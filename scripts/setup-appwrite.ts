@@ -156,7 +156,7 @@ async function createLeadsCollection() {
     await databases.createStringAttribute(DATABASE_ID, COLLECTION_ID, 'status', 50, true);
     await databases.createStringAttribute(DATABASE_ID, COLLECTION_ID, 'ownerId', 255, true);
     await databases.createStringAttribute(DATABASE_ID, COLLECTION_ID, 'assignedToId', 255, false);
-    await databases.createBooleanAttribute(DATABASE_ID, COLLECTION_ID, 'isClosed', true, false);
+    await databases.createBooleanAttribute(DATABASE_ID, COLLECTION_ID, 'isClosed', false, false);
     await databases.createDatetimeAttribute(DATABASE_ID, COLLECTION_ID, 'closedAt', false);
 
     // Create indexes

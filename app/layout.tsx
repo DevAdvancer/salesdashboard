@@ -4,6 +4,8 @@ import "./globals.css";
 import { AuthProvider } from "@/lib/contexts/auth-context";
 import { AccessControlProvider } from "@/lib/contexts/access-control-context";
 import { Toaster } from "@/components/ui/toaster";
+import { AppLayout } from "@/components/app-layout";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,16 +28,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthProvider>
-          <AccessControlProvider>
-            {children}
-          </AccessControlProvider>
-        </AuthProvider>
-        <Toaster />
+        <ErrorBoundary>
+          <AuthProvider>
+            <AccessControlProvider>
+              <AppLayout>{children}</AppLayout>
+              <Toaster />
+            </AccessControlProvider>
+          </AuthProvider>
+        </ErrorBoundary>
       </body>
     </html>
   );

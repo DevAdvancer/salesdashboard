@@ -151,7 +151,7 @@ describe('LoginPage - Task 2.5: Login Flow with Session Management', () => {
       fireEvent.click(submitButton);
 
       await waitFor(() => {
-        expect(screen.getByText(/logging in/i)).toBeInTheDocument();
+        expect(screen.getByRole('status')).toBeInTheDocument();
       });
 
       expect(submitButton).toBeDisabled();

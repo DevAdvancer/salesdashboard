@@ -123,4 +123,71 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Native select elements - dark theme styling */
+  select {
+    @apply bg-background text-foreground border-input;
+    color-scheme: dark;
+  }
+
+  select option {
+    @apply bg-popover text-popover-foreground;
+  }
+
+  /* Native textarea elements */
+  textarea {
+    @apply bg-background text-foreground border-input placeholder:text-muted-foreground;
+  }
+
+  /* Native checkbox and radio inputs */
+  input[type="checkbox"],
+  input[type="radio"] {
+    @apply accent-primary;
+    color-scheme: dark;
+  }
+
+  /* Date inputs */
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="time"] {
+    color-scheme: dark;
+  }
+
+  /* Table styling */
+  table {
+    @apply w-full;
+  }
+
+  thead {
+    @apply border-b border-border;
+  }
+
+  th {
+    @apply text-foreground font-semibold;
+  }
+
+  td {
+    @apply text-foreground;
+  }
+
+  tbody tr {
+    @apply border-b border-border transition-colors;
+  }
+
+  tbody tr:hover {
+    @apply bg-accent/50;
+  }
+}
+
+/* Focus states for interactive elements */
+@layer components {
+  select:focus,
+  textarea:focus {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  /* Consistent form input styling */
+  .form-select {
+    @apply flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+  }
 }

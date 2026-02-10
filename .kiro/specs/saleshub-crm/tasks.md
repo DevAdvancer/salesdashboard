@@ -210,8 +210,8 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
     - Test form submission disabled when invalid
     - _Requirements: 3.8, 3.9, 11.4, 11.5_
 
-- [ ] 9. Lead management service
-  - [ ] 9.1 Create lead service with CRUD operations
+- [-] 9. Lead management service
+  - [x] 9.1 Create lead service with CRUD operations
     - Implement createLead(data, ownerId, assignedToId) function
     - Implement updateLead(leadId, data) function
     - Implement deleteLead(leadId) function
@@ -221,48 +221,48 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
     - Set document-level permissions on create/update
     - _Requirements: 4.1, 4.2, 5.1, 5.6, 6.2, 9.5, 9.6_
 
-  - [ ] 9.2 Write property test for lead data serialization
+  - [x] 9.2 Write property test for lead data serialization
     - **Property 11: Lead data JSON serialization round-trip**
     - **Validates: Requirements 3.10, 9.5, 9.6**
 
-  - [ ] 9.3 Implement lead closure functionality
+  - [x] 9.3 Implement lead closure functionality
     - Create closeLead(leadId, closedStatus) function
     - Set isClosed=true and closedAt timestamp
     - Update status field
     - Update permissions to read-only for agent
     - _Requirements: 4.3, 4.5, 4.6_
 
-  - [ ] 9.4 Write property test for lead closure
+  - [x] 9.4 Write property test for lead closure
     - **Property 12: Lead closure state transition**
     - **Validates: Requirements 4.3, 4.4, 4.5**
 
-  - [ ] 9.5 Write property test for closed lead read-only
+  - [x] 9.5 Write property test for closed lead read-only
     - **Property 17: Closed lead read-only enforcement**
     - **Validates: Requirements 4.6, 6.3**
 
-  - [ ] 9.6 Implement lead reopen functionality (manager only)
+  - [x] 9.6 Implement lead reopen functionality (manager only)
     - Create reopenLead(leadId) function
     - Set isClosed=false
     - Preserve closedAt timestamp
     - Restore update permissions for assigned agent
     - _Requirements: 4.7, 7.6_
 
-  - [ ] 9.7 Write property test for lead reopen
+  - [x] 9.7 Write property test for lead reopen
     - **Property 13: Lead reopen preserves history**
     - **Validates: Requirements 4.7, 7.6**
 
-  - [ ] 9.8 Implement lead assignment functionality
+  - [x] 9.8 Implement lead assignment functionality
     - Create assignLead(leadId, agentId) function
     - Update assignedToId field
     - Update document permissions to include new agent
     - Remove old agent from permissions if changed
     - _Requirements: 5.2, 5.3, 5.6_
 
-  - [ ] 9.9 Write property test for lead assignment permissions
+  - [x] 9.9 Write property test for lead assignment permissions
     - **Property 16: Lead assignment permission update**
     - **Validates: Requirements 5.2, 6.2, 6.3**
 
-  - [ ] 9.10 Write unit tests for lead service
+  - [x] 9.10 Write unit tests for lead service
     - Test lead creation with valid data
     - Test lead creation with missing required fields fails
     - Test lead update
@@ -272,8 +272,8 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
     - Test assignment updates permissions
     - _Requirements: 4.2, 4.3, 4.7, 5.2_
 
-- [ ] 10. Lead list and filtering UI
-  - [ ] 10.1 Create leads page with active leads list
+- [x] 10. Lead list and filtering UI
+  - [x] 10.1 Create leads page with active leads list
     - Build leads table with columns: name, email, status, assigned to, created date
     - Implement role-based filtering (agent sees only assigned, manager sees all owned)
     - Add filter controls: status, assigned agent, date range, search
@@ -281,15 +281,15 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
     - Add pagination for large lists
     - _Requirements: 5.4, 5.5, 10.1, 10.2, 10.3_
 
-  - [ ] 10.2 Write property test for agent lead visibility
+  - [x] 10.2 Write property test for agent lead visibility
     - **Property 14: Agent lead visibility restriction**
     - **Validates: Requirements 5.4, 6.2**
 
-  - [ ] 10.3 Write property test for manager lead visibility
+  - [x] 10.3 Write property test for manager lead visibility
     - **Property 15: Manager lead visibility**
     - **Validates: Requirements 5.5, 6.4**
 
-  - [ ] 10.4 Create lead detail view
+  - [x] 10.4 Create lead detail view
     - Build lead detail page with all field data
     - Add edit mode for active leads
     - Add close lead button with confirmation dialog
@@ -297,7 +297,7 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
     - Display read-only view for closed leads
     - _Requirements: 4.6, 5.2, 10.3_
 
-  - [ ] 10.5 Create lead form dialog
+  - [x] 10.5 Create lead form dialog
     - Build create/edit lead dialog with dynamic form
     - Integrate DynamicLeadForm component
     - Add owner and assigned agent selectors
@@ -305,7 +305,7 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
     - Show success/error notifications
     - _Requirements: 4.1, 4.2, 5.1, 10.5, 11.4, 11.5_
 
-  - [ ] 10.6 Write unit tests for lead UI
+  - [x] 10.6 Write unit tests for lead UI
     - Test agent sees only assigned leads
     - Test manager sees all owned leads
     - Test filters work correctly
@@ -314,11 +314,11 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
     - Test close lead moves to history
     - _Requirements: 5.4, 5.5, 4.3, 4.5_
 
-- [ ] 11. Checkpoint - Verify lead management works
+- [x] 11. Checkpoint - Verify lead management works
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 12. History and audit system
-  - [ ] 12.1 Create history page with closed leads list
+- [x] 12. History and audit system
+  - [x] 12.1 Create history page with closed leads list
     - Build history table with columns: name, email, status, closed date, assigned to
     - Query leads where isClosed=true
     - Apply role-based filtering (agent sees assigned, manager sees owned)
@@ -326,11 +326,11 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
     - Sort by closedAt descending
     - _Requirements: 7.1, 7.2, 7.3, 7.5_
 
-  - [ ] 12.2 Write property test for history filtering
+  - [x] 12.2 Write property test for history filtering
     - **Property 18: History filtering correctness**
     - **Validates: Requirements 7.3, 7.4**
 
-  - [ ] 12.3 Create history detail view
+  - [x] 12.3 Create history detail view
     - Build read-only lead detail view
     - Display all field data including hidden fields
     - Show closure metadata (closedAt, status)
@@ -338,7 +338,7 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
     - Disable all form inputs
     - _Requirements: 7.2, 7.4, 7.6_
 
-  - [ ] 12.4 Write unit tests for history
+  - [x] 12.4 Write unit tests for history
     - Test only closed leads appear in history
     - Test filters work correctly
     - Test read-only enforcement
@@ -346,8 +346,8 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
     - Test agent cannot reopen leads
     - _Requirements: 7.1, 7.2, 7.6_
 
-- [ ] 13. Navigation and layout
-  - [ ] 13.1 Create main layout with navigation
+- [x] 13. Navigation and layout
+  - [x] 13.1 Create main layout with navigation
     - Build sidebar navigation with component links
     - Implement useAccess() to filter visible components
     - Add user menu with logout
@@ -355,7 +355,7 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
     - Apply dark theme styling
     - _Requirements: 2.4, 2.6, 10.1, 10.2, 10.8_
 
-  - [ ] 13.2 Create dashboard page
+  - [x] 13.2 Create dashboard page
     - Build dashboard with key metrics cards
     - Show active leads count
     - Show closed leads count
@@ -363,28 +363,28 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
     - Add quick action buttons
     - _Requirements: 2.3, 10.1, 10.2_
 
-  - [ ] 13.3 Write unit tests for navigation
+  - [x] 13.3 Write unit tests for navigation
     - Test agent sees only permitted components
     - Test manager sees all components
     - Test navigation links work correctly
     - Test logout clears session
     - _Requirements: 2.4, 2.6, 10.8_
 
-- [ ] 14. Error handling and loading states
-  - [ ] 14.1 Implement error boundaries
+- [x] 14. Error handling and loading states
+  - [x] 14.1 Implement error boundaries
     - Create ErrorBoundary component for route wrapping
     - Add fallback UI with reload button
     - Implement error logging
     - _Requirements: 10.6_
 
-  - [ ] 14.2 Add loading states to all async operations
+  - [x] 14.2 Add loading states to all async operations
     - Add loading spinners to forms
     - Add skeleton loaders to lists
     - Add loading states to buttons
     - Implement optimistic UI updates where appropriate
     - _Requirements: 10.6_
 
-  - [ ] 14.3 Implement error notifications
+  - [x] 14.3 Implement error notifications
     - Create toast notification system
     - Add error messages for validation failures
     - Add error messages for API errors
@@ -392,7 +392,7 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
     - Add network error handling with retry
     - _Requirements: 10.7, 11.4_
 
-  - [ ] 14.4 Write unit tests for error handling
+  - [x] 14.4 Write unit tests for error handling
     - Test error boundary catches crashes
     - Test validation errors display correctly
     - Test API errors show notifications
@@ -400,8 +400,8 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
     - Test network errors show retry option
     - _Requirements: 10.6, 10.7_
 
-- [ ] 15. Responsive design and styling
-  - [ ] 15.1 Apply Tailwind CSS v4 dark theme
+- [x] 15. Responsive design and styling
+  - [x] 15.1 Apply Tailwind CSS v4 dark theme
     - Configure Tailwind with dark theme colors
     - Apply consistent spacing and typography
     - Style all forms with dark theme
@@ -409,7 +409,7 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
     - Add hover and focus states
     - _Requirements: 10.1, 10.2_
 
-  - [ ] 15.2 Implement responsive layouts
+  - [x] 15.2 Implement responsive layouts
     - Make navigation responsive (mobile menu)
     - Make tables responsive (horizontal scroll or cards)
     - Make forms responsive (stack on mobile)
@@ -417,8 +417,8 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
     - Test on desktop, tablet, and mobile viewports
     - _Requirements: 10.3_
 
-- [ ] 16. Integration and final wiring
-  - [ ] 16.1 Wire all components together
+- [x] 16. Integration and final wiring
+  - [x] 16.1 Wire all components together
     - Connect authentication to all protected routes
     - Connect access control to navigation
     - Connect form builder to lead forms
@@ -427,14 +427,14 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
     - Verify all data flows work end-to-end
     - _Requirements: All_
 
-  - [ ] 16.2 Write integration tests for complete flows
+  - [x] 16.2 Write integration tests for complete flows
     - Test complete lead lifecycle (create → assign → edit → close → reopen)
     - Test user management flow (signup → create agent → agent login → agent sees assigned leads)
     - Test form builder flow (create field → publish → agent sees field → create lead with field)
     - Test access control flow (manager restricts component → agent cannot access)
     - _Requirements: All_
 
-- [ ] 17. Final checkpoint - Ensure all tests pass
+- [x] 17. Final checkpoint - Ensure all tests pass
   - Run all unit tests
   - Run all property tests (100 iterations each)
   - Run all integration tests

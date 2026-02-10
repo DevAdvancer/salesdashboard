@@ -3,10 +3,10 @@ import { FormField } from '@/lib/types';
 
 /**
  * Generate a Zod schema from form configuration
- * 
+ *
  * This function takes a form configuration (array of FormField objects) and generates
  * a Zod schema that can be used for form validation with react-hook-form.
- * 
+ *
  * Requirements:
  * - 3.9: Validate required fields based on Form_Config
  * - 10.4: Use react-hook-form for form state management
@@ -14,7 +14,7 @@ import { FormField } from '@/lib/types';
  * - 11.1: Enforce required validation on form submission
  * - 11.2: Validate email format
  * - 11.3: Validate phone number format
- * 
+ *
  * @param formConfig - Array of form field configurations
  * @returns Zod schema object for form validation
  */
@@ -90,50 +90,50 @@ export function generateZodSchema(formConfig: FormField[]): z.ZodObject<any> {
     }
 
     // Apply custom validation rules if specified
-    if (field.validation) {
-      if (field.type === 'text' && fieldSchema instanceof z.ZodString) {
-        // Apply pattern validation
-        if (field.validation.pattern) {
-          fieldSchema = fieldSchema.regex(
-            new RegExp(field.validation.pattern),
-            `Please enter a valid ${field.label.toLowerCase()}`
-          );
-        }
+    if (field.validation && field.type === 'text') {
+      // For text fields, apply pattern and length validation
+      // We need to cast since we know it's a ZodString at this point
+      let textSchema = fieldSchema as z.ZodString;
 
-        // Apply length constraints
-        if (field.validation.minLength !== undefined) {
-          fieldSchema = fieldSchema.min(
-            field.validation.minLength,
-            `${field.label} must be at least ${field.validation.minLength} characters`
-          );
-        }
-
-        if (field.validation.maxLength !== undefined) {
-          fieldSchema = fieldSchema.max(
-            field.validation.maxLength,
-            `${field.label} must be at most ${field.validation.maxLength} characters`
-          );
-        }
+      if (field.validation.pattern) {
+        textSchema = textSchema.regex(
+          new RegExp(field.validation.pattern),
+          `Please enter a valid ${field.label.toLowerCase()}`
+        );
       }
+
+      if (field.validation.minLength !== undefined) {
+        textSchema = textSchema.min(
+          field.validation.minLength,
+          `${field.label} must be at least ${field.validation.minLength} characters`
+        );
+      }
+
+      if (field.validation.maxLength !== undefined) {
+        textSchema = textSchema.max(
+          field.validation.maxLength,
+          `${field.label} must be at most ${field.validation.maxLength} characters`
+        );
+      }
+
+      fieldSchema = textSchema;
     }
 
     // Apply required/optional based on field configuration (Requirements 3.9, 11.1)
     if (field.required) {
       // For required fields, ensure non-empty values
-      if (fieldSchema instanceof z.ZodString) {
-        fieldSchema = fieldSchema.min(1, `${field.label} is required`);
-      } else if (fieldSchema instanceof z.ZodArray) {
-        fieldSchema = fieldSchema.min(1, `${field.label} is required`);
+      if (field.type === 'text' || field.type === 'email' || field.type === 'phone' || field.type === 'textarea') {
+        fieldSchema = (fieldSchema as z.ZodString).min(1, `${field.label} is required`);
+      } else if (field.type === 'checklist') {
+        fieldSchema = (fieldSchema as z.ZodArray<any>).min(1, `${field.label} is required`);
       }
     } else {
       // For optional fields, allow empty strings or undefined
-      if (fieldSchema instanceof z.ZodString) {
-        // Allow empty strings for optional text fields
+      if (field.type === 'text' || field.type === 'email' || field.type === 'phone' || field.type === 'textarea') {
         fieldSchema = fieldSchema.optional().or(z.literal(''));
-      } else if (fieldSchema instanceof z.ZodArray) {
+      } else if (field.type === 'checklist') {
         fieldSchema = fieldSchema.optional();
-      } else if (fieldSchema instanceof z.ZodEnum) {
-        // For optional enums (dropdowns), allow empty string
+      } else if (field.type === 'dropdown') {
         fieldSchema = fieldSchema.optional().or(z.literal(''));
       } else {
         fieldSchema = fieldSchema.optional();
@@ -150,10 +150,10 @@ export function generateZodSchema(formConfig: FormField[]): z.ZodObject<any> {
 
 /**
  * Generate default values for a form based on form configuration
- * 
+ *
  * This helper function creates an object with default values for all fields,
  * which can be used to initialize react-hook-form.
- * 
+ *
  * @param formConfig - Array of form field configurations
  * @returns Object with default values for each field
  */
@@ -186,9 +186,9 @@ export function generateDefaultValues(formConfig: FormField[]): Record<string, a
 
 /**
  * Filter visible fields from form configuration
- * 
+ *
  * Helper function to get only the fields that should be displayed to users.
- * 
+ *
  * @param formConfig - Array of form field configurations
  * @returns Array of visible fields sorted by order
  */

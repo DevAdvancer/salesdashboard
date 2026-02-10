@@ -7,6 +7,7 @@ import { ComponentKey } from '@/lib/contexts/access-control-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { ProtectedRoute } from '@/components/protected-route';
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const ACCESS_CONFIG_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_ACCESS_CONFIG_COLLECTION_ID!;
@@ -28,6 +29,14 @@ const COMPONENTS: { key: ComponentKey; label: string; description: string }[] = 
 ];
 
 export default function AccessConfigPage() {
+  return (
+    <ProtectedRoute componentKey="settings">
+      <AccessConfigContent />
+    </ProtectedRoute>
+  );
+}
+
+function AccessConfigContent() {
   const { isManager } = useAuth();
   const [rules, setRules] = useState<Map<string, AccessRule>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
@@ -130,24 +139,9 @@ export default function AccessConfigPage() {
     return role === 'manager';
   };
 
-  if (!isManager) {
-    return (
-      <div className="container mx-auto p-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Access Denied</CardTitle>
-            <CardDescription>
-              You do not have permission to access this page.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      </div>
-    );
-  }
-
   if (isLoading) {
     return (
-      <div className="container mx-auto p-6">
+      <div className="container mx-auto">
         <div className="flex items-center justify-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 dark:border-gray-100"></div>
         </div>
@@ -156,10 +150,10 @@ export default function AccessConfigPage() {
   }
 
   return (
-    <div className="container mx-auto p-6">
+    <div className="container mx-auto">
       <Card>
         <CardHeader>
-          <CardTitle>Access Control Configuration</CardTitle>
+          <CardTitle className="text-xl md:text-2xl">Access Control Configuration</CardTitle>
           <CardDescription>
             Configure which components are visible to different user roles.
             Managers always have full access regardless of these settings.
@@ -167,8 +161,8 @@ export default function AccessConfigPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
-            {/* Header Row */}
-            <div className="grid grid-cols-3 gap-4 pb-4 border-b">
+            {/* Header Row - hidden on mobile */}
+            <div className="hidden sm:grid grid-cols-3 gap-4 pb-4 border-b">
               <div className="font-semibold">Component</div>
               <div className="font-semibold text-center">Manager</div>
               <div className="font-semibold text-center">Agent</div>
@@ -176,7 +170,7 @@ export default function AccessConfigPage() {
 
             {/* Component Rows */}
             {COMPONENTS.map((component) => (
-              <div key={component.key} className="grid grid-cols-3 gap-4 items-center">
+              <div key={component.key} className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4 items-center border-b sm:border-b-0 pb-4 sm:pb-0">
                 <div>
                   <Label className="font-medium">{component.label}</Label>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -184,24 +178,26 @@ export default function AccessConfigPage() {
                   </p>
                 </div>
 
-                {/* Manager Checkbox (Always Disabled) */}
-                <div className="flex justify-center">
+                <div className="flex sm:justify-center items-center gap-2 sm:gap-0">
+                  <span className="text-sm text-muted-foreground sm:hidden">Manager:</span>
+                  {/* Manager Checkbox (Always Disabled) */}
                   <input
                     type="checkbox"
                     checked={true}
                     disabled
-                    className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                    className="h-5 w-5 rounded border-input disabled:opacity-50"
                   />
                 </div>
 
-                {/* Agent Checkbox */}
-                <div className="flex justify-center">
+                <div className="flex sm:justify-center items-center gap-2 sm:gap-0">
+                  <span className="text-sm text-muted-foreground sm:hidden">Agent:</span>
+                  {/* Agent Checkbox */}
                   <input
                     type="checkbox"
                     checked={isAllowed(component.key, 'agent')}
                     onChange={() => toggleAccess(component.key, 'agent')}
                     disabled={isSaving}
-                    className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50 cursor-pointer"
+                    className="h-5 w-5 rounded border-input disabled:opacity-50 cursor-pointer"
                   />
                 </div>
               </div>

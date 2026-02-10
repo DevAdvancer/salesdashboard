@@ -18,6 +18,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import Link from 'next/link';
+import { handleApiError } from '@/lib/utils/error-handler';
 
 // Validation schema for login form
 const loginSchema = z.object({
@@ -49,16 +50,12 @@ export default function LoginPage() {
       await login(data.email, data.password);
       router.push('/dashboard');
     } catch (err: any) {
-      console.error('Login error:', err);
-
-      // Handle specific error messages
-      if (err.message?.includes('Invalid credentials') || err.message?.includes('user_invalid_credentials')) {
-        setError('Invalid email or password');
-      } else if (err.message?.includes('user_not_found')) {
-        setError('No account found with this email');
-      } else {
-        setError('Failed to log in. Please try again.');
-      }
+      const errorMessage = handleApiError(err, {
+        title: 'Login Failed',
+        showToast: true,
+        retry: () => onSubmit(data),
+      });
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -110,8 +107,8 @@ export default function LoginPage() {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Logging in...' : 'Log in'}
+            <Button type="submit" className="w-full" loading={isLoading}>
+              Log in
             </Button>
             <p className="text-sm text-center text-muted-foreground">
               Don't have an account?{' '}

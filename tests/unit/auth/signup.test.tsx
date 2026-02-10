@@ -201,9 +201,10 @@ describe('SignupPage', () => {
     const submitButton = screen.getByRole('button', { name: /sign up/i });
     await user.click(submitButton);
 
-    // Verify button shows loading state
-    expect(screen.getByRole('button', { name: /creating account/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /creating account/i })).toBeDisabled();
+    // Verify button shows loading spinner and is disabled
+    const submitBtn = screen.getByRole('button', { name: /sign up/i });
+    expect(submitBtn).toBeDisabled();
+    expect(screen.getByRole('status')).toBeInTheDocument();
 
     // Verify inputs are disabled
     expect(screen.getByLabelText(/full name/i)).toBeDisabled();

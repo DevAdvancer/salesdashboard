@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { ProtectedRoute } from '@/components/protected-route';
 
 const createAgentSchema = z.object({
   name: z.string().min(1, 'Name is required').max(255, 'Name is too long'),
@@ -22,6 +23,14 @@ const createAgentSchema = z.object({
 type CreateAgentForm = z.infer<typeof createAgentSchema>;
 
 export default function UserManagementPage() {
+  return (
+    <ProtectedRoute componentKey="user-management">
+      <UserManagementContent />
+    </ProtectedRoute>
+  );
+}
+
+function UserManagementContent() {
   const router = useRouter();
   const { user, isManager } = useAuth();
   const [agents, setAgents] = useState<User[]>([]);
@@ -90,23 +99,8 @@ export default function UserManagementPage() {
     }
   };
 
-  if (!isManager) {
-    return (
-      <div className="container mx-auto p-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Access Denied</CardTitle>
-            <CardDescription>
-              You do not have permission to access user management.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      </div>
-    );
-  }
-
   return (
-    <div className="container mx-auto p-6">
+    <div className="container mx-auto">
       <div className="mb-4">
         <Button
           variant="outline"
@@ -118,7 +112,7 @@ export default function UserManagementPage() {
       </div>
       <Card>
         <CardHeader>
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <CardTitle>User Management</CardTitle>
               <CardDescription>
@@ -186,8 +180,8 @@ export default function UserManagementPage() {
 
       {/* Create Agent Dialog */}
       {showCreateDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <Card className="w-full max-w-md mx-4">
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50">
+          <Card className="w-full sm:max-w-md sm:mx-4 rounded-b-none sm:rounded-b-lg">
             <CardHeader>
               <CardTitle>Create New Agent</CardTitle>
               <CardDescription>
@@ -243,7 +237,7 @@ export default function UserManagementPage() {
                   )}
                 </div>
 
-                <div className="flex gap-2 justify-end pt-4">
+                <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end pt-4">
                   <Button
                     type="button"
                     variant="outline"
@@ -253,10 +247,11 @@ export default function UserManagementPage() {
                       setError(null);
                     }}
                     disabled={isCreating}
+                    className="w-full sm:w-auto"
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={isCreating}>
+                  <Button type="submit" disabled={isCreating} className="w-full sm:w-auto">
                     {isCreating ? 'Creating...' : 'Create Agent'}
                   </Button>
                 </div>

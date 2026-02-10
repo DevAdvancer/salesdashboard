@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { useAccess, ComponentKey } from '@/lib/contexts/access-control-context';
+import { handlePermissionError } from '@/lib/utils/error-handler';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -29,10 +30,11 @@ export function ProtectedRoute({
 
     if (!isLoading && !canAccess(componentKey)) {
       // Not authorized, redirect to fallback
+      handlePermissionError(
+        `You don't have permission to access ${componentKey.replace('-', ' ')}`,
+        { showToast: true }
+      );
       router.push(fallbackPath);
-
-      // Show toast notification (we'll implement toast later)
-      console.warn(`Access denied to ${componentKey}`);
     }
   }, [user, canAccess, componentKey, isLoading, router, fallbackPath]);
 

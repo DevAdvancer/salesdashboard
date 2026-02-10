@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/lib/contexts/auth-context';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -11,47 +11,128 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { ProtectedRoute } from '@/components/protected-route';
+import { listLeads } from '@/lib/services/lead-service';
+import { getAgentsByManager } from '@/lib/services/user-service';
+import { FileText, History, Users, TrendingUp } from 'lucide-react';
 
-export default function DashboardPage() {
-  const { user, isManager, isAgent, loading, logout } = useAuth();
+function DashboardContent() {
+  const { user, isManager, isAgent, loading } = useAuth();
   const router = useRouter();
+  const [metrics, setMetrics] = useState({
+    activeLeads: 0,
+    closedLeads: 0,
+    agentsCount: 0,
+    loading: true,
+  });
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
-    }
-  }, [user, loading, router]);
+    async function fetchMetrics() {
+      if (!user) return;
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      router.push('/login');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
+      try {
+        // Fetch active leads count
+        const activeLeads = await listLeads(
+          { isClosed: false },
+          user.$id,
+          user.role
+        );
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-lg">Loading...</p>
-      </div>
-    );
-  }
+        // Fetch closed leads count
+        const closedLeads = await listLeads(
+          { isClosed: true },
+          user.$id,
+          user.role
+        );
+
+        // Fetch agents count (managers only)
+        let agentsCount = 0;
+        if (isManager) {
+          const agents = await getAgentsByManager(user.$id);
+          agentsCount = agents.length;
+        }
+
+        setMetrics({
+          activeLeads: activeLeads.length,
+          closedLeads: closedLeads.length,
+          agentsCount,
+          loading: false,
+        });
+      } catch (error) {
+        console.error('Error fetching metrics:', error);
+        setMetrics((prev) => ({ ...prev, loading: false }));
+      }
+    }
+
+    if (user) {
+      fetchMetrics();
+    }
+  }, [user, isManager]);
 
   if (!user) {
     return null;
   }
 
   return (
-    <div className="container mx-auto p-8">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <Button onClick={handleLogout} variant="outline">
-          Log out
-        </Button>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl md:text-3xl font-bold">Dashboard</h1>
+        <p className="text-muted-foreground mt-1">
+          Welcome back, {user.name}
+        </p>
       </div>
 
+      {/* Metrics Cards */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Leads</CardTitle>
+            <FileText className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {metrics.loading ? '...' : metrics.activeLeads}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {isAgent ? 'Assigned to you' : 'Total active leads'}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Closed Leads</CardTitle>
+            <History className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {metrics.loading ? '...' : metrics.closedLeads}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              In history
+            </p>
+          </CardContent>
+        </Card>
+
+        {isManager && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Agents</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {metrics.loading ? '...' : metrics.agentsCount}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Team members
+              </p>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* User Info and Quick Actions */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader>
@@ -158,20 +239,14 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
-
-      <div className="mt-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>System Information</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              This is a placeholder dashboard. Additional features will be
-              implemented in subsequent tasks.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <ProtectedRoute componentKey="dashboard">
+      <DashboardContent />
+    </ProtectedRoute>
   );
 }

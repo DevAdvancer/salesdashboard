@@ -19,14 +19,14 @@ interface DynamicLeadFormProps {
 
 /**
  * DynamicLeadForm Component
- * 
+ *
  * Renders a dynamic form based on form configuration with the following features:
  * - Filters fields by visible=true for agents (managers see all fields in builder)
  * - Sorts fields by order property
  * - Renders fields based on type (text, email, phone, dropdown, textarea, checklist)
  * - Applies generated zod schema for validation
  * - Displays field-level error messages
- * 
+ *
  * Requirements: 3.8, 3.9, 10.4, 10.5, 11.4, 11.5
  */
 export function DynamicLeadForm({
@@ -103,7 +103,7 @@ export function DynamicLeadForm({
               id={field.key}
               placeholder={field.placeholder}
               {...register(field.key)}
-              className={`flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
                 error ? 'border-red-500' : ''
               }`}
               rows={4}
@@ -124,7 +124,7 @@ export function DynamicLeadForm({
             <select
               id={field.key}
               {...register(field.key)}
-              className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
                 error ? 'border-red-500' : ''
               }`}
             >
@@ -156,7 +156,7 @@ export function DynamicLeadForm({
                     id={`${field.key}-${index}`}
                     value={option}
                     {...register(field.key)}
-                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    className="h-4 w-4 rounded border-input text-primary focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
                   />
                   <Label
                     htmlFor={`${field.key}-${index}`}
