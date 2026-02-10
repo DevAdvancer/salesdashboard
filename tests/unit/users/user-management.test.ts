@@ -7,9 +7,17 @@ jest.mock('@/lib/appwrite', () => ({
   databases: {
     createDocument: jest.fn(),
     listDocuments: jest.fn(),
+    getDocument: jest.fn(),
+    updateDocument: jest.fn(),
   },
   account: {
     create: jest.fn(),
+  },
+  DATABASE_ID: 'test-db',
+  COLLECTIONS: {
+    USERS: 'test-users',
+    LEADS: 'test-leads',
+    BRANCHES: 'test-branches',
   },
 }));
 
@@ -27,21 +35,32 @@ describe('User Management', () => {
         managerId: 'manager-123',
       };
 
+      const mockManagerDoc = {
+        $id: 'manager-123',
+        name: 'Manager',
+        email: 'manager@example.com',
+        role: 'manager',
+        branchId: 'branch-1',
+      };
+
       const mockCreatedAgent = {
         $id: 'agent-456',
         name: mockAgentData.name,
         email: mockAgentData.email,
         role: 'agent',
         managerId: mockAgentData.managerId,
+        branchId: 'branch-1',
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
 
+      (databases.getDocument as jest.Mock).mockResolvedValue(mockManagerDoc);
       (account.create as jest.Mock).mockResolvedValue({ $id: 'agent-456' });
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedAgent);
 
       const result = await createAgent(mockAgentData);
 
+      expect(databases.getDocument).toHaveBeenCalled();
       expect(account.create).toHaveBeenCalledWith(
         expect.any(String),
         mockAgentData.email,
@@ -58,6 +77,7 @@ describe('User Management', () => {
           email: mockAgentData.email,
           role: 'agent',
           managerId: mockAgentData.managerId,
+          branchId: 'branch-1',
         },
         expect.arrayContaining([
           expect.stringContaining('read'),
@@ -66,9 +86,9 @@ describe('User Management', () => {
         ])
       );
 
-      expect(result).toEqual(mockCreatedAgent);
       expect(result.role).toBe('agent');
       expect(result.managerId).toBe(mockAgentData.managerId);
+      expect(result.branchId).toBe('branch-1');
     });
 
     it('should handle duplicate email error', async () => {
@@ -78,6 +98,11 @@ describe('User Management', () => {
         password: 'password123',
         managerId: 'manager-123',
       };
+
+      (databases.getDocument as jest.Mock).mockResolvedValue({
+        $id: 'manager-123',
+        branchId: null,
+      });
 
       const duplicateError = new Error('User already exists');
       (duplicateError as any).code = 409;
@@ -97,12 +122,18 @@ describe('User Management', () => {
         managerId: 'manager-789',
       };
 
+      (databases.getDocument as jest.Mock).mockResolvedValue({
+        $id: 'manager-789',
+        branchId: 'branch-2',
+      });
+
       const mockCreatedAgent = {
         $id: 'agent-999',
         name: mockAgentData.name,
         email: mockAgentData.email,
         role: 'agent',
         managerId: mockAgentData.managerId,
+        branchId: 'branch-2',
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
@@ -112,13 +143,10 @@ describe('User Management', () => {
 
       const result = await createAgent(mockAgentData);
 
-      // Verify role is set to 'agent'
       expect(result.role).toBe('agent');
-
-      // Verify managerId is set to the creating manager's ID
       expect(result.managerId).toBe(mockAgentData.managerId);
+      expect(result.branchId).toBe('branch-2');
 
-      // Verify the document was created with correct data
       expect(databases.createDocument).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(String),
@@ -126,6 +154,7 @@ describe('User Management', () => {
         expect.objectContaining({
           role: 'agent',
           managerId: mockAgentData.managerId,
+          branchId: 'branch-2',
         }),
         expect.any(Array)
       );
@@ -275,6 +304,11 @@ describe('User Management', () => {
         password: 'password123',
         managerId: 'manager-123',
       };
+
+      (databases.getDocument as jest.Mock).mockResolvedValue({
+        $id: 'manager-123',
+        branchId: null,
+      });
 
       const networkError = new Error('Network error');
       (account.create as jest.Mock).mockRejectedValue(networkError);

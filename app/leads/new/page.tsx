@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { useRouter } from 'next/navigation';
 import { createLead } from '@/lib/services/lead-service';
+import { validateLeadUniqueness } from '@/lib/services/lead-validator';
 import { getAgentsByManager } from '@/lib/services/user-service';
+import { listBranches } from '@/lib/services/branch-service';
 import { getFormConfig } from '@/lib/services/form-config-service';
-import { FormField, User } from '@/lib/types';
+import { FormField, User, Branch } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -23,16 +25,19 @@ export default function NewLeadPage() {
 }
 
 function NewLeadContent() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, isAdmin, loading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
   const [formFields, setFormFields] = useState<FormField[]>([]);
   const [agents, setAgents] = useState<User[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<string>('');
+  const [selectedBranch, setSelectedBranch] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -42,8 +47,11 @@ function NewLeadContent() {
 
     if (user) {
       loadFormConfig();
-      if (user.role === 'manager') {
+      if (user.role === 'manager' || user.role === 'admin') {
         loadAgents();
+      }
+      if (user.role === 'admin') {
+        loadBranches();
       }
     }
   }, [user, authLoading, router]);
@@ -64,7 +72,7 @@ function NewLeadContent() {
   };
 
   const loadAgents = async () => {
-    if (!user || user.role !== 'manager') return;
+    if (!user || (user.role !== 'manager' && user.role !== 'admin')) return;
 
     try {
       const fetchedAgents = await getAgentsByManager(user.$id);
@@ -74,18 +82,45 @@ function NewLeadContent() {
     }
   };
 
+  const loadBranches = async () => {
+    try {
+      const fetchedBranches = await listBranches();
+      setBranches(fetchedBranches.filter(b => b.isActive));
+    } catch (err: any) {
+      console.error('Error loading branches:', err);
+    }
+  };
+
   const handleSubmit = async (data: Record<string, any>) => {
     if (!user) return;
 
     try {
       setIsSaving(true);
+      setDuplicateError(null);
 
-      // Create lead with owner and optional assigned agent
+      // Validate lead uniqueness before creating
+      const validation = await validateLeadUniqueness(data);
+      if (!validation.isValid) {
+        const fieldLabel = validation.duplicateField === 'email' ? 'email address' : 'phone number';
+        setDuplicateError(
+          `A lead with this ${fieldLabel} already exists${validation.existingBranchId ? ' in another branch' : ''}.`
+        );
+        setIsSaving(false);
+        return;
+      }
+
+      // Determine branchId: admin can specify, others inherit from their user
+      const branchId = isAdmin && selectedBranch
+        ? selectedBranch
+        : user.branchId || undefined;
+
+      // Create lead with owner, optional assigned agent, and branchId
       await createLead({
         data,
         ownerId: user.$id,
         assignedToId: selectedAgent || undefined,
         status: data.status || 'New',
+        branchId,
       });
 
       toast({
@@ -147,8 +182,35 @@ function NewLeadContent() {
           <CardTitle>Lead Information</CardTitle>
         </CardHeader>
         <CardContent>
-          {/* Assignment Selector (Manager Only) */}
-          {user?.role === 'manager' && agents.length > 0 && (
+          {/* Duplicate Error */}
+          {duplicateError && (
+            <div className="mb-6 p-3 text-sm text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-md">
+              {duplicateError}
+            </div>
+          )}
+
+          {/* Branch Selector (Admin Only) */}
+          {isAdmin && branches.length > 0 && (
+            <div className="mb-6 pb-6 border-b">
+              <Label htmlFor="branch">Branch</Label>
+              <select
+                id="branch"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 mt-2"
+                value={selectedBranch}
+                onChange={(e) => setSelectedBranch(e.target.value)}
+              >
+                <option value="">No branch</option>
+                {branches.map((branch) => (
+                  <option key={branch.$id} value={branch.$id}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Assignment Selector (Manager and Admin) */}
+          {(user?.role === 'manager' || user?.role === 'admin') && agents.length > 0 && (
             <div className="mb-6 pb-6 border-b">
               <Label htmlFor="assignedTo">Assign To Agent (Optional)</Label>
               <select

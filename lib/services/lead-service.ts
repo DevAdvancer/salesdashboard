@@ -1,11 +1,14 @@
 import { Permission, Role, Query } from 'appwrite';
 import { databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
-import { Lead, CreateLeadInput, LeadData, LeadListFilters } from '@/lib/types';
+import { Lead, CreateLeadInput, LeadData, LeadListFilters, UserRole } from '@/lib/types';
+import { validateLeadUniqueness } from '@/lib/services/lead-validator';
 
 /**
  * Create a new lead
  *
  * This function creates a new lead with the provided data.
+ * It validates lead uniqueness (email/phone) across all branches before creation.
+ * It sets the branchId from the input (auto-set from user's branch, or admin-specified).
  * It sets document-level permissions based on owner and assigned agent.
  *
  * @param input - The lead creation input
@@ -13,6 +16,15 @@ import { Lead, CreateLeadInput, LeadData, LeadListFilters } from '@/lib/types';
  */
 export async function createLead(input: CreateLeadInput): Promise<Lead> {
   try {
+    // Validate lead uniqueness before creating
+    const validation = await validateLeadUniqueness(input.data);
+    if (!validation.isValid) {
+      throw new Error(
+        `Duplicate ${validation.duplicateField} found in lead ${validation.existingLeadId}` +
+        (validation.existingBranchId ? ` (branch: ${validation.existingBranchId})` : '')
+      );
+    }
+
     // Serialize lead data to JSON
     const dataJson = JSON.stringify(input.data);
 
@@ -32,7 +44,7 @@ export async function createLead(input: CreateLeadInput): Promise<Lead> {
       );
     }
 
-    // Create the lead document
+    // Create the lead document with branchId
     const lead = await databases.createDocument(
       DATABASE_ID,
       COLLECTIONS.LEADS,
@@ -42,6 +54,7 @@ export async function createLead(input: CreateLeadInput): Promise<Lead> {
         status: input.status || 'New',
         ownerId: input.ownerId,
         assignedToId: input.assignedToId || null,
+        branchId: input.branchId || null,
         isClosed: false,
         closedAt: null,
       },
@@ -59,6 +72,8 @@ export async function createLead(input: CreateLeadInput): Promise<Lead> {
  * Update an existing lead
  *
  * This function updates a lead with new data.
+ * It validates lead uniqueness (email/phone) across all branches before updating,
+ * excluding the current lead from the duplicate check.
  * It preserves the existing permissions unless assignment changes.
  *
  * @param leadId - The ID of the lead to update
@@ -73,6 +88,16 @@ export async function updateLead(leadId: string, data: Partial<LeadData>): Promi
 
     // Merge current data with updates
     const updatedData = { ...currentData, ...data };
+
+    // Validate lead uniqueness before updating (exclude self)
+    const validation = await validateLeadUniqueness(updatedData, leadId);
+    if (!validation.isValid) {
+      throw new Error(
+        `Duplicate ${validation.duplicateField} found in lead ${validation.existingLeadId}` +
+        (validation.existingBranchId ? ` (branch: ${validation.existingBranchId})` : '')
+      );
+    }
+
     const dataJson = JSON.stringify(updatedData);
 
     // Update the lead document
@@ -133,18 +158,21 @@ export async function getLead(leadId: string): Promise<Lead> {
  * List leads with optional filters
  *
  * This function fetches leads with role-based filtering:
- * - Managers see all leads they own
+ * - Admins see all leads across all branches
+ * - Managers see only leads belonging to their branch (filtered by branchId)
  * - Agents see only leads assigned to them
  *
  * @param filters - Optional filters for the lead list
  * @param userId - The ID of the current user
  * @param userRole - The role of the current user
+ * @param branchId - The branch ID of the current user (for managers)
  * @returns Array of leads
  */
 export async function listLeads(
   filters: LeadListFilters,
   userId: string,
-  userRole: 'manager' | 'agent'
+  userRole: UserRole,
+  branchId?: string | null
 ): Promise<Lead[]> {
   try {
     const queries: string[] = [];
@@ -153,9 +181,16 @@ export async function listLeads(
     if (userRole === 'agent') {
       // Agents see only leads assigned to them
       queries.push(Query.equal('assignedToId', userId));
+    } else if (userRole === 'admin') {
+      // Admins see all leads across all branches — no branch/owner filter
     } else {
-      // Managers see all leads they own
-      queries.push(Query.equal('ownerId', userId));
+      // Managers see only leads in their branch
+      if (branchId) {
+        queries.push(Query.equal('branchId', branchId));
+      } else {
+        // Manager without a branch sees only their own leads
+        queries.push(Query.equal('ownerId', userId));
+      }
     }
 
     // Filter by closed status (default to active leads)
@@ -170,8 +205,8 @@ export async function listLeads(
       queries.push(Query.equal('status', filters.status));
     }
 
-    // Apply assigned agent filter (for managers)
-    if (filters.assignedToId && userRole === 'manager') {
+    // Apply assigned agent filter (for managers and admins)
+    if (filters.assignedToId && (userRole === 'manager' || userRole === 'admin')) {
       queries.push(Query.equal('assignedToId', filters.assignedToId));
     }
 

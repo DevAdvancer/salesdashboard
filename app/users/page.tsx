@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
-import { createAgent, getAgentsByManager } from '@/lib/services/user-service';
-import { User } from '@/lib/types';
+import { createAgent, getAgentsByManager, getUsersByBranch } from '@/lib/services/user-service';
+import { listBranches } from '@/lib/services/branch-service';
+import { User, Branch } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +19,8 @@ const createAgentSchema = z.object({
   name: z.string().min(1, 'Name is required').max(255, 'Name is too long'),
   email: z.string().email('Invalid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
+  managerId: z.string().optional(),
+  branchId: z.string().optional(),
 });
 
 type CreateAgentForm = z.infer<typeof createAgentSchema>;
@@ -32,8 +35,10 @@ export default function UserManagementPage() {
 
 function UserManagementContent() {
   const router = useRouter();
-  const { user, isManager } = useAuth();
+  const { user, isManager, isAdmin } = useAuth();
   const [agents, setAgents] = useState<User[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [branchMap, setBranchMap] = useState<Map<string, string>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -53,21 +58,46 @@ function UserManagementContent() {
   useEffect(() => {
     if (user && isManager) {
       fetchAgents();
+      if (isAdmin) {
+        fetchBranches();
+      }
     }
-  }, [user, isManager]);
+  }, [user, isManager, isAdmin]);
 
   const fetchAgents = async () => {
     if (!user) return;
 
     try {
       setIsLoading(true);
-      const agentsList = await getAgentsByManager(user.$id);
-      setAgents(agentsList);
+      if (isAdmin && user.branchId) {
+        // Admin: show agents from their branch, or all if no branch
+        const agentsList = await getUsersByBranch(user.branchId);
+        setAgents(agentsList.filter(u => u.role === 'agent'));
+      } else if (isAdmin) {
+        // Admin without branch: show agents they manage
+        const agentsList = await getAgentsByManager(user.$id);
+        setAgents(agentsList);
+      } else {
+        const agentsList = await getAgentsByManager(user.$id);
+        setAgents(agentsList);
+      }
     } catch (err: any) {
       console.error('Error fetching agents:', err);
       setError(err.message || 'Failed to fetch agents');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchBranches = async () => {
+    try {
+      const branchesList = await listBranches();
+      setBranches(branchesList.filter(b => b.isActive));
+      const map = new Map<string, string>();
+      branchesList.forEach(b => map.set(b.$id, b.name));
+      setBranchMap(map);
+    } catch (err: any) {
+      console.error('Error fetching branches:', err);
     }
   };
 
@@ -78,11 +108,13 @@ function UserManagementContent() {
       setIsCreating(true);
       setError(null);
 
+      const managerId = isAdmin && data.managerId ? data.managerId : user.$id;
+
       await createAgent({
         name: data.name,
         email: data.email,
         password: data.password,
-        managerId: user.$id,
+        managerId,
       });
 
       // Reset form and close dialog
@@ -155,6 +187,7 @@ function UserManagementContent() {
                   <tr className="border-b border-gray-200 dark:border-gray-700">
                     <th className="text-left py-3 px-4 font-semibold">Name</th>
                     <th className="text-left py-3 px-4 font-semibold">Email</th>
+                    <th className="text-left py-3 px-4 font-semibold">Branch</th>
                     <th className="text-left py-3 px-4 font-semibold">Created</th>
                   </tr>
                 </thead>
@@ -166,6 +199,9 @@ function UserManagementContent() {
                     >
                       <td className="py-3 px-4">{agent.name}</td>
                       <td className="py-3 px-4">{agent.email}</td>
+                      <td className="py-3 px-4">
+                        {agent.branchId ? (branchMap.get(agent.branchId) || agent.branchId) : '—'}
+                      </td>
                       <td className="py-3 px-4">
                         {agent.$createdAt ? new Date(agent.$createdAt).toLocaleDateString() : 'N/A'}
                       </td>
@@ -236,6 +272,25 @@ function UserManagementContent() {
                     </p>
                   )}
                 </div>
+
+                {/* Branch selector (Admin only) */}
+                {isAdmin && branches.length > 0 && (
+                  <div>
+                    <Label htmlFor="branchId">Branch</Label>
+                    <select
+                      id="branchId"
+                      {...register('branchId')}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 mt-1"
+                    >
+                      <option value="">No branch</option>
+                      {branches.map((branch) => (
+                        <option key={branch.$id} value={branch.$id}>
+                          {branch.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end pt-4">
                   <Button

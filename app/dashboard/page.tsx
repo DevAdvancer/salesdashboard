@@ -17,7 +17,7 @@ import { getAgentsByManager } from '@/lib/services/user-service';
 import { FileText, History, Users, TrendingUp } from 'lucide-react';
 
 function DashboardContent() {
-  const { user, isManager, isAgent, loading } = useAuth();
+  const { user, isAdmin, isManager, isAgent, loading } = useAuth();
   const router = useRouter();
   const [metrics, setMetrics] = useState({
     activeLeads: 0,
@@ -45,9 +45,9 @@ function DashboardContent() {
           user.role
         );
 
-        // Fetch agents count (managers only)
+        // Fetch agents count (admins and managers)
         let agentsCount = 0;
-        if (isManager) {
+        if (isAdmin || isManager) {
           const agents = await getAgentsByManager(user.$id);
           agentsCount = agents.length;
         }
@@ -67,7 +67,7 @@ function DashboardContent() {
     if (user) {
       fetchMetrics();
     }
-  }, [user, isManager]);
+  }, [user, isAdmin, isManager]);
 
   if (!user) {
     return null;
@@ -114,7 +114,7 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
-        {isManager && (
+        {(isAdmin || isManager) && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Agents</CardTitle>
@@ -158,7 +158,30 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
-        {isManager && (
+        {isAdmin && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Admin Access</CardTitle>
+              <CardDescription>
+                You have full system access
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                As an admin, you can:
+              </p>
+              <ul className="list-disc list-inside text-sm mt-2 space-y-1">
+                <li>Manage all branches</li>
+                <li>Create and manage users</li>
+                <li>Configure lead forms</li>
+                <li>Manage access controls</li>
+                <li>View all leads and history</li>
+              </ul>
+            </CardContent>
+          </Card>
+        )}
+
+        {!isAdmin && isManager && (
           <Card>
             <CardHeader>
               <CardTitle>Manager Access</CardTitle>
@@ -218,7 +241,7 @@ function DashboardContent() {
             >
               View Leads
             </Button>
-            {isManager && (
+            {(isAdmin || isManager) && (
               <>
                 <Button
                   className="w-full"
@@ -235,6 +258,15 @@ function DashboardContent() {
                   Configure Forms
                 </Button>
               </>
+            )}
+            {isAdmin && (
+              <Button
+                className="w-full"
+                variant="outline"
+                onClick={() => router.push('/branches')}
+              >
+                Manage Branches
+              </Button>
             )}
           </CardContent>
         </Card>

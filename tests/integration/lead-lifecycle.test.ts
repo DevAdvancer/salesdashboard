@@ -34,6 +34,11 @@ jest.mock('@/lib/appwrite', () => ({
   },
 }));
 
+// Mock the lead validator to always return valid by default
+jest.mock('@/lib/services/lead-validator', () => ({
+  validateLeadUniqueness: jest.fn().mockResolvedValue({ isValid: true }),
+}));
+
 describe('Integration: Complete Lead Lifecycle', () => {
   const managerId = 'manager-001';
   const agentId = 'agent-001';
@@ -85,6 +90,7 @@ describe('Integration: Complete Lead Lifecycle', () => {
       'unique()',
       expect.objectContaining({
         ownerId: managerId,
+        branchId: null,
         isClosed: false,
       }),
       expect.arrayContaining([

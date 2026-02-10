@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { account, databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
-import { User, AuthContext as AuthContextType } from '@/lib/types';
+import { User, UserRole, AuthContext as AuthContextType } from '@/lib/types';
 import { ID, Models } from 'appwrite';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -24,8 +24,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         $id: userDoc.$id,
         name: userDoc.name as string,
         email: userDoc.email as string,
-        role: userDoc.role as 'manager' | 'agent',
+        role: userDoc.role as UserRole,
         managerId: userDoc.managerId as string | null,
+        branchId: (userDoc.branchId as string) || null,
         $createdAt: userDoc.$createdAt,
         $updatedAt: userDoc.$updatedAt,
       };
@@ -144,8 +145,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         $id: userDoc.$id,
         name: userDoc.name as string,
         email: userDoc.email as string,
-        role: userDoc.role as 'manager' | 'agent',
+        role: userDoc.role as UserRole,
         managerId: userDoc.managerId as string | null,
+        branchId: (userDoc.branchId as string) || null,
         $createdAt: userDoc.$createdAt,
         $updatedAt: userDoc.$updatedAt,
       };
@@ -164,11 +166,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Role-based helper properties
-  const isManager = user?.role === 'manager';
+  const isAdmin = user?.role === 'admin';
+  const isManager = user?.role === 'manager' || user?.role === 'admin';
   const isAgent = user?.role === 'agent';
 
   const value: AuthContextType = {
     user,
+    isAdmin,
     isManager,
     isAgent,
     loading,

@@ -27,6 +27,11 @@ jest.mock('@/lib/appwrite', () => ({
   },
 }));
 
+// Mock the lead validator to always return valid by default
+jest.mock('@/lib/services/lead-validator', () => ({
+  validateLeadUniqueness: jest.fn().mockResolvedValue({ isValid: true }),
+}));
+
 describe('Lead Service', () => {
   const mockManagerId = 'manager-123';
   const mockAgentId = 'agent-456';
@@ -75,6 +80,7 @@ describe('Lead Service', () => {
           status: 'New',
           ownerId: mockManagerId,
           assignedToId: mockAgentId,
+          branchId: null,
           isClosed: false,
           closedAt: null,
         },
@@ -116,6 +122,7 @@ describe('Lead Service', () => {
         'unique()',
         expect.objectContaining({
           assignedToId: null,
+          branchId: null,
         }),
         expect.arrayContaining([
           Permission.read(Role.user(mockManagerId)),

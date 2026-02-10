@@ -13,7 +13,8 @@ export type ComponentKey =
   | 'history'
   | 'user-management'
   | 'field-management'
-  | 'settings';
+  | 'settings'
+  | 'branch-management';
 
 interface AccessRule {
   $id: string;
@@ -31,7 +32,7 @@ interface AccessControlContextType {
 const AccessControlContext = createContext<AccessControlContextType | undefined>(undefined);
 
 export function AccessControlProvider({ children }: { children: React.ReactNode }) {
-  const { user, isManager } = useAuth();
+  const { user, isManager, isAdmin } = useAuth();
   const [rules, setRules] = useState<Map<string, boolean>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
 
@@ -69,8 +70,8 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
   }, [fetchRules]);
 
   const canAccess = useCallback((componentKey: ComponentKey): boolean => {
-    // Managers always have full access
-    if (isManager) {
+    // Admins always have full access to everything
+    if (isAdmin) {
       return true;
     }
 
@@ -78,7 +79,7 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
       return false;
     }
 
-    // Check for custom rule
+    // Check for custom rule from DB
     const ruleKey = `${componentKey}-${user.role}`;
     const customRule = rules.get(ruleKey);
 
@@ -86,9 +87,16 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
       return customRule;
     }
 
-    // Default rules: manager=true, agent=false
-    return user.role === 'manager';
-  }, [user, isManager, rules]);
+    // Default rules when no DB rule exists:
+    // manager=true (except branch-management), agent=dashboard+leads only
+    if (user.role === 'manager') {
+      return componentKey !== 'branch-management';
+    }
+    if (user.role === 'agent') {
+      return componentKey === 'dashboard' || componentKey === 'leads';
+    }
+    return false;
+  }, [user, isAdmin, rules]);
 
   const refreshRules = useCallback(async () => {
     await fetchRules();

@@ -34,6 +34,11 @@ jest.mock('@/lib/appwrite', () => ({
   },
 }));
 
+// Mock the lead validator to always return valid by default
+jest.mock('@/lib/services/lead-validator', () => ({
+  validateLeadUniqueness: jest.fn().mockResolvedValue({ isValid: true }),
+}));
+
 describe('Integration: User Management Flow', () => {
   const managerId = 'manager-signup-001';
   const agentId = 'agent-created-001';
@@ -54,10 +59,23 @@ describe('Integration: User Management Flow', () => {
       email: 'agent@example.com',
       role: 'agent',
       managerId: managerId,
+      branchId: null,
       $createdAt: new Date().toISOString(),
       $updatedAt: new Date().toISOString(),
     };
 
+    // Mock manager document lookup (createAgent fetches manager to inherit branchId)
+    const managerDoc = {
+      $id: managerId,
+      name: 'Test Manager',
+      email: 'manager@example.com',
+      role: 'manager',
+      managerId: null,
+      branchId: null,
+      $createdAt: new Date().toISOString(),
+      $updatedAt: new Date().toISOString(),
+    };
+    (databases.getDocument as jest.Mock).mockResolvedValue(managerDoc);
     (account.create as jest.Mock).mockResolvedValue({ $id: agentId });
     (databases.createDocument as jest.Mock).mockResolvedValue(agentDoc);
 
@@ -89,6 +107,7 @@ describe('Integration: User Management Flow', () => {
       expect.objectContaining({
         role: 'agent',
         managerId: managerId,
+        branchId: null,
       }),
       expect.arrayContaining([
         Permission.read(Role.user(managerId)),
@@ -127,6 +146,16 @@ describe('Integration: User Management Flow', () => {
   });
 
   it('should handle duplicate email during agent creation', async () => {
+    // Mock manager document lookup
+    const managerDoc = {
+      $id: managerId,
+      name: 'Test Manager',
+      email: 'manager@example.com',
+      role: 'manager',
+      managerId: null,
+      branchId: null,
+    };
+    (databases.getDocument as jest.Mock).mockResolvedValue(managerDoc);
     (account.create as jest.Mock).mockRejectedValue({
       code: 409,
       message: 'A user with the same id, email, or phone already exists',

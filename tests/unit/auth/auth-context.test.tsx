@@ -79,6 +79,7 @@ describe('AuthContext', () => {
         email: 'manager@test.com',
         role: 'manager',
         managerId: null,
+        branchId: null,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
@@ -142,6 +143,7 @@ describe('AuthContext', () => {
         email: 'agent@test.com',
         role: 'agent',
         managerId: 'manager-123',
+        branchId: null,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
@@ -180,6 +182,7 @@ describe('AuthContext', () => {
         email: 'user@test.com',
         role: 'manager' as const,
         managerId: null,
+        branchId: null,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
@@ -214,6 +217,7 @@ describe('AuthContext', () => {
         email: 'manager@test.com',
         role: 'manager' as const,
         managerId: null,
+        branchId: null,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
@@ -238,6 +242,7 @@ describe('AuthContext', () => {
         email: 'agent@test.com',
         role: 'agent' as const,
         managerId: 'manager-123',
+        branchId: null,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };

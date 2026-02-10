@@ -1,12 +1,12 @@
 /**
  * Task 2.6: Unit Tests for Authentication Flows
- * 
+ *
  * This test suite covers the complete authentication flows including:
  * - Login with valid credentials
  * - Login with invalid credentials
  * - Signup creates manager account
  * - Session expiration handling
- * 
+ *
  * Requirements: 1.2, 1.4
  */
 
@@ -61,6 +61,7 @@ describe('Task 2.6: Authentication Flows', () => {
         email: 'manager@test.com',
         role: 'manager',
         managerId: null,
+        branchId: null,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
@@ -95,6 +96,7 @@ describe('Task 2.6: Authentication Flows', () => {
         email: 'agent@test.com',
         role: 'agent',
         managerId: 'manager-123',
+        branchId: null,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
@@ -203,6 +205,7 @@ describe('Task 2.6: Authentication Flows', () => {
         email: 'newmanager@test.com',
         role: 'manager',
         managerId: null,
+        branchId: null,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
@@ -342,6 +345,7 @@ describe('Task 2.6: Authentication Flows', () => {
         email: 'test@test.com',
         role: 'manager',
         managerId: null,
+        branchId: null,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
@@ -379,6 +383,7 @@ describe('Task 2.6: Authentication Flows', () => {
         email: 'test@test.com',
         role: 'agent',
         managerId: 'manager-123',
+        branchId: null,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
@@ -441,6 +446,7 @@ describe('Task 2.6: Authentication Flows', () => {
         email: 'returning@test.com',
         role: 'manager',
         managerId: null,
+        branchId: null,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
@@ -466,6 +472,7 @@ describe('Task 2.6: Authentication Flows', () => {
         email: 'manager@test.com',
         role: 'manager' as const,
         managerId: null,
+        branchId: null,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
@@ -490,6 +497,7 @@ describe('Task 2.6: Authentication Flows', () => {
         email: 'agent@test.com',
         role: 'agent' as const,
         managerId: 'manager-123',
+        branchId: null,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };

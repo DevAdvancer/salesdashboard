@@ -48,6 +48,7 @@ describe('AuthContext - Signup Flow', () => {
       email: 'manager@example.com',
       role: 'manager',
       managerId: null,
+      branchId: null,
       $createdAt: '2024-01-01T00:00:00.000Z',
       $updatedAt: '2024-01-01T00:00:00.000Z',
     };
@@ -120,6 +121,7 @@ describe('AuthContext - Signup Flow', () => {
       email: 'manager@example.com',
       role: 'manager',
       managerId: null,
+      branchId: null,
       $createdAt: '2024-01-01T00:00:00.000Z',
       $updatedAt: '2024-01-01T00:00:00.000Z',
     };

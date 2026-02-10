@@ -1,32 +1,52 @@
 import { ID, Permission, Role, Query } from 'appwrite';
-import { account, databases } from '@/lib/appwrite';
+import { account, databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { User, UserRole, CreateAgentInput } from '@/lib/types';
 
-const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
+
+/**
+ * Map an Appwrite document to a User object
+ */
+function mapDocToUser(doc: any): User {
+  return {
+    $id: doc.$id,
+    name: doc.name as string,
+    email: doc.email as string,
+    role: doc.role as UserRole,
+    managerId: (doc.managerId as string) || null,
+    branchId: (doc.branchId as string) || null,
+    $createdAt: doc.$createdAt,
+    $updatedAt: doc.$updatedAt,
+  };
+}
 
 /**
  * Create a new agent account
  *
  * This function:
- * 1. Creates an Appwrite Auth account
- * 2. Creates a user document with role='agent' and managerId
- * 3. Sets up document-level permissions for the agent
- *
- * @param input - Agent creation data
- * @returns The created user document
+ * 1. Fetches the manager to inherit their branchId
+ * 2. Creates an Appwrite Auth account
+ * 3. Creates a user document with role='agent', managerId, and inherited branchId
+ * 4. Sets up document-level permissions for the agent
  */
 export async function createAgent(input: CreateAgentInput): Promise<User> {
   const { name, email, password, managerId } = input;
 
   try {
-    // Generate a unique ID for the user
+    // Fetch manager to inherit branchId
+    const managerDoc = await databases.getDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      managerId
+    );
+    const branchId = (managerDoc.branchId as string) || null;
+
     const userId = ID.unique();
 
-    // Step 1: Create Appwrite Auth account
+    // Create Appwrite Auth account
     await account.create(userId, email, password, name);
 
-    // Step 2: Create user document with role='agent' and managerId
+    // Create user document with inherited branchId
     const userDoc = await databases.createDocument(
       DATABASE_ID,
       USERS_COLLECTION_ID,
@@ -36,43 +56,150 @@ export async function createAgent(input: CreateAgentInput): Promise<User> {
         email,
         role: 'agent',
         managerId,
+        branchId,
       },
       [
-        // Document-level permissions
-        Permission.read(Role.user(userId)), // Agent can read their own document
-        Permission.read(Role.user(managerId)), // Manager can read agent's document
-        Permission.update(Role.user(userId)), // Agent can update their own document
-        Permission.update(Role.user(managerId)), // Manager can update agent's document
-        Permission.delete(Role.user(managerId)), // Manager can delete agent's document
+        Permission.read(Role.user(userId)),
+        Permission.read(Role.user(managerId)),
+        Permission.update(Role.user(userId)),
+        Permission.update(Role.user(managerId)),
+        Permission.delete(Role.user(managerId)),
       ]
     );
 
-    return {
-      $id: userDoc.$id,
-      name: userDoc.name as string,
-      email: userDoc.email as string,
-      role: userDoc.role as 'agent',
-      managerId: userDoc.managerId as string,
-      $createdAt: userDoc.$createdAt,
-      $updatedAt: userDoc.$updatedAt,
-    };
+    return mapDocToUser(userDoc);
   } catch (error: any) {
     console.error('Error creating agent:', error);
-
-    // Provide more specific error messages
     if (error.code === 409 || error.message?.includes('already exists')) {
       throw new Error('A user with this email already exists');
     }
-
     throw new Error(error.message || 'Failed to create agent account');
   }
 }
 
 /**
- * Get all agents for a specific manager
- *
- * @param managerId - The manager's user ID
- * @returns List of agents linked to the manager
+ * Assign a manager to a branch.
+ * Updates the manager's branchId and cascades to all linked agents.
+ */
+export async function assignManagerToBranch(managerId: string, branchId: string): Promise<User> {
+  try {
+    // Update manager's branchId
+    const managerDoc = await databases.updateDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      managerId,
+      { branchId }
+    );
+
+    // Cascade: update all agents linked to this manager
+    const agents = await databases.listDocuments(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      [
+        Query.equal('role', 'agent'),
+        Query.equal('managerId', managerId),
+      ]
+    );
+
+    await Promise.all(
+      agents.documents.map(agent =>
+        databases.updateDocument(
+          DATABASE_ID,
+          USERS_COLLECTION_ID,
+          agent.$id,
+          { branchId }
+        )
+      )
+    );
+
+    return mapDocToUser(managerDoc);
+  } catch (error: any) {
+    console.error('Error assigning manager to branch:', error);
+    throw new Error(error.message || 'Failed to assign manager to branch');
+  }
+}
+
+/**
+ * Remove a manager from their branch.
+ * Clears branchId for the manager and all linked agents.
+ */
+export async function removeManagerFromBranch(managerId: string): Promise<User> {
+  try {
+    // Clear manager's branchId
+    const managerDoc = await databases.updateDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      managerId,
+      { branchId: null }
+    );
+
+    // Cascade: clear branchId for all agents linked to this manager
+    const agents = await databases.listDocuments(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      [
+        Query.equal('role', 'agent'),
+        Query.equal('managerId', managerId),
+      ]
+    );
+
+    await Promise.all(
+      agents.documents.map(agent =>
+        databases.updateDocument(
+          DATABASE_ID,
+          USERS_COLLECTION_ID,
+          agent.$id,
+          { branchId: null }
+        )
+      )
+    );
+
+    return mapDocToUser(managerDoc);
+  } catch (error: any) {
+    console.error('Error removing manager from branch:', error);
+    throw new Error(error.message || 'Failed to remove manager from branch');
+  }
+}
+
+/**
+ * Get all users assigned to a specific branch
+ */
+export async function getUsersByBranch(branchId: string): Promise<User[]> {
+  try {
+    const response = await databases.listDocuments(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      [Query.equal('branchId', branchId)]
+    );
+    return response.documents.map(mapDocToUser);
+  } catch (error: any) {
+    console.error('Error fetching users by branch:', error);
+    throw new Error(error.message || 'Failed to fetch users by branch');
+  }
+}
+
+/**
+ * Get all managers that are not assigned to any branch
+ */
+export async function getUnassignedManagers(): Promise<User[]> {
+  try {
+    const response = await databases.listDocuments(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      [
+        Query.equal('role', 'manager'),
+        Query.isNull('branchId'),
+      ]
+    );
+    return response.documents.map(mapDocToUser);
+  } catch (error: any) {
+    console.error('Error fetching unassigned managers:', error);
+    throw new Error(error.message || 'Failed to fetch unassigned managers');
+  }
+}
+
+/**
+ * Get all agents for a specific manager (includes branchId)
  */
 export async function getAgentsByManager(managerId: string): Promise<User[]> {
   try {
@@ -84,16 +211,7 @@ export async function getAgentsByManager(managerId: string): Promise<User[]> {
         Query.equal('managerId', managerId),
       ]
     );
-
-    return response.documents.map(doc => ({
-      $id: doc.$id,
-      name: doc.name as string,
-      email: doc.email as string,
-      role: doc.role as 'agent',
-      managerId: doc.managerId as string,
-      $createdAt: doc.$createdAt,
-      $updatedAt: doc.$updatedAt,
-    }));
+    return response.documents.map(mapDocToUser);
   } catch (error: any) {
     console.error('Error fetching agents:', error);
     throw new Error(error.message || 'Failed to fetch agents');
@@ -102,9 +220,6 @@ export async function getAgentsByManager(managerId: string): Promise<User[]> {
 
 /**
  * Get a user by ID
- *
- * @param userId - The user's ID
- * @returns The user document
  */
 export async function getUserById(userId: string): Promise<User> {
   try {
@@ -113,16 +228,7 @@ export async function getUserById(userId: string): Promise<User> {
       USERS_COLLECTION_ID,
       userId
     );
-
-    return {
-      $id: userDoc.$id,
-      name: userDoc.name as string,
-      email: userDoc.email as string,
-      role: userDoc.role as UserRole,
-      managerId: userDoc.managerId as string | null,
-      $createdAt: userDoc.$createdAt,
-      $updatedAt: userDoc.$updatedAt,
-    };
+    return mapDocToUser(userDoc);
   } catch (error: any) {
     console.error('Error fetching user:', error);
     throw new Error(error.message || 'Failed to fetch user');
@@ -131,10 +237,6 @@ export async function getUserById(userId: string): Promise<User> {
 
 /**
  * Update a user's information
- *
- * @param userId - The user's ID
- * @param data - The data to update
- * @returns The updated user document
  */
 export async function updateUser(
   userId: string,
@@ -147,16 +249,7 @@ export async function updateUser(
       userId,
       data
     );
-
-    return {
-      $id: userDoc.$id,
-      name: userDoc.name as string,
-      email: userDoc.email as string,
-      role: userDoc.role as UserRole,
-      managerId: userDoc.managerId as string | null,
-      $createdAt: userDoc.$createdAt,
-      $updatedAt: userDoc.$updatedAt,
-    };
+    return mapDocToUser(userDoc);
   } catch (error: any) {
     console.error('Error updating user:', error);
     throw new Error(error.message || 'Failed to update user');
@@ -166,8 +259,6 @@ export async function updateUser(
 /**
  * Delete an agent account
  * Note: This only deletes the user document, not the Appwrite Auth account
- *
- * @param agentId - The agent's user ID
  */
 export async function deleteAgent(agentId: string): Promise<void> {
   try {

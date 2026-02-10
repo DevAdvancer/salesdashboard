@@ -3,10 +3,9 @@
 import { useState, useEffect } from 'react';
 import { databases } from '@/lib/appwrite';
 import { useAuth } from '@/lib/contexts/auth-context';
-import { ComponentKey } from '@/lib/contexts/access-control-context';
+import { useAccess, ComponentKey } from '@/lib/contexts/access-control-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
 import { ProtectedRoute } from '@/components/protected-route';
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
@@ -15,17 +14,18 @@ const ACCESS_CONFIG_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_ACCESS_CONF
 interface AccessRule {
   $id?: string;
   componentKey: ComponentKey;
-  role: 'manager' | 'agent';
+  role: 'admin' | 'manager' | 'agent';
   allowed: boolean;
 }
 
-const COMPONENTS: { key: ComponentKey; label: string; description: string }[] = [
+const ALL_COMPONENTS: { key: ComponentKey; label: string; description: string }[] = [
   { key: 'dashboard', label: 'Dashboard', description: 'Main dashboard view' },
   { key: 'leads', label: 'Leads', description: 'Active leads management' },
   { key: 'history', label: 'History', description: 'Closed leads history' },
   { key: 'user-management', label: 'User Management', description: 'Create and manage agents' },
   { key: 'field-management', label: 'Field Management', description: 'Configure lead form fields' },
   { key: 'settings', label: 'Settings', description: 'System settings and configuration' },
+  { key: 'branch-management', label: 'Branch Management', description: 'Manage organizational branches' },
 ];
 
 export default function AccessConfigPage() {
@@ -37,7 +37,8 @@ export default function AccessConfigPage() {
 }
 
 function AccessConfigContent() {
-  const { isManager } = useAuth();
+  const { isAdmin, isManager } = useAuth();
+  const { refreshRules } = useAccess();
   const [rules, setRules] = useState<Map<string, AccessRule>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -82,7 +83,6 @@ function AccessConfigContent() {
       setIsSaving(true);
 
       if (existingRule?.$id) {
-        // Update existing rule
         await databases.updateDocument(
           DATABASE_ID,
           ACCESS_CONFIG_COLLECTION_ID,
@@ -90,16 +90,11 @@ function AccessConfigContent() {
           { allowed: newAllowed }
         );
       } else {
-        // Create new rule
         const newDoc = await databases.createDocument(
           DATABASE_ID,
           ACCESS_CONFIG_COLLECTION_ID,
           'unique()',
-          {
-            componentKey,
-            role,
-            allowed: newAllowed,
-          }
+          { componentKey, role, allowed: newAllowed }
         );
 
         const updatedRules = new Map(rules);
@@ -110,16 +105,14 @@ function AccessConfigContent() {
           allowed: newAllowed,
         });
         setRules(updatedRules);
+        await refreshRules();
         return;
       }
 
-      // Update local state
       const updatedRules = new Map(rules);
-      updatedRules.set(key, {
-        ...existingRule,
-        allowed: newAllowed,
-      });
+      updatedRules.set(key, { ...existingRule!, allowed: newAllowed });
       setRules(updatedRules);
+      await refreshRules();
     } catch (error) {
       console.error('Error updating access rule:', error);
     } finally {
@@ -130,14 +123,23 @@ function AccessConfigContent() {
   const isAllowed = (componentKey: ComponentKey, role: 'manager' | 'agent'): boolean => {
     const key = `${componentKey}-${role}`;
     const rule = rules.get(key);
-
-    if (rule !== undefined) {
-      return rule.allowed;
-    }
-
-    // Default: manager=true, agent=false
-    return role === 'manager';
+    if (rule !== undefined) return rule.allowed;
+    // Defaults: manager=true (except branch-management), agent=false (except dashboard, leads)
+    if (role === 'manager') return componentKey !== 'branch-management';
+    if (role === 'agent') return componentKey === 'dashboard' || componentKey === 'leads';
+    return false;
   };
+
+  // Admin sees all components (including branch-management)
+  // Manager sees all except branch-management
+  const visibleComponents = isAdmin
+    ? ALL_COMPONENTS
+    : ALL_COMPONENTS.filter((c) => c.key !== 'branch-management');
+
+  // Admin can toggle: manager + agent columns
+  // Manager can toggle: agent column only
+  const canEditManager = isAdmin;
+  const canEditAgent = isAdmin || isManager;
 
   if (isLoading) {
     return (
@@ -155,22 +157,29 @@ function AccessConfigContent() {
         <CardHeader>
           <CardTitle className="text-xl md:text-2xl">Access Control Configuration</CardTitle>
           <CardDescription>
-            Configure which components are visible to different user roles.
-            Managers always have full access regardless of these settings.
+            {isAdmin
+              ? 'Configure which components are visible to managers and agents. Admin always has full access.'
+              : 'Configure which components are visible to agents. Managers always have full access.'}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
-            {/* Header Row - hidden on mobile */}
-            <div className="hidden sm:grid grid-cols-3 gap-4 pb-4 border-b">
+            {/* Header Row */}
+            <div className={`hidden sm:grid gap-4 pb-4 border-b ${isAdmin ? 'grid-cols-4' : 'grid-cols-3'}`}>
               <div className="font-semibold">Component</div>
-              <div className="font-semibold text-center">Manager</div>
+              {isAdmin && <div className="font-semibold text-center">Manager</div>}
               <div className="font-semibold text-center">Agent</div>
+              <div />
             </div>
 
             {/* Component Rows */}
-            {COMPONENTS.map((component) => (
-              <div key={component.key} className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4 items-center border-b sm:border-b-0 pb-4 sm:pb-0">
+            {visibleComponents.map((component) => (
+              <div
+                key={component.key}
+                className={`grid grid-cols-1 gap-2 items-center border-b sm:border-b-0 pb-4 sm:pb-0 ${
+                  isAdmin ? 'sm:grid-cols-4 sm:gap-4' : 'sm:grid-cols-3 sm:gap-4'
+                }`}
+              >
                 <div>
                   <Label className="font-medium">{component.label}</Label>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -178,36 +187,50 @@ function AccessConfigContent() {
                   </p>
                 </div>
 
-                <div className="flex sm:justify-center items-center gap-2 sm:gap-0">
-                  <span className="text-sm text-muted-foreground sm:hidden">Manager:</span>
-                  {/* Manager Checkbox (Always Disabled) */}
-                  <input
-                    type="checkbox"
-                    checked={true}
-                    disabled
-                    className="h-5 w-5 rounded border-input disabled:opacity-50"
-                  />
-                </div>
+                {/* Manager column — only visible to admin */}
+                {isAdmin && (
+                  <div className="flex sm:justify-center items-center gap-2 sm:gap-0">
+                    <span className="text-sm text-muted-foreground sm:hidden">Manager:</span>
+                    <input
+                      type="checkbox"
+                      checked={isAllowed(component.key, 'manager')}
+                      onChange={() => toggleAccess(component.key, 'manager')}
+                      disabled={isSaving}
+                      className="h-5 w-5 rounded border-input disabled:opacity-50 cursor-pointer"
+                    />
+                  </div>
+                )}
 
+                {/* Agent column */}
                 <div className="flex sm:justify-center items-center gap-2 sm:gap-0">
                   <span className="text-sm text-muted-foreground sm:hidden">Agent:</span>
-                  {/* Agent Checkbox */}
                   <input
                     type="checkbox"
                     checked={isAllowed(component.key, 'agent')}
                     onChange={() => toggleAccess(component.key, 'agent')}
-                    disabled={isSaving}
+                    disabled={isSaving || !canEditAgent}
                     className="h-5 w-5 rounded border-input disabled:opacity-50 cursor-pointer"
                   />
                 </div>
+
+                <div />
               </div>
             ))}
           </div>
 
           <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
             <p className="text-sm text-blue-800 dark:text-blue-200">
-              <strong>Note:</strong> Changes are saved immediately. Managers always have access to all components.
-              Agents will only see components that are checked in their column.
+              {isAdmin ? (
+                <>
+                  <strong>Note:</strong> Changes are saved immediately. Admin always has full access to all components.
+                  Toggle the checkboxes to control what managers and agents can see.
+                </>
+              ) : (
+                <>
+                  <strong>Note:</strong> Changes are saved immediately. Managers always have access to all components.
+                  Agents will only see components that are checked in their column.
+                </>
+              )}
             </p>
           </div>
         </CardContent>

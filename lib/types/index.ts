@@ -1,5 +1,5 @@
 // User types
-export type UserRole = 'manager' | 'agent';
+export type UserRole = 'admin' | 'manager' | 'agent';
 
 export interface User {
   $id: string;
@@ -7,6 +7,7 @@ export interface User {
   email: string;
   role: UserRole;
   managerId: string | null;
+  branchId: string | null;
   $createdAt?: string;
   $updatedAt?: string;
 }
@@ -25,6 +26,7 @@ export interface Lead {
   status: string;
   ownerId: string;
   assignedToId: string | null;
+  branchId: string | null;
   isClosed: boolean;
   closedAt: string | null;
   $createdAt?: string;
@@ -36,11 +38,38 @@ export interface LeadData {
   [key: string]: any;
 }
 
+// Branch types
+export interface Branch {
+  $id: string;
+  name: string;
+  isActive: boolean;
+  $createdAt?: string;
+  $updatedAt?: string;
+}
+
+export interface CreateBranchInput {
+  name: string;
+}
+
+export interface UpdateBranchInput {
+  name?: string;
+  isActive?: boolean;
+}
+
+// Lead validation types
+export interface LeadValidationResult {
+  isValid: boolean;
+  duplicateField?: 'email' | 'phone';
+  existingLeadId?: string;
+  existingBranchId?: string;
+}
+
 export interface CreateLeadInput {
   data: LeadData;
   ownerId: string;
   assignedToId?: string;
   status: string;
+  branchId?: string | null;
 }
 
 export interface LeadListFilters {
@@ -89,7 +118,8 @@ export type ComponentKey =
   | 'history'
   | 'user-management'
   | 'field-management'
-  | 'settings';
+  | 'settings'
+  | 'branch-management';
 
 export interface AccessRule {
   $id?: string;
@@ -106,6 +136,7 @@ export interface AccessConfig {
 // Authentication context types
 export interface AuthContext {
   user: User | null;
+  isAdmin: boolean;
   isManager: boolean;
   isAgent: boolean;
   loading: boolean;

@@ -6,6 +6,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
   LayoutDashboard,
+  Building2,
   Users,
   FileText,
   History,
@@ -30,6 +31,12 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Dashboard',
     href: '/dashboard',
     icon: LayoutDashboard,
+  },
+  {
+    key: 'branch-management',
+    label: 'Branches',
+    href: '/branches',
+    icon: Building2,
   },
   {
     key: 'leads',
