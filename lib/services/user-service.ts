@@ -1,25 +1,9 @@
 import { ID, Permission, Role, Query } from 'appwrite';
 import { account, databases } from '@/lib/appwrite';
+import { User, UserRole, CreateAgentInput } from '@/lib/types';
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
-
-export interface CreateAgentInput {
-  name: string;
-  email: string;
-  password: string;
-  managerId: string;
-}
-
-export interface User {
-  $id: string;
-  name: string;
-  email: string;
-  role: 'manager' | 'agent';
-  managerId: string | null;
-  $createdAt: string;
-  $updatedAt: string;
-}
 
 /**
  * Create a new agent account
@@ -63,7 +47,15 @@ export async function createAgent(input: CreateAgentInput): Promise<User> {
       ]
     );
 
-    return userDoc as User;
+    return {
+      $id: userDoc.$id,
+      name: userDoc.name as string,
+      email: userDoc.email as string,
+      role: userDoc.role as 'agent',
+      managerId: userDoc.managerId as string,
+      $createdAt: userDoc.$createdAt,
+      $updatedAt: userDoc.$updatedAt,
+    };
   } catch (error: any) {
     console.error('Error creating agent:', error);
 
@@ -93,7 +85,15 @@ export async function getAgentsByManager(managerId: string): Promise<User[]> {
       ]
     );
 
-    return response.documents as User[];
+    return response.documents.map(doc => ({
+      $id: doc.$id,
+      name: doc.name as string,
+      email: doc.email as string,
+      role: doc.role as 'agent',
+      managerId: doc.managerId as string,
+      $createdAt: doc.$createdAt,
+      $updatedAt: doc.$updatedAt,
+    }));
   } catch (error: any) {
     console.error('Error fetching agents:', error);
     throw new Error(error.message || 'Failed to fetch agents');
@@ -114,7 +114,15 @@ export async function getUserById(userId: string): Promise<User> {
       userId
     );
 
-    return userDoc as User;
+    return {
+      $id: userDoc.$id,
+      name: userDoc.name as string,
+      email: userDoc.email as string,
+      role: userDoc.role as UserRole,
+      managerId: userDoc.managerId as string | null,
+      $createdAt: userDoc.$createdAt,
+      $updatedAt: userDoc.$updatedAt,
+    };
   } catch (error: any) {
     console.error('Error fetching user:', error);
     throw new Error(error.message || 'Failed to fetch user');
@@ -140,7 +148,15 @@ export async function updateUser(
       data
     );
 
-    return userDoc as User;
+    return {
+      $id: userDoc.$id,
+      name: userDoc.name as string,
+      email: userDoc.email as string,
+      role: userDoc.role as UserRole,
+      managerId: userDoc.managerId as string | null,
+      $createdAt: userDoc.$createdAt,
+      $updatedAt: userDoc.$updatedAt,
+    };
   } catch (error: any) {
     console.error('Error updating user:', error);
     throw new Error(error.message || 'Failed to update user');

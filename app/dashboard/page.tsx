@@ -149,7 +149,7 @@ export default function DashboardPage() {
                 <Button
                   className="w-full"
                   variant="outline"
-                  onClick={() => router.push('/forms')}
+                  onClick={() => router.push('/field-management')}
                 >
                   Configure Forms
                 </Button>

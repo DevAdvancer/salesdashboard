@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
-import { createAgent, getAgentsByManager, User } from '@/lib/services/user-service';
+import { createAgent, getAgentsByManager } from '@/lib/services/user-service';
+import { User } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -172,7 +173,7 @@ export default function UserManagementPage() {
                       <td className="py-3 px-4">{agent.name}</td>
                       <td className="py-3 px-4">{agent.email}</td>
                       <td className="py-3 px-4">
-                        {new Date(agent.$createdAt).toLocaleDateString()}
+                        {agent.$createdAt ? new Date(agent.$createdAt).toLocaleDateString() : 'N/A'}
                       </td>
                     </tr>
                   ))}

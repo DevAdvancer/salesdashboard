@@ -17,7 +17,7 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
   - Seed default form_config with DEFAULT_FIELDS
   - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.7, 9.8_
 
-- [ ] 2. Authentication system
+- [x] 2. Authentication system
   - [x] 2.1 Create authentication context and hooks
     - Implement AuthProvider with user state management
     - Create useAuth() hook with login, logout, signup methods
@@ -45,7 +45,7 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
     - Add session persistence and restoration
     - _Requirements: 1.4, 10.5_
 
-  - [~] 2.6 Write unit tests for authentication flows
+  - [x] 2.6 Write unit tests for authentication flows
     - Test login with valid credentials
     - Test login with invalid credentials
     - Test signup creates manager account
@@ -55,7 +55,7 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
 - [x] 3. Checkpoint - Verify authentication works
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 4. Access control system
+- [x] 4. Access control system
   - [x] 4.1 Create access control service and context
     - Implement AccessControlProvider with rule caching
     - Create useAccess() hook for component visibility checks
@@ -87,14 +87,14 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
     - **Property 4: Access config persistence round-trip**
     - **Validates: Requirements 2.2**
 
-  - [~] 4.7 Write unit tests for access control
+  - [x] 4.7 Write unit tests for access control
     - Test default rules apply correctly
     - Test custom rules override defaults
     - Test manager always has access
     - Test agent respects rules
     - _Requirements: 2.4, 2.5, 2.6_
 
-- [ ] 5. User management module
+- [x] 5. User management module
   - [x] 5.1 Create user management service
     - Implement createAgent(name, email, password) function
     - Add Appwrite account creation logic
@@ -121,27 +121,37 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
     - Test agent cannot access user management
     - _Requirements: 8.2, 8.3, 8.5_
 
-- [ ] 6. Form builder system
-  - [~] 6.1 Create form configuration service
+- [x] 6. Form builder system
+  - [x] 6.1 Create form configuration service
     - Implement getFormConfig() to fetch current config
     - Implement updateFormConfig(fields) with version increment
     - Add singleton pattern using 'current' document ID
     - Implement field operations: add, remove, reorder
     - _Requirements: 3.1, 3.2, 3.7, 9.3_
 
-  - [~] 6.2 Write property test for form config operations
+  - [x] 6.2 Write property test for form config operations
     - **Property 7: Form config field operations**
     - **Validates: Requirements 3.2**
 
-  - [ ] 6.3 Write property test for form confi
-ement form config publish functionality
+  - [x] 6.3 Write property test for form config persistence
+    - **Property 10: Form config persistence round-trip**
+    - **Validates: Requirements 3.7**
+
+  - [x] 6.4 Create form builder page UI
+    - Build field list with drag-and-drop reordering
+    - Add field type selector for adding new fields
+    - Create field editor panel for property editing
+    - Add form preview showing agent view
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6_
+
+  - [x] 6.5 Implement form config publish functionality
     - Add publish button with confirmation
     - Persist changes to form_config collection
     - Increment version number
     - Show success notification
     - _Requirements: 3.7_
 
-  - [~] 6.6 Write unit tests for form builder
+  - [x] 6.6 Write unit tests for form builder
     - Test adding field updates config
     - Test removing field updates config
     - Test reordering fields updates order
@@ -151,11 +161,11 @@ ement form config publish functionality
     - Test version increments on publish
     - _Requirements: 3.2, 3.5, 3.6, 3.7_
 
-- [~] 7. Checkpoint - Verify form builder works
+- [x] 7. Checkpoint - Verify form builder works
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 8. Dynamic form rendering system
-  - [~] 8.1 Create form schema generator
+- [x] 8. Dynamic form rendering system
+  - [x] 8.1 Create form schema generator
     - Implement generateZodSchema(formConfig) function
     - Map field types to zod validators
     - Apply required/optional based on field config
@@ -163,23 +173,23 @@ ement form config publish functionality
     - Add dropdown enum validation
     - _Requirements: 3.9, 10.4, 10.5, 11.1, 11.2, 11.3_
 
-  - [~] 8.2 Write property test for required field validation
+  - [x] 8.2 Write property test for required field validation
     - **Property 9: Required field validation enforcement**
     - **Validates: Requirements 3.9, 11.1**
 
-  - [~] 8.3 Write property test for email validation
+  - [x] 8.3 Write property test for email validation
     - **Property 19: Email format validation**
     - **Validates: Requirements 11.2**
 
-  - [~] 8.4 Write property test for phone validation
+  - [x] 8.4 Write property test for phone validation
     - **Property 20: Phone format validation**
     - **Validates: Requirements 11.3**
 
-  - [~] 8.5 Write property test for dropdown constraint
+  - [x] 8.5 Write property test for dropdown constraint
     - **Property 21: Dropdown options constraint**
     - **Validates: Requirements 3.6**
 
-  - [~] 8.6 Create dynamic form component
+  - [x] 8.6 Create dynamic form component
     - Implement DynamicLeadForm component with react-hook-form
     - Filter fields by visible=true for agents
     - Sort fields by order property
@@ -188,11 +198,11 @@ ement form config publish functionality
     - Display field-level error messages
     - _Requirements: 3.8, 3.9, 10.4, 10.5, 11.4, 11.5_
 
-  - [~] 8.6 Write property test for field visibility filtering
+  - [x] 8.6 Write property test for field visibility filtering
     - **Property 8: Field visibility filtering for agents**
     - **Validates: Requirements 3.8**
 
-  - [~] 8.7 Write unit tests for form rendering
+  - [x] 8.7 Write unit tests for form rendering
     - Test fields render in correct order
     - Test only visible fields shown to agents
     - Test all fields shown to managers
@@ -201,7 +211,7 @@ ement form config publish functionality
     - _Requirements: 3.8, 3.9, 11.4, 11.5_
 
 - [ ] 9. Lead management service
-  - [~] 9.1 Create lead service with CRUD operations
+  - [ ] 9.1 Create lead service with CRUD operations
     - Implement createLead(data, ownerId, assignedToId) function
     - Implement updateLead(leadId, data) function
     - Implement deleteLead(leadId) function
@@ -211,48 +221,48 @@ ement form config publish functionality
     - Set document-level permissions on create/update
     - _Requirements: 4.1, 4.2, 5.1, 5.6, 6.2, 9.5, 9.6_
 
-  - [~] 9.2 Write property test for lead data serialization
+  - [ ] 9.2 Write property test for lead data serialization
     - **Property 11: Lead data JSON serialization round-trip**
     - **Validates: Requirements 3.10, 9.5, 9.6**
 
-  - [~] 9.3 Implement lead closure functionality
+  - [ ] 9.3 Implement lead closure functionality
     - Create closeLead(leadId, closedStatus) function
     - Set isClosed=true and closedAt timestamp
     - Update status field
     - Update permissions to read-only for agent
     - _Requirements: 4.3, 4.5, 4.6_
 
-  - [~] 9.4 Write property test for lead closure
+  - [ ] 9.4 Write property test for lead closure
     - **Property 12: Lead closure state transition**
     - **Validates: Requirements 4.3, 4.4, 4.5**
 
-  - [~] 9.5 Write property test for closed lead read-only
+  - [ ] 9.5 Write property test for closed lead read-only
     - **Property 17: Closed lead read-only enforcement**
     - **Validates: Requirements 4.6, 6.3**
 
-  - [~] 9.6 Implement lead reopen functionality (manager only)
+  - [ ] 9.6 Implement lead reopen functionality (manager only)
     - Create reopenLead(leadId) function
     - Set isClosed=false
     - Preserve closedAt timestamp
     - Restore update permissions for assigned agent
     - _Requirements: 4.7, 7.6_
 
-  - [~] 9.7 Write property test for lead reopen
+  - [ ] 9.7 Write property test for lead reopen
     - **Property 13: Lead reopen preserves history**
     - **Validates: Requirements 4.7, 7.6**
 
-  - [~] 9.8 Implement lead assignment functionality
+  - [ ] 9.8 Implement lead assignment functionality
     - Create assignLead(leadId, agentId) function
     - Update assignedToId field
     - Update document permissions to include new agent
     - Remove old agent from permissions if changed
     - _Requirements: 5.2, 5.3, 5.6_
 
-  - [~] 9.9 Write property test for lead assignment permissions
+  - [ ] 9.9 Write property test for lead assignment permissions
     - **Property 16: Lead assignment permission update**
     - **Validates: Requirements 5.2, 6.2, 6.3**
 
-  - [~] 9.10 Write unit tests for lead service
+  - [ ] 9.10 Write unit tests for lead service
     - Test lead creation with valid data
     - Test lead creation with missing required fields fails
     - Test lead update
@@ -263,7 +273,7 @@ ement form config publish functionality
     - _Requirements: 4.2, 4.3, 4.7, 5.2_
 
 - [ ] 10. Lead list and filtering UI
-  - [~] 10.1 Create leads page with active leads list
+  - [ ] 10.1 Create leads page with active leads list
     - Build leads table with columns: name, email, status, assigned to, created date
     - Implement role-based filtering (agent sees only assigned, manager sees all owned)
     - Add filter controls: status, assigned agent, date range, search
@@ -271,15 +281,15 @@ ement form config publish functionality
     - Add pagination for large lists
     - _Requirements: 5.4, 5.5, 10.1, 10.2, 10.3_
 
-  - [~] 10.2 Write property test for agent lead visibility
+  - [ ] 10.2 Write property test for agent lead visibility
     - **Property 14: Agent lead visibility restriction**
     - **Validates: Requirements 5.4, 6.2**
 
-  - [~] 10.3 Write property test for manager lead visibility
+  - [ ] 10.3 Write property test for manager lead visibility
     - **Property 15: Manager lead visibility**
     - **Validates: Requirements 5.5, 6.4**
 
-  - [~] 10.4 Create lead detail view
+  - [ ] 10.4 Create lead detail view
     - Build lead detail page with all field data
     - Add edit mode for active leads
     - Add close lead button with confirmation dialog
@@ -287,7 +297,7 @@ ement form config publish functionality
     - Display read-only view for closed leads
     - _Requirements: 4.6, 5.2, 10.3_
 
-  - [~] 10.5 Create lead form dialog
+  - [ ] 10.5 Create lead form dialog
     - Build create/edit lead dialog with dynamic form
     - Integrate DynamicLeadForm component
     - Add owner and assigned agent selectors
@@ -295,7 +305,7 @@ ement form config publish functionality
     - Show success/error notifications
     - _Requirements: 4.1, 4.2, 5.1, 10.5, 11.4, 11.5_
 
-  - [~] 10.6 Write unit tests for lead UI
+  - [ ] 10.6 Write unit tests for lead UI
     - Test agent sees only assigned leads
     - Test manager sees all owned leads
     - Test filters work correctly
@@ -304,11 +314,11 @@ ement form config publish functionality
     - Test close lead moves to history
     - _Requirements: 5.4, 5.5, 4.3, 4.5_
 
-- [~] 11. Checkpoint - Verify lead management works
+- [ ] 11. Checkpoint - Verify lead management works
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 12. History and audit system
-  - [~] 12.1 Create history page with closed leads list
+  - [ ] 12.1 Create history page with closed leads list
     - Build history table with columns: name, email, status, closed date, assigned to
     - Query leads where isClosed=true
     - Apply role-based filtering (agent sees assigned, manager sees owned)
@@ -316,11 +326,11 @@ ement form config publish functionality
     - Sort by closedAt descending
     - _Requirements: 7.1, 7.2, 7.3, 7.5_
 
-  - [~] 12.2 Write property test for history filtering
+  - [ ] 12.2 Write property test for history filtering
     - **Property 18: History filtering correctness**
     - **Validates: Requirements 7.3, 7.4**
 
-  - [~] 12.3 Create history detail view
+  - [ ] 12.3 Create history detail view
     - Build read-only lead detail view
     - Display all field data including hidden fields
     - Show closure metadata (closedAt, status)
@@ -328,7 +338,7 @@ ement form config publish functionality
     - Disable all form inputs
     - _Requirements: 7.2, 7.4, 7.6_
 
-  - [~] 12.4 Write unit tests for history
+  - [ ] 12.4 Write unit tests for history
     - Test only closed leads appear in history
     - Test filters work correctly
     - Test read-only enforcement
@@ -337,7 +347,7 @@ ement form config publish functionality
     - _Requirements: 7.1, 7.2, 7.6_
 
 - [ ] 13. Navigation and layout
-  - [~] 13.1 Create main layout with navigation
+  - [ ] 13.1 Create main layout with navigation
     - Build sidebar navigation with component links
     - Implement useAccess() to filter visible components
     - Add user menu with logout
@@ -345,7 +355,7 @@ ement form config publish functionality
     - Apply dark theme styling
     - _Requirements: 2.4, 2.6, 10.1, 10.2, 10.8_
 
-  - [~] 13.2 Create dashboard page
+  - [ ] 13.2 Create dashboard page
     - Build dashboard with key metrics cards
     - Show active leads count
     - Show closed leads count
@@ -353,7 +363,7 @@ ement form config publish functionality
     - Add quick action buttons
     - _Requirements: 2.3, 10.1, 10.2_
 
-  - [~] 13.3 Write unit tests for navigation
+  - [ ] 13.3 Write unit tests for navigation
     - Test agent sees only permitted components
     - Test manager sees all components
     - Test navigation links work correctly
@@ -361,20 +371,20 @@ ement form config publish functionality
     - _Requirements: 2.4, 2.6, 10.8_
 
 - [ ] 14. Error handling and loading states
-  - [~] 14.1 Implement error boundaries
+  - [ ] 14.1 Implement error boundaries
     - Create ErrorBoundary component for route wrapping
     - Add fallback UI with reload button
     - Implement error logging
     - _Requirements: 10.6_
 
-  - [~] 14.2 Add loading states to all async operations
+  - [ ] 14.2 Add loading states to all async operations
     - Add loading spinners to forms
     - Add skeleton loaders to lists
     - Add loading states to buttons
     - Implement optimistic UI updates where appropriate
     - _Requirements: 10.6_
 
-  - [~] 14.3 Implement error notifications
+  - [ ] 14.3 Implement error notifications
     - Create toast notification system
     - Add error messages for validation failures
     - Add error messages for API errors
@@ -382,7 +392,7 @@ ement form config publish functionality
     - Add network error handling with retry
     - _Requirements: 10.7, 11.4_
 
-  - [~] 14.4 Write unit tests for error handling
+  - [ ] 14.4 Write unit tests for error handling
     - Test error boundary catches crashes
     - Test validation errors display correctly
     - Test API errors show notifications
@@ -391,7 +401,7 @@ ement form config publish functionality
     - _Requirements: 10.6, 10.7_
 
 - [ ] 15. Responsive design and styling
-  - [~] 15.1 Apply Tailwind CSS v4 dark theme
+  - [ ] 15.1 Apply Tailwind CSS v4 dark theme
     - Configure Tailwind with dark theme colors
     - Apply consistent spacing and typography
     - Style all forms with dark theme
@@ -399,7 +409,7 @@ ement form config publish functionality
     - Add hover and focus states
     - _Requirements: 10.1, 10.2_
 
-  - [~] 15.2 Implement responsive layouts
+  - [ ] 15.2 Implement responsive layouts
     - Make navigation responsive (mobile menu)
     - Make tables responsive (horizontal scroll or cards)
     - Make forms responsive (stack on mobile)
@@ -408,7 +418,7 @@ ement form config publish functionality
     - _Requirements: 10.3_
 
 - [ ] 16. Integration and final wiring
-  - [~] 16.1 Wire all components together
+  - [ ] 16.1 Wire all components together
     - Connect authentication to all protected routes
     - Connect access control to navigation
     - Connect form builder to lead forms
@@ -417,14 +427,14 @@ ement form config publish functionality
     - Verify all data flows work end-to-end
     - _Requirements: All_
 
-  - [~] 16.2 Write integration tests for complete flows
+  - [ ] 16.2 Write integration tests for complete flows
     - Test complete lead lifecycle (create → assign → edit → close → reopen)
     - Test user management flow (signup → create agent → agent login → agent sees assigned leads)
     - Test form builder flow (create field → publish → agent sees field → create lead with field)
     - Test access control flow (manager restricts component → agent cannot access)
     - _Requirements: All_
 
-- [~] 17. Final checkpoint - Ensure all tests pass
+- [ ] 17. Final checkpoint - Ensure all tests pass
   - Run all unit tests
   - Run all property tests (100 iterations each)
   - Run all integration tests

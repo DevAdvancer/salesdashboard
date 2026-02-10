@@ -15,6 +15,7 @@ export interface CreateAgentInput {
   name: string;
   email: string;
   password: string;
+  managerId: string;
 }
 
 // Lead types
