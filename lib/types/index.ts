@@ -1,5 +1,11 @@
 // User types
-export type UserRole = 'admin' | 'manager' | 'agent';
+export type UserRole = 'admin' | 'manager' | 'team_lead' | 'agent';
+
+export const VALID_ROLES: UserRole[] = ['admin', 'manager', 'team_lead', 'agent'];
+
+export function isValidRole(value: string): value is UserRole {
+  return VALID_ROLES.includes(value as UserRole);
+}
 
 export interface User {
   $id: string;
@@ -7,16 +13,42 @@ export interface User {
   email: string;
   role: UserRole;
   managerId: string | null;
-  branchId: string | null;
+  teamLeadId: string | null;
+  branchIds: string[];
+  /** @deprecated Use branchIds instead */
+  branchId?: string | null;
   $createdAt?: string;
   $updatedAt?: string;
+}
+
+export interface CreateManagerInput {
+  name: string;
+  email: string;
+  password: string;
+  branchIds: string[];
+}
+
+export interface CreateTeamLeadInput {
+  name: string;
+  email: string;
+  password: string;
+  managerId: string;
+  branchIds: string[];
+
+  export interface CreateManagerInput {
+    name: string;
+    email: string;
+    password: string;
+    branchIds: string[];
+  }
 }
 
 export interface CreateAgentInput {
   name: string;
   email: string;
   password: string;
-  managerId: string;
+  teamLeadId: string;
+  branchIds: string[];
 }
 
 // Lead types
@@ -66,7 +98,6 @@ export interface LeadValidationResult {
 
 export interface CreateLeadInput {
   data: LeadData;
-  ownerId: string;
   assignedToId?: string;
   status: string;
   branchId?: string | null;
@@ -138,6 +169,7 @@ export interface AuthContext {
   user: User | null;
   isAdmin: boolean;
   isManager: boolean;
+  isTeamLead: boolean;
   isAgent: boolean;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;

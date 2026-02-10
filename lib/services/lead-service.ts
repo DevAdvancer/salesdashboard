@@ -8,13 +8,15 @@ import { validateLeadUniqueness } from '@/lib/services/lead-validator';
  *
  * This function creates a new lead with the provided data.
  * It validates lead uniqueness (email/phone) across all branches before creation.
+ * It automatically sets ownerId to the creating user's ID (Requirement 4.1).
  * It sets the branchId from the input (auto-set from user's branch, or admin-specified).
  * It sets document-level permissions based on owner and assigned agent.
  *
+ * @param creatingUserId - The ID of the user creating the lead (auto-set as ownerId)
  * @param input - The lead creation input
  * @returns The created lead
  */
-export async function createLead(input: CreateLeadInput): Promise<Lead> {
+export async function createLead(creatingUserId: string, input: CreateLeadInput): Promise<Lead> {
   try {
     // Validate lead uniqueness before creating
     const validation = await validateLeadUniqueness(input.data);
@@ -25,15 +27,18 @@ export async function createLead(input: CreateLeadInput): Promise<Lead> {
       );
     }
 
+    // Auto-set ownerId to the creating user's ID (Requirement 4.1)
+    const ownerId = creatingUserId;
+
     // Serialize lead data to JSON
     const dataJson = JSON.stringify(input.data);
 
     // Build permissions array
     const permissions: string[] = [
-      // Owner (manager) has full access
-      Permission.read(Role.user(input.ownerId)),
-      Permission.update(Role.user(input.ownerId)),
-      Permission.delete(Role.user(input.ownerId)),
+      // Owner (creator) has full access
+      Permission.read(Role.user(ownerId)),
+      Permission.update(Role.user(ownerId)),
+      Permission.delete(Role.user(ownerId)),
     ];
 
     // If assigned to an agent, grant them read and update access
@@ -52,7 +57,7 @@ export async function createLead(input: CreateLeadInput): Promise<Lead> {
       {
         data: dataJson,
         status: input.status || 'New',
-        ownerId: input.ownerId,
+        ownerId: ownerId,
         assignedToId: input.assignedToId || null,
         branchId: input.branchId || null,
         isClosed: false,
@@ -159,20 +164,21 @@ export async function getLead(leadId: string): Promise<Lead> {
  *
  * This function fetches leads with role-based filtering:
  * - Admins see all leads across all branches
- * - Managers see only leads belonging to their branch (filtered by branchId)
+ * - Managers see only leads belonging to any of their branches (filtered by branchIds)
+ * - Team Leads see only leads belonging to any of their branches (filtered by branchIds)
  * - Agents see only leads assigned to them
  *
  * @param filters - Optional filters for the lead list
  * @param userId - The ID of the current user
  * @param userRole - The role of the current user
- * @param branchId - The branch ID of the current user (for managers)
+ * @param branchIds - The branch IDs of the current user (for managers and team leads)
  * @returns Array of leads
  */
 export async function listLeads(
   filters: LeadListFilters,
   userId: string,
   userRole: UserRole,
-  branchId?: string | null
+  branchIds?: string[]
 ): Promise<Lead[]> {
   try {
     const queries: string[] = [];
@@ -183,12 +189,12 @@ export async function listLeads(
       queries.push(Query.equal('assignedToId', userId));
     } else if (userRole === 'admin') {
       // Admins see all leads across all branches — no branch/owner filter
-    } else {
-      // Managers see only leads in their branch
-      if (branchId) {
-        queries.push(Query.equal('branchId', branchId));
+    } else if (userRole === 'manager' || userRole === 'team_lead') {
+      // Managers and Team Leads see only leads in their branches
+      if (branchIds && branchIds.length > 0) {
+        queries.push(Query.equal('branchId', branchIds));
       } else {
-        // Manager without a branch sees only their own leads
+        // Manager/Team Lead without branches sees only their own leads
         queries.push(Query.equal('ownerId', userId));
       }
     }
@@ -206,7 +212,7 @@ export async function listLeads(
     }
 
     // Apply assigned agent filter (for managers and admins)
-    if (filters.assignedToId && (userRole === 'manager' || userRole === 'admin')) {
+    if (filters.assignedToId && (userRole === 'manager' || userRole === 'team_lead' || userRole === 'admin')) {
       queries.push(Query.equal('assignedToId', filters.assignedToId));
     }
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { FormField } from '@/lib/types';
@@ -8,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/contexts/auth-context';
+import { LeadAssignmentDropdown } from '@/components/lead-assignment-dropdown';
 
 interface DynamicLeadFormProps {
   formConfig: FormField[];
@@ -36,16 +38,28 @@ export function DynamicLeadForm({
   submitLabel = 'Submit',
   isLoading = false,
 }: DynamicLeadFormProps) {
-  const { isAgent } = useAuth();
+  const { user, isAgent } = useAuth();
+
+  // State for the lead assignment dropdown (Requirement 4.2, 4.3, 4.4)
+  // Agents auto-assign to themselves; managers/team leads pick from dropdown
+  const [assignedToId, setAssignedToId] = useState<string | null>(
+    isAgent && user ? user.$id : null
+  );
+
+  // Filter out ownerId and assignedToId from configurable form fields (Requirement 4.5)
+  // These are handled automatically: ownerId by createLead, assignedToId by the dropdown
+  const filteredConfig = formConfig.filter(
+    (f) => f.key !== 'ownerId' && f.key !== 'assignedToId'
+  );
 
   // Filter visible fields for agents (Requirement 3.8)
   // Managers see all fields in form builder, but in lead forms, we filter for agents
   const visibleFields = isAgent
-    ? getVisibleFields(formConfig)
-    : formConfig.filter(f => f.visible).sort((a, b) => a.order - b.order);
+    ? getVisibleFields(filteredConfig)
+    : filteredConfig.filter(f => f.visible).sort((a, b) => a.order - b.order);
 
   // Generate zod schema from form config (Requirements 10.5, 11.1, 11.2, 11.3)
-  const schema = generateZodSchema(formConfig);
+  const schema = generateZodSchema(filteredConfig);
 
   // Initialize react-hook-form (Requirement 10.4)
   const {
@@ -59,7 +73,12 @@ export function DynamicLeadForm({
   });
 
   const handleFormSubmit = async (data: Record<string, any>) => {
-    await onSubmit(data);
+    // Inject assignedToId into the submitted data (Requirement 4.2, 4.3, 4.4)
+    const submissionData = {
+      ...data,
+      ...(assignedToId ? { assignedToId } : {}),
+    };
+    await onSubmit(submissionData);
   };
 
   /**
@@ -180,6 +199,16 @@ export function DynamicLeadForm({
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
+      {/* Lead Assignment Dropdown - role-aware (Requirements 4.2, 4.3, 4.4) */}
+      {user && (
+        <LeadAssignmentDropdown
+          creatorRole={user.role}
+          creatorBranchIds={user.branchIds ?? []}
+          value={assignedToId}
+          onChange={setAssignedToId}
+        />
+      )}
+
       {/* Render fields in order (Requirement 3.8) */}
       {visibleFields.map((field) => renderField(field))}
 

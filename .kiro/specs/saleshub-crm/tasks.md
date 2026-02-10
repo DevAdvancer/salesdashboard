@@ -210,7 +210,7 @@ This implementation plan breaks down the SalesHub CRM system into incremental, t
     - Test form submission disabled when invalid
     - _Requirements: 3.8, 3.9, 11.4, 11.5_
 
-- [-] 9. Lead management service
+- [x] 9. Lead management service
   - [x] 9.1 Create lead service with CRUD operations
     - Implement createLead(data, ownerId, assignedToId) function
     - Implement updateLead(leadId, data) function

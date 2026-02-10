@@ -3,27 +3,20 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
-import { createAgent, getAgentsByManager, getUsersByBranch } from '@/lib/services/user-service';
+import {
+  createAgent,
+  createTeamLead,
+  createManager,
+  getUsersByBranches,
+  getAgentsByManager,
+} from '@/lib/services/user-service';
 import { listBranches } from '@/lib/services/branch-service';
 import { User, Branch } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { ProtectedRoute } from '@/components/protected-route';
-
-const createAgentSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(255, 'Name is too long'),
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
-  managerId: z.string().optional(),
-  branchId: z.string().optional(),
-});
-
-type CreateAgentForm = z.infer<typeof createAgentSchema>;
 
 export default function UserManagementPage() {
   return (
@@ -35,55 +28,67 @@ export default function UserManagementPage() {
 
 function UserManagementContent() {
   const router = useRouter();
-  const { user, isManager, isAdmin } = useAuth();
-  const [agents, setAgents] = useState<User[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
+  const { user, isManager, isAdmin, isTeamLead } = useAuth();
+  const [users, setUsers] = useState<User[]>([]);
+  const [allBranches, setAllBranches] = useState<Branch[]>([]);
   const [branchMap, setBranchMap] = useState<Map<string, string>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  console.log('UserManagementPage render:', { user, isManager, showCreateDialog });
+  // Form state
+  const [formName, setFormName] = useState('');
+  const [formEmail, setFormEmail] = useState('');
+  const [formPassword, setFormPassword] = useState('');
+  const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>([]);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-  } = useForm<CreateAgentForm>({
-    resolver: zodResolver(createAgentSchema),
-  });
+  // Determine which role the current user can create
+  const canCreateManager = isAdmin;
+  const canCreateTeamLead = !isAdmin && isManager && user?.role === 'manager';
+  const canCreateAgent = isTeamLead;
+  const canCreate = canCreateManager || canCreateTeamLead || canCreateAgent;
+
+  // The branches available for assignment (subset of current user's branchIds)
+  const availableBranches = allBranches.filter(
+    (b) => b.isActive && (isAdmin || (user?.branchIds ?? []).includes(b.$id))
+  );
 
   useEffect(() => {
-    if (user && isManager) {
-      fetchAgents();
-      if (isAdmin) {
-        fetchBranches();
-      }
+    if (user) {
+      fetchUsers();
+      fetchBranches();
     }
-  }, [user, isManager, isAdmin]);
+  }, [user]);
 
-  const fetchAgents = async () => {
+  const fetchUsers = async () => {
     if (!user) return;
-
     try {
       setIsLoading(true);
-      if (isAdmin && user.branchId) {
-        // Admin: show agents from their branch, or all if no branch
-        const agentsList = await getUsersByBranch(user.branchId);
-        setAgents(agentsList.filter(u => u.role === 'agent'));
-      } else if (isAdmin) {
-        // Admin without branch: show agents they manage
-        const agentsList = await getAgentsByManager(user.$id);
-        setAgents(agentsList);
+      if (isAdmin) {
+        // Admin sees all users — fetch by their branches or all agents
+        if (user.branchIds && user.branchIds.length > 0) {
+          const usersList = await getUsersByBranches(user.branchIds);
+          setUsers(usersList);
+        } else {
+          const agentsList = await getAgentsByManager(user.$id);
+          setUsers(agentsList);
+        }
+      } else if (user.role === 'manager' && user.branchIds.length > 0) {
+        const usersList = await getUsersByBranches(user.branchIds);
+        setUsers(usersList);
+      } else if (user.role === 'team_lead' && user.branchIds.length > 0) {
+        const usersList = await getUsersByBranches(user.branchIds);
+        // Team lead sees only agents with overlapping branches
+        setUsers(usersList.filter((u) => u.role === 'agent'));
       } else {
         const agentsList = await getAgentsByManager(user.$id);
-        setAgents(agentsList);
+        setUsers(agentsList);
       }
     } catch (err: any) {
-      console.error('Error fetching agents:', err);
-      setError(err.message || 'Failed to fetch agents');
+      console.error('Error fetching users:', err);
+      setError(err.message || 'Failed to fetch users');
     } finally {
       setIsLoading(false);
     }
@@ -92,43 +97,114 @@ function UserManagementContent() {
   const fetchBranches = async () => {
     try {
       const branchesList = await listBranches();
-      setBranches(branchesList.filter(b => b.isActive));
+      setAllBranches(branchesList);
       const map = new Map<string, string>();
-      branchesList.forEach(b => map.set(b.$id, b.name));
+      branchesList.forEach((b) => map.set(b.$id, b.name));
       setBranchMap(map);
     } catch (err: any) {
       console.error('Error fetching branches:', err);
     }
   };
 
-  const onSubmit = async (data: CreateAgentForm) => {
-    if (!user) return;
+  const resetForm = () => {
+    setFormName('');
+    setFormEmail('');
+    setFormPassword('');
+    setSelectedBranchIds([]);
+    setFormErrors({});
+    setError(null);
+  };
+
+  const validateForm = (): boolean => {
+    const errs: Record<string, string> = {};
+    if (!formName.trim()) errs.name = 'Name is required';
+    if (!formEmail.trim()) errs.email = 'Email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formEmail)) errs.email = 'Invalid email address';
+    if (!formPassword) errs.password = 'Password is required';
+    else if (formPassword.length < 8) errs.password = 'Password must be at least 8 characters';
+    if (selectedBranchIds.length === 0) errs.branches = 'At least one branch must be selected';
+    setFormErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const toggleBranch = (branchId: string) => {
+    setSelectedBranchIds((prev) =>
+      prev.includes(branchId) ? prev.filter((id) => id !== branchId) : [...prev, branchId]
+    );
+  };
+
+  const handleCreate = async () => {
+    if (!user || !validateForm()) return;
 
     try {
       setIsCreating(true);
       setError(null);
 
-      const managerId = isAdmin && data.managerId ? data.managerId : user.$id;
+      if (canCreateManager) {
+        // Admin creates a Manager
+        await createManager({
+          name: formName.trim(),
+          email: formEmail.trim(),
+          password: formPassword,
+          branchIds: selectedBranchIds,
+        });
+      } else if (canCreateTeamLead) {
+        // Manager creates a Team Lead
+        await createTeamLead({
+          name: formName.trim(),
+          email: formEmail.trim(),
+          password: formPassword,
+          managerId: user.$id,
+          branchIds: selectedBranchIds,
+        });
+      } else if (canCreateAgent) {
+        // Team Lead creates an Agent
+        await createAgent({
+          name: formName.trim(),
+          email: formEmail.trim(),
+          password: formPassword,
+          teamLeadId: user.$id,
+          branchIds: selectedBranchIds,
+        });
+      }
 
-      await createAgent({
-        name: data.name,
-        email: data.email,
-        password: data.password,
-        managerId,
-      });
-
-      // Reset form and close dialog
-      reset();
+      resetForm();
       setShowCreateDialog(false);
-
-      // Refresh agents list
-      await fetchAgents();
+      await fetchUsers();
     } catch (err: any) {
-      console.error('Error creating agent:', err);
-      setError(err.message || 'Failed to create agent');
+      console.error('Error creating user:', err);
+      setError(err.message || 'Failed to create user');
     } finally {
       setIsCreating(false);
     }
+  };
+
+  const createButtonLabel = canCreateManager ? 'Create Manager' : canCreateTeamLead ? 'Create Team Lead' : 'Create Agent';
+  const dialogTitle = canCreateManager ? 'Create New Manager' : canCreateTeamLead ? 'Create New Team Lead' : 'Create New Agent';
+  const dialogDescription = canCreateManager
+    ? 'Add a new manager and assign them to branches'
+    : canCreateTeamLead
+      ? 'Add a new team lead and assign them to your branches'
+      : 'Add a new agent and assign them to your branches';
+
+  const formatRole = (role: string) => {
+    switch (role) {
+      case 'admin':
+        return 'Admin';
+      case 'manager':
+        return 'Manager';
+      case 'team_lead':
+        return 'Team Lead';
+      case 'agent':
+        return 'Agent';
+      default:
+        return role;
+    }
+  };
+
+  const formatBranches = (branchIds: string[]) => {
+    if (!branchIds || branchIds.length === 0) return '—';
+    return branchIds.map((id) => branchMap.get(id) || id).join(', ');
   };
 
   return (
@@ -147,24 +223,24 @@ function UserManagementContent() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <CardTitle>User Management</CardTitle>
-              <CardDescription>
-                Manage your team of agents
-              </CardDescription>
+              <CardDescription>Manage your team members</CardDescription>
             </div>
-            <Button
-              onClick={() => {
-                console.log('Button clicked, setting showCreateDialog to true');
-                setShowCreateDialog(true);
-              }}
-              type="button"
-              className="cursor-pointer"
-            >
-              Create Agent
-            </Button>
+            {canCreate && (
+              <Button
+                onClick={() => {
+                  resetForm();
+                  setShowCreateDialog(true);
+                }}
+                type="button"
+                className="cursor-pointer"
+              >
+                {createButtonLabel}
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
-          {error && (
+          {error && !showCreateDialog && (
             <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
               <p className="text-red-800 dark:text-red-200">{error}</p>
             </div>
@@ -174,10 +250,10 @@ function UserManagementContent() {
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
             </div>
-          ) : agents.length === 0 ? (
+          ) : users.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-gray-500 dark:text-gray-400">
-                No agents yet. Create your first agent to get started.
+                No users found. {canCreate ? `Create your first ${canCreateManager ? 'manager' : canCreateTeamLead ? 'team lead' : 'agent'} to get started.` : ''}
               </p>
             </div>
           ) : (
@@ -187,23 +263,27 @@ function UserManagementContent() {
                   <tr className="border-b border-gray-200 dark:border-gray-700">
                     <th className="text-left py-3 px-4 font-semibold">Name</th>
                     <th className="text-left py-3 px-4 font-semibold">Email</th>
-                    <th className="text-left py-3 px-4 font-semibold">Branch</th>
+                    <th className="text-left py-3 px-4 font-semibold">Role</th>
+                    <th className="text-left py-3 px-4 font-semibold">Branches</th>
                     <th className="text-left py-3 px-4 font-semibold">Created</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {agents.map((agent) => (
+                  {users.map((u) => (
                     <tr
-                      key={agent.$id}
+                      key={u.$id}
                       className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
                     >
-                      <td className="py-3 px-4">{agent.name}</td>
-                      <td className="py-3 px-4">{agent.email}</td>
+                      <td className="py-3 px-4">{u.name}</td>
+                      <td className="py-3 px-4">{u.email}</td>
                       <td className="py-3 px-4">
-                        {agent.branchId ? (branchMap.get(agent.branchId) || agent.branchId) : '—'}
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200">
+                          {formatRole(u.role)}
+                        </span>
                       </td>
+                      <td className="py-3 px-4">{formatBranches(u.branchIds)}</td>
                       <td className="py-3 px-4">
-                        {agent.$createdAt ? new Date(agent.$createdAt).toLocaleDateString() : 'N/A'}
+                        {u.$createdAt ? new Date(u.$createdAt).toLocaleDateString() : 'N/A'}
                       </td>
                     </tr>
                   ))}
@@ -214,83 +294,95 @@ function UserManagementContent() {
         </CardContent>
       </Card>
 
-      {/* Create Agent Dialog */}
+      {/* Create User Dialog */}
       {showCreateDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50">
           <Card className="w-full sm:max-w-md sm:mx-4 rounded-b-none sm:rounded-b-lg">
             <CardHeader>
-              <CardTitle>Create New Agent</CardTitle>
-              <CardDescription>
-                Add a new agent to your team
-              </CardDescription>
+              <CardTitle>{dialogTitle}</CardTitle>
+              <CardDescription>{dialogDescription}</CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              <div className="space-y-4">
+                {error && (
+                  <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                    <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+                  </div>
+                )}
+
                 <div>
-                  <Label htmlFor="name">Name</Label>
+                  <Label htmlFor="create-name">Name</Label>
                   <Input
-                    id="name"
-                    {...register('name')}
+                    id="create-name"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
                     placeholder="John Doe"
                     className="mt-1"
                   />
-                  {errors.name && (
-                    <p className="text-sm text-red-600 dark:text-red-400 mt-1">
-                      {errors.name.message}
-                    </p>
+                  {formErrors.name && (
+                    <p className="text-sm text-red-600 dark:text-red-400 mt-1">{formErrors.name}</p>
                   )}
                 </div>
 
                 <div>
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="create-email">Email</Label>
                   <Input
-                    id="email"
+                    id="create-email"
                     type="email"
-                    {...register('email')}
+                    value={formEmail}
+                    onChange={(e) => setFormEmail(e.target.value)}
                     placeholder="john@example.com"
                     className="mt-1"
                   />
-                  {errors.email && (
-                    <p className="text-sm text-red-600 dark:text-red-400 mt-1">
-                      {errors.email.message}
-                    </p>
+                  {formErrors.email && (
+                    <p className="text-sm text-red-600 dark:text-red-400 mt-1">{formErrors.email}</p>
                   )}
                 </div>
 
                 <div>
-                  <Label htmlFor="password">Initial Password</Label>
+                  <Label htmlFor="create-password">Initial Password</Label>
                   <Input
-                    id="password"
+                    id="create-password"
                     type="password"
-                    {...register('password')}
+                    value={formPassword}
+                    onChange={(e) => setFormPassword(e.target.value)}
                     placeholder="••••••••"
                     className="mt-1"
                   />
-                  {errors.password && (
-                    <p className="text-sm text-red-600 dark:text-red-400 mt-1">
-                      {errors.password.message}
-                    </p>
+                  {formErrors.password && (
+                    <p className="text-sm text-red-600 dark:text-red-400 mt-1">{formErrors.password}</p>
                   )}
                 </div>
 
-                {/* Branch selector (Admin only) */}
-                {isAdmin && branches.length > 0 && (
-                  <div>
-                    <Label htmlFor="branchId">Branch</Label>
-                    <select
-                      id="branchId"
-                      {...register('branchId')}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 mt-1"
-                    >
-                      <option value="">No branch</option>
-                      {branches.map((branch) => (
-                        <option key={branch.$id} value={branch.$id}>
-                          {branch.name}
-                        </option>
+                {/* Branch multi-select */}
+                <div>
+                  <Label>Branches</Label>
+                  {availableBranches.length === 0 ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                      No branches available. You need at least one assigned branch.
+                    </p>
+                  ) : (
+                    <div className="mt-1 space-y-2 max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md p-2">
+                      {availableBranches.map((branch) => (
+                        <label
+                          key={branch.$id}
+                          className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 p-1 rounded"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedBranchIds.includes(branch.$id)}
+                            onChange={() => toggleBranch(branch.$id)}
+                            className="rounded border-gray-300 dark:border-gray-600"
+                          />
+                          <span className="text-sm">{branch.name}</span>
+                        </label>
                       ))}
-                    </select>
-                  </div>
-                )}
+                    </div>
+                  )}
+                  {formErrors.branches && (
+                    <p className="text-sm text-red-600 dark:text-red-400 mt-1">{formErrors.branches}</p>
+                  )}
+                </div>
 
                 <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end pt-4">
                   <Button
@@ -298,19 +390,23 @@ function UserManagementContent() {
                     variant="outline"
                     onClick={() => {
                       setShowCreateDialog(false);
-                      reset();
-                      setError(null);
+                      resetForm();
                     }}
                     disabled={isCreating}
                     className="w-full sm:w-auto"
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={isCreating} className="w-full sm:w-auto">
-                    {isCreating ? 'Creating...' : 'Create Agent'}
+                  <Button
+                    type="button"
+                    onClick={handleCreate}
+                    disabled={isCreating}
+                    className="w-full sm:w-auto"
+                  >
+                    {isCreating ? 'Creating...' : createButtonLabel}
                   </Button>
                 </div>
-              </form>
+              </div>
             </CardContent>
           </Card>
         </div>

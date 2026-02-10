@@ -1,6 +1,6 @@
 import { ID, Permission, Role, Query } from 'appwrite';
 import { account, databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
-import { User, UserRole, CreateAgentInput } from '@/lib/types';
+import { User, UserRole, CreateAgentInput, CreateTeamLeadInput, CreateManagerInput } from '@/lib/types';
 
 const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
 
@@ -14,6 +14,8 @@ function mapDocToUser(doc: any): User {
     email: doc.email as string,
     role: doc.role as UserRole,
     managerId: (doc.managerId as string) || null,
+    teamLeadId: (doc.teamLeadId as string) || null,
+    branchIds: Array.isArray(doc.branchIds) ? doc.branchIds : [],
     branchId: (doc.branchId as string) || null,
     $createdAt: doc.$createdAt,
     $updatedAt: doc.$updatedAt,
@@ -21,32 +23,23 @@ function mapDocToUser(doc: any): User {
 }
 
 /**
- * Create a new agent account
+ * Create a new team lead account
  *
- * This function:
- * 1. Fetches the manager to inherit their branchId
- * 2. Creates an Appwrite Auth account
- * 3. Creates a user document with role='agent', managerId, and inherited branchId
- * 4. Sets up document-level permissions for the agent
+/**
+ * Create a new manager account (admin only).
+ * Admin can assign any combination of active branches.
  */
-export async function createAgent(input: CreateAgentInput): Promise<User> {
-  const { name, email, password, managerId } = input;
+export async function createManager(input: CreateManagerInput): Promise<User> {
+  const { name, email, password, branchIds } = input;
+
+  if (!branchIds.length) {
+    throw new Error('At least one branch must be assigned');
+  }
 
   try {
-    // Fetch manager to inherit branchId
-    const managerDoc = await databases.getDocument(
-      DATABASE_ID,
-      USERS_COLLECTION_ID,
-      managerId
-    );
-    const branchId = (managerDoc.branchId as string) || null;
-
     const userId = ID.unique();
-
-    // Create Appwrite Auth account
     await account.create(userId, email, password, name);
 
-    // Create user document with inherited branchId
     const userDoc = await databases.createDocument(
       DATABASE_ID,
       USERS_COLLECTION_ID,
@@ -54,9 +47,69 @@ export async function createAgent(input: CreateAgentInput): Promise<User> {
       {
         name,
         email,
-        role: 'agent',
+        role: 'manager',
+        managerId: null,
+        teamLeadId: null,
+        branchIds,
+      },
+      [
+        Permission.read(Role.user(userId)),
+        Permission.update(Role.user(userId)),
+      ]
+    );
+
+    return mapDocToUser(userDoc);
+  } catch (error: any) {
+    console.error('Error creating manager:', error);
+    if (error.code === 409 || error.message?.includes('already exists')) {
+      throw new Error('A user with this email already exists');
+    }
+    throw error;
+  }
+}
+
+/**
+ * Create a new team lead under a manager.
+ * This function:
+ * 1. Fetches the manager and validates branchIds ⊆ manager.branchIds
+ * 2. Creates an Appwrite Auth account
+ * 3. Creates a user document with role='team_lead', managerId, and branchIds
+ */
+export async function createTeamLead(input: CreateTeamLeadInput): Promise<User> {
+  const { name, email, password, managerId, branchIds } = input;
+
+  if (!branchIds.length) {
+    throw new Error('At least one branch must be assigned');
+  }
+
+  try {
+    const managerDoc = await databases.getDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      managerId
+    );
+    const managerBranchIds: string[] = Array.isArray(managerDoc.branchIds) ? managerDoc.branchIds : [];
+
+    // Validate branchIds ⊆ manager.branchIds
+    for (const bid of branchIds) {
+      if (!managerBranchIds.includes(bid)) {
+        throw new Error(`Branch ${bid} is not in your assigned branches`);
+      }
+    }
+
+    const userId = ID.unique();
+    await account.create(userId, email, password, name);
+
+    const userDoc = await databases.createDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      userId,
+      {
+        name,
+        email,
+        role: 'team_lead',
         managerId,
-        branchId,
+        branchIds,
       },
       [
         Permission.read(Role.user(userId)),
@@ -69,11 +122,77 @@ export async function createAgent(input: CreateAgentInput): Promise<User> {
 
     return mapDocToUser(userDoc);
   } catch (error: any) {
+    console.error('Error creating team lead:', error);
+    if (error.code === 409 || error.message?.includes('already exists')) {
+      throw new Error('A user with this email already exists');
+    }
+    throw error;
+  }
+}
+
+/**
+ * Create a new agent account
+ *
+ * This function:
+ * 1. Fetches the team lead and validates branchIds ⊆ teamLead.branchIds
+ * 2. Creates an Appwrite Auth account
+ * 3. Creates a user document with role='agent', managerId (from team lead), teamLeadId, and branchIds
+ */
+export async function createAgent(input: CreateAgentInput): Promise<User> {
+  const { name, email, password, teamLeadId, branchIds } = input;
+
+  if (!branchIds.length) {
+    throw new Error('At least one branch must be assigned');
+  }
+
+  try {
+    const teamLeadDoc = await databases.getDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      teamLeadId
+    );
+    const teamLeadBranchIds: string[] = Array.isArray(teamLeadDoc.branchIds) ? teamLeadDoc.branchIds : [];
+    const managerId = (teamLeadDoc.managerId as string) || null;
+
+    // Validate branchIds ⊆ teamLead.branchIds
+    for (const bid of branchIds) {
+      if (!teamLeadBranchIds.includes(bid)) {
+        throw new Error(`Branch ${bid} is not in your assigned branches`);
+      }
+    }
+
+    const userId = ID.unique();
+    await account.create(userId, email, password, name);
+
+    const userDoc = await databases.createDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      userId,
+      {
+        name,
+        email,
+        role: 'agent',
+        managerId,
+        teamLeadId,
+        branchIds,
+      },
+      [
+        Permission.read(Role.user(userId)),
+        Permission.read(Role.user(teamLeadId)),
+        ...(managerId ? [Permission.read(Role.user(managerId))] : []),
+        Permission.update(Role.user(userId)),
+        Permission.update(Role.user(teamLeadId)),
+        ...(managerId ? [Permission.delete(Role.user(managerId))] : []),
+      ]
+    );
+
+    return mapDocToUser(userDoc);
+  } catch (error: any) {
     console.error('Error creating agent:', error);
     if (error.code === 409 || error.message?.includes('already exists')) {
       throw new Error('A user with this email already exists');
     }
-    throw new Error(error.message || 'Failed to create agent account');
+    throw error;
   }
 }
 
@@ -162,19 +281,74 @@ export async function removeManagerFromBranch(managerId: string): Promise<User> 
 }
 
 /**
- * Get all users assigned to a specific branch
+ * Get all users assigned to a specific branch (queries branchIds array)
  */
 export async function getUsersByBranch(branchId: string): Promise<User[]> {
   try {
     const response = await databases.listDocuments(
       DATABASE_ID,
       USERS_COLLECTION_ID,
-      [Query.equal('branchId', branchId)]
+      [Query.contains('branchIds', [branchId])]
     );
     return response.documents.map(mapDocToUser);
   } catch (error: any) {
     console.error('Error fetching users by branch:', error);
     throw new Error(error.message || 'Failed to fetch users by branch');
+  }
+}
+
+/**
+ * Get all users whose branchIds overlap with the given array
+ */
+export async function getUsersByBranches(branchIds: string[]): Promise<User[]> {
+  if (!branchIds.length) return [];
+  try {
+    const response = await databases.listDocuments(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      [Query.contains('branchIds', branchIds)]
+    );
+    return response.documents.map(mapDocToUser);
+  } catch (error: any) {
+    console.error('Error fetching users by branches:', error);
+    throw new Error(error.message || 'Failed to fetch users by branches');
+  }
+}
+
+/**
+ * Get users assignable to a lead based on the creator's role and branches.
+ * - Manager: team_leads + agents with overlapping branchIds
+ * - Team Lead: agents with overlapping branchIds
+ * - Agent: empty array
+ */
+export async function getAssignableUsers(
+  creatorRole: UserRole,
+  creatorBranchIds: string[]
+): Promise<User[]> {
+  if (creatorRole === 'agent' || !creatorBranchIds.length) return [];
+
+  try {
+    const allowedRoles: UserRole[] =
+      creatorRole === 'manager' ? ['team_lead', 'agent'] :
+      creatorRole === 'team_lead' ? ['agent'] :
+      [];
+
+    if (!allowedRoles.length) return [];
+
+    const response = await databases.listDocuments(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      [
+        Query.contains('branchIds', creatorBranchIds),
+        ...(allowedRoles.length === 1
+          ? [Query.equal('role', allowedRoles[0])]
+          : [Query.equal('role', allowedRoles)]),
+      ]
+    );
+    return response.documents.map(mapDocToUser);
+  } catch (error: any) {
+    console.error('Error fetching assignable users:', error);
+    throw new Error(error.message || 'Failed to fetch assignable users');
   }
 }
 

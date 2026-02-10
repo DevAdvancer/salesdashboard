@@ -26,6 +26,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email: userDoc.email as string,
         role: userDoc.role as UserRole,
         managerId: userDoc.managerId as string | null,
+        teamLeadId: (userDoc.teamLeadId as string) || null,
+        branchIds: Array.isArray(userDoc.branchIds) ? (userDoc.branchIds as string[]) : [],
         branchId: (userDoc.branchId as string) || null,
         $createdAt: userDoc.$createdAt,
         $updatedAt: userDoc.$updatedAt,
@@ -141,12 +143,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Set user state
-      const userData = {
+      const userData: User = {
         $id: userDoc.$id,
         name: userDoc.name as string,
         email: userDoc.email as string,
         role: userDoc.role as UserRole,
         managerId: userDoc.managerId as string | null,
+        teamLeadId: (userDoc.teamLeadId as string) || null,
+        branchIds: Array.isArray(userDoc.branchIds) ? (userDoc.branchIds as string[]) : [],
         branchId: (userDoc.branchId as string) || null,
         $createdAt: userDoc.$createdAt,
         $updatedAt: userDoc.$updatedAt,
@@ -168,12 +172,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Role-based helper properties
   const isAdmin = user?.role === 'admin';
   const isManager = user?.role === 'manager' || user?.role === 'admin';
+  const isTeamLead = user?.role === 'team_lead';
   const isAgent = user?.role === 'agent';
 
   const value: AuthContextType = {
     user,
     isAdmin,
     isManager,
+    isTeamLead,
     isAgent,
     loading,
     login,

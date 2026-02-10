@@ -114,10 +114,9 @@ function NewLeadContent() {
         ? selectedBranch
         : user.branchId || undefined;
 
-      // Create lead with owner, optional assigned agent, and branchId
-      await createLead({
+      // Create lead with auto-set owner and optional assigned agent
+      await createLead(user.$id, {
         data,
-        ownerId: user.$id,
         assignedToId: selectedAgent || undefined,
         status: data.status || 'New',
         branchId,

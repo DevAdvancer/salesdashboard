@@ -19,7 +19,7 @@ export type ComponentKey =
 interface AccessRule {
   $id: string;
   componentKey: ComponentKey;
-  role: 'manager' | 'agent';
+  role: 'manager' | 'team_lead' | 'agent';
   allowed: boolean;
 }
 
@@ -88,9 +88,19 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
     }
 
     // Default rules when no DB rule exists:
-    // manager=true (except branch-management), agent=dashboard+leads only
+    // manager=true (except branch-management)
+    // team_lead=dashboard+leads+history+user-management only
+    // agent=dashboard+leads only
     if (user.role === 'manager') {
       return componentKey !== 'branch-management';
+    }
+    if (user.role === 'team_lead') {
+      return (
+        componentKey === 'dashboard' ||
+        componentKey === 'leads' ||
+        componentKey === 'history' ||
+        componentKey === 'user-management'
+      );
     }
     if (user.role === 'agent') {
       return componentKey === 'dashboard' || componentKey === 'leads';

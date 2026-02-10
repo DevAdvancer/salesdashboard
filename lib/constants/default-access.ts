@@ -7,7 +7,7 @@ export type ComponentKey =
   | 'settings'
   | 'branch-management';
 
-export type UserRole = 'admin' | 'manager' | 'agent';
+export type UserRole = 'admin' | 'manager' | 'team_lead' | 'agent';
 
 export interface AccessRule {
   componentKey: ComponentKey;
@@ -32,6 +32,14 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'field-management', role: 'manager', allowed: true },
   { componentKey: 'settings', role: 'manager', allowed: true },
   { componentKey: 'branch-management', role: 'manager', allowed: false },
+  // Team Lead rules
+  { componentKey: 'dashboard', role: 'team_lead', allowed: true },
+  { componentKey: 'leads', role: 'team_lead', allowed: true },
+  { componentKey: 'history', role: 'team_lead', allowed: true },
+  { componentKey: 'user-management', role: 'team_lead', allowed: true },
+  { componentKey: 'field-management', role: 'team_lead', allowed: false },
+  { componentKey: 'settings', role: 'team_lead', allowed: false },
+  { componentKey: 'branch-management', role: 'team_lead', allowed: false },
   // Agent rules
   { componentKey: 'dashboard', role: 'agent', allowed: true },
   { componentKey: 'leads', role: 'agent', allowed: true },

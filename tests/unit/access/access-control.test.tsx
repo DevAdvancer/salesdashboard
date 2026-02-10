@@ -1,12 +1,12 @@
 /**
  * Unit tests for access control system
- * 
+ *
  * Tests cover:
  * - Default rules apply correctly
  * - Custom rules override defaults
  * - Manager always has access
  * - Agent respects rules
- * 
+ *
  * Requirements: 2.4, 2.5, 2.6
  */
 
@@ -45,6 +45,7 @@ describe('Access Control System', () => {
       mockUseAuth.mockReturnValue({
         user: { $id: 'agent-1', role: 'agent', email: 'agent@test.com' },
         isManager: false,
+        isAdmin: false,
       });
 
       (databases.listDocuments as jest.Mock).mockResolvedValue({
@@ -58,17 +59,19 @@ describe('Access Control System', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // Test all components - agents should be denied by default
-      const components: ComponentKey[] = [
-        'dashboard',
-        'leads',
+      // Agents get default access to dashboard and leads only
+      expect(result.current.canAccess('dashboard')).toBe(true);
+      expect(result.current.canAccess('leads')).toBe(true);
+
+      // Agents should be denied access to other components by default
+      const deniedComponents: ComponentKey[] = [
         'history',
         'user-management',
         'field-management',
         'settings',
       ];
 
-      components.forEach((component) => {
+      deniedComponents.forEach((component) => {
         expect(result.current.canAccess(component)).toBe(false);
       });
     });
@@ -78,6 +81,7 @@ describe('Access Control System', () => {
       mockUseAuth.mockReturnValue({
         user: { $id: 'manager-1', role: 'manager', email: 'manager@test.com' },
         isManager: true,
+        isAdmin: false,
       });
 
       (databases.listDocuments as jest.Mock).mockResolvedValue({
@@ -91,7 +95,7 @@ describe('Access Control System', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // Test all components - managers should have access by default
+      // Test all standard components - managers should have access by default
       const components: ComponentKey[] = [
         'dashboard',
         'leads',
@@ -111,6 +115,7 @@ describe('Access Control System', () => {
       mockUseAuth.mockReturnValue({
         user: null,
         isManager: false,
+        isAdmin: false,
       });
 
       (databases.listDocuments as jest.Mock).mockResolvedValue({
@@ -135,6 +140,7 @@ describe('Access Control System', () => {
       mockUseAuth.mockReturnValue({
         user: { $id: 'agent-1', role: 'agent', email: 'agent@test.com' },
         isManager: false,
+        isAdmin: false,
       });
 
       const customRules = [
@@ -184,6 +190,7 @@ describe('Access Control System', () => {
       mockUseAuth.mockReturnValue({
         user: { $id: 'agent-1', role: 'agent', email: 'agent@test.com' },
         isManager: false,
+        isAdmin: false,
       });
 
       const customRules = [
@@ -221,6 +228,7 @@ describe('Access Control System', () => {
       mockUseAuth.mockReturnValue({
         user: { $id: 'agent-1', role: 'agent', email: 'agent@test.com' },
         isManager: false,
+        isAdmin: false,
       });
 
       const customRules = [
@@ -281,6 +289,7 @@ describe('Access Control System', () => {
       mockUseAuth.mockReturnValue({
         user: { $id: 'manager-1', role: 'manager', email: 'manager@test.com' },
         isManager: true,
+        isAdmin: false,
       });
 
       const customRules = [
@@ -324,11 +333,12 @@ describe('Access Control System', () => {
       });
     });
 
-    it('should grant manager access even with explicit deny rules for managers', async () => {
-      // Setup: Manager with rules that explicitly deny manager access (edge case)
+    it('should respect explicit deny rules for managers from custom rules', async () => {
+      // Setup: Manager with rules that explicitly deny manager access
       mockUseAuth.mockReturnValue({
         user: { $id: 'manager-1', role: 'manager', email: 'manager@test.com' },
         isManager: true,
+        isAdmin: false,
       });
 
       const customRules = [
@@ -336,13 +346,13 @@ describe('Access Control System', () => {
           $id: 'rule-1',
           componentKey: 'dashboard',
           role: 'manager',
-          allowed: false, // This should be ignored
+          allowed: false,
         },
         {
           $id: 'rule-2',
           componentKey: 'leads',
           role: 'manager',
-          allowed: false, // This should be ignored
+          allowed: false,
         },
       ];
 
@@ -357,9 +367,10 @@ describe('Access Control System', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // Manager should still have access - isManager check comes first
-      expect(result.current.canAccess('dashboard')).toBe(true);
-      expect(result.current.canAccess('leads')).toBe(true);
+      // Custom deny rules are respected for managers (only admins bypass)
+      expect(result.current.canAccess('dashboard')).toBe(false);
+      expect(result.current.canAccess('leads')).toBe(false);
+      // Components without custom rules fall back to manager defaults (true)
       expect(result.current.canAccess('history')).toBe(true);
     });
 
@@ -368,6 +379,7 @@ describe('Access Control System', () => {
       mockUseAuth.mockReturnValue({
         user: { $id: 'manager-1', role: 'manager', email: 'manager@test.com' },
         isManager: true,
+        isAdmin: false,
       });
 
       (databases.listDocuments as jest.Mock).mockResolvedValue({
@@ -401,6 +413,7 @@ describe('Access Control System', () => {
       mockUseAuth.mockReturnValue({
         user: { $id: 'agent-1', role: 'agent', email: 'agent@test.com' },
         isManager: false,
+        isAdmin: false,
       });
 
       const customRules = [
@@ -444,6 +457,7 @@ describe('Access Control System', () => {
       mockUseAuth.mockReturnValue({
         user: { $id: 'agent-1', role: 'agent', email: 'agent@test.com' },
         isManager: false,
+        isAdmin: false,
       });
 
       const initialRules = [
@@ -468,9 +482,11 @@ describe('Access Control System', () => {
 
       // Initial state
       expect(result.current.canAccess('dashboard')).toBe(true);
-      expect(result.current.canAccess('leads')).toBe(false);
+      expect(result.current.canAccess('leads')).toBe(true);
+      // history has no custom rule, defaults to false for agents
+      expect(result.current.canAccess('history')).toBe(false);
 
-      // Update rules
+      // Update rules to add history access
       const updatedRules = [
         {
           $id: 'rule-1',
@@ -480,7 +496,7 @@ describe('Access Control System', () => {
         },
         {
           $id: 'rule-2',
-          componentKey: 'leads',
+          componentKey: 'history',
           role: 'agent',
           allowed: true,
         },
@@ -498,6 +514,7 @@ describe('Access Control System', () => {
 
       // Updated state
       expect(result.current.canAccess('dashboard')).toBe(true);
+      expect(result.current.canAccess('history')).toBe(true);
       expect(result.current.canAccess('leads')).toBe(true);
     });
 
@@ -506,6 +523,7 @@ describe('Access Control System', () => {
       mockUseAuth.mockReturnValue({
         user: { $id: 'agent-1', role: 'agent', email: 'agent@test.com' },
         isManager: false,
+        isAdmin: false,
       });
 
       const customRules = [
@@ -543,6 +561,7 @@ describe('Access Control System', () => {
       mockUseAuth.mockReturnValue({
         user: { $id: 'agent-1', role: 'agent', email: 'agent@test.com' },
         isManager: false,
+        isAdmin: false,
       });
 
       (databases.listDocuments as jest.Mock).mockResolvedValue({
@@ -569,6 +588,7 @@ describe('Access Control System', () => {
       mockUseAuth.mockReturnValue({
         user: { $id: 'agent-1', role: 'agent', email: 'agent@test.com' },
         isManager: false,
+        isAdmin: false,
       });
 
       (databases.listDocuments as jest.Mock).mockRejectedValue(
@@ -581,9 +601,11 @@ describe('Access Control System', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // Should fall back to default rules (deny for agents)
-      expect(result.current.canAccess('dashboard')).toBe(false);
-      expect(result.current.canAccess('leads')).toBe(false);
+      // Should fall back to default rules (agents get dashboard and leads by default)
+      expect(result.current.canAccess('dashboard')).toBe(true);
+      expect(result.current.canAccess('leads')).toBe(true);
+      // Other components denied by default for agents
+      expect(result.current.canAccess('user-management')).toBe(false);
     });
 
     it('should maintain manager access even when database fetch fails', async () => {
@@ -591,6 +613,7 @@ describe('Access Control System', () => {
       mockUseAuth.mockReturnValue({
         user: { $id: 'manager-1', role: 'manager', email: 'manager@test.com' },
         isManager: true,
+        isAdmin: false,
       });
 
       (databases.listDocuments as jest.Mock).mockRejectedValue(
@@ -615,6 +638,7 @@ describe('Access Control System', () => {
       mockUseAuth.mockReturnValue({
         user: { $id: 'agent-1', role: 'agent', email: 'agent@test.com' },
         isManager: false,
+        isAdmin: false,
       });
 
       // Create a promise that we can control

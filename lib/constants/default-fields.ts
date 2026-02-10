@@ -84,31 +84,13 @@ export const DEFAULT_FIELDS: FormField[] = [
     options: ['New', 'Contacted', 'Qualified', 'Proposal', 'Negotiation']
   },
   {
-    id: '8',
-    type: 'text',
-    label: 'Owner',
-    key: 'ownerId',
-    required: true,
-    visible: false,
-    order: 8
-  },
-  {
-    id: '9',
-    type: 'text',
-    label: 'Assigned To',
-    key: 'assignedToId',
-    required: false,
-    visible: true,
-    order: 9
-  },
-  {
     id: '10',
     type: 'text',
     label: 'Legal Name',
     key: 'legalName',
     required: false,
     visible: true,
-    order: 10
+    order: 8
   },
   {
     id: '11',
@@ -117,7 +99,7 @@ export const DEFAULT_FIELDS: FormField[] = [
     key: 'ssnLast4',
     required: false,
     visible: true,
-    order: 11,
+    order: 9,
     validation: { pattern: '^\\d{4}$', minLength: 4, maxLength: 4 }
   },
   {
@@ -127,7 +109,7 @@ export const DEFAULT_FIELDS: FormField[] = [
     key: 'visaStatus',
     required: false,
     visible: true,
-    order: 12,
+    order: 10,
     options: ['Citizen', 'Green Card', 'H1B', 'F1', 'Other']
   },
   {
@@ -137,6 +119,6 @@ export const DEFAULT_FIELDS: FormField[] = [
     key: 'notes',
     required: false,
     visible: true,
-    order: 13
+    order: 11
   },
 ];

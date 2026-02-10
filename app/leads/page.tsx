@@ -39,7 +39,7 @@ function LeadsContent() {
 
     if (user) {
       loadLeads();
-      if (user.role === 'manager') {
+      if (user.role === 'manager' || user.role === 'team_lead') {
         loadAgents();
       }
     }
@@ -52,7 +52,7 @@ function LeadsContent() {
   }, [filters]);
 
   const loadAgents = async () => {
-    if (!user || user.role !== 'manager') return;
+    if (!user || (user.role !== 'manager' && user.role !== 'team_lead')) return;
 
     try {
       const fetchedAgents = await getAgentsByManager(user.$id);
@@ -68,7 +68,7 @@ function LeadsContent() {
     try {
       setIsLoading(true);
       setError(null);
-      const fetchedLeads = await listLeads(filters, user.$id, user.role);
+      const fetchedLeads = await listLeads(filters, user.$id, user.role, user.branchIds);
       setLeads(fetchedLeads);
       setCurrentPage(1);
     } catch (err: any) {
@@ -187,7 +187,7 @@ function LeadsContent() {
               </select>
             </div>
 
-            {user?.role === 'manager' && (
+            {(user?.role === 'manager' || user?.role === 'team_lead') && (
               <div>
                 <Label htmlFor="assignedTo">Assigned To</Label>
                 <select
@@ -256,7 +256,7 @@ function LeadsContent() {
                       <th className="p-3 md:p-4 font-semibold">Name</th>
                       <th className="p-3 md:p-4 font-semibold hidden sm:table-cell">Email</th>
                       <th className="p-3 md:p-4 font-semibold">Status</th>
-                      {user?.role === 'manager' && (
+                      {(user?.role === 'manager' || user?.role === 'team_lead') && (
                         <th className="p-3 md:p-4 font-semibold hidden md:table-cell">Assigned To</th>
                       )}
                       <th className="p-3 md:p-4 font-semibold hidden sm:table-cell">Created</th>
@@ -282,7 +282,7 @@ function LeadsContent() {
                               {lead.status}
                             </span>
                           </td>
-                          {user?.role === 'manager' && (
+                          {(user?.role === 'manager' || user?.role === 'team_lead') && (
                             <td className="p-3 md:p-4 text-muted-foreground hidden md:table-cell">
                               {lead.assignedToId ? (
                                 <AssignedAgentName agentId={lead.assignedToId} agents={agents} />

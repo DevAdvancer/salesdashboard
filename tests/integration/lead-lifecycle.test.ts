@@ -75,9 +75,8 @@ describe('Integration: Complete Lead Lifecycle', () => {
 
     (databases.createDocument as jest.Mock).mockResolvedValue(createdLead);
 
-    currentLead = await createLead({
+    currentLead = await createLead(managerId, {
       data: leadData,
-      ownerId: managerId,
       status: 'New',
     });
 

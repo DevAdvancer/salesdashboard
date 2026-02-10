@@ -38,7 +38,11 @@ describe('Session Persistence and Restoration - Task 2.5', () => {
       email: 'test@example.com',
       role: 'manager',
       managerId: null,
+      teamLeadId: null,
+      branchIds: [],
       branchId: null,
+      $createdAt: '2024-01-01T00:00:00.000Z',
+      $updatedAt: '2024-01-01T00:00:00.000Z',
     };
 
     mockAccount.get.mockResolvedValue(mockSession as any);
@@ -83,7 +87,11 @@ describe('Session Persistence and Restoration - Task 2.5', () => {
       email: 'agent@test.com',
       role: 'agent',
       managerId: 'manager-123',
+      teamLeadId: null,
+      branchIds: [],
       branchId: null,
+      $createdAt: '2024-01-01T00:00:00.000Z',
+      $updatedAt: '2024-01-01T00:00:00.000Z',
     };
 
     mockAccount.createEmailPasswordSession.mockResolvedValue({} as any);
@@ -104,7 +112,11 @@ describe('Session Persistence and Restoration - Task 2.5', () => {
       email: 'test@example.com',
       role: 'manager',
       managerId: null,
+      teamLeadId: null,
+      branchIds: [],
       branchId: null,
+      $createdAt: '2024-01-01T00:00:00.000Z',
+      $updatedAt: '2024-01-01T00:00:00.000Z',
     };
 
     mockAccount.get.mockResolvedValue({ $id: 'user-789' } as any);

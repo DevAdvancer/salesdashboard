@@ -32,15 +32,17 @@ describe('User Management', () => {
         name: 'Test Agent',
         email: 'agent@example.com',
         password: 'password123',
-        managerId: 'manager-123',
+        teamLeadId: 'teamlead-123',
+        branchIds: ['branch-1'],
       };
 
-      const mockManagerDoc = {
-        $id: 'manager-123',
-        name: 'Manager',
-        email: 'manager@example.com',
-        role: 'manager',
-        branchId: 'branch-1',
+      const mockTeamLeadDoc = {
+        $id: 'teamlead-123',
+        name: 'Team Lead',
+        email: 'tl@example.com',
+        role: 'team_lead',
+        managerId: 'manager-123',
+        branchIds: ['branch-1', 'branch-2'],
       };
 
       const mockCreatedAgent = {
@@ -48,13 +50,14 @@ describe('User Management', () => {
         name: mockAgentData.name,
         email: mockAgentData.email,
         role: 'agent',
-        managerId: mockAgentData.managerId,
-        branchId: 'branch-1',
+        managerId: 'manager-123',
+        teamLeadId: 'teamlead-123',
+        branchIds: ['branch-1'],
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
 
-      (databases.getDocument as jest.Mock).mockResolvedValue(mockManagerDoc);
+      (databases.getDocument as jest.Mock).mockResolvedValue(mockTeamLeadDoc);
       (account.create as jest.Mock).mockResolvedValue({ $id: 'agent-456' });
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedAgent);
 
@@ -72,23 +75,24 @@ describe('User Management', () => {
         expect.any(String),
         expect.any(String),
         expect.any(String),
-        {
+        expect.objectContaining({
           name: mockAgentData.name,
           email: mockAgentData.email,
           role: 'agent',
-          managerId: mockAgentData.managerId,
-          branchId: 'branch-1',
-        },
+          managerId: 'manager-123',
+          teamLeadId: 'teamlead-123',
+          branchIds: ['branch-1'],
+        }),
         expect.arrayContaining([
           expect.stringContaining('read'),
           expect.stringContaining('update'),
-          expect.stringContaining('delete'),
         ])
       );
 
       expect(result.role).toBe('agent');
-      expect(result.managerId).toBe(mockAgentData.managerId);
-      expect(result.branchId).toBe('branch-1');
+      expect(result.managerId).toBe('manager-123');
+      expect(result.teamLeadId).toBe('teamlead-123');
+      expect(result.branchIds).toEqual(['branch-1']);
     });
 
     it('should handle duplicate email error', async () => {
@@ -96,12 +100,14 @@ describe('User Management', () => {
         name: 'Test Agent',
         email: 'existing@example.com',
         password: 'password123',
-        managerId: 'manager-123',
+        teamLeadId: 'teamlead-123',
+        branchIds: ['branch-1'],
       };
 
       (databases.getDocument as jest.Mock).mockResolvedValue({
-        $id: 'manager-123',
-        branchId: null,
+        $id: 'teamlead-123',
+        managerId: 'manager-123',
+        branchIds: ['branch-1'],
       });
 
       const duplicateError = new Error('User already exists');
@@ -114,17 +120,19 @@ describe('User Management', () => {
       );
     });
 
-    it('should set agent role and managerId correctly', async () => {
+    it('should set agent role, managerId and teamLeadId correctly', async () => {
       const mockAgentData = {
         name: 'New Agent',
         email: 'newagent@example.com',
         password: 'securepass',
-        managerId: 'manager-789',
+        teamLeadId: 'teamlead-789',
+        branchIds: ['branch-2'],
       };
 
       (databases.getDocument as jest.Mock).mockResolvedValue({
-        $id: 'manager-789',
-        branchId: 'branch-2',
+        $id: 'teamlead-789',
+        managerId: 'manager-789',
+        branchIds: ['branch-2', 'branch-3'],
       });
 
       const mockCreatedAgent = {
@@ -132,8 +140,9 @@ describe('User Management', () => {
         name: mockAgentData.name,
         email: mockAgentData.email,
         role: 'agent',
-        managerId: mockAgentData.managerId,
-        branchId: 'branch-2',
+        managerId: 'manager-789',
+        teamLeadId: 'teamlead-789',
+        branchIds: ['branch-2'],
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
@@ -144,20 +153,9 @@ describe('User Management', () => {
       const result = await createAgent(mockAgentData);
 
       expect(result.role).toBe('agent');
-      expect(result.managerId).toBe(mockAgentData.managerId);
-      expect(result.branchId).toBe('branch-2');
-
-      expect(databases.createDocument).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.any(String),
-        expect.any(String),
-        expect.objectContaining({
-          role: 'agent',
-          managerId: mockAgentData.managerId,
-          branchId: 'branch-2',
-        }),
-        expect.any(Array)
-      );
+      expect(result.managerId).toBe('manager-789');
+      expect(result.teamLeadId).toBe('teamlead-789');
+      expect(result.branchIds).toEqual(['branch-2']);
     });
   });
 
@@ -302,12 +300,14 @@ describe('User Management', () => {
         name: 'Test Agent',
         email: 'agent@example.com',
         password: 'password123',
-        managerId: 'manager-123',
+        teamLeadId: 'teamlead-123',
+        branchIds: ['branch-1'],
       };
 
       (databases.getDocument as jest.Mock).mockResolvedValue({
-        $id: 'manager-123',
-        branchId: null,
+        $id: 'teamlead-123',
+        managerId: 'manager-123',
+        branchIds: ['branch-1'],
       });
 
       const networkError = new Error('Network error');

@@ -51,7 +51,6 @@ describe('Lead Service', () => {
     it('should create a lead with valid data', async () => {
       const input: CreateLeadInput = {
         data: mockLeadData,
-        ownerId: mockManagerId,
         assignedToId: mockAgentId,
         status: 'New',
       };
@@ -68,7 +67,7 @@ describe('Lead Service', () => {
 
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedLead);
 
-      const result = await createLead(input);
+      const result = await createLead(mockManagerId, input);
 
       expect(result).toEqual(mockCreatedLead);
       expect(databases.createDocument).toHaveBeenCalledWith(
@@ -97,7 +96,6 @@ describe('Lead Service', () => {
     it('should create a lead without assigned agent', async () => {
       const input: CreateLeadInput = {
         data: mockLeadData,
-        ownerId: mockManagerId,
         status: 'New',
       };
 
@@ -113,7 +111,7 @@ describe('Lead Service', () => {
 
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedLead);
 
-      const result = await createLead(input);
+      const result = await createLead(mockManagerId, input);
 
       expect(result.assignedToId).toBeNull();
       expect(databases.createDocument).toHaveBeenCalledWith(
@@ -135,7 +133,6 @@ describe('Lead Service', () => {
     it('should use default status "New" if not provided', async () => {
       const input: CreateLeadInput = {
         data: mockLeadData,
-        ownerId: mockManagerId,
         status: '',
       };
 
@@ -151,7 +148,7 @@ describe('Lead Service', () => {
 
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedLead);
 
-      await createLead(input);
+      await createLead(mockManagerId, input);
 
       expect(databases.createDocument).toHaveBeenCalledWith(
         expect.any(String),
@@ -167,7 +164,6 @@ describe('Lead Service', () => {
     it('should throw error when creation fails', async () => {
       const input: CreateLeadInput = {
         data: mockLeadData,
-        ownerId: mockManagerId,
         status: 'New',
       };
 
@@ -175,7 +171,7 @@ describe('Lead Service', () => {
         message: 'Database error',
       });
 
-      await expect(createLead(input)).rejects.toThrow('Database error');
+      await expect(createLead(mockManagerId, input)).rejects.toThrow('Database error');
     });
   });
 

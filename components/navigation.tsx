@@ -18,6 +18,11 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 
+function formatRoleLabel(role: string): string {
+  if (role === 'team_lead') return 'Team Lead';
+  return role.charAt(0).toUpperCase() + role.slice(1);
+}
+
 interface NavItem {
   key: string;
   label: string;
@@ -167,8 +172,8 @@ export function Navigation() {
         <div className="p-4 border-t border-border space-y-3">
           <div className="px-4 py-2">
             <p className="text-sm font-medium truncate">{user.name}</p>
-            <p className="text-xs text-muted-foreground capitalize">
-              {user.role}
+            <p className="text-xs text-muted-foreground">
+              {formatRoleLabel(user.role)}
             </p>
           </div>
           <Button

@@ -49,33 +49,34 @@ describe('Integration: User Management Flow', () => {
 
   it('should complete the user management flow: signup → create agent → agent sees assigned leads', async () => {
     // Step 1: Manager signs up (simulated by creating user doc with manager role)
-    // The signup flow creates an Appwrite account + user document with role='manager'
-    // We test the agent creation part which is the service-level integration
+    // Step 2: Team Lead creates an agent
 
-    // Step 2: Manager creates an agent
+    const teamLeadId = 'teamlead-001';
+
     const agentDoc = {
       $id: agentId,
       name: 'Test Agent',
       email: 'agent@example.com',
       role: 'agent',
       managerId: managerId,
-      branchId: null,
+      teamLeadId: teamLeadId,
+      branchIds: ['branch-1'],
       $createdAt: new Date().toISOString(),
       $updatedAt: new Date().toISOString(),
     };
 
-    // Mock manager document lookup (createAgent fetches manager to inherit branchId)
-    const managerDoc = {
-      $id: managerId,
-      name: 'Test Manager',
-      email: 'manager@example.com',
-      role: 'manager',
-      managerId: null,
-      branchId: null,
+    // Mock team lead document lookup (createAgent fetches team lead)
+    const teamLeadDoc = {
+      $id: teamLeadId,
+      name: 'Test Team Lead',
+      email: 'tl@example.com',
+      role: 'team_lead',
+      managerId: managerId,
+      branchIds: ['branch-1', 'branch-2'],
       $createdAt: new Date().toISOString(),
       $updatedAt: new Date().toISOString(),
     };
-    (databases.getDocument as jest.Mock).mockResolvedValue(managerDoc);
+    (databases.getDocument as jest.Mock).mockResolvedValue(teamLeadDoc);
     (account.create as jest.Mock).mockResolvedValue({ $id: agentId });
     (databases.createDocument as jest.Mock).mockResolvedValue(agentDoc);
 
@@ -83,12 +84,14 @@ describe('Integration: User Management Flow', () => {
       name: 'Test Agent',
       email: 'agent@example.com',
       password: 'securePassword123',
-      managerId: managerId,
+      teamLeadId: teamLeadId,
+      branchIds: ['branch-1'],
     });
 
     // Verify agent has correct role and managerId
     expect(createdAgent.role).toBe('agent');
     expect(createdAgent.managerId).toBe(managerId);
+    expect(createdAgent.teamLeadId).toBe(teamLeadId);
     expect(createdAgent.name).toBe('Test Agent');
 
     // Verify Appwrite account was created
@@ -99,7 +102,7 @@ describe('Integration: User Management Flow', () => {
       'Test Agent'
     );
 
-    // Verify document permissions include both agent and manager
+    // Verify document was created with correct data
     expect(databases.createDocument).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
@@ -107,11 +110,12 @@ describe('Integration: User Management Flow', () => {
       expect.objectContaining({
         role: 'agent',
         managerId: managerId,
-        branchId: null,
+        teamLeadId: teamLeadId,
+        branchIds: ['branch-1'],
       }),
       expect.arrayContaining([
-        Permission.read(Role.user(managerId)),
-        Permission.update(Role.user(managerId)),
+        Permission.read(Role.user(teamLeadId)),
+        Permission.update(Role.user(teamLeadId)),
       ])
     );
 
@@ -146,16 +150,18 @@ describe('Integration: User Management Flow', () => {
   });
 
   it('should handle duplicate email during agent creation', async () => {
-    // Mock manager document lookup
-    const managerDoc = {
-      $id: managerId,
-      name: 'Test Manager',
-      email: 'manager@example.com',
-      role: 'manager',
-      managerId: null,
-      branchId: null,
+    const teamLeadId = 'teamlead-001';
+
+    // Mock team lead document lookup
+    const teamLeadDoc = {
+      $id: teamLeadId,
+      name: 'Test Team Lead',
+      email: 'tl@example.com',
+      role: 'team_lead',
+      managerId: managerId,
+      branchIds: ['branch-1'],
     };
-    (databases.getDocument as jest.Mock).mockResolvedValue(managerDoc);
+    (databases.getDocument as jest.Mock).mockResolvedValue(teamLeadDoc);
     (account.create as jest.Mock).mockRejectedValue({
       code: 409,
       message: 'A user with the same id, email, or phone already exists',
@@ -166,7 +172,8 @@ describe('Integration: User Management Flow', () => {
         name: 'Duplicate Agent',
         email: 'existing@example.com',
         password: 'password123',
-        managerId: managerId,
+        teamLeadId: teamLeadId,
+        branchIds: ['branch-1'],
       })
     ).rejects.toThrow('A user with this email already exists');
   });
