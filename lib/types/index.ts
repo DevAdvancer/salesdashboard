@@ -34,13 +34,6 @@ export interface CreateTeamLeadInput {
   password: string;
   managerId: string;
   branchIds: string[];
-
-  export interface CreateManagerInput {
-    name: string;
-    email: string;
-    password: string;
-    branchIds: string[];
-  }
 }
 
 export interface CreateAgentInput {
