@@ -3,10 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
+import { createManagerAction, createTeamLeadAction, createAgentAction } from '@/app/actions/user';
 import {
-  createAgent,
-  createTeamLead,
-  createManager,
   getUsersByBranches,
   getAgentsByManager,
 } from '@/lib/services/user-service';
@@ -142,7 +140,7 @@ function UserManagementContent() {
 
       if (canCreateManager) {
         // Admin creates a Manager
-        await createManager({
+        await createManagerAction({
           name: formName.trim(),
           email: formEmail.trim(),
           password: formPassword,
@@ -150,7 +148,7 @@ function UserManagementContent() {
         });
       } else if (canCreateTeamLead) {
         // Manager creates a Team Lead
-        await createTeamLead({
+        await createTeamLeadAction({
           name: formName.trim(),
           email: formEmail.trim(),
           password: formPassword,
@@ -159,7 +157,7 @@ function UserManagementContent() {
         });
       } else if (canCreateAgent) {
         // Team Lead creates an Agent
-        await createAgent({
+        await createAgentAction({
           name: formName.trim(),
           email: formEmail.trim(),
           password: formPassword,
