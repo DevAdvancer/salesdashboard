@@ -92,11 +92,11 @@ function LeadDetailContent() {
   };
 
   const handleSave = async () => {
-    if (!lead) return;
+    if (!lead || !user) return;
 
     try {
       setIsSaving(true);
-      await updateLead(leadId, leadData);
+      await updateLead(leadId, leadData, user.$id, user.name);
       toast({
         title: 'Success',
         description: 'Lead updated successfully',
@@ -116,11 +116,11 @@ function LeadDetailContent() {
   };
 
   const handleCloseLead = async () => {
-    if (!lead) return;
+    if (!lead || !user) return;
 
     try {
       setIsSaving(true);
-      await closeLead(leadId, closeStatus);
+      await closeLead(leadId, closeStatus, user.$id, user.name);
       toast({
         title: 'Success',
         description: 'Lead closed successfully',
@@ -140,10 +140,10 @@ function LeadDetailContent() {
   };
 
   const handleAssignAgent = async (agentId: string) => {
-    if (!lead) return;
+    if (!lead || !user) return;
 
     try {
-      await assignLead(leadId, agentId);
+      await assignLead(leadId, agentId, user.$id, user.name);
       toast({
         title: 'Success',
         description: 'Lead assigned successfully',

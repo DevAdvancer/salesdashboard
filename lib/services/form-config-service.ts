@@ -1,6 +1,7 @@
 import { Permission, Role } from 'appwrite';
 import { databases } from '@/lib/appwrite';
 import { FormField, FormConfig } from '@/lib/types';
+import { logAction } from './audit-service';
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const FORM_CONFIG_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_FORM_CONFIG_COLLECTION_ID!;
@@ -109,11 +110,13 @@ export async function getFormConfig(): Promise<{ fields: FormField[]; version: n
  *
  * @param fields - The new form fields configuration
  * @param managerId - The ID of the manager making the update
+ * @param managerName - The name of the manager (optional, for logging)
  * @returns The updated form configuration
  */
 export async function updateFormConfig(
   fields: FormField[],
-  managerId: string
+  managerId: string,
+  managerName?: string
 ): Promise<{ fields: FormField[]; version: number; updatedBy: string }> {
   try {
     // Get current config to increment version
@@ -135,6 +138,18 @@ export async function updateFormConfig(
           updatedBy: managerId,
         }
       );
+
+      // Log audit
+      if (managerName) {
+        await logAction({
+            action: 'FORM_CONFIG_UPDATE',
+            actorId: managerId,
+            actorName: managerName,
+            targetId: FORM_CONFIG_DOC_ID,
+            targetType: 'FORM_CONFIG',
+            metadata: { version: newVersion, fieldCount: fields.length }
+        });
+      }
 
       return {
         fields,
@@ -162,6 +177,18 @@ export async function updateFormConfig(
             Permission.delete(Role.label('manager')),
           ]
         );
+
+        // Log audit
+        if (managerName) {
+            await logAction({
+                action: 'FORM_CONFIG_UPDATE',
+                actorId: managerId,
+                actorName: managerName,
+                targetId: FORM_CONFIG_DOC_ID,
+                targetType: 'FORM_CONFIG',
+                metadata: { version: newVersion, fieldCount: fields.length, isCreation: true }
+            });
+        }
 
         return {
           fields,

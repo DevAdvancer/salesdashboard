@@ -14,7 +14,8 @@ export type ComponentKey =
   | 'user-management'
   | 'field-management'
   | 'settings'
-  | 'branch-management';
+  | 'branch-management'
+  | 'audit-logs';
 
 interface AccessRule {
   $id: string;
@@ -92,7 +93,7 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
     // team_lead=dashboard+leads+history+user-management only
     // agent=dashboard+leads only
     if (user.role === 'manager') {
-      return componentKey !== 'branch-management';
+      return componentKey !== 'branch-management' && componentKey !== 'audit-logs';
     }
     if (user.role === 'team_lead') {
       return (

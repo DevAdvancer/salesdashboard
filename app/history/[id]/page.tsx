@@ -80,11 +80,11 @@ function HistoryDetailContent() {
   };
 
   const handleReopenLead = async () => {
-    if (!lead || !isManager) return;
+    if (!lead || !isManager || !user) return;
 
     try {
       setIsReopening(true);
-      await reopenLead(leadId);
+      await reopenLead(leadId, user.$id, user.name);
       toast({
         title: 'Success',
         description: 'Lead reopened successfully',

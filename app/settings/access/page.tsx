@@ -26,6 +26,7 @@ const ALL_COMPONENTS: { key: ComponentKey; label: string; description: string }[
   { key: 'field-management', label: 'Field Management', description: 'Configure lead form fields' },
   { key: 'settings', label: 'Settings', description: 'System settings and configuration' },
   { key: 'branch-management', label: 'Branch Management', description: 'Manage organizational branches' },
+  { key: 'audit-logs', label: 'Audit Logs', description: 'System activity and user actions' },
 ];
 
 export default function AccessConfigPage() {

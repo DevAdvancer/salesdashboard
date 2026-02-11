@@ -2,6 +2,7 @@ import { Permission, Role, Query } from 'appwrite';
 import { databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { Lead, CreateLeadInput, LeadData, LeadListFilters, UserRole } from '@/lib/types';
 import { validateLeadUniqueness } from '@/lib/services/lead-validator';
+import { logAction } from './audit-service';
 
 /**
  * Create a new lead
@@ -14,9 +15,10 @@ import { validateLeadUniqueness } from '@/lib/services/lead-validator';
  *
  * @param creatingUserId - The ID of the user creating the lead (auto-set as ownerId)
  * @param input - The lead creation input
+ * @param creatingUserName - The name of the user creating the lead (optional, for logging)
  * @returns The created lead
  */
-export async function createLead(creatingUserId: string, input: CreateLeadInput): Promise<Lead> {
+export async function createLead(creatingUserId: string, input: CreateLeadInput, creatingUserName?: string): Promise<Lead> {
   try {
     // Validate lead uniqueness before creating
     const validation = await validateLeadUniqueness(input.data);
@@ -66,7 +68,21 @@ export async function createLead(creatingUserId: string, input: CreateLeadInput)
       permissions
     );
 
-    return lead as unknown as Lead;
+    const createdLead = lead as unknown as Lead;
+
+    // Log audit
+    if (creatingUserName) {
+        await logAction({
+            action: 'LEAD_CREATE',
+            actorId: creatingUserId,
+            actorName: creatingUserName,
+            targetId: createdLead.$id,
+            targetType: 'LEAD',
+            metadata: { ...input.data, branchId: input.branchId }
+        });
+    }
+
+    return createdLead;
   } catch (error: any) {
     console.error('Error creating lead:', error);
     throw new Error(error.message || 'Failed to create lead');
@@ -83,9 +99,16 @@ export async function createLead(creatingUserId: string, input: CreateLeadInput)
  *
  * @param leadId - The ID of the lead to update
  * @param data - The updated lead data
+ * @param actorId - The ID of the user performing the update (optional, for logging)
+ * @param actorName - The name of the user performing the update (optional, for logging)
  * @returns The updated lead
  */
-export async function updateLead(leadId: string, data: Partial<LeadData>): Promise<Lead> {
+export async function updateLead(
+    leadId: string,
+    data: Partial<LeadData>,
+    actorId?: string,
+    actorName?: string
+): Promise<Lead> {
   try {
     // Get the current lead to merge data
     const currentLead = await getLead(leadId);
@@ -116,6 +139,18 @@ export async function updateLead(leadId: string, data: Partial<LeadData>): Promi
       }
     );
 
+    // Log audit
+    if (actorId && actorName) {
+         await logAction({
+            action: 'LEAD_UPDATE',
+            actorId: actorId,
+            actorName: actorName,
+            targetId: leadId,
+            targetType: 'LEAD',
+            metadata: data
+        });
+    }
+
     return lead as unknown as Lead;
   } catch (error: any) {
     console.error('Error updating lead:', error);
@@ -130,10 +165,23 @@ export async function updateLead(leadId: string, data: Partial<LeadData>): Promi
  * Only the owner (manager) can delete leads.
  *
  * @param leadId - The ID of the lead to delete
+ * @param actorId - The ID of the user performing the delete (optional, for logging)
+ * @param actorName - The name of the user performing the delete (optional, for logging)
  */
-export async function deleteLead(leadId: string): Promise<void> {
+export async function deleteLead(leadId: string, actorId?: string, actorName?: string): Promise<void> {
   try {
     await databases.deleteDocument(DATABASE_ID, COLLECTIONS.LEADS, leadId);
+
+    // Log audit
+    if (actorId && actorName) {
+         await logAction({
+            action: 'LEAD_DELETE',
+            actorId: actorId,
+            actorName: actorName,
+            targetId: leadId,
+            targetType: 'LEAD'
+        });
+    }
   } catch (error: any) {
     console.error('Error deleting lead:', error);
     throw new Error(error.message || 'Failed to delete lead');
@@ -258,9 +306,16 @@ export async function listLeads(
  *
  * @param leadId - The ID of the lead to close
  * @param closedStatus - The final status of the closed lead
+ * @param actorId - The ID of the user performing the close (optional, for logging)
+ * @param actorName - The name of the user performing the close (optional, for logging)
  * @returns The updated lead
  */
-export async function closeLead(leadId: string, closedStatus: string): Promise<Lead> {
+export async function closeLead(
+    leadId: string,
+    closedStatus: string,
+    actorId?: string,
+    actorName?: string
+): Promise<Lead> {
   try {
     // Get the current lead to preserve owner and assigned agent
     const currentLead = await getLead(leadId);
@@ -290,6 +345,18 @@ export async function closeLead(leadId: string, closedStatus: string): Promise<L
       permissions
     );
 
+    // Log audit
+    if (actorId && actorName) {
+         await logAction({
+            action: 'LEAD_UPDATE',
+            actorId: actorId,
+            actorName: actorName,
+            targetId: leadId,
+            targetType: 'LEAD',
+            metadata: { isClosed: true, status: closedStatus }
+        });
+    }
+
     return lead as unknown as Lead;
   } catch (error: any) {
     console.error('Error closing lead:', error);
@@ -305,9 +372,15 @@ export async function closeLead(leadId: string, closedStatus: string): Promise<L
  * It restores update permissions for the assigned agent.
  *
  * @param leadId - The ID of the lead to reopen
+ * @param actorId - The ID of the user performing the reopen (optional, for logging)
+ * @param actorName - The name of the user performing the reopen (optional, for logging)
  * @returns The updated lead
  */
-export async function reopenLead(leadId: string): Promise<Lead> {
+export async function reopenLead(
+    leadId: string,
+    actorId?: string,
+    actorName?: string
+): Promise<Lead> {
   try {
     // Get the current lead
     const currentLead = await getLead(leadId);
@@ -338,6 +411,18 @@ export async function reopenLead(leadId: string): Promise<Lead> {
       permissions
     );
 
+    // Log audit
+    if (actorId && actorName) {
+         await logAction({
+            action: 'LEAD_UPDATE',
+            actorId: actorId,
+            actorName: actorName,
+            targetId: leadId,
+            targetType: 'LEAD',
+            metadata: { isClosed: false }
+        });
+    }
+
     return lead as unknown as Lead;
   } catch (error: any) {
     console.error('Error reopening lead:', error);
@@ -353,9 +438,16 @@ export async function reopenLead(leadId: string): Promise<Lead> {
  *
  * @param leadId - The ID of the lead to assign
  * @param agentId - The ID of the agent to assign the lead to
+ * @param actorId - The ID of the user performing the assignment (optional, for logging)
+ * @param actorName - The name of the user performing the assignment (optional, for logging)
  * @returns The updated lead
  */
-export async function assignLead(leadId: string, agentId: string): Promise<Lead> {
+export async function assignLead(
+    leadId: string,
+    agentId: string,
+    actorId?: string,
+    actorName?: string
+): Promise<Lead> {
   try {
     // Get the current lead
     const currentLead = await getLead(leadId);
@@ -388,6 +480,18 @@ export async function assignLead(leadId: string, agentId: string): Promise<Lead>
       },
       permissions
     );
+
+    // Log audit
+    if (actorId && actorName) {
+         await logAction({
+            action: 'LEAD_UPDATE',
+            actorId: actorId,
+            actorName: actorName,
+            targetId: leadId,
+            targetType: 'LEAD',
+            metadata: { assignedToId: agentId }
+        });
+    }
 
     return lead as unknown as Lead;
   } catch (error: any) {

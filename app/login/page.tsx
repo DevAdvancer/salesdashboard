@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import Link from 'next/link';
 import {
   Card,
   CardContent,
@@ -109,6 +110,12 @@ export default function LoginPage() {
             <Button type="submit" className="w-full" loading={isLoading}>
               Log in
             </Button>
+            <div className="text-sm text-muted-foreground">
+              Don&apos;t have an account?{' '}
+              <Link href="/signup" className="underline font-medium">
+                Sign up
+              </Link>
+            </div>
           </CardFooter>
         </form>
       </Card>

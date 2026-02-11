@@ -8,6 +8,7 @@ import {
   getUsersByBranches,
   getAgentsByManager,
 } from '@/lib/services/user-service';
+import { getVisibleUserBranches } from '@/lib/utils/branch-visibility';
 import { listBranches } from '@/lib/services/branch-service';
 import { User, Branch } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -91,8 +92,8 @@ function UserManagementContent() {
         setUsers(usersList);
       } else if (user.role === 'team_lead' && user.branchIds.length > 0) {
         const usersList = await getUsersByBranches(user.branchIds);
-        // Team lead sees only agents with overlapping branches
-        setUsers(usersList.filter((u) => u.role === 'agent'));
+        // Team lead sees everyone with overlapping branches
+        setUsers(usersList);
       } else {
         const agentsList = await getAgentsByManager(user.$id);
         setUsers(agentsList);
@@ -183,15 +184,34 @@ function UserManagementContent() {
       setIsCreating(true);
       setError(null);
 
-      if (canCreateManager) {
-        // Admin creates a Manager
-        await createManagerAction({
-          name: formName.trim(),
-          email: formEmail.trim(),
-          password: formPassword,
-          branchIds: selectedBranchIds,
-          currentUserId: user.$id,
-        });
+      if (isAdmin) {
+         if (createRole === 'manager') {
+            await createManagerAction({
+              name: formName.trim(),
+              email: formEmail.trim(),
+              password: formPassword,
+              branchIds: selectedBranchIds,
+              currentUserId: user.$id,
+            });
+         } else if (createRole === 'team_lead') {
+            await createTeamLeadAction({
+              name: formName.trim(),
+              email: formEmail.trim(),
+              password: formPassword,
+              managerId: user.$id, // Admin passes their ID, but action handles it as null/fallback
+              branchIds: selectedBranchIds,
+              currentUserId: user.$id,
+            });
+         } else {
+            await createAgentAction({
+              name: formName.trim(),
+              email: formEmail.trim(),
+              password: formPassword,
+              teamLeadId: undefined, // Admin creates independent agent
+              branchIds: selectedBranchIds,
+              currentUserId: user.$id,
+            });
+         }
       } else if (canCreateTeamLead) {
         if (user.role === 'manager' && createRole === 'agent') {
           await createAgentAction({
@@ -234,16 +254,32 @@ function UserManagementContent() {
   };
 
   const isMgr = user?.role === 'manager';
-  const [createRole, setCreateRole] = useState<'team_lead' | 'agent'>('team_lead');
-  const createButtonLabel = canCreateManager ? 'Create Manager' : isMgr ? 'Create User' : canCreateTeamLead ? 'Create Team Lead' : 'Create Agent';
-  const dialogTitle = canCreateManager ? 'Create New Manager' : isMgr ? (createRole === 'team_lead' ? 'Create New Team Lead' : 'Create New Agent') : canCreateTeamLead ? 'Create New Team Lead' : 'Create New Agent';
-  const dialogDescription = canCreateManager
-    ? 'Add a new manager and assign them to branches'
+  const [createRole, setCreateRole] = useState<'manager' | 'team_lead' | 'agent'>('team_lead');
+
+  // Initialize createRole when dialog opens or user changes
+  useEffect(() => {
+    if (isAdmin) setCreateRole('manager');
+    else if (isMgr) setCreateRole('team_lead');
+    else if (isTeamLead) setCreateRole('agent');
+  }, [isAdmin, isMgr, isTeamLead, showCreateDialog]);
+
+  const createButtonLabel = isAdmin
+    ? (createRole === 'manager' ? 'Create Manager' : createRole === 'team_lead' ? 'Create Team Lead' : 'Create Agent')
     : isMgr
-      ? (createRole === 'team_lead' ? 'Add a new team lead and assign them to your branches' : 'Add a new agent and assign them to your branches')
-      : canCreateTeamLead
-        ? 'Add a new team lead and assign them to your branches'
-        : 'Add a new agent and assign them to your branches';
+      ? (createRole === 'team_lead' ? 'Create Team Lead' : 'Create Agent')
+      : 'Create Agent';
+
+  const dialogTitle = isAdmin
+    ? (createRole === 'manager' ? 'Create New Manager' : createRole === 'team_lead' ? 'Create New Team Lead' : 'Create New Agent')
+    : isMgr
+      ? (createRole === 'team_lead' ? 'Create New Team Lead' : 'Create New Agent')
+      : 'Create New Agent';
+
+  const dialogDescription = isAdmin
+    ? 'Add a new user and assign them to branches'
+    : isMgr
+      ? 'Add a new team member and assign them to your branches'
+      : 'Add a new agent and assign them to your branches';
 
   const formatRole = (role: string) => {
     switch (role) {
@@ -260,9 +296,35 @@ function UserManagementContent() {
     }
   };
 
-  const formatBranches = (branchIds: string[]) => {
-    if (!branchIds || branchIds.length === 0) return '—';
-    return branchIds.map((id) => branchMap.get(id) || id).join(', ');
+  const formatBranches = (targetUserBranchIds: string[]) => {
+    if (!targetUserBranchIds || targetUserBranchIds.length === 0) return '—';
+
+    // Calculate visible branches based on current user's role and assignments.
+    // This ensures that managers only see branch data relevant to their own assignments,
+    // preventing information leak about cross-branch assignments they don't control.
+    const { visibleBranchIds, hasVisibilityMismatch } = getVisibleUserBranches(
+      targetUserBranchIds,
+      user?.role || 'agent',
+      user?.branchIds || [],
+      (msg, meta) => console.warn(`[BranchVisibility] ${msg}`, meta)
+    );
+
+    const branchNames = visibleBranchIds
+      .map((id) => branchMap.get(id) || id)
+      .join(', ');
+
+    if (hasVisibilityMismatch && (isAdmin || isMgr)) {
+      // Optional: Add a visual indicator for managers/admins that some branches are hidden
+      // For now, we just append a count if the user is an admin or manager to let them know
+      // strictly following the requirement "shows only their assigned branch", we might not want this,
+      // but "comprehensive logging" implies we care about mismatches.
+      // However, the UI requirement implies strict filtering.
+      // Let's stick to showing only visible ones, but maybe with a subtle hint if desired.
+      // For this implementation, I will just return the visible ones as requested.
+      return branchNames || '—';
+    }
+
+    return branchNames || '—';
   };
 
   return (
@@ -456,12 +518,23 @@ function UserManagementContent() {
                   )}
                 </div>
 
-                {isMgr && (
-                  <div className="flex items-center gap-2">
+                {(isAdmin || isMgr) && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {isAdmin && (
+                      <Button
+                        type="button"
+                        variant={createRole === 'manager' ? 'default' : 'outline'}
+                        onClick={() => setCreateRole('manager')}
+                        size="sm"
+                      >
+                        Manager
+                      </Button>
+                    )}
                     <Button
                       type="button"
                       variant={createRole === 'team_lead' ? 'default' : 'outline'}
                       onClick={() => setCreateRole('team_lead')}
+                      size="sm"
                     >
                       Team Lead
                     </Button>
@@ -469,6 +542,7 @@ function UserManagementContent() {
                       type="button"
                       variant={createRole === 'agent' ? 'default' : 'outline'}
                       onClick={() => setCreateRole('agent')}
+                      size="sm"
                     >
                       Agent
                     </Button>

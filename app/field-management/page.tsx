@@ -142,7 +142,7 @@ function FieldManagementContent() {
 
     try {
       setSaving(true);
-      const result = await updateFormConfig(fields, user.$id);
+      const result = await updateFormConfig(fields, user.$id, user.name);
       setVersion(result.version);
       setShowPublishConfirm(false);
 

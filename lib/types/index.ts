@@ -143,7 +143,8 @@ export type ComponentKey =
   | 'user-management'
   | 'field-management'
   | 'settings'
-  | 'branch-management';
+  | 'branch-management'
+  | 'audit-logs';
 
 export interface AccessRule {
   $id?: string;
@@ -155,6 +156,31 @@ export interface AccessRule {
 export interface AccessConfig {
   rules: AccessRule[];
   canAccess: (componentKey: ComponentKey, role: UserRole) => boolean;
+}
+
+// Audit Log types
+export type AuditLogAction =
+  | 'USER_CREATE'
+  | 'USER_UPDATE'
+  | 'USER_DELETE'
+  | 'LEAD_CREATE'
+  | 'LEAD_UPDATE'
+  | 'LEAD_DELETE'
+  | 'FORM_CONFIG_UPDATE'
+  | 'BRANCH_CREATE'
+  | 'BRANCH_UPDATE'
+  | 'LOGIN'
+  | 'LOGOUT';
+
+export interface AuditLog {
+  $id: string;
+  action: string;
+  actorId: string;
+  actorName: string;
+  targetId?: string;
+  targetType: string;
+  metadata?: string; // JSON string
+  performedAt: string;
 }
 
 // Authentication context types

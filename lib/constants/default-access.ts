@@ -5,7 +5,8 @@ export type ComponentKey =
   | 'user-management'
   | 'field-management'
   | 'settings'
-  | 'branch-management';
+  | 'branch-management'
+  | 'audit-logs';
 
 export type UserRole = 'admin' | 'manager' | 'team_lead' | 'agent';
 
@@ -24,6 +25,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'field-management', role: 'admin', allowed: true },
   { componentKey: 'settings', role: 'admin', allowed: true },
   { componentKey: 'branch-management', role: 'admin', allowed: true },
+  { componentKey: 'audit-logs', role: 'admin', allowed: true },
   // Manager rules
   { componentKey: 'dashboard', role: 'manager', allowed: true },
   { componentKey: 'leads', role: 'manager', allowed: true },
@@ -32,6 +34,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'field-management', role: 'manager', allowed: true },
   { componentKey: 'settings', role: 'manager', allowed: true },
   { componentKey: 'branch-management', role: 'manager', allowed: false },
+  { componentKey: 'audit-logs', role: 'manager', allowed: false },
   // Team Lead rules
   { componentKey: 'dashboard', role: 'team_lead', allowed: true },
   { componentKey: 'leads', role: 'team_lead', allowed: true },
@@ -40,6 +43,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'field-management', role: 'team_lead', allowed: false },
   { componentKey: 'settings', role: 'team_lead', allowed: false },
   { componentKey: 'branch-management', role: 'team_lead', allowed: false },
+  { componentKey: 'audit-logs', role: 'team_lead', allowed: false },
   // Agent rules
   { componentKey: 'dashboard', role: 'agent', allowed: true },
   { componentKey: 'leads', role: 'agent', allowed: true },
@@ -48,4 +52,5 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'field-management', role: 'agent', allowed: false },
   { componentKey: 'settings', role: 'agent', allowed: false },
   { componentKey: 'branch-management', role: 'agent', allowed: false },
+  { componentKey: 'audit-logs', role: 'agent', allowed: false },
 ];

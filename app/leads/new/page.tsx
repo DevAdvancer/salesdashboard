@@ -106,7 +106,7 @@ function NewLeadContent() {
         assignedToId: assignedToId || undefined,
         status: sanitizedData.status || 'New',
         branchId,
-      });
+      }, user.name);
 
       toast({
         title: 'Success',

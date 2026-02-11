@@ -15,6 +15,7 @@ import {
   LogOut,
   Menu,
   X,
+  ClipboardList,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -66,6 +67,12 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Field Management',
     href: '/field-management',
     icon: FormInput,
+  },
+  {
+    key: 'audit-logs',
+    label: 'Audit Logs',
+    href: '/audit-logs',
+    icon: ClipboardList,
   },
   {
     key: 'settings',

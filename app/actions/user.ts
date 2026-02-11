@@ -7,6 +7,7 @@ import { CreateManagerInput, CreateTeamLeadInput, CreateAgentInput, UserRole } f
 // Constants
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
+const AUDIT_LOGS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_AUDIT_LOGS_COLLECTION_ID!;
 
 async function getCurrentUser() {
   try {
@@ -32,9 +33,42 @@ async function getUserDoc(userId: string) {
     }
 }
 
+async function logAuditAction(
+    databases: any,
+    action: string,
+    actorId: string,
+    actorName: string,
+    targetId: string | undefined,
+    targetType: string,
+    metadata?: any
+) {
+    if (!AUDIT_LOGS_COLLECTION_ID) {
+        console.warn('Audit logs collection ID not set, skipping log');
+        return;
+    }
+    try {
+        await databases.createDocument(
+            DATABASE_ID,
+            AUDIT_LOGS_COLLECTION_ID,
+            ID.unique(),
+            {
+                action,
+                actorId,
+                actorName,
+                targetId,
+                targetType,
+                metadata: metadata ? JSON.stringify(metadata) : null,
+                performedAt: new Date().toISOString(),
+            }
+        );
+    } catch (error) {
+        console.error("Failed to log audit action:", error);
+    }
+}
+
 export async function createManagerAction(input: CreateManagerInput & { currentUserId: string }) {
     const { currentUserId, ...managerInput } = input;
-    
+
     if (!currentUserId) {
         console.error("createManagerAction: No currentUserId provided");
         throw new Error("Unauthorized - No user ID provided");
@@ -47,9 +81,9 @@ export async function createManagerAction(input: CreateManagerInput & { currentU
         console.error("createManagerAction: User document not found for ID:", currentUserId);
         throw new Error("User profile not found");
     }
-    
+
     console.log("createManagerAction: Caller role:", callerDoc.role);
-    
+
     // Allow both admin and manager roles to create managers
     // This enables manager-to-manager creation until proper admin bootstrap is in place
     if (callerDoc.role !== 'admin' && callerDoc.role !== 'manager') {
@@ -96,6 +130,18 @@ export async function createManagerAction(input: CreateManagerInput & { currentU
                  Permission.update(Role.user(userId)),
             ]
         );
+
+        // Log audit
+        await logAuditAction(
+            databases,
+            'USER_CREATE',
+            callerDoc.$id,
+            callerDoc.name,
+            userId,
+            'USER',
+            { role: 'manager', email, name, branchIds }
+        );
+
         return { success: true };
     } catch (error: any) {
         console.error("DB Creation failed, rolling back Auth User", error);
@@ -106,19 +152,22 @@ export async function createManagerAction(input: CreateManagerInput & { currentU
 
 export async function createTeamLeadAction(input: CreateTeamLeadInput & { currentUserId: string }) {
     const { currentUserId, ...teamLeadInput } = input;
-    
+
     if (!currentUserId) throw new Error("Unauthorized - No user ID provided");
 
     const callerDoc = await getUserDoc(currentUserId);
-    if (!callerDoc || callerDoc.role !== 'manager') {
-        throw new Error("Permission denied: Only managers can create team leads");
+    // Allow admin and manager roles to create team leads
+    if (!callerDoc || (callerDoc.role !== 'manager' && callerDoc.role !== 'admin')) {
+        throw new Error("Permission denied: Only managers and admins can create team leads");
     }
 
-    // Validate branches
-    const callerBranches = (callerDoc.branchIds as string[]) || [];
-    for (const bid of teamLeadInput.branchIds) {
-        if (!callerBranches.includes(bid)) {
-            throw new Error(`Branch ${bid} is not in your assigned branches`);
+    // Validate branches (skip for admin)
+    if (callerDoc.role !== 'admin') {
+        const callerBranches = (callerDoc.branchIds as string[]) || [];
+        for (const bid of teamLeadInput.branchIds) {
+            if (!callerBranches.includes(bid)) {
+                throw new Error(`Branch ${bid} is not in your assigned branches`);
+            }
         }
     }
 
@@ -133,6 +182,10 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
         throw e;
     }
 
+    // For admins, managerId is null unless specified (not supported in UI yet, so null)
+    // For managers, they are the manager
+    const managerId = callerDoc.role === 'manager' ? callerDoc.$id : null;
+
     try {
         await databases.createDocument(
             DATABASE_ID,
@@ -142,18 +195,30 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
                 name,
                 email,
                 role: 'team_lead',
-                managerId: callerDoc.$id, // Manager ID is the caller
+                managerId,
                 teamLeadId: null,
                 branchIds
             },
             [
                  Permission.read(Role.user(userId)),
-                 Permission.read(Role.user(callerDoc.$id)),
+                 ...(managerId ? [Permission.read(Role.user(managerId))] : []),
                  Permission.update(Role.user(userId)),
-                 Permission.update(Role.user(callerDoc.$id)),
-                 Permission.delete(Role.user(callerDoc.$id)),
+                 ...(managerId ? [Permission.update(Role.user(managerId))] : []),
+                 ...(managerId ? [Permission.delete(Role.user(managerId))] : []),
             ]
         );
+
+        // Log audit
+        await logAuditAction(
+            databases,
+            'USER_CREATE',
+            callerDoc.$id,
+            callerDoc.name,
+            userId,
+            'USER',
+            { role: 'team_lead', email, name, branchIds, managerId }
+        );
+
         return { success: true };
     } catch (error: any) {
         console.error("DB Creation failed, rolling back Auth User", error);
@@ -164,18 +229,20 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
 
 export async function createAgentAction(input: CreateAgentInput & { currentUserId: string }) {
     const { currentUserId, ...agentInput } = input;
-    
+
     if (!currentUserId) throw new Error("Unauthorized - No user ID provided");
 
     const callerDoc = await getUserDoc(currentUserId);
-    if (!callerDoc || (callerDoc.role !== 'team_lead' && callerDoc.role !== 'manager')) {
-        throw new Error("Permission denied: Only team leads or managers can create agents");
+    if (!callerDoc || (callerDoc.role !== 'team_lead' && callerDoc.role !== 'manager' && callerDoc.role !== 'admin')) {
+        throw new Error("Permission denied: Only team leads, managers, or admins can create agents");
     }
 
-    const callerBranches = (callerDoc.branchIds as string[]) || [];
-    for (const bid of agentInput.branchIds) {
-        if (!callerBranches.includes(bid)) {
-            throw new Error(`Branch ${bid} is not in your assigned branches`);
+    if (callerDoc.role !== 'admin') {
+        const callerBranches = (callerDoc.branchIds as string[]) || [];
+        for (const bid of agentInput.branchIds) {
+            if (!callerBranches.includes(bid)) {
+                throw new Error(`Branch ${bid} is not in your assigned branches`);
+            }
         }
     }
 
@@ -185,7 +252,8 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
 
     const isTeamLead = callerDoc.role === 'team_lead';
     const isManager = callerDoc.role === 'manager';
-    const managerId = isTeamLead ? (callerDoc.managerId || null) : callerDoc.$id;
+    // For admin, we default to no hierarchy for now
+    const managerId = isTeamLead ? (callerDoc.managerId || null) : (isManager ? callerDoc.$id : null);
     const teamLeadId = isTeamLead ? callerDoc.$id : (agentInput.teamLeadId || null);
 
     try {
@@ -220,6 +288,18 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
             },
             permissions
         );
+
+        // Log audit
+        await logAuditAction(
+            databases,
+            'USER_CREATE',
+            callerDoc.$id,
+            callerDoc.name,
+            userId,
+            'USER',
+            { role: 'agent', email, name, branchIds, managerId, teamLeadId }
+        );
+
         return { success: true };
     } catch (error: any) {
         console.error("DB Creation failed, rolling back Auth User", error);
