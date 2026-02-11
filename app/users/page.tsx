@@ -33,6 +33,8 @@ function UserManagementContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Form state
@@ -44,7 +46,7 @@ function UserManagementContent() {
 
   // Determine which role the current user can create
   const canCreateManager = isAdmin;
-  const canCreateTeamLead = !isAdmin && isManager && user?.role === 'manager';
+  const canCreateTeamLead = isManager && user?.role === 'manager';
   const canCreateAgent = isTeamLead;
   const canCreate = canCreateManager || canCreateTeamLead || canCreateAgent;
 
@@ -65,14 +67,25 @@ function UserManagementContent() {
     try {
       setIsLoading(true);
       if (isAdmin) {
-        // Admin sees all users — fetch by their branches or all agents
-        if (user.branchIds && user.branchIds.length > 0) {
-          const usersList = await getUsersByBranches(user.branchIds);
-          setUsers(usersList);
-        } else {
-          const agentsList = await getAgentsByManager(user.$id);
-          setUsers(agentsList);
-        }
+        // Admin sees all users regardless of branches
+        const { databases } = await import('@/lib/appwrite');
+        const response = await databases.listDocuments(
+          process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+          process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!
+        );
+        const allUsers = response.documents.map((doc: any) => ({
+          $id: doc.$id,
+          name: doc.name,
+          email: doc.email,
+          role: doc.role,
+          managerId: doc.managerId || null,
+          teamLeadId: doc.teamLeadId || null,
+          branchIds: doc.branchIds || [],
+          branchId: doc.branchId || null,
+          $createdAt: doc.$createdAt,
+          $updatedAt: doc.$updatedAt,
+        }));
+        setUsers(allUsers);
       } else if (user.role === 'manager' && user.branchIds.length > 0) {
         const usersList = await getUsersByBranches(user.branchIds);
         setUsers(usersList);
@@ -131,6 +144,38 @@ function UserManagementContent() {
     );
   };
 
+  const handleEdit = (userToEdit: User) => {
+    setEditingUser(userToEdit);
+    setSelectedBranchIds(userToEdit.branchIds || []);
+    setError(null);
+  };
+
+  const handleUpdateBranches = async () => {
+    if (!editingUser || !user) return;
+
+    try {
+      setIsUpdating(true);
+      setError(null);
+
+      const { databases } = await import('@/lib/appwrite');
+      await databases.updateDocument(
+        process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+        process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
+        editingUser.$id,
+        { branchIds: selectedBranchIds }
+      );
+
+      setEditingUser(null);
+      setSelectedBranchIds([]);
+      await fetchUsers();
+    } catch (err: any) {
+      console.error('Error updating user branches:', err);
+      setError(err.message || 'Failed to update user branches');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleCreate = async () => {
     if (!user || !validateForm()) return;
 
@@ -145,6 +190,7 @@ function UserManagementContent() {
           email: formEmail.trim(),
           password: formPassword,
           branchIds: selectedBranchIds,
+          currentUserId: user.$id,
         });
       } else if (canCreateTeamLead) {
         // Manager creates a Team Lead
@@ -154,6 +200,7 @@ function UserManagementContent() {
           password: formPassword,
           managerId: user.$id,
           branchIds: selectedBranchIds,
+          currentUserId: user.$id,
         });
       } else if (canCreateAgent) {
         // Team Lead creates an Agent
@@ -163,6 +210,7 @@ function UserManagementContent() {
           password: formPassword,
           teamLeadId: user.$id,
           branchIds: selectedBranchIds,
+          currentUserId: user.$id,
         });
       }
 
@@ -264,6 +312,7 @@ function UserManagementContent() {
                     <th className="text-left py-3 px-4 font-semibold">Role</th>
                     <th className="text-left py-3 px-4 font-semibold">Branches</th>
                     <th className="text-left py-3 px-4 font-semibold">Created</th>
+                    {isAdmin && <th className="text-left py-3 px-4 font-semibold">Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -283,6 +332,19 @@ function UserManagementContent() {
                       <td className="py-3 px-4">
                         {u.$createdAt ? new Date(u.$createdAt).toLocaleDateString() : 'N/A'}
                       </td>
+                      {isAdmin && (
+                        <td className="py-3 px-4">
+                          {(u.role === 'manager' || u.role === 'team_lead' || u.role === 'agent') && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEdit(u)}
+                            >
+                              Edit Branches
+                            </Button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -402,6 +464,80 @@ function UserManagementContent() {
                     className="w-full sm:w-auto"
                   >
                     {isCreating ? 'Creating...' : createButtonLabel}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Edit User Branches Dialog */}
+      {editingUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50">
+          <Card className="w-full sm:max-w-md sm:mx-4 rounded-b-none sm:rounded-b-lg">
+            <CardHeader>
+              <CardTitle>Edit User Branches</CardTitle>
+              <CardDescription>
+                Update branch assignments for {editingUser.name} ({formatRole(editingUser.role)})
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {error && (
+                  <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                    <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+                  </div>
+                )}
+
+                {/* Branch multi-select */}
+                <div>
+                  <Label>Branches</Label>
+                  {availableBranches.length === 0 ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                      No branches available.
+                    </p>
+                  ) : (
+                    <div className="mt-1 space-y-2 max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md p-2">
+                      {availableBranches.map((branch) => (
+                        <label
+                          key={branch.$id}
+                          className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 p-1 rounded"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedBranchIds.includes(branch.$id)}
+                            onChange={() => toggleBranch(branch.$id)}
+                            className="rounded border-gray-300 dark:border-gray-600"
+                          />
+                          <span className="text-sm">{branch.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setEditingUser(null);
+                      setSelectedBranchIds([]);
+                      setError(null);
+                    }}
+                    disabled={isUpdating}
+                    className="w-full sm:w-auto"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleUpdateBranches}
+                    disabled={isUpdating}
+                    className="w-full sm:w-auto"
+                  >
+                    {isUpdating ? 'Updating...' : 'Update Branches'}
                   </Button>
                 </div>
               </div>

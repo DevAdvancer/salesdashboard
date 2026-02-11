@@ -204,6 +204,7 @@ export function DynamicLeadForm({
         <LeadAssignmentDropdown
           creatorRole={user.role}
           creatorBranchIds={user.branchIds ?? []}
+          creatorId={user.$id}
           value={assignedToId}
           onChange={setAssignedToId}
         />

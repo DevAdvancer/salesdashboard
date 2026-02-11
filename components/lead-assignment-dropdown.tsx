@@ -8,6 +8,7 @@ import type { User, UserRole } from '@/lib/types';
 interface LeadAssignmentDropdownProps {
   creatorRole: UserRole;
   creatorBranchIds: string[];
+  creatorId?: string;
   value: string | null;
   onChange: (userId: string | null) => void;
 }
@@ -25,6 +26,7 @@ interface LeadAssignmentDropdownProps {
 export function LeadAssignmentDropdown({
   creatorRole,
   creatorBranchIds,
+  creatorId,
   value,
   onChange,
 }: LeadAssignmentDropdownProps) {
@@ -43,7 +45,7 @@ export function LeadAssignmentDropdown({
       setLoading(true);
       setError(null);
       try {
-        const assignable = await getAssignableUsers(creatorRole, creatorBranchIds);
+        const assignable = await getAssignableUsers(creatorRole, creatorBranchIds, creatorId);
         if (!cancelled) {
           setUsers(assignable);
         }
@@ -63,7 +65,7 @@ export function LeadAssignmentDropdown({
     return () => {
       cancelled = true;
     };
-  }, [creatorRole, creatorBranchIds]);
+  }, [creatorRole, creatorBranchIds, creatorId]);
 
   // Hidden for agents (Requirement 4.4)
   if (creatorRole === 'agent') {

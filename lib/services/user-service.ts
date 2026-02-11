@@ -198,38 +198,34 @@ export async function createAgent(input: CreateAgentInput): Promise<User> {
 
 /**
  * Assign a manager to a branch.
- * Updates the manager's branchId and cascades to all linked agents.
+ * Adds the branch to the manager's branchIds array (supports multiple branches).
  */
 export async function assignManagerToBranch(managerId: string, branchId: string): Promise<User> {
   try {
-    // Update manager's branchId
-    const managerDoc = await databases.updateDocument(
+    // Get current manager document
+    const managerDoc = await databases.getDocument(
       DATABASE_ID,
       USERS_COLLECTION_ID,
-      managerId,
-      { branchId }
+      managerId
     );
 
-    // Cascade: update all agents linked to this manager
-    const agents = await databases.listDocuments(
-      DATABASE_ID,
-      USERS_COLLECTION_ID,
-      [
-        Query.equal('role', 'agent'),
-        Query.equal('managerId', managerId),
-      ]
-    );
+    // Get current branchIds array
+    const currentBranchIds = (managerDoc.branchIds as string[]) || [];
+    
+    // Add new branch if not already present
+    if (!currentBranchIds.includes(branchId)) {
+      const updatedBranchIds = [...currentBranchIds, branchId];
+      
+      // Update manager's branchIds
+      const updatedManager = await databases.updateDocument(
+        DATABASE_ID,
+        USERS_COLLECTION_ID,
+        managerId,
+        { branchIds: updatedBranchIds }
+      );
 
-    await Promise.all(
-      agents.documents.map(agent =>
-        databases.updateDocument(
-          DATABASE_ID,
-          USERS_COLLECTION_ID,
-          agent.$id,
-          { branchId }
-        )
-      )
-    );
+      return mapDocToUser(updatedManager);
+    }
 
     return mapDocToUser(managerDoc);
   } catch (error: any) {
@@ -239,41 +235,33 @@ export async function assignManagerToBranch(managerId: string, branchId: string)
 }
 
 /**
- * Remove a manager from their branch.
- * Clears branchId for the manager and all linked agents.
+ * Remove a manager from a specific branch.
+ * Removes the branch from the manager's branchIds array.
  */
-export async function removeManagerFromBranch(managerId: string): Promise<User> {
+export async function removeManagerFromBranch(managerId: string, branchId: string): Promise<User> {
   try {
-    // Clear manager's branchId
-    const managerDoc = await databases.updateDocument(
+    // Get current manager document
+    const managerDoc = await databases.getDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      managerId
+    );
+
+    // Get current branchIds array
+    const currentBranchIds = (managerDoc.branchIds as string[]) || [];
+    
+    // Remove the branch
+    const updatedBranchIds = currentBranchIds.filter(id => id !== branchId);
+    
+    // Update manager's branchIds
+    const updatedManager = await databases.updateDocument(
       DATABASE_ID,
       USERS_COLLECTION_ID,
       managerId,
-      { branchId: null }
+      { branchIds: updatedBranchIds }
     );
 
-    // Cascade: clear branchId for all agents linked to this manager
-    const agents = await databases.listDocuments(
-      DATABASE_ID,
-      USERS_COLLECTION_ID,
-      [
-        Query.equal('role', 'agent'),
-        Query.equal('managerId', managerId),
-      ]
-    );
-
-    await Promise.all(
-      agents.documents.map(agent =>
-        databases.updateDocument(
-          DATABASE_ID,
-          USERS_COLLECTION_ID,
-          agent.$id,
-          { branchId: null }
-        )
-      )
-    );
-
-    return mapDocToUser(managerDoc);
+    return mapDocToUser(updatedManager);
   } catch (error: any) {
     console.error('Error removing manager from branch:', error);
     throw new Error(error.message || 'Failed to remove manager from branch');
@@ -281,7 +269,8 @@ export async function removeManagerFromBranch(managerId: string): Promise<User> 
 }
 
 /**
- * Get all users assigned to a specific branch (queries branchIds array)
+ * Get users by branch ID.
+ * Returns all users whose branchIds array contains the given branchId.
  */
 export async function getUsersByBranch(branchId: string): Promise<User[]> {
   try {
@@ -317,13 +306,14 @@ export async function getUsersByBranches(branchIds: string[]): Promise<User[]> {
 
 /**
  * Get users assignable to a lead based on the creator's role and branches.
- * - Manager: team_leads + agents with overlapping branchIds
- * - Team Lead: agents with overlapping branchIds
+ * - Manager: team_leads + agents with overlapping branchIds (excluding self)
+ * - Team Lead: agents with overlapping branchIds (excluding self)
  * - Agent: empty array
  */
 export async function getAssignableUsers(
   creatorRole: UserRole,
-  creatorBranchIds: string[]
+  creatorBranchIds: string[],
+  creatorId?: string
 ): Promise<User[]> {
   if (creatorRole === 'agent' || !creatorBranchIds.length) return [];
 
@@ -345,7 +335,10 @@ export async function getAssignableUsers(
           : [Query.equal('role', allowedRoles)]),
       ]
     );
-    return response.documents.map(mapDocToUser);
+    
+    // Filter out the creator themselves
+    const users = response.documents.map(mapDocToUser);
+    return creatorId ? users.filter(u => u.$id !== creatorId) : users;
   } catch (error: any) {
     console.error('Error fetching assignable users:', error);
     throw new Error(error.message || 'Failed to fetch assignable users');
@@ -362,10 +355,11 @@ export async function getUnassignedManagers(): Promise<User[]> {
       USERS_COLLECTION_ID,
       [
         Query.equal('role', 'manager'),
-        Query.isNull('branchId'),
       ]
     );
-    return response.documents.map(mapDocToUser);
+    // Filter client-side for managers with empty branchIds array
+    const allManagers = response.documents.map(mapDocToUser);
+    return allManagers.filter(manager => !manager.branchIds || manager.branchIds.length === 0);
   } catch (error: any) {
     console.error('Error fetching unassigned managers:', error);
     throw new Error(error.message || 'Failed to fetch unassigned managers');

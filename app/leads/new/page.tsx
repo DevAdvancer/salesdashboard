@@ -5,10 +5,9 @@ import { useAuth } from '@/lib/contexts/auth-context';
 import { useRouter } from 'next/navigation';
 import { createLead } from '@/lib/services/lead-service';
 import { validateLeadUniqueness } from '@/lib/services/lead-validator';
-import { getAgentsByManager } from '@/lib/services/user-service';
 import { listBranches } from '@/lib/services/branch-service';
 import { getFormConfig } from '@/lib/services/form-config-service';
-import { FormField, User, Branch } from '@/lib/types';
+import { FormField, Branch } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -30,9 +29,7 @@ function NewLeadContent() {
   const { toast } = useToast();
 
   const [formFields, setFormFields] = useState<FormField[]>([]);
-  const [agents, setAgents] = useState<User[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [selectedAgent, setSelectedAgent] = useState<string>('');
   const [selectedBranch, setSelectedBranch] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -47,9 +44,6 @@ function NewLeadContent() {
 
     if (user) {
       loadFormConfig();
-      if (user.role === 'manager' || user.role === 'admin') {
-        loadAgents();
-      }
       if (user.role === 'admin') {
         loadBranches();
       }
@@ -68,17 +62,6 @@ function NewLeadContent() {
       setError(err.message || 'Failed to load form configuration');
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const loadAgents = async () => {
-    if (!user || (user.role !== 'manager' && user.role !== 'admin')) return;
-
-    try {
-      const fetchedAgents = await getAgentsByManager(user.$id);
-      setAgents(fetchedAgents);
-    } catch (err: any) {
-      console.error('Error loading agents:', err);
     }
   };
 
@@ -114,11 +97,14 @@ function NewLeadContent() {
         ? selectedBranch
         : user.branchId || undefined;
 
+      // Extract assignedToId added by DynamicLeadForm and prevent it from being stored in data JSON
+      const { assignedToId, ...sanitizedData } = data as { assignedToId?: string } & Record<string, any>;
+
       // Create lead with auto-set owner and optional assigned agent
       await createLead(user.$id, {
-        data,
-        assignedToId: selectedAgent || undefined,
-        status: data.status || 'New',
+        data: sanitizedData,
+        assignedToId: assignedToId || undefined,
+        status: sanitizedData.status || 'New',
         branchId,
       });
 
@@ -202,26 +188,6 @@ function NewLeadContent() {
                 {branches.map((branch) => (
                   <option key={branch.$id} value={branch.$id}>
                     {branch.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Assignment Selector (Manager and Admin) */}
-          {(user?.role === 'manager' || user?.role === 'admin') && agents.length > 0 && (
-            <div className="mb-6 pb-6 border-b">
-              <Label htmlFor="assignedTo">Assign To Agent (Optional)</Label>
-              <select
-                id="assignedTo"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 mt-2"
-                value={selectedAgent}
-                onChange={(e) => setSelectedAgent(e.target.value)}
-              >
-                <option value="">Unassigned</option>
-                {agents.map((agent) => (
-                  <option key={agent.$id} value={agent.$id}>
-                    {agent.name}
                   </option>
                 ))}
               </select>
