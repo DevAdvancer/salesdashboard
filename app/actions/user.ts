@@ -59,7 +59,12 @@ async function logAuditAction(
                 targetType,
                 metadata: metadata ? JSON.stringify(metadata) : null,
                 performedAt: new Date().toISOString(),
-            }
+            },
+            [
+                Permission.read(Role.any()),
+                Permission.update(Role.label('admin')),
+                Permission.delete(Role.label('admin')),
+            ]
         );
     } catch (error) {
         console.error("Failed to log audit action:", error);
@@ -138,7 +143,7 @@ export async function createManagerAction(input: CreateManagerInput & { currentU
             callerDoc.$id,
             callerDoc.name,
             userId,
-            'USER',
+            'manager',
             { role: 'manager', email, name, branchIds }
         );
 
@@ -215,7 +220,7 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
             callerDoc.$id,
             callerDoc.name,
             userId,
-            'USER',
+            'team_lead',
             { role: 'team_lead', email, name, branchIds, managerId }
         );
 
@@ -296,7 +301,7 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
             callerDoc.$id,
             callerDoc.name,
             userId,
-            'USER',
+            'agent',
             { role: 'agent', email, name, branchIds, managerId, teamLeadId }
         );
 

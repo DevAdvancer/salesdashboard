@@ -1,5 +1,6 @@
 import { ID, Permission, Role, Query } from 'appwrite';
 import { account, databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
+import { logAction } from '@/lib/services/audit-service';
 import { User, UserRole, CreateAgentInput, CreateTeamLeadInput, CreateManagerInput } from '@/lib/types';
 
 const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
@@ -29,7 +30,7 @@ function mapDocToUser(doc: any): User {
  * Create a new manager account (admin only).
  * Admin can assign any combination of active branches.
  */
-export async function createManager(input: CreateManagerInput): Promise<User> {
+export async function createManager(input: CreateManagerInput, currentUser: User): Promise<User> {
   const { name, email, password, branchIds } = input;
 
   if (!branchIds.length) {
@@ -58,6 +59,15 @@ export async function createManager(input: CreateManagerInput): Promise<User> {
       ]
     );
 
+    await logAction({
+      action: 'USER_CREATE',
+      actorId: currentUser.$id,
+      actorName: currentUser.name,
+      targetId: userDoc.$id,
+      targetType: 'manager',
+      metadata: { branchIds }
+    });
+
     return mapDocToUser(userDoc);
   } catch (error: any) {
     console.error('Error creating manager:', error);
@@ -75,7 +85,7 @@ export async function createManager(input: CreateManagerInput): Promise<User> {
  * 2. Creates an Appwrite Auth account
  * 3. Creates a user document with role='team_lead', managerId, and branchIds
  */
-export async function createTeamLead(input: CreateTeamLeadInput): Promise<User> {
+export async function createTeamLead(input: CreateTeamLeadInput, currentUser: User): Promise<User> {
   const { name, email, password, managerId, branchIds } = input;
 
   if (!branchIds.length) {
@@ -120,6 +130,18 @@ export async function createTeamLead(input: CreateTeamLeadInput): Promise<User> 
       ]
     );
 
+    await logAction({
+      action: 'USER_CREATE',
+      actorId: currentUser.$id,
+      actorName: currentUser.name,
+      targetId: userDoc.$id,
+      targetType: 'team_lead',
+      metadata: {
+          branchIds,
+          managerId
+      }
+    });
+
     return mapDocToUser(userDoc);
   } catch (error: any) {
     console.error('Error creating team lead:', error);
@@ -138,7 +160,7 @@ export async function createTeamLead(input: CreateTeamLeadInput): Promise<User> 
  * 2. Creates an Appwrite Auth account
  * 3. Creates a user document with role='agent', managerId (from team lead), teamLeadId, and branchIds
  */
-export async function createAgent(input: CreateAgentInput): Promise<User> {
+export async function createAgent(input: CreateAgentInput, currentUser: User): Promise<User> {
   const { name, email, password, teamLeadId, branchIds } = input;
 
   if (!branchIds.length) {
@@ -189,6 +211,18 @@ export async function createAgent(input: CreateAgentInput): Promise<User> {
       ]
     );
 
+    await logAction({
+      action: 'USER_CREATE',
+      actorId: currentUser.$id,
+      actorName: currentUser.name,
+      targetId: userDoc.$id,
+      targetType: 'agent',
+      metadata: {
+          branchIds,
+          teamLeadId
+      }
+    });
+
     return mapDocToUser(userDoc);
   } catch (error: any) {
     console.error('Error creating agent:', error);
@@ -214,11 +248,11 @@ export async function assignManagerToBranch(managerId: string, branchId: string)
 
     // Get current branchIds array
     const currentBranchIds = (managerDoc.branchIds as string[]) || [];
-    
+
     // Add new branch if not already present
     if (!currentBranchIds.includes(branchId)) {
       const updatedBranchIds = [...currentBranchIds, branchId];
-      
+
       // Update manager's branchIds
       const updatedManager = await databases.updateDocument(
         DATABASE_ID,
@@ -252,10 +286,10 @@ export async function removeManagerFromBranch(managerId: string, branchId: strin
 
     // Get current branchIds array
     const currentBranchIds = (managerDoc.branchIds as string[]) || [];
-    
+
     // Remove the branch
     const updatedBranchIds = currentBranchIds.filter(id => id !== branchId);
-    
+
     // Update manager's branchIds
     const updatedManager = await databases.updateDocument(
       DATABASE_ID,
@@ -338,7 +372,7 @@ export async function getAssignableUsers(
           : [Query.equal('role', allowedRoles)]),
       ]
     );
-    
+
     // Filter out the creator themselves
     const users = response.documents.map(mapDocToUser);
     return creatorId ? users.filter(u => u.$id !== creatorId) : users;

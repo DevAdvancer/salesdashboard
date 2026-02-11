@@ -210,12 +210,17 @@ export async function updateFormConfig(
  *
  * @param field - The field to add
  * @param managerId - The ID of the manager making the update
+ * @param managerName - The name of the manager (optional, for logging)
  * @returns The updated form configuration
  */
-export async function addField(field: FormField, managerId: string): Promise<{ fields: FormField[]; version: number; updatedBy: string }> {
+export async function addField(
+  field: FormField,
+  managerId: string,
+  managerName?: string
+): Promise<{ fields: FormField[]; version: number; updatedBy: string }> {
   const currentConfig = await getFormConfig();
   const fields = [...currentConfig.fields, field];
-  return updateFormConfig(fields, managerId);
+  return updateFormConfig(fields, managerId, managerName);
 }
 
 /**
@@ -223,9 +228,14 @@ export async function addField(field: FormField, managerId: string): Promise<{ f
  *
  * @param fieldId - The ID of the field to remove
  * @param managerId - The ID of the manager making the update
+ * @param managerName - The name of the manager (optional, for logging)
  * @returns The updated form configuration
  */
-export async function removeField(fieldId: string, managerId: string): Promise<{ fields: FormField[]; version: number; updatedBy: string }> {
+export async function removeField(
+  fieldId: string,
+  managerId: string,
+  managerName?: string
+): Promise<{ fields: FormField[]; version: number; updatedBy: string }> {
   const currentConfig = await getFormConfig();
   const fields = currentConfig.fields.filter((f) => f.id !== fieldId);
 
@@ -235,7 +245,7 @@ export async function removeField(fieldId: string, managerId: string): Promise<{
     order: index + 1,
   }));
 
-  return updateFormConfig(reorderedFields, managerId);
+  return updateFormConfig(reorderedFields, managerId, managerName);
 }
 
 /**
@@ -269,19 +279,21 @@ export async function reorderFields(fieldIds: string[], managerId: string): Prom
  * @param fieldId - The ID of the field to update
  * @param updates - Partial field updates
  * @param managerId - The ID of the manager making the update
+ * @param managerName - The name of the manager (optional, for logging)
  * @returns The updated form configuration
  */
 export async function updateField(
   fieldId: string,
   updates: Partial<FormField>,
-  managerId: string
+  managerId: string,
+  managerName?: string
 ): Promise<{ fields: FormField[]; version: number; updatedBy: string }> {
   const currentConfig = await getFormConfig();
   const fields = currentConfig.fields.map((field) =>
     field.id === fieldId ? { ...field, ...updates } : field
   );
 
-  return updateFormConfig(fields, managerId);
+  return updateFormConfig(fields, managerId, managerName);
 }
 
 /**
@@ -289,11 +301,13 @@ export async function updateField(
  *
  * @param fieldId - The ID of the field to toggle
  * @param managerId - The ID of the manager making the update
+ * @param managerName - The name of the manager (optional, for logging)
  * @returns The updated form configuration
  */
 export async function toggleFieldVisibility(
   fieldId: string,
-  managerId: string
+  managerId: string,
+  managerName?: string
 ): Promise<{ fields: FormField[]; version: number; updatedBy: string }> {
   const currentConfig = await getFormConfig();
   const field = currentConfig.fields.find((f) => f.id === fieldId);
@@ -302,7 +316,7 @@ export async function toggleFieldVisibility(
     throw new Error('Field not found');
   }
 
-  return updateField(fieldId, { visible: !field.visible }, managerId);
+  return updateField(fieldId, { visible: !field.visible }, managerId, managerName);
 }
 
 /**
@@ -310,11 +324,13 @@ export async function toggleFieldVisibility(
  *
  * @param fieldId - The ID of the field to toggle
  * @param managerId - The ID of the manager making the update
+ * @param managerName - The name of the manager (optional, for logging)
  * @returns The updated form configuration
  */
 export async function toggleFieldRequired(
   fieldId: string,
-  managerId: string
+  managerId: string,
+  managerName?: string
 ): Promise<{ fields: FormField[]; version: number; updatedBy: string }> {
   const currentConfig = await getFormConfig();
   const field = currentConfig.fields.find((f) => f.id === fieldId);
@@ -323,5 +339,5 @@ export async function toggleFieldRequired(
     throw new Error('Field not found');
   }
 
-  return updateField(fieldId, { required: !field.required }, managerId);
+  return updateField(fieldId, { required: !field.required }, managerId, managerName);
 }
