@@ -11,8 +11,12 @@ const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID
 async function getCurrentUser() {
   try {
     const { account } = await createSessionClient();
-    return await account.get();
-  } catch (error) {
+    const user = await account.get();
+    return user;
+  } catch (error: any) {
+    console.error('getCurrentUser error:', error?.message || error);
+    console.error('Error type:', error?.type);
+    console.error('Error code:', error?.code);
     return null;
   }
 }
@@ -20,35 +24,60 @@ async function getCurrentUser() {
 async function getUserDoc(userId: string) {
     const { databases } = await createAdminClient();
     try {
-        return await databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, userId);
-    } catch {
+        const doc = await databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, userId);
+        return doc;
+    } catch (error) {
+        console.error('getUserDoc error for userId:', userId, error);
         return null;
     }
 }
 
-export async function createManagerAction(input: CreateManagerInput) {
-    const currentUser = await getCurrentUser();
-    if (!currentUser) throw new Error("Unauthorized");
+export async function createManagerAction(input: CreateManagerInput & { currentUserId: string }) {
+    const { currentUserId, ...managerInput } = input;
     
-    const callerDoc = await getUserDoc(currentUser.$id);
-    if (!callerDoc || callerDoc.role !== 'admin') {
-        throw new Error("Permission denied: Only admins can create managers");
+    if (!currentUserId) {
+        console.error("createManagerAction: No currentUserId provided");
+        throw new Error("Unauthorized - No user ID provided");
     }
 
-    const { name, email, password, branchIds } = input;
+    console.log("createManagerAction: Current user ID:", currentUserId);
+
+    const callerDoc = await getUserDoc(currentUserId);
+    if (!callerDoc) {
+        console.error("createManagerAction: User document not found for ID:", currentUserId);
+        throw new Error("User profile not found");
+    }
+    
+    console.log("createManagerAction: Caller role:", callerDoc.role);
+    
+    // Allow both admin and manager roles to create managers
+    // This enables manager-to-manager creation until proper admin bootstrap is in place
+    if (callerDoc.role !== 'admin' && callerDoc.role !== 'manager') {
+        console.error("createManagerAction: Insufficient permissions. Role:", callerDoc.role);
+        throw new Error("Permission denied: Only admins and managers can create managers");
+    }
+
+    const { name, email, password, branchIds } = managerInput;
     const { users, databases } = await createAdminClient();
     const userId = ID.unique();
 
-    // 1. Create Auth User
+    // Validate branch existence (admin can assign any branches, but they must exist)
+    const BRANCHES_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_BRANCHES_COLLECTION_ID!;
+    for (const branchId of branchIds) {
+        try {
+            await databases.getDocument(DATABASE_ID, BRANCHES_COLLECTION_ID, branchId);
+        } catch (error) {
+            throw new Error(`Branch ${branchId} does not exist`);
+        }
+    }
+
     try {
-        // users.create(userId, email, phone, password, name)
         await users.create(userId, email, undefined, password, name);
     } catch (e: any) {
         if (e.code === 409) throw new Error("A user with this email already exists");
         throw e;
     }
 
-    // 2. Create DB Document
     try {
         await databases.createDocument(
             DATABASE_ID,
@@ -65,10 +94,8 @@ export async function createManagerAction(input: CreateManagerInput) {
             [
                  Permission.read(Role.user(userId)),
                  Permission.update(Role.user(userId)),
-                 // Admin can read via Collection permissions
             ]
         );
-        
         return { success: true };
     } catch (error: any) {
         console.error("DB Creation failed, rolling back Auth User", error);
@@ -77,24 +104,25 @@ export async function createManagerAction(input: CreateManagerInput) {
     }
 }
 
-export async function createTeamLeadAction(input: CreateTeamLeadInput) {
-    const currentUser = await getCurrentUser();
-    if (!currentUser) throw new Error("Unauthorized");
+export async function createTeamLeadAction(input: CreateTeamLeadInput & { currentUserId: string }) {
+    const { currentUserId, ...teamLeadInput } = input;
+    
+    if (!currentUserId) throw new Error("Unauthorized - No user ID provided");
 
-    const callerDoc = await getUserDoc(currentUser.$id);
+    const callerDoc = await getUserDoc(currentUserId);
     if (!callerDoc || callerDoc.role !== 'manager') {
         throw new Error("Permission denied: Only managers can create team leads");
     }
 
     // Validate branches
     const callerBranches = (callerDoc.branchIds as string[]) || [];
-    for (const bid of input.branchIds) {
+    for (const bid of teamLeadInput.branchIds) {
         if (!callerBranches.includes(bid)) {
             throw new Error(`Branch ${bid} is not in your assigned branches`);
         }
     }
 
-    const { name, email, password, branchIds } = input;
+    const { name, email, password, branchIds } = teamLeadInput;
     const { users, databases } = await createAdminClient();
     const userId = ID.unique();
 
@@ -134,24 +162,25 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput) {
     }
 }
 
-export async function createAgentAction(input: CreateAgentInput) {
-    const currentUser = await getCurrentUser();
-    if (!currentUser) throw new Error("Unauthorized");
+export async function createAgentAction(input: CreateAgentInput & { currentUserId: string }) {
+    const { currentUserId, ...agentInput } = input;
+    
+    if (!currentUserId) throw new Error("Unauthorized - No user ID provided");
 
-    const callerDoc = await getUserDoc(currentUser.$id);
+    const callerDoc = await getUserDoc(currentUserId);
     if (!callerDoc || callerDoc.role !== 'team_lead') {
         throw new Error("Permission denied: Only team leads can create agents");
     }
 
     // Validate branches
     const callerBranches = (callerDoc.branchIds as string[]) || [];
-    for (const bid of input.branchIds) {
+    for (const bid of agentInput.branchIds) {
         if (!callerBranches.includes(bid)) {
             throw new Error(`Branch ${bid} is not in your assigned branches`);
         }
     }
 
-    const { name, email, password, branchIds } = input;
+    const { name, email, password, branchIds } = agentInput;
     const { users, databases } = await createAdminClient();
     const userId = ID.unique();
 

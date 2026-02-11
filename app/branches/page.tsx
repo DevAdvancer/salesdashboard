@@ -11,9 +11,8 @@ import {
   getBranchStats,
 } from '@/lib/services/branch-service';
 import {
-  getUnassignedManagers,
   getUsersByBranch,
-  assignManagerToBranch,
+  removeManagerFromBranch,
 } from '@/lib/services/user-service';
 import { Branch, User } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -46,7 +45,7 @@ export default function BranchManagementPage() {
 
 function BranchManagementContent() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [branches, setBranches] = useState<BranchWithStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,10 +53,8 @@ function BranchManagementContent() {
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Manager assignment state
-  const [unassignedManagers, setUnassignedManagers] = useState<User[]>([]);
+  // Manager state
   const [branchManagers, setBranchManagers] = useState<Record<string, User[]>>({});
-  const [assigningBranchId, setAssigningBranchId] = useState<string | null>(null);
 
   const createForm = useForm<BranchNameForm>({
     resolver: zodResolver(branchNameSchema),
@@ -94,9 +91,6 @@ function BranchManagementContent() {
 
   const fetchManagerData = useCallback(async (branchList: BranchWithStats[]) => {
     try {
-      const unassigned = await getUnassignedManagers();
-      setUnassignedManagers(unassigned);
-
       const managersMap: Record<string, User[]> = {};
       await Promise.all(
         branchList.map(async (branch) => {
@@ -182,34 +176,9 @@ function BranchManagementContent() {
     }
   };
 
-  const handleAssignManager = async (branchId: string, managerId: string) => {
-    if (!managerId) return;
-    try {
-      setAssigningBranchId(branchId);
-      setError(null);
-      await assignManagerToBranch(managerId, branchId);
-      await fetchBranches();
-    } catch (err: any) {
-      console.error('Error assigning manager:', err);
-      setError(err.message || 'Failed to assign manager');
-    } finally {
-      setAssigningBranchId(null);
-    }
-  };
-
   const openEditDialog = (branch: Branch) => {
     setEditingBranch(branch);
     editForm.reset({ name: branch.name });
-  };
-
-  const getAssignableManagers = (branchId: string): User[] => {
-    const managersFromOtherBranches: User[] = [];
-    for (const [bId, managers] of Object.entries(branchManagers)) {
-      if (bId !== branchId) {
-        managersFromOtherBranches.push(...managers);
-      }
-    }
-    return [...unassignedManagers, ...managersFromOtherBranches];
   };
 
   return (
@@ -264,14 +233,11 @@ function BranchManagementContent() {
                     <th className="text-left py-3 px-4 font-semibold">Status</th>
                     <th className="text-left py-3 px-4 font-semibold">Managers</th>
                     <th className="text-left py-3 px-4 font-semibold">Leads</th>
-                    <th className="text-left py-3 px-4 font-semibold">Assign Manager</th>
                     <th className="text-left py-3 px-4 font-semibold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {branches.map((branch) => {
-                    const assignableManagers = getAssignableManagers(branch.$id);
-                    return (
+                  {branches.map((branch) => (
                       <tr
                         key={branch.$id}
                         className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
@@ -289,34 +255,36 @@ function BranchManagementContent() {
                             {branch.isActive ? 'Active' : 'Inactive'}
                           </button>
                         </td>
-                        <td className="py-3 px-4">{branch.managerCount}</td>
-                        <td className="py-3 px-4">{branch.leadCount}</td>
                         <td className="py-3 px-4">
-                          <select
-                            className="border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm bg-white dark:bg-gray-800 disabled:opacity-50"
-                            defaultValue=""
-                            disabled={assigningBranchId === branch.$id || assignableManagers.length === 0}
-                            onChange={(e) => {
-                              if (e.target.value) {
-                                handleAssignManager(branch.$id, e.target.value);
-                                e.target.value = '';
-                              }
-                            }}
-                          >
-                            <option value="">
-                              {assignableManagers.length === 0
-                                ? 'No managers available'
-                                : assigningBranchId === branch.$id
-                                  ? 'Assigning...'
-                                  : 'Select manager'}
-                            </option>
-                            {assignableManagers.map((manager) => (
-                              <option key={manager.$id} value={manager.$id}>
-                                {manager.name} ({manager.email}){manager.branchId ? ' - reassign' : ''}
-                              </option>
-                            ))}
-                          </select>
+                          {branchManagers[branch.$id]?.length > 0 ? (
+                            <div className="space-y-1">
+                              {branchManagers[branch.$id].map((manager) => (
+                                <div key={manager.$id} className="flex items-center gap-2 text-sm">
+                                  <span>{manager.name}</span>
+                                  {isAdmin && (
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          await removeManagerFromBranch(manager.$id, branch.$id);
+                                          await fetchBranches();
+                                        } catch (err: any) {
+                                          setError(err.message || 'Failed to remove manager');
+                                        }
+                                      }}
+                                      className="text-red-500 hover:text-red-700 text-xs"
+                                      title="Remove from this branch"
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 text-sm">No managers</span>
+                          )}
                         </td>
+                        <td className="py-3 px-4">{branch.leadCount}</td>
                         <td className="py-3 px-4">
                           <div className="flex gap-2">
                             <Button variant="outline" size="sm" onClick={() => openEditDialog(branch)}>
@@ -333,8 +301,7 @@ function BranchManagementContent() {
                           </div>
                         </td>
                       </tr>
-                    );
-                  })}
+                  ))}
                 </tbody>
               </table>
             </div>

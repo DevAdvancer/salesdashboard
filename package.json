@@ -11,7 +11,8 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "setup:appwrite": "tsx scripts/setup-appwrite.ts",
-    "verify:appwrite": "tsx scripts/verify-setup.ts"
+    "verify:appwrite": "tsx scripts/verify-setup.ts",
+    "promote-admin": "tsx scripts/promote-to-admin.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

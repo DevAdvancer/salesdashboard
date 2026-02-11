@@ -6,8 +6,27 @@ export async function createSessionClient() {
     .setEndpoint(process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!)
     .setProject(process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!);
 
-  const session = (await cookies()).get(`a_session_${process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID}`);
+  const cookieStore = await cookies();
+  const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!;
+  
+  // Try different cookie name formats
+  let session = cookieStore.get(`a_session_${projectId}`);
+  
   if (!session || !session.value) {
+    // Try legacy format
+    session = cookieStore.get(`a_session_${projectId}_legacy`);
+  }
+  
+  if (!session || !session.value) {
+    // Try without prefix
+    session = cookieStore.get(projectId);
+  }
+  
+  if (!session || !session.value) {
+    const allCookies = cookieStore.getAll();
+    console.error('Session cookie not found.');
+    console.error('Expected cookie name:', `a_session_${projectId}`);
+    console.error('Available cookies:', allCookies.map(c => ({ name: c.name, hasValue: !!c.value })));
     throw new Error("No session");
   }
 

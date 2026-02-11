@@ -14,7 +14,7 @@ const ACCESS_CONFIG_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_ACCESS_CONF
 interface AccessRule {
   $id?: string;
   componentKey: ComponentKey;
-  role: 'admin' | 'manager' | 'agent';
+  role: 'admin' | 'manager' | 'team_lead' | 'agent';
   allowed: boolean;
 }
 
@@ -74,7 +74,7 @@ function AccessConfigContent() {
     }
   };
 
-  const toggleAccess = async (componentKey: ComponentKey, role: 'manager' | 'agent') => {
+  const toggleAccess = async (componentKey: ComponentKey, role: 'manager' | 'team_lead' | 'agent') => {
     const key = `${componentKey}-${role}`;
     const existingRule = rules.get(key);
     const newAllowed = existingRule ? !existingRule.allowed : true;
@@ -120,12 +120,16 @@ function AccessConfigContent() {
     }
   };
 
-  const isAllowed = (componentKey: ComponentKey, role: 'manager' | 'agent'): boolean => {
+  const isAllowed = (componentKey: ComponentKey, role: 'manager' | 'team_lead' | 'agent'): boolean => {
     const key = `${componentKey}-${role}`;
     const rule = rules.get(key);
     if (rule !== undefined) return rule.allowed;
-    // Defaults: manager=true (except branch-management), agent=false (except dashboard, leads)
+    // Defaults: 
+    // - manager=true (except branch-management)
+    // - team_lead=true (dashboard, leads, history, user-management)
+    // - agent=false (except dashboard, leads)
     if (role === 'manager') return componentKey !== 'branch-management';
+    if (role === 'team_lead') return ['dashboard', 'leads', 'history', 'user-management'].includes(componentKey);
     if (role === 'agent') return componentKey === 'dashboard' || componentKey === 'leads';
     return false;
   };
@@ -136,9 +140,10 @@ function AccessConfigContent() {
     ? ALL_COMPONENTS
     : ALL_COMPONENTS.filter((c) => c.key !== 'branch-management');
 
-  // Admin can toggle: manager + agent columns
-  // Manager can toggle: agent column only
+  // Admin can toggle: manager + team_lead + agent columns
+  // Manager can toggle: team_lead + agent columns only
   const canEditManager = isAdmin;
+  const canEditTeamLead = isAdmin || isManager;
   const canEditAgent = isAdmin || isManager;
 
   if (isLoading) {
@@ -158,16 +163,17 @@ function AccessConfigContent() {
           <CardTitle className="text-xl md:text-2xl">Access Control Configuration</CardTitle>
           <CardDescription>
             {isAdmin
-              ? 'Configure which components are visible to managers and agents. Admin always has full access.'
-              : 'Configure which components are visible to agents. Managers always have full access.'}
+              ? 'Configure which components are visible to managers, team leads, and agents. Admin always has full access.'
+              : 'Configure which components are visible to team leads and agents. Managers always have full access.'}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
             {/* Header Row */}
-            <div className={`hidden sm:grid gap-4 pb-4 border-b ${isAdmin ? 'grid-cols-4' : 'grid-cols-3'}`}>
+            <div className={`hidden sm:grid gap-4 pb-4 border-b ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'}`}>
               <div className="font-semibold">Component</div>
               {isAdmin && <div className="font-semibold text-center">Manager</div>}
+              <div className="font-semibold text-center">Team Lead</div>
               <div className="font-semibold text-center">Agent</div>
               <div />
             </div>
@@ -177,7 +183,7 @@ function AccessConfigContent() {
               <div
                 key={component.key}
                 className={`grid grid-cols-1 gap-2 items-center border-b sm:border-b-0 pb-4 sm:pb-0 ${
-                  isAdmin ? 'sm:grid-cols-4 sm:gap-4' : 'sm:grid-cols-3 sm:gap-4'
+                  isAdmin ? 'sm:grid-cols-5 sm:gap-4' : 'sm:grid-cols-4 sm:gap-4'
                 }`}
               >
                 <div>
@@ -201,6 +207,18 @@ function AccessConfigContent() {
                   </div>
                 )}
 
+                {/* Team Lead column */}
+                <div className="flex sm:justify-center items-center gap-2 sm:gap-0">
+                  <span className="text-sm text-muted-foreground sm:hidden">Team Lead:</span>
+                  <input
+                    type="checkbox"
+                    checked={isAllowed(component.key, 'team_lead')}
+                    onChange={() => toggleAccess(component.key, 'team_lead')}
+                    disabled={isSaving || !canEditTeamLead}
+                    className="h-5 w-5 rounded border-input disabled:opacity-50 cursor-pointer"
+                  />
+                </div>
+
                 {/* Agent column */}
                 <div className="flex sm:justify-center items-center gap-2 sm:gap-0">
                   <span className="text-sm text-muted-foreground sm:hidden">Agent:</span>
@@ -223,12 +241,12 @@ function AccessConfigContent() {
               {isAdmin ? (
                 <>
                   <strong>Note:</strong> Changes are saved immediately. Admin always has full access to all components.
-                  Toggle the checkboxes to control what managers and agents can see.
+                  Toggle the checkboxes to control what managers, team leads, and agents can see.
                 </>
               ) : (
                 <>
                   <strong>Note:</strong> Changes are saved immediately. Managers always have access to all components.
-                  Agents will only see components that are checked in their column.
+                  Team leads and agents will only see components that are checked in their columns.
                 </>
               )}
             </p>
