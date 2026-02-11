@@ -17,7 +17,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import Link from 'next/link';
 import { handleApiError } from '@/lib/utils/error-handler';
 
 // Validation schema for login form
@@ -110,15 +109,6 @@ export default function LoginPage() {
             <Button type="submit" className="w-full" loading={isLoading}>
               Log in
             </Button>
-            <p className="text-sm text-center text-muted-foreground">
-              Don't have an account?{' '}
-              <Link
-                href="/signup"
-                className="text-primary hover:underline font-medium"
-              >
-                Sign up
-              </Link>
-            </p>
           </CardFooter>
         </form>
       </Card>

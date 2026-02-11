@@ -168,11 +168,10 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
     if (!currentUserId) throw new Error("Unauthorized - No user ID provided");
 
     const callerDoc = await getUserDoc(currentUserId);
-    if (!callerDoc || callerDoc.role !== 'team_lead') {
-        throw new Error("Permission denied: Only team leads can create agents");
+    if (!callerDoc || (callerDoc.role !== 'team_lead' && callerDoc.role !== 'manager')) {
+        throw new Error("Permission denied: Only team leads or managers can create agents");
     }
 
-    // Validate branches
     const callerBranches = (callerDoc.branchIds as string[]) || [];
     for (const bid of agentInput.branchIds) {
         if (!callerBranches.includes(bid)) {
@@ -184,8 +183,10 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
     const { users, databases } = await createAdminClient();
     const userId = ID.unique();
 
-    // Get manager ID from team lead
-    const managerId = callerDoc.managerId || null;
+    const isTeamLead = callerDoc.role === 'team_lead';
+    const isManager = callerDoc.role === 'manager';
+    const managerId = isTeamLead ? (callerDoc.managerId || null) : callerDoc.$id;
+    const teamLeadId = isTeamLead ? callerDoc.$id : (agentInput.teamLeadId || null);
 
     try {
         await users.create(userId, email, undefined, password, name);
@@ -197,15 +198,13 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
     try {
         const permissions = [
             Permission.read(Role.user(userId)),
-            Permission.read(Role.user(callerDoc.$id)),
+            ...(teamLeadId ? [Permission.read(Role.user(teamLeadId))] : []),
+            ...(managerId ? [Permission.read(Role.user(managerId))] : []),
             Permission.update(Role.user(userId)),
-            Permission.update(Role.user(callerDoc.$id)),
+            ...(teamLeadId ? [Permission.update(Role.user(teamLeadId))] : []),
         ];
 
-        if (managerId) {
-            permissions.push(Permission.read(Role.user(managerId)));
-            permissions.push(Permission.delete(Role.user(managerId)));
-        }
+        if (managerId) permissions.push(Permission.delete(Role.user(managerId)));
 
         await databases.createDocument(
             DATABASE_ID,
@@ -215,8 +214,8 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
                 name,
                 email,
                 role: 'agent',
-                managerId: managerId,
-                teamLeadId: callerDoc.$id,
+                managerId,
+                teamLeadId,
                 branchIds
             },
             permissions

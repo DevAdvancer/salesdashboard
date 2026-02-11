@@ -47,7 +47,7 @@ function UserManagementContent() {
   // Determine which role the current user can create
   const canCreateManager = isAdmin;
   const canCreateTeamLead = isManager && user?.role === 'manager';
-  const canCreateAgent = isTeamLead;
+  const canCreateAgent = isTeamLead || (isManager && user?.role === 'manager');
   const canCreate = canCreateManager || canCreateTeamLead || canCreateAgent;
 
   // The branches available for assignment (subset of current user's branchIds)
@@ -193,17 +193,25 @@ function UserManagementContent() {
           currentUserId: user.$id,
         });
       } else if (canCreateTeamLead) {
-        // Manager creates a Team Lead
-        await createTeamLeadAction({
-          name: formName.trim(),
-          email: formEmail.trim(),
-          password: formPassword,
-          managerId: user.$id,
-          branchIds: selectedBranchIds,
-          currentUserId: user.$id,
-        });
+        if (user.role === 'manager' && createRole === 'agent') {
+          await createAgentAction({
+            name: formName.trim(),
+            email: formEmail.trim(),
+            password: formPassword,
+            branchIds: selectedBranchIds,
+            currentUserId: user.$id,
+          });
+        } else {
+          await createTeamLeadAction({
+            name: formName.trim(),
+            email: formEmail.trim(),
+            password: formPassword,
+            managerId: user.$id,
+            branchIds: selectedBranchIds,
+            currentUserId: user.$id,
+          });
+        }
       } else if (canCreateAgent) {
-        // Team Lead creates an Agent
         await createAgentAction({
           name: formName.trim(),
           email: formEmail.trim(),
@@ -225,13 +233,17 @@ function UserManagementContent() {
     }
   };
 
-  const createButtonLabel = canCreateManager ? 'Create Manager' : canCreateTeamLead ? 'Create Team Lead' : 'Create Agent';
-  const dialogTitle = canCreateManager ? 'Create New Manager' : canCreateTeamLead ? 'Create New Team Lead' : 'Create New Agent';
+  const isMgr = user?.role === 'manager';
+  const [createRole, setCreateRole] = useState<'team_lead' | 'agent'>('team_lead');
+  const createButtonLabel = canCreateManager ? 'Create Manager' : isMgr ? 'Create User' : canCreateTeamLead ? 'Create Team Lead' : 'Create Agent';
+  const dialogTitle = canCreateManager ? 'Create New Manager' : isMgr ? (createRole === 'team_lead' ? 'Create New Team Lead' : 'Create New Agent') : canCreateTeamLead ? 'Create New Team Lead' : 'Create New Agent';
   const dialogDescription = canCreateManager
     ? 'Add a new manager and assign them to branches'
-    : canCreateTeamLead
-      ? 'Add a new team lead and assign them to your branches'
-      : 'Add a new agent and assign them to your branches';
+    : isMgr
+      ? (createRole === 'team_lead' ? 'Add a new team lead and assign them to your branches' : 'Add a new agent and assign them to your branches')
+      : canCreateTeamLead
+        ? 'Add a new team lead and assign them to your branches'
+        : 'Add a new agent and assign them to your branches';
 
   const formatRole = (role: string) => {
     switch (role) {
@@ -444,6 +456,25 @@ function UserManagementContent() {
                   )}
                 </div>
 
+                {isMgr && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant={createRole === 'team_lead' ? 'default' : 'outline'}
+                      onClick={() => setCreateRole('team_lead')}
+                    >
+                      Team Lead
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={createRole === 'agent' ? 'default' : 'outline'}
+                      onClick={() => setCreateRole('agent')}
+                    >
+                      Agent
+                    </Button>
+                  </div>
+                )}
+
                 <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end pt-4">
                   <Button
                     type="button"
@@ -463,7 +494,7 @@ function UserManagementContent() {
                     disabled={isCreating}
                     className="w-full sm:w-auto"
                   >
-                    {isCreating ? 'Creating...' : createButtonLabel}
+                    {isCreating ? 'Creating...' : (isMgr ? (createRole === 'team_lead' ? 'Create Team Lead' : 'Create Agent') : createButtonLabel)}
                   </Button>
                 </div>
               </div>

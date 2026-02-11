@@ -40,7 +40,7 @@ export interface CreateAgentInput {
   name: string;
   email: string;
   password: string;
-  teamLeadId: string;
+  teamLeadId?: string;
   branchIds: string[];
 }
 

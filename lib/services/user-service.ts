@@ -146,6 +146,9 @@ export async function createAgent(input: CreateAgentInput): Promise<User> {
   }
 
   try {
+    if (!teamLeadId) {
+      throw new Error('Team lead is required');
+    }
     const teamLeadDoc = await databases.getDocument(
       DATABASE_ID,
       USERS_COLLECTION_ID,
