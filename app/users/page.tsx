@@ -89,7 +89,9 @@ function UserManagementContent() {
         setUsers(allUsers);
       } else if (user.role === 'manager' && user.branchIds.length > 0) {
         const usersList = await getUsersByBranches(user.branchIds);
-        setUsers(usersList);
+        // Managers should not see other managers (except themselves)
+        const filteredUsers = usersList.filter(u => u.role !== 'manager' || u.$id === user.$id);
+        setUsers(filteredUsers);
       } else if (user.role === 'team_lead' && user.branchIds.length > 0) {
         const usersList = await getUsersByBranches(user.branchIds);
         // Team lead sees everyone with overlapping branches
