@@ -110,12 +110,6 @@ export default function LoginPage() {
             <Button type="submit" className="w-full" loading={isLoading}>
               Log in
             </Button>
-            <div className="text-sm text-muted-foreground">
-              Don&apos;t have an account?{' '}
-              <Link href="/signup" className="underline font-medium">
-                Sign up
-              </Link>
-            </div>
           </CardFooter>
         </form>
       </Card>

@@ -33,7 +33,9 @@ describe('LoginPage - Task 2.5: Login Flow with Session Management', () => {
 
     mockUseAuth.mockReturnValue({
       user: null,
+      isAdmin: false,
       isManager: false,
+      isTeamLead: false,
       isAgent: false,
       loading: false,
       login: mockLogin,
@@ -51,12 +53,11 @@ describe('LoginPage - Task 2.5: Login Flow with Session Management', () => {
       expect(screen.getByRole('button', { name: /log in/i })).toBeInTheDocument();
     });
 
-    it('should render link to signup page', () => {
+    it('should not render link to signup page', () => {
       render(<LoginPage />);
 
-      const signupLink = screen.getByRole('link', { name: /sign up/i });
-      expect(signupLink).toBeInTheDocument();
-      expect(signupLink).toHaveAttribute('href', '/signup');
+      const signupLink = screen.queryByRole('link', { name: /sign up/i });
+      expect(signupLink).not.toBeInTheDocument();
     });
   });
 
