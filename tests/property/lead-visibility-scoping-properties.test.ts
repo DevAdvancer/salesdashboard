@@ -29,14 +29,17 @@ function filterLeadsByVisibility(
   if (user.role === 'admin') {
     return allLeads;
   }
+  if (user.role === 'manager') {
+    return allLeads; // Managers see all leads
+  }
   if (user.role === 'agent') {
     return allLeads.filter((l) => l.assignedToId === user.$id);
   }
-  // Manager or Team_Lead: filter by branchIds overlap
+  // Team_Lead: filter by branchIds overlap
   if (user.branchIds.length > 0) {
     return allLeads.filter((l) => l.branchId !== null && user.branchIds.includes(l.branchId));
   }
-  // Manager/Team_Lead without branches sees only their own leads
+  // Team_Lead without branches sees only their own leads
   return allLeads.filter((l) => l.ownerId === user.$id);
 }
 
@@ -86,7 +89,7 @@ describe('Lead Visibility Scoping Properties', () => {
       );
     });
 
-    it('manager should see only leads whose branchId is in their branchIds', () => {
+    it('manager should see all leads regardless of branch', () => {
       fc.assert(
         fc.property(
           fc.uniqueArray(branchIdArb, { minLength: 2, maxLength: 6 }).chain((branchPool) =>
@@ -107,17 +110,9 @@ describe('Lead Visibility Scoping Properties', () => {
 
             const result = filterLeadsByVisibility(leads, manager);
 
-            // Every returned lead must have a branchId in the manager's branchIds
-            for (const lead of result) {
-              expect(lead.branchId).not.toBeNull();
-              expect(managerBranchIds).toContain(lead.branchId);
-            }
-
-            // No eligible lead should be missing
-            const expected = leads.filter(
-              (l) => l.branchId !== null && managerBranchIds.includes(l.branchId)
-            );
-            expect(result).toHaveLength(expected.length);
+            // Managers should see all leads
+            expect(result).toHaveLength(leads.length);
+            expect(result).toEqual(leads);
           }
         ),
         { numRuns: 100 }
@@ -196,7 +191,7 @@ describe('Lead Visibility Scoping Properties', () => {
       );
     });
 
-    it('manager/team_lead with empty branchIds should see only their own leads', () => {
+    it('manager with empty branchIds should see all leads, team_lead should see only their own leads', () => {
       fc.assert(
         fc.property(
           fc.constantFrom<UserRole>('manager', 'team_lead'),
@@ -217,14 +212,18 @@ describe('Lead Visibility Scoping Properties', () => {
 
             const result = filterLeadsByVisibility(leads, user);
 
-            // Every returned lead must be owned by the user
-            for (const lead of result) {
-              expect(lead.ownerId).toBe(userId);
+            if (role === 'manager') {
+              // Managers should see all leads even with empty branchIds
+              expect(result).toHaveLength(leads.length);
+              expect(result).toEqual(leads);
+            } else {
+              // Team leads should see only their own leads
+              for (const lead of result) {
+                expect(lead.ownerId).toBe(userId);
+              }
+              const expected = leads.filter((l) => l.ownerId === userId);
+              expect(result).toHaveLength(expected.length);
             }
-
-            // No eligible lead should be missing
-            const expected = leads.filter((l) => l.ownerId === userId);
-            expect(result).toHaveLength(expected.length);
           }
         ),
         { numRuns: 100 }

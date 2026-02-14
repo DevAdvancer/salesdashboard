@@ -33,12 +33,8 @@ export async function logAction(input: CreateAuditLogInput): Promise<AuditLog> {
         targetType,
         metadata: metadata ? JSON.stringify(metadata) : null,
         performedAt: new Date().toISOString(),
-      },
-      [
-        Permission.read(Role.any()), // We filter in frontend
-        Permission.update(Role.label('admin')),
-        Permission.delete(Role.label('admin')),
-      ]
+      }
+      // Removed document-level permissions to rely on collection-level permissions
     );
 
     return {

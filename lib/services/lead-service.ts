@@ -212,14 +212,14 @@ export async function getLead(leadId: string): Promise<Lead> {
  *
  * This function fetches leads with role-based filtering:
  * - Admins see all leads across all branches
- * - Managers see only leads belonging to any of their branches (filtered by branchIds)
- * - Team Leads see only leads belonging to any of their branches (filtered by branchIds)
+ * - Managers see all leads across all branches (full visibility)
+ * - Team Leads see only leads in their branches
  * - Agents see only leads assigned to them
  *
  * @param filters - Optional filters for the lead list
  * @param userId - The ID of the current user
  * @param userRole - The role of the current user
- * @param branchIds - The branch IDs of the current user (for managers and team leads)
+ * @param branchIds - The branch IDs of the current user (for team leads)
  * @returns Array of leads
  */
 export async function listLeads(
@@ -237,12 +237,14 @@ export async function listLeads(
       queries.push(Query.equal('assignedToId', userId));
     } else if (userRole === 'admin') {
       // Admins see all leads across all branches — no branch/owner filter
-    } else if (userRole === 'manager' || userRole === 'team_lead') {
-      // Managers and Team Leads see only leads in their branches
+    } else if (userRole === 'manager') {
+      // Managers can see all leads from all branches (no filtering needed)
+    } else if (userRole === 'team_lead') {
+      // Team Leads see only leads in their branches
       if (branchIds && branchIds.length > 0) {
         queries.push(Query.equal('branchId', branchIds));
       } else {
-        // Manager/Team Lead without branches sees only their own leads
+        // Team Lead without branches sees only their own leads
         queries.push(Query.equal('ownerId', userId));
       }
     }

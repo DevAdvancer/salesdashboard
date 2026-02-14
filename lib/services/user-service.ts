@@ -441,6 +441,45 @@ export async function getUserById(userId: string): Promise<User> {
 }
 
 /**
+ * Get user by email address
+ */
+export async function getUserByEmail(email: string): Promise<User | null> {
+  try {
+    const response = await databases.listDocuments(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      [Query.equal('email', email)]
+    );
+    
+    if (response.documents.length === 0) {
+      return null;
+    }
+    
+    return mapDocToUser(response.documents[0]);
+  } catch (error: any) {
+    console.error('Error fetching user by email:', error);
+    throw new Error(error.message || 'Failed to fetch user by email');
+  }
+}
+
+/**
+ * Get all agents in the system (for managers with full access)
+ */
+export async function getAllAgents(): Promise<User[]> {
+  try {
+    const response = await databases.listDocuments(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      [Query.equal('role', 'agent')]
+    );
+    return response.documents.map(mapDocToUser);
+  } catch (error: any) {
+    console.error('Error fetching all agents:', error);
+    throw new Error(error.message || 'Failed to fetch all agents');
+  }
+}
+
+/**
  * Update a user's information
  */
 export async function updateUser(

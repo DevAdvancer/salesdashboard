@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { useRouter } from 'next/navigation';
 import { listLeads } from '@/lib/services/lead-service';
-import { getAgentsByManager, getUserById } from '@/lib/services/user-service';
+import { getAgentsByManager, getAssignableUsers, getUserById as getUserByIdService } from '@/lib/services/user-service';
 import { Lead, User, LeadListFilters } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ function LeadsContent() {
   const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [agents, setAgents] = useState<User[]>([]);
+  const [owners, setOwners] = useState<Map<string, User>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -46,6 +47,12 @@ function LeadsContent() {
   }, [user, loading, router]);
 
   useEffect(() => {
+    if (leads.length > 0) {
+      loadOwnerNames();
+    }
+  }, [leads]);
+
+  useEffect(() => {
     if (user) {
       loadLeads();
     }
@@ -55,10 +62,42 @@ function LeadsContent() {
     if (!user || (user.role !== 'manager' && user.role !== 'team_lead')) return;
 
     try {
-      const fetchedAgents = await getAgentsByManager(user.$id);
-      setAgents(fetchedAgents);
-    } catch (err: any) {
+      let fetchedUsers: User[] = [];
+      
+      if (user.role === 'manager') {
+        // For managers, load assignable users (team leads and agents) based on their branch scope
+        fetchedUsers = await getAssignableUsers(user.role, user.branchIds || [], user.$id);
+      } else {
+        // Team leads can only see agents assigned to them
+        fetchedUsers = await getAgentsByManager(user.$id);
+      }
+      
+      setAgents(fetchedUsers);
+    } catch (err) {
       console.error('Error loading agents:', err);
+    }
+  };
+
+  const loadOwnerNames = async () => {
+    if (!user || leads.length === 0) return;
+
+    try {
+      const ownerIds = [...new Set(leads.map(lead => lead.ownerId))];
+      const ownerMap = new Map<string, User>();
+
+      // Fetch owner details
+      for (const ownerId of ownerIds) {
+        try {
+          const owner = await getUserByIdService(ownerId);
+          ownerMap.set(ownerId, owner);
+        } catch (err) {
+          console.error(`Error loading owner ${ownerId}:`, err);
+        }
+      }
+
+      setOwners(ownerMap);
+    } catch (err) {
+      console.error('Error loading owner names:', err);
     }
   };
 
@@ -71,8 +110,8 @@ function LeadsContent() {
       const fetchedLeads = await listLeads(filters, user.$id, user.role, user.branchIds);
       setLeads(fetchedLeads);
       setCurrentPage(1);
-    } catch (err: any) {
-      const errorMessage = handleError(err, {
+    } catch (err) {
+      const errorMessage = handleError(err as Error, {
         title: 'Failed to Load Leads',
         showToast: true,
         retry: loadLeads,
@@ -259,6 +298,9 @@ function LeadsContent() {
                       {(user?.role === 'manager' || user?.role === 'team_lead') && (
                         <th className="p-3 md:p-4 font-semibold hidden md:table-cell">Assigned To</th>
                       )}
+                      {(user?.role === 'manager' || user?.role === 'team_lead') && (
+                        <th className="p-3 md:p-4 font-semibold hidden lg:table-cell">Owner</th>
+                      )}
                       <th className="p-3 md:p-4 font-semibold hidden sm:table-cell">Created</th>
                       <th className="p-3 md:p-4 font-semibold">Actions</th>
                     </tr>
@@ -289,6 +331,11 @@ function LeadsContent() {
                               ) : (
                                 'Unassigned'
                               )}
+                            </td>
+                          )}
+                          {(user?.role === 'manager' || user?.role === 'team_lead') && (
+                            <td className="p-3 md:p-4 text-muted-foreground hidden lg:table-cell">
+                              <OwnerName ownerId={lead.ownerId} owners={owners} />
                             </td>
                           )}
                           <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">
@@ -347,6 +394,11 @@ function LeadsContent() {
 function AssignedAgentName({ agentId, agents }: { agentId: string; agents: User[] }) {
   const agent = agents.find((a) => a.$id === agentId);
   return <span>{agent?.name || 'Unknown'}</span>;
+}
+
+function OwnerName({ ownerId, owners }: { ownerId: string; owners: Map<string, User> }) {
+  const owner = owners.get(ownerId);
+  return <span>{owner?.name || 'Unknown'}</span>;
 }
 
 export default function LeadsPage() {
