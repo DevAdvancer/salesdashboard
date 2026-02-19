@@ -62,6 +62,7 @@ export async function getAuditLogs(
   filters?: {
     actorId?: string;
     targetType?: string;
+    targetId?: string;
     limit?: number;
     offset?: number;
   }
@@ -79,6 +80,10 @@ export async function getAuditLogs(
 
     if (filters?.targetType) {
       queries.push(Query.equal('targetType', filters.targetType));
+    }
+
+    if (filters?.targetId) {
+      queries.push(Query.equal('targetId', filters.targetId));
     }
 
     const response = await databases.listDocuments(
