@@ -4,13 +4,14 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { listLeads } from '@/lib/services/lead-service';
-import { Lead, LeadData, HistoryFilters } from '@/lib/types';
+import { Lead, LeadData, HistoryFilters, AuditLog } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { TableSkeleton } from '@/components/ui/skeleton';
 import { ProtectedRoute } from '@/components/protected-route';
+import { getAuditLogs } from '@/lib/services/audit-service';
 
 function HistoryContent() {
   const router = useRouter();
@@ -18,6 +19,7 @@ function HistoryContent() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<HistoryFilters>({});
+  const [closedByMap, setClosedByMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!user) {
@@ -45,10 +47,49 @@ function HistoryContent() {
         user.role
       );
       setLeads(closedLeads);
+      loadClosedBy(closedLeads);
     } catch (error) {
       console.error('Error loading closed leads:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadClosedBy = async (currentLeads: Lead[]) => {
+    try {
+      const entries: Record<string, string> = {};
+
+      await Promise.all(
+        currentLeads.map(async (lead) => {
+          try {
+            const { logs } = await getAuditLogs({
+              targetId: lead.$id,
+              targetType: 'LEAD',
+              limit: 10,
+            });
+
+            const closeLog = logs.find((log: AuditLog) => {
+              if (log.action !== 'LEAD_UPDATE' || !log.metadata) return false;
+              try {
+                const metadata = JSON.parse(log.metadata);
+                return metadata.isClosed === true;
+              } catch {
+                return false;
+              }
+            });
+
+            if (closeLog) {
+              entries[lead.$id] = closeLog.actorName;
+            }
+          } catch (error) {
+            console.error('Error loading closedBy for lead', lead.$id, error);
+          }
+        })
+      );
+
+      setClosedByMap(entries);
+    } catch (error) {
+      console.error('Error loading closedBy names:', error);
     }
   };
 
@@ -149,6 +190,7 @@ function HistoryContent() {
                 <th className="text-left p-3 md:p-4 font-semibold">Name</th>
                 <th className="text-left p-3 md:p-4 font-semibold hidden sm:table-cell">Email</th>
                 <th className="text-left p-3 md:p-4 font-semibold">Status</th>
+                <th className="text-left p-3 md:p-4 font-semibold hidden md:table-cell">Closed By</th>
                 <th className="text-left p-3 md:p-4 font-semibold hidden sm:table-cell">Closed Date</th>
                 <th className="text-left p-3 md:p-4 font-semibold">Actions</th>
               </tr>
@@ -156,7 +198,7 @@ function HistoryContent() {
             <tbody>
               {leads.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center p-8 text-muted-foreground">
+                  <td colSpan={6} className="text-center p-8 text-muted-foreground">
                     No closed leads found
                   </td>
                 </tr>
@@ -177,6 +219,9 @@ function HistoryContent() {
                         <span className="px-2 py-1 rounded-full text-xs bg-secondary text-secondary-foreground">
                           {lead.status}
                         </span>
+                      </td>
+                      <td className="p-3 md:p-4 text-muted-foreground hidden md:table-cell">
+                        {closedByMap[lead.$id] || 'N/A'}
                       </td>
                       <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">{formatDate(lead.closedAt)}</td>
                       <td className="p-3 md:p-4">

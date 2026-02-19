@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { useRouter, useParams } from 'next/navigation';
 import { getLead, reopenLead } from '@/lib/services/lead-service';
+import { getUserById } from '@/lib/services/user-service';
+import { User } from '@/lib/types';
 import { getFormConfig } from '@/lib/services/form-config-service';
 import { Lead, FormField, LeadData } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,6 +37,8 @@ function HistoryDetailContent() {
   const [isReopening, setIsReopening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showReopenDialog, setShowReopenDialog] = useState(false);
+  const [owner, setOwner] = useState<User | null>(null);
+  const [assignedTo, setAssignedTo] = useState<User | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -62,6 +66,18 @@ function HistoryDetailContent() {
 
       setLead(fetchedLead);
       setLeadData(JSON.parse(fetchedLead.data));
+
+      try {
+        const [ownerUser, assignedUser] = await Promise.all([
+          getUserById(fetchedLead.ownerId),
+          fetchedLead.assignedToId ? getUserById(fetchedLead.assignedToId) : Promise.resolve(null),
+        ]);
+
+        setOwner(ownerUser);
+        setAssignedTo(assignedUser);
+      } catch (err: any) {
+        console.error('Error loading related users:', err);
+      }
     } catch (err: any) {
       console.error('Error loading lead:', err);
       setError(err.message || 'Failed to load lead');
@@ -314,13 +330,15 @@ function HistoryDetailContent() {
                 </p>
               </div>
               <div>
-                <Label>Owner ID</Label>
-                <p className="text-muted-foreground mt-2 font-mono text-xs">{lead.ownerId}</p>
+                <Label>Owner</Label>
+                <p className="text-muted-foreground mt-2">
+                  {owner?.name || 'Unknown'}
+                </p>
               </div>
               <div>
-                <Label>Assigned To ID</Label>
-                <p className="text-muted-foreground mt-2 font-mono text-xs">
-                  {lead.assignedToId || 'Unassigned'}
+                <Label>Assigned To</Label>
+                <p className="text-muted-foreground mt-2">
+                  {lead.assignedToId ? assignedTo?.name || 'Unknown' : 'Unassigned'}
                 </p>
               </div>
             </div>
