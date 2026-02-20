@@ -21,7 +21,7 @@ interface AccessRule {
 const ALL_COMPONENTS: { key: ComponentKey; label: string; description: string }[] = [
   { key: 'dashboard', label: 'Dashboard', description: 'Main dashboard view' },
   { key: 'leads', label: 'Leads', description: 'Active leads management' },
-  { key: 'history', label: 'History', description: 'Closed leads history' },
+  { key: 'history', label: 'Client', description: 'Closed leads/client records' },
   { key: 'user-management', label: 'User Management', description: 'Create and manage agents' },
   { key: 'field-management', label: 'Field Management', description: 'Configure lead form fields' },
   { key: 'settings', label: 'Settings', description: 'System settings and configuration' },

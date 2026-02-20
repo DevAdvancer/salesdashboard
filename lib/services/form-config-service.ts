@@ -61,6 +61,15 @@ export const DEFAULT_FIELDS: FormField[] = [
     options: ['Citizen', 'Green Card', 'H1B', 'F1', 'Other'],
   },
   { id: '13', type: 'textarea', label: 'Notes', key: 'notes', required: false, visible: true, order: 11 },
+  {
+    id: '15',
+    type: 'text',
+    label: 'Amount ($)',
+    key: 'amount',
+    required: false,
+    visible: true,
+    order: 12,
+  },
 ];
 
 /**

@@ -121,7 +121,7 @@ function HistoryContent() {
     return (
       <div className="container mx-auto">
         <div className="mb-6">
-          <h1 className="text-2xl md:text-3xl font-bold mb-2">Lead History</h1>
+          <h1 className="text-2xl md:text-3xl font-bold mb-2">Client History</h1>
         </div>
         <Card className="p-4 md:p-6">
           <TableSkeleton rows={5} />
@@ -133,8 +133,8 @@ function HistoryContent() {
   return (
     <div className="container mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold mb-2">Lead History</h1>
-        <p className="text-muted-foreground">View all closed leads</p>
+        <h1 className="text-2xl md:text-3xl font-bold mb-2">Client History</h1>
+        <p className="text-muted-foreground">View all client records</p>
       </div>
 
       {/* Filters */}
@@ -198,8 +198,8 @@ function HistoryContent() {
             <tbody>
               {leads.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center p-8 text-muted-foreground">
-                    No closed leads found
+                  <td colSpan={6} className="text-center py-8 text-muted-foreground">
+                    No client records found
                   </td>
                 </tr>
               ) : (
@@ -247,7 +247,7 @@ function HistoryContent() {
 
       {/* Summary */}
       <div className="mt-4 text-muted-foreground text-sm">
-        Showing {leads.length} closed lead{leads.length !== 1 ? 's' : ''}
+        Showing {leads.length} client record{leads.length !== 1 ? 's' : ''}
       </div>
     </div>
   );

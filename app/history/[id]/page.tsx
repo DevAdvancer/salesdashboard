@@ -179,7 +179,7 @@ function HistoryDetailContent() {
   if (authLoading || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <p className="text-lg text-muted-foreground">Loading lead history...</p>
+        <p className="text-lg text-muted-foreground">Loading client details...</p>
       </div>
     );
   }
@@ -192,9 +192,9 @@ function HistoryDetailContent() {
             <CardTitle className="text-destructive">Error</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">{error || 'Lead not found'}</p>
+            <p className="text-muted-foreground">{error || 'Client record not found'}</p>
             <Button onClick={() => router.push('/history')} className="mt-4">
-              Back to History
+              Back to Clients
             </Button>
           </CardContent>
         </Card>
@@ -211,10 +211,10 @@ function HistoryDetailContent() {
             onClick={() => router.push('/history')}
             className="mb-2"
           >
-            ← Back to History
+            ← Back to Clients
           </Button>
-          <h1 className="text-2xl md:text-3xl font-bold">Lead History Detail</h1>
-          <p className="text-muted-foreground mt-1">Read-only view of closed lead</p>
+          <h1 className="text-2xl md:text-3xl font-bold">Client Detail</h1>
+          <p className="text-muted-foreground mt-1">Read-only view of client record</p>
         </div>
         <div className="flex gap-2">
           {isManager && (

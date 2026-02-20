@@ -87,7 +87,7 @@ describe('Navigation Component', () => {
 
       expect(screen.getByText('Dashboard')).toBeInTheDocument();
       expect(screen.getByText('Leads')).toBeInTheDocument();
-      expect(screen.getByText('History')).toBeInTheDocument();
+      expect(screen.getByText('Client')).toBeInTheDocument();
       expect(screen.getByText('User Management')).toBeInTheDocument();
       expect(screen.getByText('Field Management')).toBeInTheDocument();
       expect(screen.getByText('Settings')).toBeInTheDocument();

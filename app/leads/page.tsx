@@ -63,7 +63,7 @@ function LeadsContent() {
 
     try {
       let fetchedUsers: User[] = [];
-      
+
       if (user.role === 'manager') {
         // For managers, load assignable users (team leads and agents) based on their branch scope
         fetchedUsers = await getAssignableUsers(user.role, user.branchIds || [], user.$id);
@@ -71,7 +71,7 @@ function LeadsContent() {
         // Team leads can only see agents assigned to them
         fetchedUsers = await getAgentsByManager(user.$id);
       }
-      
+
       setAgents(fetchedUsers);
     } catch (err) {
       console.error('Error loading agents:', err);
@@ -128,8 +128,18 @@ function LeadsContent() {
     if (searchQuery) newFilters.searchQuery = searchQuery;
     if (statusFilter) newFilters.status = statusFilter;
     if (assignedToFilter) newFilters.assignedToId = assignedToFilter;
-    if (dateFromFilter) newFilters.dateFrom = new Date(dateFromFilter).toISOString();
-    if (dateToFilter) newFilters.dateTo = new Date(dateToFilter).toISOString();
+    if (dateFromFilter) {
+      // Set to start of day
+      const date = new Date(dateFromFilter);
+      date.setHours(0, 0, 0, 0);
+      newFilters.dateFrom = date.toISOString();
+    }
+    if (dateToFilter) {
+      // Set to end of day
+      const date = new Date(dateToFilter);
+      date.setHours(23, 59, 59, 999);
+      newFilters.dateTo = date.toISOString();
+    }
 
     setFilters(newFilters);
   };

@@ -14,7 +14,7 @@ import {
 import { ProtectedRoute } from '@/components/protected-route';
 import { listLeads } from '@/lib/services/lead-service';
 import { getAgentsByManager } from '@/lib/services/user-service';
-import { FileText, History, Users, TrendingUp } from 'lucide-react';
+import { FileText, Briefcase, Users, TrendingUp } from 'lucide-react';
 
 function DashboardContent() {
   const { user, isAdmin, isManager, isAgent, isTeamLead, loading } = useAuth();
@@ -51,10 +51,10 @@ function DashboardContent() {
         let teamMembersCount = 0;
         if (isAdmin || isManager || isTeamLead) {
           const { getUsersByBranches } = await import('@/lib/services/user-service');
-          
+
           if (user.branchIds && user.branchIds.length > 0) {
             const users = await getUsersByBranches(user.branchIds);
-            
+
             if (isManager) {
               // Managers see team leads count
               teamMembersCount = users.filter(u => u.role === 'team_lead').length;
@@ -91,7 +91,7 @@ function DashboardContent() {
 
       try {
         const { databases } = await import('@/lib/appwrite');
-        
+
         // Fetch manager name if user has managerId
         if (user.managerId) {
           const managerDoc = await databases.getDocument(
@@ -153,15 +153,15 @@ function DashboardContent() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Closed Leads</CardTitle>
-            <History className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Clients</CardTitle>
+            <Briefcase className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
               {metrics.loading ? '...' : metrics.closedLeads}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              In history
+              In client records
             </p>
           </CardContent>
         </Card>
@@ -251,7 +251,7 @@ function DashboardContent() {
                 <li>Create and manage users</li>
                 <li>Configure lead forms</li>
                 <li>Manage access controls</li>
-                <li>View all leads and history</li>
+                <li>View all leads and clients</li>
               </ul>
             </CardContent>
           </Card>
@@ -274,7 +274,7 @@ function DashboardContent() {
                 <li>Configure lead forms</li>
                 <li>Manage access controls</li>
                 <li>View all leads</li>
-                <li>Access history and reports</li>
+                <li>Access client records and reports</li>
               </ul>
             </CardContent>
           </Card>
@@ -296,7 +296,7 @@ function DashboardContent() {
                 <li>Create and manage agents</li>
                 <li>View team leads</li>
                 <li>Assign and manage leads</li>
-                <li>Access history and reports</li>
+                <li>Access client records and reports</li>
               </ul>
             </CardContent>
           </Card>

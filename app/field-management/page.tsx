@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { FormField, FieldType } from '@/lib/types';
-import { getFormConfig, updateFormConfig } from '@/lib/services/form-config-service';
+import { getFormConfig, updateFormConfig, DEFAULT_FIELDS } from '@/lib/services/form-config-service';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,16 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { ProtectedRoute } from '@/components/protected-route';
+
+const CORE_FIELD_KEYS = new Set<string>([
+  'firstName',
+  'lastName',
+  'email',
+  'phone',
+  'amount',
+  'legalName',
+  'ssnLast4',
+]);
 
 export default function FieldManagementPage() {
   return (
@@ -50,7 +60,8 @@ function FieldManagementContent() {
     try {
       setLoading(true);
       const config = await getFormConfig();
-      setFields(config.fields);
+       const configurableFields = config.fields.filter((field) => !CORE_FIELD_KEYS.has(field.key));
+      setFields(configurableFields);
       setVersion(config.version);
     } catch (error) {
       console.error('Error loading form config:', error);
@@ -142,7 +153,38 @@ function FieldManagementContent() {
 
     try {
       setSaving(true);
-      const result = await updateFormConfig(fields, user.$id, user.name);
+      const currentConfig = await getFormConfig();
+
+      const coreDefaultsMap = new Map<string, FormField>();
+
+      for (const field of DEFAULT_FIELDS) {
+        if (CORE_FIELD_KEYS.has(field.key)) {
+          coreDefaultsMap.set(field.key, field);
+        }
+      }
+
+      for (const field of currentConfig.fields) {
+        if (CORE_FIELD_KEYS.has(field.key)) {
+          coreDefaultsMap.set(field.key, field);
+        }
+      }
+
+      const coreFields = Array.from(coreDefaultsMap.values()).sort(
+        (a, b) => a.order - b.order
+      );
+
+      const startingOrder = coreFields.length
+        ? Math.max(...coreFields.map((field) => field.order))
+        : 0;
+
+      const configurableFieldsWithOrder = fields.map((field, index) => ({
+        ...field,
+        order: startingOrder + index + 1,
+      }));
+
+      const allFields = [...coreFields, ...configurableFieldsWithOrder];
+
+      const result = await updateFormConfig(allFields, user.$id, user.name);
       setVersion(result.version);
       setShowPublishConfirm(false);
 

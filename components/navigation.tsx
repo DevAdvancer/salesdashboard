@@ -9,7 +9,7 @@ import {
   Building2,
   Users,
   FileText,
-  History,
+  Briefcase,
   Settings,
   FormInput,
   LogOut,
@@ -52,9 +52,9 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     key: 'history',
-    label: 'History',
+    label: 'Client',
     href: '/history',
-    icon: History,
+    icon: Briefcase,
   },
   {
     key: 'user-management',

@@ -277,6 +277,9 @@ export async function listLeads(
     // Order by creation date (newest first)
     queries.push(Query.orderDesc('$createdAt'));
 
+    // Set a high limit to fetch all leads (Appwrite default is 25)
+    queries.push(Query.limit(5000));
+
     // Fetch leads
     const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS, queries);
 
