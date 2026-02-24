@@ -14,6 +14,7 @@ import {
 import { ProtectedRoute } from '@/components/protected-route';
 import { listLeads } from '@/lib/services/lead-service';
 import { getAgentsByManager } from '@/lib/services/user-service';
+import { getBranchById } from '@/lib/services/branch-service';
 import { FileText, Briefcase, Users, TrendingUp } from 'lucide-react';
 
 function DashboardContent() {
@@ -28,6 +29,32 @@ function DashboardContent() {
   const [managerName, setManagerName] = useState<string | null>(null);
   const [teamLeadName, setTeamLeadName] = useState<string | null>(null);
   const [assignedAgents, setAssignedAgents] = useState<any[]>([]);
+  const [isOutlookChecking, setIsOutlookChecking] = useState(true);
+
+  // Check Outlook connection status
+  useEffect(() => {
+    const checkOutlookConnection = async () => {
+      try {
+        const response = await fetch('/api/auth/status');
+        const data = await response.json();
+        
+        if (!data.connected) {
+          // If not connected, redirect to login
+          console.log('Outlook not connected, redirecting to login...');
+          window.location.href = '/api/auth/login';
+        } else {
+          setIsOutlookChecking(false);
+        }
+      } catch (error) {
+        console.error('Failed to check Outlook status:', error);
+        setIsOutlookChecking(false);
+      }
+    };
+
+    if (user) {
+      checkOutlookConnection();
+    }
+  }, [user]);
 
   useEffect(() => {
     async function fetchMetrics() {
@@ -56,8 +83,27 @@ function DashboardContent() {
           if (isTeamLead) {
             const { getAgentsByTeamLead } = await import('@/lib/services/user-service');
             const agents = await getAgentsByTeamLead(user.$id);
+            
+            // Fetch branch names for each agent
+            const agentsWithBranches = await Promise.all(agents.map(async (agent) => {
+              if (agent.branchIds && agent.branchIds.length > 0) {
+                // Assuming we want to show the first branch or join them
+                // For simplicity, let's fetch the first branch name
+                try {
+                    const branchNames = await Promise.all(agent.branchIds.map(async (bid) => {
+                        const branch = await getBranchById(bid);
+                        return branch.name;
+                    }));
+                    return { ...agent, branchNames: branchNames.join(', ') };
+                } catch (e) {
+                    return { ...agent, branchNames: 'Unknown' };
+                }
+              }
+              return { ...agent, branchNames: 'N/A' };
+            }));
+
             teamMembersCount = agents.length;
-            setAssignedAgents(agents);
+            setAssignedAgents(agentsWithBranches);
           } else {
             const { getUsersByBranches } = await import('@/lib/services/user-service');
             if (user.branchIds && user.branchIds.length > 0) {
@@ -124,8 +170,14 @@ function DashboardContent() {
     }
   }, [user]);
 
-  if (!user) {
-    return null;
+  if (!user || isOutlookChecking) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-lg">
+          {!user ? 'Loading user...' : 'Checking Outlook connection...'}
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -398,6 +450,7 @@ function DashboardContent() {
                   <tr className="text-left">
                     <th className="p-3 font-semibold text-sm">Name</th>
                     <th className="p-3 font-semibold text-sm">Email</th>
+                    <th className="p-3 font-semibold text-sm">Branch</th>
                     <th className="p-3 font-semibold text-sm">Status</th>
                   </tr>
                 </thead>
@@ -406,6 +459,7 @@ function DashboardContent() {
                     <tr key={agent.$id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                       <td className="p-3 text-sm">{agent.name}</td>
                       <td className="p-3 text-sm text-muted-foreground">{agent.email}</td>
+                      <td className="p-3 text-sm">{agent.branchNames || 'N/A'}</td>
                       <td className="p-3 text-sm">
                         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
                           Active

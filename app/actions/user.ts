@@ -1,6 +1,6 @@
 'use server';
 
-import { ID, Permission, Role } from 'node-appwrite';
+import { ID } from 'node-appwrite';
 import { createAdminClient, createSessionClient } from '@/lib/server/appwrite';
 import { CreateManagerInput, CreateTeamLeadInput, CreateAgentInput, UserRole } from '@/lib/types';
 
@@ -61,9 +61,9 @@ async function logAuditAction(
                 performedAt: new Date().toISOString(),
             },
             [
-                Permission.read(Role.any()),
-                Permission.update(Role.label('admin')),
-                Permission.delete(Role.label('admin')),
+                'read("any")',
+                'update("label:admin")',
+                'delete("label:admin")',
             ]
         );
     } catch (error) {
@@ -131,8 +131,9 @@ export async function createManagerAction(input: CreateManagerInput & { currentU
                 branchIds
             },
             [
-                 Permission.read(Role.user(userId)),
-                 Permission.update(Role.user(userId)),
+                 `read("user:${userId}")`,
+                 `read("users")`,
+                 `update("user:${userId}")`,
             ]
         );
 
@@ -176,7 +177,7 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
         }
     }
 
-    const { name, email, password, branchIds } = teamLeadInput;
+    const { name, email, password, branchIds, managerIds: inputManagerIds } = teamLeadInput;
     const { users, databases } = await createAdminClient();
     const userId = ID.unique();
 
@@ -187,9 +188,20 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
         throw e;
     }
 
-    // For admins, use the provided managerId or null
-    // For managers, they are the manager
-    const managerId = callerDoc.role === 'manager' ? callerDoc.$id : (teamLeadInput.managerId || null);
+    // Determine managerIds
+    let managerIds: string[] = [];
+    if (callerDoc.role === 'manager') {
+        managerIds = [callerDoc.$id];
+    } else if (inputManagerIds && Array.isArray(inputManagerIds)) {
+        managerIds = inputManagerIds;
+    }
+
+    // Generate permissions for all managers
+    const managerPermissions = managerIds.flatMap(mid => [
+        `read("user:${mid}")`,
+        `update("user:${mid}")`,
+        `delete("user:${mid}")`
+    ]);
 
     try {
         await databases.createDocument(
@@ -200,16 +212,16 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
                 name,
                 email,
                 role: 'team_lead',
-                managerId,
+                managerIds, // Use new array field
+                managerId: managerIds[0] || null, // Keep legacy field populated with first manager or null
                 teamLeadId: null,
                 branchIds
             },
             [
-                 Permission.read(Role.user(userId)),
-                 ...(managerId ? [Permission.read(Role.user(managerId))] : []),
-                 Permission.update(Role.user(userId)),
-                 ...(managerId ? [Permission.update(Role.user(managerId))] : []),
-                 ...(managerId ? [Permission.delete(Role.user(managerId))] : []),
+                 `read("user:${userId}")`,
+                 `read("users")`,
+                 `update("user:${userId}")`,
+                 ...managerPermissions
             ]
         );
 
@@ -221,7 +233,7 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
             callerDoc.name,
             userId,
             'team_lead',
-            { role: 'team_lead', email, name, branchIds, managerId }
+            { role: 'team_lead', email, name, branchIds, managerIds }
         );
 
         return { success: true };
@@ -270,14 +282,15 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
 
     try {
         const permissions = [
-            Permission.read(Role.user(userId)),
-            ...(teamLeadId ? [Permission.read(Role.user(teamLeadId))] : []),
-            ...(managerId ? [Permission.read(Role.user(managerId))] : []),
-            Permission.update(Role.user(userId)),
-            ...(teamLeadId ? [Permission.update(Role.user(teamLeadId))] : []),
+            `read("user:${userId}")`,
+            `read("users")`,
+            ...(teamLeadId ? [`read("user:${teamLeadId}")`] : []),
+            ...(managerId ? [`read("user:${managerId}")`] : []),
+            `update("user:${userId}")`,
+            ...(teamLeadId ? [`update("user:${teamLeadId}")`] : []),
         ];
 
-        if (managerId) permissions.push(Permission.delete(Role.user(managerId)));
+        if (managerId) permissions.push(`delete("user:${managerId}")`);
 
         await databases.createDocument(
             DATABASE_ID,
@@ -316,23 +329,28 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
 export async function updateUserAction(input: {
     userId: string;
     role?: UserRole;
-    managerId?: string | null;
+    managerId?: string | null; // @deprecated
+    managerIds?: string[]; // New field
     teamLeadId?: string | null;
     branchIds?: string[];
     currentUserId: string;
 }) {
-    const { userId, role, managerId, teamLeadId, branchIds, currentUserId } = input;
+    const { userId, role, managerId, managerIds, teamLeadId, branchIds, currentUserId } = input;
 
     if (!currentUserId) throw new Error("Unauthorized");
 
     const callerDoc = await getUserDoc(currentUserId);
     if (!callerDoc) throw new Error("User profile not found");
 
+    const targetUserDoc = await getUserDoc(userId);
+    if (!targetUserDoc) throw new Error("Target user not found");
+
     const isCallerAdmin = callerDoc.role === 'admin';
     const isCallerManager = callerDoc.role === 'manager';
+    const isCallerTeamLead = callerDoc.role === 'team_lead';
 
     // Permission Check
-    if (!isCallerAdmin && !isCallerManager) {
+    if (!isCallerAdmin && !isCallerManager && !isCallerTeamLead) {
         throw new Error("Permission denied");
     }
 
@@ -341,60 +359,135 @@ export async function updateUserAction(input: {
     try {
         const updates: any = {};
 
-        // 1. Handle Role Update (Admin Only)
-        if (role && role !== callerDoc.role) { // Prevent self-lockout logic if needed
-             if (!isCallerAdmin) throw new Error("Only admins can change user roles");
-             updates.role = role;
-             
+        // 1. Handle Role Update
+        if (role && role !== targetUserDoc.role) {
+             // Admin can change any role
+             if (isCallerAdmin) {
+                 updates.role = role;
+             }
+             // Manager can promote Agent -> Team Lead or demote Team Lead -> Agent
+             else if (isCallerManager) {
+                 if ((targetUserDoc.role === 'agent' && role === 'team_lead') ||
+                     (targetUserDoc.role === 'team_lead' && role === 'agent')) {
+                     updates.role = role;
+                 } else {
+                     throw new Error("Managers can only promote Agents to Team Leads or demote Team Leads to Agents.");
+                 }
+             }
+             else {
+                 throw new Error("Only admins or managers can change user roles.");
+             }
+
              // Reset hierarchy fields based on new role
              if (role === 'manager') {
                  updates.managerId = null;
+                 updates.managerIds = [];
                  updates.teamLeadId = null;
              } else if (role === 'team_lead') {
                  updates.teamLeadId = null;
+                 // If promoted by manager, ensure managerId is set to the caller (manager) if not explicitly set
+                 if (isCallerManager && !updates.managerId && !managerId && !managerIds && !targetUserDoc.managerId) {
+                     updates.managerId = currentUserId;
+                     updates.managerIds = [currentUserId];
+                 }
              }
         }
 
         // 2. Handle Manager Update
-        if (managerId !== undefined) {
-             if (!isCallerAdmin && !isCallerManager) throw new Error("Permission denied");
+        // Support both managerId (legacy single) and managerIds (new multiple)
+        let newManagerIds: string[] | undefined;
+
+        if (managerIds !== undefined) {
+            if (!isCallerAdmin && !isCallerManager) throw new Error("Permission denied to change manager");
+            newManagerIds = managerIds;
+            updates.managerIds = managerIds;
+            // Sync legacy field
+            updates.managerId = managerIds.length > 0 ? managerIds[0] : null;
+        } else if (managerId !== undefined) {
+             if (!isCallerAdmin && !isCallerManager) throw new Error("Permission denied to change manager");
+             // If legacy field is used, treat as single manager array
+             newManagerIds = managerId ? [managerId] : [];
+             updates.managerIds = newManagerIds;
              updates.managerId = managerId;
         }
 
         // 3. Handle Team Lead Update
-        if (teamLeadId !== undefined) {
+        if (teamLeadId !== undefined && teamLeadId !== targetUserDoc.teamLeadId) {
              updates.teamLeadId = teamLeadId;
         }
 
         // 4. Handle Branch Update
         if (branchIds) {
+             // Validate branches if not Admin
+             if (!isCallerAdmin) {
+                 const callerBranches = (callerDoc.branchIds as string[]) || [];
+                 // Managers/TLs can only assign branches they have access to
+                 for (const bid of branchIds) {
+                     if (!callerBranches.includes(bid)) {
+                         throw new Error(`Branch ${bid} is not in your assigned branches`);
+                     }
+                 }
+             }
              updates.branchIds = branchIds;
         }
 
         if (Object.keys(updates).length === 0) return { success: true };
 
+        // Calculate Permissions if hierarchy changed
+        let permissions: string[] | undefined;
+
+        // If manager or team lead changed, we need to recalculate permissions
+        if (updates.managerIds || updates.managerId !== undefined || updates.teamLeadId !== undefined || updates.role) {
+            const finalRole = updates.role || targetUserDoc.role;
+            const finalManagerIds = updates.managerIds || targetUserDoc.managerIds || (targetUserDoc.managerId ? [targetUserDoc.managerId] : []);
+            const finalTeamLeadId = updates.teamLeadId !== undefined ? updates.teamLeadId : targetUserDoc.teamLeadId;
+
+            permissions = [
+                `read("user:${userId}")`,
+                `read("users")`,
+                `update("user:${userId}")`
+            ];
+
+            // Add manager permissions
+            if (finalManagerIds.length > 0) {
+                finalManagerIds.forEach((mid: string) => {
+                    permissions!.push(`read("user:${mid}")`);
+                    permissions!.push(`update("user:${mid}")`);
+                    permissions!.push(`delete("user:${mid}")`);
+                });
+            }
+
+            // Add Team Lead permissions
+            if (finalTeamLeadId) {
+                permissions!.push(`read("user:${finalTeamLeadId}")`);
+                permissions!.push(`update("user:${finalTeamLeadId}")`);
+            }
+        }
+
         await databases.updateDocument(
             DATABASE_ID,
             USERS_COLLECTION_ID,
             userId,
-            updates
+            updates,
+            permissions // Pass new permissions if calculated
         );
 
         // Log audit
         await logAuditAction(
-            databases,
-            'USER_UPDATE',
-            callerDoc.$id,
-            callerDoc.name,
-            userId,
-            'user',
-            updates
+           databases,
+           'USER_UPDATE',
+           callerDoc.$id,
+           callerDoc.name,
+           userId,
+           'user',
+           updates
         );
 
         return { success: true };
 
     } catch (error: any) {
         console.error("Update failed", error);
-        throw new Error("Failed to update user: " + error.message);
+        const errorMessage = error?.message || String(error);
+        throw new Error("Failed to update user: " + errorMessage);
     }
 }

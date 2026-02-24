@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { listLeads } from '@/lib/services/lead-service';
-import type { Lead } from '@/lib/types';
+import { getUserById, getUsersByBranches, getAllManagers } from '@/lib/services/user-service';
+import type { Lead, User } from '@/lib/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,11 +37,12 @@ interface MockFormData {
   yourName: string;
   yourRole: string;
   yourPhone: string;
-  company: 'Silverspace Inc.' | 'Other Company' | 'Vizva Consultancy';
+  company: 'Silverspace Inc.' | 'Vizva Consultancy';
 }
 
 const INITIAL_FORM_DATA: MockFormData = {
-  to: '',
+  to: 'tech.leaders@silverspaceinc.com',
+  // to: 'prateek.narvariya@silverspaceinc.com',
   cc: '',
   resume: null,
   role: '',
@@ -68,6 +70,8 @@ function MockContent() {
   const [isSending, setIsSending] = useState(false);
   // const { instance, accounts } = useMsal();
   const [isOutlookConnected, setIsOutlookConnected] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
 
   const handleConnectOutlook = async () => {
     window.location.href = '/api/auth/login';
@@ -166,20 +170,108 @@ function MockContent() {
   // Reset file input key to force re-render and clear file
   const [fileInputKey, setFileInputKey] = useState(Date.now());
 
-  const handleCreateMock = (lead: Lead) => {
-    setSelectedLead(lead);
+  const [isPreparingMock, setIsPreparingMock] = useState(false);
 
-    setFormData(prev => ({
-      ...INITIAL_FORM_DATA,
-      // Preserve signature preferences
-      yourName: prev.yourName,
-      yourRole: prev.yourRole,
-      yourPhone: prev.yourPhone,
-      company: prev.company,
-    }));
-    setFileInputKey(Date.now()); // Reset file input
+  const handleCreateMock = async (lead: Lead) => {
+    try {
+      setIsPreparingMock(true);
+      setSelectedLead(lead);
 
-    setIsModalOpen(true);
+      // Reset form data but keep signature preferences
+      setFormData(prev => ({
+        ...INITIAL_FORM_DATA,
+        yourName: prev.yourName,
+        yourRole: prev.yourRole,
+        yourPhone: prev.yourPhone,
+        company: prev.company,
+      }));
+      setFileInputKey(Date.now()); // Reset file input
+
+      // Get lead data and owner/assignee
+      const leadData = JSON.parse(lead.data);
+
+      // Determine the user associated with the candidate (Owner/Assignee)
+      // Use assignedToId if available, otherwise ownerId
+      const targetUserId = lead.assignedToId || lead.ownerId;
+
+      // We need to fetch the target user to know their role and hierarchy
+      let targetUser: User | null = null;
+      if (targetUserId) {
+          targetUser = await getUserById(targetUserId);
+      }
+
+      // If no target user found (e.g. unassigned), fallback to current user logic?
+      // But per requirement: "if I am agent then my tl if available then all the managers..."
+      // This implies logic is based on the *current logged-in user* who is creating the mock,
+      // OR the *owner* of the lead?
+      // "if I am agent" suggests it's about the current user's role.
+      // Let's assume the logic is based on the CURRENT USER (who is performing the action).
+
+      const currentUser = user;
+      if (!currentUser) return; // Should be protected route anyway
+
+      let ccEmails: string[] = [];
+
+      // Logic based on Current User Role
+      if (currentUser.role === 'agent') {
+          // Agent -> TL + All Managers
+
+          // 1. Add Team Lead
+          if (currentUser.teamLeadId) {
+              const tlUser = await getUserById(currentUser.teamLeadId);
+              if (tlUser && tlUser.email) ccEmails.push(tlUser.email);
+          }
+
+          // 2. Add All Managers Globally
+          const allManagers = await getAllManagers();
+          allManagers.forEach(m => {
+              if (m.email) ccEmails.push(m.email);
+          });
+      }
+      else if (currentUser.role === 'team_lead') {
+          // TL -> Creating Agent + All Managers
+
+          // 1. Add Creating Agent (assigned agent)
+          if (targetUser && targetUser.role === 'agent' && targetUser.$id !== currentUser.$id) {
+               if (targetUser.email) ccEmails.push(targetUser.email);
+          }
+
+          // 2. Add All Managers Globally
+          const allManagers = await getAllManagers();
+          allManagers.forEach(m => {
+              if (m.email) ccEmails.push(m.email);
+          });
+      }
+      else if (currentUser.role === 'manager') {
+          // Manager -> All OTHER Managers Globally
+          const allManagers = await getAllManagers();
+          allManagers.forEach(m => {
+              if (m.email && m.$id !== currentUser.$id) ccEmails.push(m.email);
+          });
+      }
+
+      // Exclude current user's email
+      ccEmails = ccEmails.filter(email => email !== currentUser.email);
+
+      // Deduplicate emails
+      const uniqueCC = Array.from(new Set(ccEmails));
+
+      setFormData(prev => ({
+        ...prev,
+        cc: uniqueCC.join(', '),
+      }));
+
+      setIsModalOpen(true);
+    } catch (error) {
+      console.error('Error preparing mock:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to prepare mock interview form.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsPreparingMock(false);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -266,10 +358,15 @@ function MockContent() {
         formattedSchedule = `${datePart} at ${timePart}`;
       }
 
-      // Determine logo URL based on company
+      // Determine logo URL and website based on company
       let logoUrl = 'https://egvjgtfjstxgszpzvvbx.supabase.co/storage/v1/object/public/images//20250610_1111_3D%20Gradient%20Logo_remix_01jxd69dc9ex29jbj9r701yjkf%20(2).png';
+      let websiteUrl = 'www.silverspaceinc.com';
+      let websiteLink = 'https://www.silverspaceinc.com';
+
       if (formData.company === 'Vizva Consultancy') {
         logoUrl = 'https://egvjgtfjstxgszpzvvbx.supabase.co/storage/v1/object/public/images//20250611_1634_3D%20Logo%20Design_remix_01jxgb3x1qebfa2hsxw7sdagw1%20(1).png';
+        websiteUrl = 'vizvaconsultancyservices.com';
+        websiteLink = 'https://vizvaconsultancyservices.com/';
       }
 
       // Construct email body
@@ -291,7 +388,7 @@ function MockContent() {
             <br/>
             <p>Regards,</p>
 
-            <table cellpadding="0" cellspacing="0" border="0" style="font-family: Arial, sans-serif; font-size: 14px; color: rgb(255, 255, 255); background-color: #1a1a1a; padding: 10px; border-radius: 5px;"><tbody><tr><td style="padding-right: 20px;"><div style="filter: drop-shadow(rgba(255, 255, 255, 0.8) 0px 0px 4px) drop-shadow(rgba(255, 255, 255, 0.4) 0px 0px 20px); padding: 4px;"><img src="${logoUrl}" alt="${formData.company} logo" width="130" style="display: block; max-width: 100%; height: auto;"></div></td><td style="border-left: 2px solid rgb(248, 98, 149); padding-left: 20px;"><strong style="font-size: 18px; color: rgb(255, 255, 255); display: block; margin-bottom: 4px;">${formData.yourName}</strong><span style="display: block; margin-bottom: 2px; color: rgb(255, 255, 255);">${formData.yourRole}</span><span style="color: rgb(204, 204, 204); display: block; margin-bottom: 12px;">${formData.company}</span><a href="mailto:${formData.yourName.toLowerCase().replace(/\s+/g, '.')}@silverspaceinc.com" style="color: rgb(255, 255, 255); text-decoration: none; display: block; margin-bottom: 4px;">📧 ${formData.yourName.toLowerCase().replace(/\s+/g, '.')}@silverspaceinc.com</a><a href="tel:${formData.yourPhone}" style="color: rgb(255, 255, 255); text-decoration: none; display: block; margin-bottom: 4px;">📞 ${formData.yourPhone}</a><a href="https://www.silverspaceinc.com" target="_blank" style="color: rgb(255, 255, 255); text-decoration: none; display: block;">🔗 www.silverspaceinc.com</a></td></tr></tbody></table>
+            <table cellpadding="0" cellspacing="0" border="0" style="font-family: Arial, sans-serif; font-size: 14px; color: rgb(255, 255, 255); background-color: #1a1a1a; padding: 10px; border-radius: 5px;"><tbody><tr><td style="padding-right: 20px;"><div style="filter: drop-shadow(rgba(255, 255, 255, 0.8) 0px 0px 4px) drop-shadow(rgba(255, 255, 255, 0.4) 0px 0px 20px); padding: 4px;"><img src="${logoUrl}" alt="${formData.company} logo" width="130" style="display: block; max-width: 100%; height: auto;"></div></td><td style="border-left: 2px solid rgb(248, 98, 149); padding-left: 20px;"><strong style="font-size: 18px; color: rgb(255, 255, 255); display: block; margin-bottom: 4px;">${formData.yourName}</strong><span style="display: block; margin-bottom: 2px; color: rgb(255, 255, 255);">${formData.yourRole}</span><span style="color: rgb(204, 204, 204); display: block; margin-bottom: 12px;">${formData.company}</span><a href="mailto:${formData.yourName.toLowerCase().replace(/\s+/g, '.')}@silverspaceinc.com" style="color: rgb(255, 255, 255); text-decoration: none; display: block; margin-bottom: 4px;">📧 ${formData.yourName.toLowerCase().replace(/\s+/g, '.')}@silverspaceinc.com</a><a href="tel:${formData.yourPhone}" style="color: rgb(255, 255, 255); text-decoration: none; display: block; margin-bottom: 4px;">📞 ${formData.yourPhone}</a><a href="${websiteLink}" target="_blank" style="color: rgb(255, 255, 255); text-decoration: none; display: block;">🔗 ${websiteUrl}</a></td></tr></tbody></table>
           </body>
         </html>
       `;
@@ -377,6 +474,12 @@ function MockContent() {
     }
   };
 
+  const totalPages = Math.ceil(filteredLeads.length / ITEMS_PER_PAGE);
+  const paginatedLeads = filteredLeads.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
   if (loading || isLoading) {
     return (
       <div className="container mx-auto p-6">
@@ -445,7 +548,7 @@ function MockContent() {
                 </tr>
               </thead>
               <tbody>
-                {filteredLeads.map((lead) => {
+                {paginatedLeads.map((lead) => {
                   const leadData = JSON.parse(lead.data);
                   return (
                     <tr key={lead.$id} className="border-b hover:bg-muted/50 transition-colors">
@@ -460,15 +563,15 @@ function MockContent() {
                         <Button
                           size="sm"
                           onClick={() => handleCreateMock(lead)}
-                          disabled={!isOutlookConnected}
+                          disabled={!isOutlookConnected || isPreparingMock}
                         >
-                          Create Mock
+                          {isPreparingMock && selectedLead?.$id === lead.$id ? 'Preparing...' : 'Create Mock'}
                         </Button>
                       </td>
                     </tr>
                   );
                 })}
-                {filteredLeads.length === 0 && (
+                {paginatedLeads.length === 0 && (
                   <tr>
                     <td colSpan={5} className="p-8 text-center text-muted-foreground">
                       No leads found.
@@ -478,6 +581,31 @@ function MockContent() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-end space-x-2 p-4 border-t">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </Button>
+              <div className="text-sm font-medium">
+                Page {currentPage} of {totalPages}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -494,8 +622,8 @@ function MockContent() {
                 <Input
                   id="to"
                   value={formData.to}
-                  onChange={(e) => setFormData({ ...formData, to: e.target.value })}
-                  placeholder="interviewer@example.com, hr@example.com"
+                  readOnly
+                  className="bg-muted"
                 />
               </div>
 
@@ -566,7 +694,6 @@ function MockContent() {
                 >
                     <option value="Silverspace Inc.">Silverspace Inc.</option>
                     <option value="Vizva Consultancy">Vizva Consultancy</option>
-                    <option value="Other Company">Other Company</option>
                 </select>
               </div>
 

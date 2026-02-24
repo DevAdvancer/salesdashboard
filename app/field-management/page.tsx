@@ -24,7 +24,6 @@ import { ProtectedRoute } from '@/components/protected-route';
 
 const CORE_FIELD_KEYS = new Set<string>([
   'firstName',
-  'lastName',
   'email',
   'phone',
   'amount',

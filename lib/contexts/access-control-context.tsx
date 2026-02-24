@@ -112,16 +112,14 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
         componentKey === 'leads' ||
         componentKey === 'history' ||
         componentKey === 'user-management' ||
-        componentKey === 'mock' ||
-        componentKey === 'settings'
+        componentKey === 'mock'
       );
     }
     if (user.role === 'agent') {
       return (
         componentKey === 'dashboard' ||
         componentKey === 'leads' ||
-        componentKey === 'mock' ||
-        componentKey === 'settings'
+        componentKey === 'mock'
       );
     }
     return false;

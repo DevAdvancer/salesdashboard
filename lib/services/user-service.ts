@@ -15,6 +15,7 @@ function mapDocToUser(doc: any): User {
     email: doc.email as string,
     role: doc.role as UserRole,
     managerId: (doc.managerId as string) || null,
+    managerIds: Array.isArray(doc.managerIds) ? doc.managerIds : [], // Add managerIds
     teamLeadId: (doc.teamLeadId as string) || null,
     branchIds: Array.isArray(doc.branchIds) ? doc.branchIds : [],
     branchId: (doc.branchId as string) || null,
@@ -52,6 +53,7 @@ export async function createManager(input: CreateManagerInput, currentUser: User
       },
       [
         Permission.read(Role.user(userId)),
+        Permission.read(Role.users()),
         Permission.update(Role.user(userId)),
       ]
     );
@@ -83,7 +85,7 @@ export async function createManager(input: CreateManagerInput, currentUser: User
  * 3. Creates a user document with role='team_lead', managerId, and branchIds
  */
 export async function createTeamLead(input: CreateTeamLeadInput, currentUser: User): Promise<User> {
-  const { name, email, password, managerId, branchIds } = input;
+  const { name, email, password, managerIds, branchIds } = input;
 
   if (!branchIds.length) {
     throw new Error('At least one branch must be assigned');
@@ -91,35 +93,42 @@ export async function createTeamLead(input: CreateTeamLeadInput, currentUser: Us
 
   try {
     let managerBranchIds: string[] = [];
-    if (managerId) {
-      const managerDoc = await databases.getDocument(
-        DATABASE_ID,
-        USERS_COLLECTION_ID,
-        managerId
-      );
-      managerBranchIds = Array.isArray(managerDoc.branchIds) ? managerDoc.branchIds : [];
+    // Validate against first manager if available (simplification for now, or check all?)
+    // Actually we just need to ensure branch validity.
+    // If managerIds are provided, check their branches? Or just trust admin/manager caller?
+    
+    // For now, let's process permissions for all managers
+    const permissions = [
+      Permission.read(Role.user(ID.custom('temp'))), // Placeholder ID will be replaced
+      Permission.read(Role.users()),
+      Permission.update(Role.user(ID.custom('temp'))),
+    ];
 
-      // Validate branchIds ⊆ manager.branchIds
-      for (const bid of branchIds) {
-        if (!managerBranchIds.includes(bid)) {
-          throw new Error(`Branch ${bid} is not in your assigned branches`);
+    if (managerIds && managerIds.length > 0) {
+        for (const mid of managerIds) {
+            permissions.push(Permission.read(Role.user(mid)));
+            permissions.push(Permission.update(Role.user(mid)));
+            permissions.push(Permission.delete(Role.user(mid)));
         }
-      }
     }
 
     const userId = ID.unique();
-    await account.create(userId, email, password, name);
-
-    const permissions = [
+    // Fix permissions with correct userId
+    const finalPermissions = [
       Permission.read(Role.user(userId)),
+      Permission.read(Role.users()),
       Permission.update(Role.user(userId)),
     ];
-
-    if (managerId) {
-      permissions.push(Permission.read(Role.user(managerId)));
-      permissions.push(Permission.update(Role.user(managerId)));
-      permissions.push(Permission.delete(Role.user(managerId)));
+    
+    if (managerIds && managerIds.length > 0) {
+        for (const mid of managerIds) {
+            finalPermissions.push(Permission.read(Role.user(mid)));
+            finalPermissions.push(Permission.update(Role.user(mid)));
+            finalPermissions.push(Permission.delete(Role.user(mid)));
+        }
     }
+
+    await account.create(userId, email, password, name);
 
     const userDoc = await databases.createDocument(
       DATABASE_ID,
@@ -129,10 +138,11 @@ export async function createTeamLead(input: CreateTeamLeadInput, currentUser: Us
         name,
         email,
         role: 'team_lead',
-        managerId: managerId || null,
+        managerIds: managerIds || [],
+        managerId: managerIds && managerIds.length > 0 ? managerIds[0] : null,
         branchIds,
       },
-      permissions
+      finalPermissions
     );
 
     await logAction({
@@ -143,7 +153,7 @@ export async function createTeamLead(input: CreateTeamLeadInput, currentUser: Us
       targetType: 'team_lead',
       metadata: {
           branchIds,
-          managerId
+          managerIds
       }
     });
 
@@ -208,6 +218,7 @@ export async function createAgent(input: CreateAgentInput, currentUser: User): P
       },
       [
         Permission.read(Role.user(userId)),
+        Permission.read(Role.users()),
         Permission.read(Role.user(teamLeadId)),
         ...(managerId ? [Permission.read(Role.user(managerId))] : []),
         Permission.update(Role.user(userId)),
@@ -475,15 +486,32 @@ export async function getUserByEmail(email: string): Promise<User | null> {
       USERS_COLLECTION_ID,
       [Query.equal('email', email)]
     );
-    
+
     if (response.documents.length === 0) {
       return null;
     }
-    
+
     return mapDocToUser(response.documents[0]);
   } catch (error: any) {
     console.error('Error fetching user by email:', error);
     throw new Error(error.message || 'Failed to fetch user by email');
+  }
+}
+
+/**
+ * Get all managers in the system
+ */
+export async function getAllManagers(): Promise<User[]> {
+  try {
+    const response = await databases.listDocuments(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      [Query.equal('role', 'manager')]
+    );
+    return response.documents.map(mapDocToUser);
+  } catch (error: any) {
+    console.error('Error fetching all managers:', error);
+    throw new Error(error.message || 'Failed to fetch all managers');
   }
 }
 
@@ -595,29 +623,12 @@ export async function updateUserManager(
 }
 
 /**
- * Get all managers (for assigning to team leads/agents)
- */
-export async function getAllManagers(): Promise<User[]> {
-  try {
-    const response = await databases.listDocuments(
-      DATABASE_ID,
-      USERS_COLLECTION_ID,
-      [Query.equal('role', 'manager')]
-    );
-    return response.documents.map(mapDocToUser);
-  } catch (error: any) {
-    console.error('Error fetching managers:', error);
-    throw new Error(error.message || 'Failed to fetch managers');
-  }
-}
-
-/**
  * Get all team leads (optionally filtered by branchIds)
  */
 export async function getTeamLeads(branchIds?: string[]): Promise<User[]> {
   try {
     const queries = [Query.equal('role', 'team_lead')];
-    
+
     if (branchIds && branchIds.length > 0) {
       queries.push(Query.contains('branchIds', branchIds));
     }

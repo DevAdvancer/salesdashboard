@@ -12,7 +12,8 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
-  managerId: string | null;
+  managerId: string | null; // @deprecated Use managerIds instead
+  managerIds?: string[]; // New field for multiple managers
   teamLeadId: string | null;
   branchIds: string[];
   /** @deprecated Use branchIds instead */
@@ -32,7 +33,7 @@ export interface CreateTeamLeadInput {
   name: string;
   email: string;
   password: string;
-  managerId?: string;
+  managerIds?: string[]; // Changed from managerId
   branchIds: string[];
 }
 
@@ -41,7 +42,10 @@ export interface CreateAgentInput {
   email: string;
   password: string;
   teamLeadId?: string;
-  managerId?: string;
+  managerId?: string; // Agents still have one manager? Or should they also have multiple? Assuming one for now via TL, or direct report.
+  // Actually, if TL has multiple managers, the Agent under that TL effectively reports to all those managers.
+  // But if Agent is direct report to Manager (no TL), maybe still one manager?
+  // Let's stick to TL having multiple managers as requested.
   branchIds: string[];
 }
 

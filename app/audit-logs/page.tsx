@@ -14,17 +14,30 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { Spinner } from '@/components/ui/spinner';
 import { getAuditLogs } from '@/lib/services/audit-service';
 import { AuditLog } from '@/lib/types';
-import { RefreshCw, FileText, User as UserIcon } from 'lucide-react';
+import { RefreshCw, FileText, User as UserIcon, Eye } from 'lucide-react';
 import { ProtectedRoute } from '@/components/protected-route';
+import { databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
+import { listBranches } from '@/lib/services/branch-service';
 
 function AuditLogsContent() {
   const { user, isAdmin } = useAuth();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+  const [idToNameMap, setIdToNameMap] = useState<Map<string, string>>(new Map());
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
   const router = useRouter();
 
   // Redirect if not admin
@@ -34,10 +47,36 @@ function AuditLogsContent() {
     }
   }, [user, isAdmin, loading, router]);
 
+  const fetchNames = async () => {
+    try {
+      const map = new Map<string, string>();
+
+      // Fetch branches
+      const branches = await listBranches();
+      branches.forEach(b => map.set(b.$id, b.name));
+
+      // Fetch users (limit 1000 for now)
+      const users = await databases.listDocuments(
+        DATABASE_ID,
+        COLLECTIONS.USERS,
+        [
+          // Query.limit(1000) // Default is usually smaller, maybe need pagination if many users
+        ]
+      );
+      users.documents.forEach((u: any) => map.set(u.$id, u.name));
+
+      setIdToNameMap(map);
+    } catch (err) {
+      console.error('Error fetching names for audit logs:', err);
+    }
+  };
+
   const fetchLogs = async () => {
     try {
       setRefreshing(true);
-      const { logs: fetchedLogs } = await getAuditLogs({ limit: 100 });
+      // Increased limit to 5000 to show more logs.
+      // Ideally, this should be server-side paginated, but for now we fetch more to support client-side pagination.
+      const { logs: fetchedLogs } = await getAuditLogs({ limit: 5000 });
       setLogs(fetchedLogs);
     } catch (error) {
       console.error('Failed to fetch audit logs:', error);
@@ -50,10 +89,125 @@ function AuditLogsContent() {
   useEffect(() => {
     if (isAdmin) {
       fetchLogs();
+      fetchNames();
     } else if (user) {
       setLoading(false); // Stop loading to trigger redirect
     }
   }, [isAdmin, user]);
+
+  const totalPages = Math.ceil(logs.length / ITEMS_PER_PAGE);
+  const paginatedLogs = logs.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  const resolveName = (id: string) => {
+    return idToNameMap.get(id) || id;
+  };
+
+  const renderDetails = (log: AuditLog) => {
+    if (!log.metadata) return <p className="text-muted-foreground">No details available.</p>;
+
+    let metadata: any;
+    try {
+      metadata = JSON.parse(log.metadata);
+    } catch {
+      return <pre className="text-xs">{log.metadata}</pre>;
+    }
+
+    if (log.action === 'FORM_CONFIG_UPDATE' && metadata.changes) {
+      const { added, removed, modified } = metadata.changes;
+      return (
+        <div className="space-y-4">
+          {metadata.isCreation && (
+            <div className="p-2 bg-blue-50 text-blue-700 rounded text-sm mb-2">
+              Initial Form Configuration Created
+            </div>
+          )}
+
+          {added && added.length > 0 && (
+            <div>
+              <h4 className="font-semibold text-green-600 mb-2">Added Fields</h4>
+              <ul className="list-disc pl-5 space-y-1 text-sm">
+                {added.map((f: any) => (
+                  <li key={f.key}>
+                    <span className="font-medium">{f.label}</span> ({f.type})
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {removed && removed.length > 0 && (
+            <div>
+              <h4 className="font-semibold text-red-600 mb-2">Removed Fields</h4>
+              <ul className="list-disc pl-5 space-y-1 text-sm">
+                {removed.map((f: any) => (
+                  <li key={f.key}>
+                    <span className="font-medium">{f.label}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {modified && modified.length > 0 && (
+            <div>
+              <h4 className="font-semibold text-amber-600 mb-2">Modified Fields</h4>
+              <div className="space-y-3">
+                {modified.map((m: any) => (
+                  <div key={m.key} className="text-sm border-l-2 border-amber-200 pl-3">
+                    <p className="font-medium">{m.label}</p>
+                    <ul className="mt-1 space-y-1 text-muted-foreground">
+                      {Object.entries(m.changes).map(([prop, change]: [string, any]) => (
+                        <li key={prop}>
+                          <span className="font-mono text-xs">{prop}</span>:
+                          <span className="line-through mx-1">{String(change.from)}</span>
+                          →
+                          <span className="font-semibold mx-1 text-foreground">{String(change.to)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!added?.length && !removed?.length && !modified?.length && !metadata.isCreation && (
+             <p className="text-muted-foreground text-sm">No field changes detected (version update only).</p>
+          )}
+        </div>
+      );
+    }
+
+    // Generic JSON renderer with ID resolution
+    return (
+      <div className="space-y-2">
+        {Object.entries(metadata).map(([key, value]) => {
+          if (key === 'changes' || key === 'isCreation') return null; // Skip internal fields if not handled above
+
+          let displayValue = String(value);
+
+          // Try to resolve IDs in arrays (e.g. branchIds)
+          if (Array.isArray(value)) {
+             displayValue = value.map(v => resolveName(String(v))).join(', ');
+          }
+          // Try to resolve ID in string (if it looks like an ID and exists in map)
+          else if (typeof value === 'string' && idToNameMap.has(value)) {
+             displayValue = resolveName(value);
+          }
+
+          return (
+            <div key={key} className="grid grid-cols-3 gap-2 text-sm border-b py-2 last:border-0">
+              <span className="font-medium text-muted-foreground">{key}</span>
+              <span className="col-span-2 break-all">{displayValue}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   if (loading) {
     return (
@@ -111,7 +265,7 @@ function AuditLogsContent() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  logs.map((log) => (
+                  paginatedLogs.map((log) => (
                     <TableRow key={log.$id}>
                       <TableCell className="whitespace-nowrap font-medium">
                         {new Date(log.performedAt).toLocaleString()}
@@ -133,12 +287,16 @@ function AuditLogsContent() {
                         </span>
                       </TableCell>
                       <TableCell>{log.targetType}</TableCell>
-                      <TableCell className="max-w-xs truncate">
-                        {log.metadata ? (
-                          <span title={log.metadata} className="text-muted-foreground text-sm">
-                            {log.metadata}
-                          </span>
-                        ) : '-'}
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedLog(log)}
+                          className="flex items-center gap-1"
+                        >
+                          <Eye className="h-3 w-3" />
+                          View Details
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))
@@ -146,8 +304,57 @@ function AuditLogsContent() {
               </TableBody>
             </Table>
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-end space-x-2 py-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </Button>
+              <div className="text-sm font-medium">
+                Page {currentPage} of {totalPages}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Audit Log Details</DialogTitle>
+            <DialogDescription>
+              {selectedLog && (
+                <span className="flex flex-col gap-1">
+                  <span>
+                    Action: <span className="font-medium text-foreground">{selectedLog.action}</span>
+                  </span>
+                  <span>
+                    Performed by: <span className="font-medium text-foreground">{selectedLog.actorName}</span> on {new Date(selectedLog.performedAt).toLocaleString()}
+                  </span>
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-4">
+            {selectedLog && renderDetails(selectedLog)}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

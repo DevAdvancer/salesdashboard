@@ -37,6 +37,14 @@ describe('Admin Manager Creation Authorization', () => {
     branchIds: ['branch-1', 'branch-2'],
   };
 
+  const mockCurrentUser: any = {
+    $id: 'admin-123',
+    name: 'Admin User',
+    email: 'admin@example.com',
+    role: 'admin',
+    branchIds: [],
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID = 'test-database';
@@ -61,7 +69,7 @@ describe('Admin Manager Creation Authorization', () => {
       (account.create as jest.Mock).mockResolvedValue({ $id: 'manager-456' });
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedManager);
 
-      const result = await createManager(mockManagerInput);
+      const result = await createManager(mockManagerInput, mockCurrentUser);
 
       // Verify success
       expect(result.role).toBe('manager');
@@ -115,7 +123,7 @@ describe('Admin Manager Creation Authorization', () => {
       (account.create as jest.Mock).mockResolvedValue({ $id: 'manager-456' });
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedManager);
 
-      await createManager(mockManagerInput);
+      await createManager(mockManagerInput, mockCurrentUser);
 
       // Verify permissions include read and update for the manager user
       expect(databases.createDocument).toHaveBeenCalledWith(
@@ -151,7 +159,7 @@ describe('Admin Manager Creation Authorization', () => {
       (account.create as jest.Mock).mockResolvedValue({ $id: 'manager-456' });
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedManager);
 
-      const result = await createManager(inputWithMultipleBranches);
+      const result = await createManager(inputWithMultipleBranches, mockCurrentUser);
 
       expect(result.branchIds).toEqual(['branch-1', 'branch-2', 'branch-3']);
       expect(databases.createDocument).toHaveBeenCalledWith(
@@ -173,7 +181,7 @@ describe('Admin Manager Creation Authorization', () => {
 
       (account.create as jest.Mock).mockRejectedValue(duplicateError);
 
-      await expect(createManager(mockManagerInput)).rejects.toThrow(
+      await expect(createManager(mockManagerInput, mockCurrentUser)).rejects.toThrow(
         'A user with this email already exists'
       );
     });
@@ -184,7 +192,7 @@ describe('Admin Manager Creation Authorization', () => {
         branchIds: [],
       };
 
-      await expect(createManager(inputWithNoBranches)).rejects.toThrow(
+      await expect(createManager(inputWithNoBranches, mockCurrentUser)).rejects.toThrow(
         'At least one branch must be assigned'
       );
 
@@ -198,14 +206,14 @@ describe('Admin Manager Creation Authorization', () => {
         new Error('Database connection failed')
       );
 
-      await expect(createManager(mockManagerInput)).rejects.toThrow();
+      await expect(createManager(mockManagerInput, mockCurrentUser)).rejects.toThrow();
     });
 
     it('should handle network errors during account creation', async () => {
       const networkError = new Error('Network error');
       (account.create as jest.Mock).mockRejectedValue(networkError);
 
-      await expect(createManager(mockManagerInput)).rejects.toThrow();
+      await expect(createManager(mockManagerInput, mockCurrentUser)).rejects.toThrow();
     });
   });
 
@@ -231,7 +239,7 @@ describe('Admin Manager Creation Authorization', () => {
       (account.create as jest.Mock).mockResolvedValue({ $id: 'manager-456' });
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedManager);
 
-      const result = await createManager(inputWithOneBranch);
+      const result = await createManager(inputWithOneBranch, mockCurrentUser);
 
       expect(result.branchIds).toEqual(['branch-1']);
     });
@@ -252,7 +260,7 @@ describe('Admin Manager Creation Authorization', () => {
       (account.create as jest.Mock).mockResolvedValue({ $id: 'manager-456' });
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedManager);
 
-      const result = await createManager(mockManagerInput);
+      const result = await createManager(mockManagerInput, mockCurrentUser);
 
       expect(result.managerId).toBeNull();
       expect(result.teamLeadId).toBeNull();
@@ -281,7 +289,7 @@ describe('Admin Manager Creation Authorization', () => {
       (account.create as jest.Mock).mockResolvedValue({ $id: 'manager-456' });
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedManager);
 
-      const result = await createManager(inputWithSpecialChars);
+      const result = await createManager(inputWithSpecialChars, mockCurrentUser);
 
       expect(result.name).toBe("O'Brien-Smith");
       expect(result.email).toBe('manager+test@example.com');
@@ -305,7 +313,7 @@ describe('Admin Manager Creation Authorization', () => {
       (account.create as jest.Mock).mockResolvedValue({ $id: 'manager-456' });
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedManager);
 
-      const result = await createManager(mockManagerInput);
+      const result = await createManager(mockManagerInput, mockCurrentUser);
 
       expect(result.role).toBe('manager');
       expect(databases.createDocument).toHaveBeenCalledWith(
@@ -335,7 +343,7 @@ describe('Admin Manager Creation Authorization', () => {
       (account.create as jest.Mock).mockResolvedValue({ $id: 'manager-456' });
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedManager);
 
-      await createManager(mockManagerInput);
+      await createManager(mockManagerInput, mockCurrentUser);
 
       // Verify managerId and teamLeadId are explicitly set to null
       expect(databases.createDocument).toHaveBeenCalledWith(

@@ -15,7 +15,7 @@ const FORM_CONFIG_DOC_ID = 'current';
  */
 export const DEFAULT_FIELDS: FormField[] = [
   { id: '1', type: 'text', label: 'First Name', key: 'firstName', required: true, visible: true, order: 1 },
-  { id: '2', type: 'text', label: 'Last Name', key: 'lastName', required: true, visible: true, order: 2 },
+  { id: '2', type: 'text', label: 'Last Name', key: 'lastName', required: false, visible: true, order: 2 },
   { id: '3', type: 'email', label: 'Email', key: 'email', required: true, visible: true, order: 3 },
   { id: '4', type: 'phone', label: 'Phone', key: 'phone', required: false, visible: true, order: 4 },
   { id: '5', type: 'text', label: 'Company', key: 'company', required: false, visible: true, order: 5 },
@@ -112,6 +112,68 @@ export async function getFormConfig(): Promise<{ fields: FormField[]; version: n
 }
 
 /**
+ * Calculate the difference between old and new field configurations
+ */
+function calculateFieldDiff(oldFields: FormField[], newFields: FormField[]) {
+  const added: FormField[] = [];
+  const removed: FormField[] = [];
+  const modified: { key: string; label: string; changes: any }[] = [];
+
+  const oldMap = new Map(oldFields.map(f => [f.key, f]));
+  const newMap = new Map(newFields.map(f => [f.key, f]));
+
+  // Find added and modified fields
+  for (const newField of newFields) {
+    const oldField = oldMap.get(newField.key);
+    if (!oldField) {
+      added.push(newField);
+    } else {
+      const changes: any = {};
+      let hasChanges = false;
+
+      // Check specific properties
+      if (oldField.label !== newField.label) {
+        changes.label = { from: oldField.label, to: newField.label };
+        hasChanges = true;
+      }
+      if (oldField.required !== newField.required) {
+        changes.required = { from: oldField.required, to: newField.required };
+        hasChanges = true;
+      }
+      if (oldField.visible !== newField.visible) {
+        changes.visible = { from: oldField.visible, to: newField.visible };
+        hasChanges = true;
+      }
+      if (oldField.order !== newField.order) {
+        changes.order = { from: oldField.order, to: newField.order };
+        hasChanges = true;
+      }
+      if (JSON.stringify(oldField.options) !== JSON.stringify(newField.options)) {
+        changes.options = { from: oldField.options, to: newField.options };
+        hasChanges = true;
+      }
+
+      if (hasChanges) {
+        modified.push({
+          key: newField.key,
+          label: newField.label,
+          changes
+        });
+      }
+    }
+  }
+
+  // Find removed fields
+  for (const oldField of oldFields) {
+    if (!newMap.has(oldField.key)) {
+      removed.push(oldField);
+    }
+  }
+
+  return { added, removed, modified };
+}
+
+/**
  * Update the form configuration
  *
  * This function updates the form configuration with new fields.
@@ -150,13 +212,18 @@ export async function updateFormConfig(
 
       // Log audit
       if (managerName) {
+        const diff = calculateFieldDiff(currentConfig.fields, fields);
         await logAction({
             action: 'FORM_CONFIG_UPDATE',
             actorId: managerId,
             actorName: managerName,
             targetId: FORM_CONFIG_DOC_ID,
             targetType: 'FORM_CONFIG',
-            metadata: { version: newVersion, fieldCount: fields.length }
+            metadata: {
+              version: newVersion,
+              fieldCount: fields.length,
+              changes: diff
+            }
         });
       }
 
@@ -188,16 +255,27 @@ export async function updateFormConfig(
         );
 
         // Log audit
-        if (managerName) {
-            await logAction({
-                action: 'FORM_CONFIG_UPDATE',
-                actorId: managerId,
-                actorName: managerName,
-                targetId: FORM_CONFIG_DOC_ID,
-                targetType: 'FORM_CONFIG',
-                metadata: { version: newVersion, fieldCount: fields.length, isCreation: true }
-            });
-        }
+      if (managerName) {
+        // For creation, everything is "added"
+        const diff = {
+          added: fields,
+          removed: [],
+          modified: []
+        };
+        await logAction({
+            action: 'FORM_CONFIG_UPDATE',
+            actorId: managerId,
+            actorName: managerName,
+            targetId: FORM_CONFIG_DOC_ID,
+            targetType: 'FORM_CONFIG',
+            metadata: {
+              version: newVersion,
+              fieldCount: fields.length,
+              isCreation: true,
+              changes: diff
+            }
+        });
+      }
 
         return {
           fields,

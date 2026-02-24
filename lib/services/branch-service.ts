@@ -44,6 +44,10 @@ export async function createBranch(input: CreateBranchInput): Promise<Branch> {
   }
 }
 
+export async function getBranchById(branchId: string): Promise<Branch> {
+  return getBranch(branchId);
+}
+
 /**
  * Get a branch by ID
  *

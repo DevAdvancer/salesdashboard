@@ -32,7 +32,7 @@ export const DEFAULT_FIELDS: FormField[] = [
     type: 'text',
     label: 'Last Name',
     key: 'lastName',
-    required: true,
+    required: false,
     visible: true,
     order: 2
   },

@@ -24,15 +24,26 @@ function TreeNode({ user, allUsers, level = 0 }: { user: User; allUsers: User[];
   const directReports = allUsers.filter((u) => {
     // Manager sees Team Leads AND direct-report Agents (agents with no TL but assigned to this manager)
     if (user.role === 'manager') {
-        return (u.managerId === user.$id && u.role === 'team_lead') || 
-               (u.managerId === user.$id && u.role === 'agent' && !u.teamLeadId);
+        const isAssigned = (u.managerIds && u.managerIds.includes(user.$id)) || u.managerId === user.$id;
+        return (isAssigned && u.role === 'team_lead') ||
+               (isAssigned && u.role === 'agent' && !u.teamLeadId);
     }
     // Team Lead sees assigned Agents
     if (user.role === 'team_lead') return u.teamLeadId === user.$id && u.role === 'agent';
     return false;
   });
 
-  const hasChildren = directReports.length > 0;
+  // Sort children: Team Leads first, then Agents. Alphabetically within roles.
+  const sortedReports = directReports.sort((a, b) => {
+    // Priority: Team Leads < Agents
+    if (a.role === 'team_lead' && b.role !== 'team_lead') return -1;
+    if (a.role !== 'team_lead' && b.role === 'team_lead') return 1;
+
+    // Secondary: Alphabetical by Name
+    return a.name.localeCompare(b.name);
+  });
+
+  const hasChildren = sortedReports.length > 0;
 
   return (
     <div className="relative pl-6">
@@ -75,7 +86,7 @@ function TreeNode({ user, allUsers, level = 0 }: { user: User; allUsers: User[];
 
       {isExpanded && hasChildren && (
         <div className="relative border-l border-border ml-6 pl-6">
-          {directReports.map((child) => (
+          {sortedReports.map((child) => (
             <TreeNode key={child.$id} user={child} allUsers={allUsers} level={level + 1} />
           ))}
         </div>
@@ -120,6 +131,7 @@ function HierarchyContent() {
           email: doc.email,
           role: doc.role,
           managerId: doc.managerId || null,
+          managerIds: doc.managerIds || [],
           teamLeadId: doc.teamLeadId || null,
           branchIds: doc.branchIds || [],
           branchId: doc.branchId || null,

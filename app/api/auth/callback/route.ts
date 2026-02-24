@@ -45,8 +45,8 @@ export async function GET(request: NextRequest) {
       });
     }
     
-    // Redirect back to the mock page
-    return NextResponse.redirect(new URL("/mock", request.url));
+    // Redirect back to the dashboard
+    return NextResponse.redirect(new URL("/dashboard", request.url));
 
   } catch (error: any) {
     console.error("Token Exchange Error:", error);
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
     if (errorDetails.includes("AADSTS54005") || errorDetails.includes("already redeemed")) {
       const cookieStore = await cookies();
       if (cookieStore.get("outlook_access_token")) {
-        return NextResponse.redirect(new URL("/mock", request.url));
+        return NextResponse.redirect(new URL("/dashboard", request.url));
       }
     }
 
