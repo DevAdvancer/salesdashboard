@@ -21,6 +21,10 @@ import { TableSkeleton } from '@/components/ui/skeleton';
 import { handleError } from '@/lib/utils/error-handler';
 import { useToast } from '@/components/ui/use-toast';
 import { ProtectedRoute } from '@/components/protected-route';
+// import { databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite'; // Removed client-side DB usage
+// import { Query, ID } from 'appwrite';
+import { Clock, RefreshCw, AlertCircle } from 'lucide-react';
+import { getMockAttempts, recordMockAttempt } from '@/app/actions/mock'; // Import Server Actions
 // import { useMsal } from "@azure/msal-react";
 // import { loginRequest } from "@/lib/msal-config";
 
@@ -55,6 +59,14 @@ const INITIAL_FORM_DATA: MockFormData = {
   company: 'Silverspace Inc.',
 };
 
+interface MockAttempt {
+    $id: string;
+    leadId: string;
+    userId: string;
+    attemptCount: number;
+    lastAttemptAt: string;
+}
+
 function MockContent() {
   const { user, loading } = useAuth();
   const { toast } = useToast();
@@ -72,6 +84,10 @@ function MockContent() {
   const [isOutlookConnected, setIsOutlookConnected] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
+
+  // Mock Attempts State
+  const [mockAttempts, setMockAttempts] = useState<Map<string, MockAttempt>>(new Map());
+  const [loadingAttempts, setLoadingAttempts] = useState(false);
 
   const handleConnectOutlook = async () => {
     window.location.href = '/api/auth/login';
@@ -105,6 +121,33 @@ function MockContent() {
     }
   }, []);
 
+  const loadMockAttempts = useCallback(async (leadIds: string[]) => {
+      if (!leadIds.length || !user) return;
+
+      try {
+          setLoadingAttempts(true);
+          // Use Server Action instead of client DB call
+          const attempts = await getMockAttempts(user.$id, leadIds);
+
+          const attemptsMap = new Map<string, MockAttempt>();
+          attempts.forEach((doc: any) => {
+              attemptsMap.set(doc.leadId, {
+                  $id: doc.$id,
+                  leadId: doc.leadId,
+                  userId: doc.userId,
+                  attemptCount: doc.attemptCount,
+                  lastAttemptAt: doc.lastAttemptAt
+              });
+          });
+
+          setMockAttempts(prev => new Map([...prev, ...attemptsMap]));
+      } catch (err) {
+          console.error('Error loading mock attempts:', err);
+      } finally {
+          setLoadingAttempts(false);
+      }
+  }, [user]);
+
   const loadLeads = useCallback(async () => {
     if (!user) return;
 
@@ -130,23 +173,30 @@ function MockContent() {
     }
   }, [user, loadLeads]);
 
+  // Load attempts when filtered leads change (or pagination changes)
+  useEffect(() => {
+      if (filteredLeads.length > 0) {
+          const pageLeads = filteredLeads.slice(
+            (currentPage - 1) * ITEMS_PER_PAGE,
+            currentPage * ITEMS_PER_PAGE
+          );
+          const leadIds = pageLeads.map(l => l.$id);
+          loadMockAttempts(leadIds);
+      }
+  }, [filteredLeads, currentPage, loadMockAttempts]);
+
   useEffect(() => {
     let result = leads;
 
     if (filter === 'mock_created') {
-      // Assuming we'll track mock creation status later.
-      // For now, this is a placeholder or relies on a field we might need to add to LeadData
-      // Or we can check if there's a specific tag or note.
-      // Since we don't have a direct field, I'll leave it as all for now or implement if a field exists.
-      // Ideally, we should add a 'mockCreated' flag to lead data.
-      result = result.filter(lead => {
-         const data = JSON.parse(lead.data);
-         return data.mockCreated === true;
+       result = result.filter(lead => {
+         const attempt = mockAttempts.get(lead.$id);
+         return attempt && attempt.attemptCount > 0;
       });
     } else if (filter === 'mock_not_created') {
       result = result.filter(lead => {
-         const data = JSON.parse(lead.data);
-         return !data.mockCreated;
+         const attempt = mockAttempts.get(lead.$id);
+         return !attempt || attempt.attemptCount === 0;
       });
     }
 
@@ -165,14 +215,52 @@ function MockContent() {
     }
 
     setFilteredLeads(result);
-  }, [leads, filter, searchQuery]);
+  }, [leads, filter, searchQuery, mockAttempts]);
 
   // Reset file input key to force re-render and clear file
   const [fileInputKey, setFileInputKey] = useState(Date.now());
 
   const [isPreparingMock, setIsPreparingMock] = useState(false);
 
+  const getCooldownStatus = (leadId: string) => {
+      const attempt = mockAttempts.get(leadId);
+      if (!attempt) return { canCreate: true, remainingTime: 0, count: 0 };
+
+      const MAX_ATTEMPTS = 2;
+      const COOLDOWN_MINUTES = 30;
+
+      if (attempt.attemptCount >= MAX_ATTEMPTS) {
+          return { canCreate: false, remainingTime: 0, count: attempt.attemptCount, isMaxed: true };
+      }
+
+      const lastAttempt = new Date(attempt.lastAttemptAt);
+      const now = new Date();
+      const diffMs = now.getTime() - lastAttempt.getTime();
+      const diffMinutes = diffMs / (1000 * 60);
+
+      if (diffMinutes < COOLDOWN_MINUTES) {
+          return {
+              canCreate: false,
+              remainingTime: Math.ceil(COOLDOWN_MINUTES - diffMinutes),
+              count: attempt.attemptCount
+          };
+      }
+
+      return { canCreate: true, remainingTime: 0, count: attempt.attemptCount };
+  };
+
   const handleCreateMock = async (lead: Lead) => {
+    // Check restrictions again
+    const status = getCooldownStatus(lead.$id);
+    if (!status.canCreate) {
+        if (status.isMaxed) {
+             toast({ title: 'Limit Reached', description: 'Maximum of 2 mock attempts allowed.', variant: 'destructive' });
+        } else {
+             toast({ title: 'Cooldown Active', description: `Please wait ${status.remainingTime} minutes before retrying.`, variant: 'destructive' });
+        }
+        return;
+    }
+
     try {
       setIsPreparingMock(true);
       setSelectedLead(lead);
@@ -447,6 +535,32 @@ function MockContent() {
       const storedSignature = localStorage.getItem('mockSignature');
       const parsedSignature = storedSignature ? JSON.parse(storedSignature) : {};
 
+      // Update Mock Attempts Count using Server Action
+      if (user) {
+          try {
+              const updatedAttempt = await recordMockAttempt(user.$id, selectedLead.$id);
+
+              setMockAttempts(prev => new Map(prev).set(selectedLead.$id, {
+                  $id: updatedAttempt.$id,
+                  leadId: updatedAttempt.leadId,
+                  userId: updatedAttempt.userId,
+                  attemptCount: updatedAttempt.attemptCount,
+                  lastAttemptAt: updatedAttempt.lastAttemptAt
+              }));
+          } catch (e: any) {
+              console.error('Failed to record mock attempt:', e);
+              // If failed (e.g. limit reached), notify user but email was already sent?
+              // Ideally this should be checked BEFORE sending email, but we do optimistic check in handleCreateMock.
+              // If server rejects, it means race condition or tampering.
+          }
+      }
+
+      toast({
+        title: 'Success',
+        description: 'Email sent successfully.',
+      });
+
+      setIsModalOpen(false);
       setFormData({
           ...INITIAL_FORM_DATA,
           yourName: parsedSignature.yourName || '',
@@ -550,6 +664,10 @@ function MockContent() {
               <tbody>
                 {paginatedLeads.map((lead) => {
                   const leadData = JSON.parse(lead.data);
+                  const status = getCooldownStatus(lead.$id);
+                  const attempt = mockAttempts.get(lead.$id);
+                  const attemptsCount = attempt?.attemptCount || 0;
+
                   return (
                     <tr key={lead.$id} className="border-b hover:bg-muted/50 transition-colors">
                       <td className="p-4">
@@ -559,14 +677,49 @@ function MockContent() {
                       <td className="p-4">{leadData.phone || 'N/A'}</td>
                       <td className="p-4">{leadData.email || 'N/A'}</td>
                       <td className="p-4">{leadData.company || 'N/A'}</td>
-                      <td className="p-4">
-                        <Button
-                          size="sm"
-                          onClick={() => handleCreateMock(lead)}
-                          disabled={!isOutlookConnected || isPreparingMock}
-                        >
-                          {isPreparingMock && selectedLead?.$id === lead.$id ? 'Preparing...' : 'Create Mock'}
-                        </Button>
+                      <td className="p-4 flex items-center gap-2">
+                        {attemptsCount === 0 ? (
+                            <Button
+                                size="sm"
+                                onClick={() => handleCreateMock(lead)}
+                                disabled={!isOutlookConnected || isPreparingMock}
+                            >
+                                {isPreparingMock && selectedLead?.$id === lead.$id ? 'Preparing...' : 'Create Mock'}
+                            </Button>
+                        ) : (
+                            <div className="flex items-center gap-2">
+                                {/* Attempts count display removed as per request */}
+                                {attemptsCount < 2 && (
+                                    status.canCreate ? (
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => handleCreateMock(lead)}
+                                            disabled={!isOutlookConnected || isPreparingMock}
+                                        >
+                                            <RefreshCw className="h-3 w-3 mr-1" />
+                                            Retry
+                                        </Button>
+                                    ) : (
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            disabled
+                                            className="text-orange-500 border-orange-200 bg-orange-50"
+                                        >
+                                            <Clock className="h-3 w-3 mr-1" />
+                                            {status.remainingTime}m
+                                        </Button>
+                                    )
+                                )}
+                                {attemptsCount >= 2 && (
+                                    <span className="text-xs font-medium text-red-500 flex items-center">
+                                        <AlertCircle className="h-3 w-3 mr-1" />
+                                        Max Limit
+                                    </span>
+                                )}
+                            </div>
+                        )}
                       </td>
                     </tr>
                   );

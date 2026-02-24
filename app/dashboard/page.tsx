@@ -13,9 +13,10 @@ import {
 } from '@/components/ui/card';
 import { ProtectedRoute } from '@/components/protected-route';
 import { listLeads } from '@/lib/services/lead-service';
-import { getAgentsByManager } from '@/lib/services/user-service';
+import { getAgentsByManager, getTeamLeads } from '@/lib/services/user-service';
 import { getBranchById } from '@/lib/services/branch-service';
-import { FileText, Briefcase, Users, TrendingUp } from 'lucide-react';
+import { FileText, Briefcase, Users, TrendingUp, DollarSign } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 function DashboardContent() {
   const { user, isAdmin, isManager, isAgent, isTeamLead, loading } = useAuth();
@@ -24,8 +25,11 @@ function DashboardContent() {
     activeLeads: 0,
     closedLeads: 0,
     teamMembersCount: 0,
+    totalAmount: 0,
+    netAmount: 0,
     loading: true,
   });
+  const [amountData, setAmountData] = useState<any[]>([]);
   const [managerName, setManagerName] = useState<string | null>(null);
   const [teamLeadName, setTeamLeadName] = useState<string | null>(null);
   const [assignedAgents, setAssignedAgents] = useState<any[]>([]);
@@ -37,7 +41,7 @@ function DashboardContent() {
       try {
         const response = await fetch('/api/auth/status');
         const data = await response.json();
-        
+
         if (!data.connected) {
           // If not connected, redirect to login
           console.log('Outlook not connected, redirecting to login...');
@@ -83,7 +87,7 @@ function DashboardContent() {
           if (isTeamLead) {
             const { getAgentsByTeamLead } = await import('@/lib/services/user-service');
             const agents = await getAgentsByTeamLead(user.$id);
-            
+
             // Fetch branch names for each agent
             const agentsWithBranches = await Promise.all(agents.map(async (agent) => {
               if (agent.branchIds && agent.branchIds.length > 0) {
@@ -104,25 +108,68 @@ function DashboardContent() {
 
             teamMembersCount = agents.length;
             setAssignedAgents(agentsWithBranches);
-          } else {
+          } else if (isManager) {
             const { getUsersByBranches } = await import('@/lib/services/user-service');
             if (user.branchIds && user.branchIds.length > 0) {
               const users = await getUsersByBranches(user.branchIds);
-              if (isManager) {
-                teamMembersCount = users.filter(u => u.role === 'team_lead').length;
-              } else if (isAdmin) {
-                teamMembersCount = users.length;
-              }
+              teamMembersCount = users.filter(u => u.role === 'team_lead').length;
             }
+          } else if (isAdmin) {
+            const teamLeads = await getTeamLeads();
+            teamMembersCount = teamLeads.length;
           }
         }
+
+        // Calculate Amounts (Total and Net)
+        let totalAmount = 0;
+        let netAmount = 0;
+        const monthlyData: { [key: string]: { total: number; net: number } } = {};
+
+        // Process all leads (active + closed) for amounts
+        [...activeLeads, ...closedLeads].forEach(lead => {
+            let leadData: any;
+            try {
+                leadData = JSON.parse(lead.data);
+            } catch (e) { return; }
+
+            const amount = parseFloat(leadData.dealValue || '0') || 0;
+            // Assuming Net Amount is same as Total for now, or if there's a specific field like 'netValue'
+            // If netValue exists use it, else use dealValue
+            const net = parseFloat(leadData.netValue || leadData.dealValue || '0') || 0;
+
+            // Only add if amount > 0
+            if (amount > 0) {
+                totalAmount += amount;
+                netAmount += net;
+
+                // Group by Month for Chart
+                const date = new Date(lead.$createdAt || new Date());
+                const monthKey = date.toLocaleString('default', { month: 'short', year: 'numeric' });
+                
+                if (!monthlyData[monthKey]) {
+                    monthlyData[monthKey] = { total: 0, net: 0 };
+                }
+                monthlyData[monthKey].total += amount;
+                monthlyData[monthKey].net += net;
+            }
+        });
+
+        // Format chart data
+        const chartData = Object.entries(monthlyData).map(([name, data]) => ({
+            name,
+            Total: data.total,
+            Net: data.net
+        }));
 
         setMetrics({
           activeLeads: activeLeads.length,
           closedLeads: closedLeads.length,
           teamMembersCount,
+          totalAmount,
+          netAmount,
           loading: false,
         });
+        setAmountData(chartData);
       } catch (error) {
         console.error('Error fetching metrics:', error);
         setMetrics((prev) => ({ ...prev, loading: false }));
@@ -257,6 +304,49 @@ function DashboardContent() {
           </Card>
         )}
       </div>
+
+      {/* Amount Insights Graph (Admin Only) */}
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Financial Insights</CardTitle>
+            <CardDescription>Revenue overview over time</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div className="flex flex-col gap-1 p-4 border rounded-lg bg-card shadow-sm">
+                    <span className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        <DollarSign className="h-4 w-4" /> Total Deal Value
+                    </span>
+                    <span className="text-2xl font-bold">${metrics.totalAmount.toLocaleString()}</span>
+                </div>
+                <div className="flex flex-col gap-1 p-4 border rounded-lg bg-card shadow-sm">
+                    <span className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4" /> Net Revenue
+                    </span>
+                    <span className="text-2xl font-bold text-green-600">${metrics.netAmount.toLocaleString()}</span>
+                </div>
+            </div>
+
+            <div className="h-[300px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={amountData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip
+                            formatter={(value) => `$${Number(value).toLocaleString()}`}
+                            contentStyle={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}
+                        />
+                        <Legend />
+                        <Bar dataKey="Total" fill="#8884d8" name="Total Deal Value" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="Net" fill="#82ca9d" name="Net Revenue" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* User Info and Quick Actions */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

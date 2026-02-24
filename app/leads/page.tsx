@@ -14,6 +14,8 @@ import { TableSkeleton } from '@/components/ui/skeleton';
 import { handleError } from '@/lib/utils/error-handler';
 import { ProtectedRoute } from '@/components/protected-route';
 
+import { Download } from 'lucide-react';
+
 function LeadsContent() {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -30,8 +32,98 @@ function LeadsContent() {
   const [assignedToFilter, setAssignedToFilter] = useState('');
   const [dateFromFilter, setDateFromFilter] = useState('');
   const [dateToFilter, setDateToFilter] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
 
   const ITEMS_PER_PAGE = 10;
+
+  // Check if current user is Shashi Pathak
+  const isSpecialUser = user?.email === 'shashi.pathak@silverspaceinc.com';
+
+  const handleExport = () => {
+    if (!leads.length) return;
+    setIsExporting(true);
+
+    try {
+      // 1. Collect all unique keys from all leads' data
+      const allKeys = new Set<string>();
+      const parsedLeads = leads.map(lead => {
+        let data: any = {};
+        try {
+            data = JSON.parse(lead.data);
+        } catch (e) {
+            console.error('Failed to parse lead data', e);
+        }
+        
+        // Add all keys from this lead to the set
+        Object.keys(data).forEach(key => allKeys.add(key));
+        
+        return {
+            ...lead,
+            parsedData: data
+        };
+      });
+
+      // 2. Define standard headers we always want first
+      const standardHeaders = ['firstName', 'lastName', 'email', 'phone', 'company', 'status', 'sourceName', 'referralName'];
+      
+      // 3. Create final list of headers (standard + any others found)
+      // Filter out standard ones from allKeys to avoid duplicates, then spread the rest
+      const otherKeys = Array.from(allKeys).filter(key => !standardHeaders.includes(key));
+      
+      // Create display headers (Capitalized)
+      const displayHeaders = [
+          'First Name', 'Last Name', 'Email', 'Phone', 'Company', 'Status', 'Source Name', 'Referral Name', 'Created At',
+          ...otherKeys.map(k => k.charAt(0).toUpperCase() + k.slice(1).replace(/([A-Z])/g, ' $1').trim()) // Simple title case
+      ];
+
+      // 4. Map data rows
+      const rows = parsedLeads.map(lead => {
+        const data = lead.parsedData;
+        
+        // Smart mapping for Source and Referral
+        // Use sourceName if available, otherwise fall back to 'source' field
+        const sourceVal = data.sourceName || data.source || '';
+        // Use referralName if available, otherwise check common variations
+        const referralVal = data.referralName || data.referral || data['Referral Name'] || '';
+
+        // Build row array matching the order of displayHeaders
+        const row = [
+          data.firstName || '',
+          data.lastName || '',
+          data.email || '',
+          data.phone || '',
+          data.company || '',
+          lead.status || '',
+          sourceVal,    // Mapped Source Value
+          referralVal,  // Mapped Referral Value
+          lead.$createdAt ? new Date(lead.$createdAt).toLocaleDateString() : '',
+          ...otherKeys.map(key => data[key] || '') // Add values for other dynamic keys
+        ];
+
+        return row.map(cell => `"${String(cell).replace(/"/g, '""')}"`); // Escape quotes
+      });
+
+      // 5. Combine headers and rows
+      const csvContent = [
+        displayHeaders.join(','),
+        ...rows.map(row => row.join(','))
+      ].join('\n');
+
+      // Create download link
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `leads_export_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Export failed:', err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   useEffect(() => {
     if (!loading && !user) {
@@ -230,9 +322,22 @@ function LeadsContent() {
     <div className="container mx-auto">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <h1 className="text-2xl md:text-3xl font-bold">Active Leads</h1>
-        <Button onClick={() => router.push('/leads/new')}>
-          Create Lead
-        </Button>
+        <div className="flex items-center gap-2">
+            {isSpecialUser && (
+                <Button
+                    variant="outline"
+                    onClick={handleExport}
+                    disabled={isExporting || leads.length === 0}
+                    className="flex items-center gap-2"
+                >
+                    <Download className="h-4 w-4" />
+                    {isExporting ? 'Exporting...' : 'Export CSV'}
+                </Button>
+            )}
+            <Button onClick={() => router.push('/leads/new')}>
+              Create Lead
+            </Button>
+        </div>
       </div>
 
       {/* Filters Section */}
@@ -338,6 +443,12 @@ function LeadsContent() {
                       <th className="p-3 md:p-4 font-semibold">Name</th>
                       <th className="p-3 md:p-4 font-semibold hidden sm:table-cell">Email</th>
                       <th className="p-3 md:p-4 font-semibold">Status</th>
+                      {isSpecialUser && (
+                        <>
+                          <th className="p-3 md:p-4 font-semibold hidden lg:table-cell">Source</th>
+                          <th className="p-3 md:p-4 font-semibold hidden lg:table-cell">Referral</th>
+                        </>
+                      )}
                       {(user?.role === 'manager' || user?.role === 'team_lead') && (
                         <th className="p-3 md:p-4 font-semibold hidden md:table-cell">Assigned To</th>
                       )}
@@ -367,6 +478,16 @@ function LeadsContent() {
                               {lead.status}
                             </span>
                           </td>
+                          {isSpecialUser && (
+                            <>
+                              <td className="p-3 md:p-4 text-muted-foreground hidden lg:table-cell">
+                                {leadData.sourceName || leadData.source || '-'}
+                              </td>
+                              <td className="p-3 md:p-4 text-muted-foreground hidden lg:table-cell">
+                                {leadData.referralName || leadData.referral || leadData['Referral Name'] || '-'}
+                              </td>
+                            </>
+                          )}
                           {(user?.role === 'manager' || user?.role === 'team_lead') && (
                             <td className="p-3 md:p-4 text-muted-foreground hidden md:table-cell">
                               {lead.assignedToId ? (

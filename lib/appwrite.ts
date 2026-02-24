@@ -17,6 +17,7 @@ export const COLLECTIONS = {
   FORM_CONFIG: process.env.NEXT_PUBLIC_APPWRITE_FORM_CONFIG_COLLECTION_ID ?? 'form_config',
   ACCESS_CONFIG: process.env.NEXT_PUBLIC_APPWRITE_ACCESS_CONFIG_COLLECTION_ID ?? 'access_config',
   BRANCHES: process.env.NEXT_PUBLIC_APPWRITE_BRANCHES_COLLECTION_ID ?? 'branches',
+  MOCK_ATTEMPTS: process.env.NEXT_PUBLIC_APPWRITE_MOCK_ATTEMPTS_COLLECTION_ID ?? 'mock_attempts',
 };
 
 export { client };
