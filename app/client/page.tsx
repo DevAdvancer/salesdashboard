@@ -38,7 +38,6 @@ function HistoryContent() {
       const closedLeads = await listLeads(
         {
           isClosed: true,
-          status: filters.status,
           assignedToId: filters.agentId,
           dateFrom: filters.dateFrom,
           dateTo: filters.dateTo,
@@ -159,16 +158,6 @@ function HistoryContent() {
               onChange={(e) => handleFilterChange('dateTo', e.target.value)}
             />
           </div>
-          <div>
-            <Label htmlFor="status">Status</Label>
-            <Input
-              id="status"
-              type="text"
-              placeholder="Filter by status"
-              value={filters.status || ''}
-              onChange={(e) => handleFilterChange('status', e.target.value)}
-            />
-          </div>
           <div className="flex items-end">
             <Button
               onClick={clearFilters}
@@ -209,7 +198,7 @@ function HistoryContent() {
                     <tr
                       key={lead.$id}
                       className="border-b border-border hover:bg-accent/50 cursor-pointer transition-colors"
-                      onClick={() => router.push(`/history/${lead.$id}`)}
+                      onClick={() => router.push(`/client/${lead.$id}`)}
                     >
                       <td className="p-3 md:p-4">
                         {data.firstName} {data.lastName}
@@ -230,7 +219,7 @@ function HistoryContent() {
                           size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
-                            router.push(`/history/${lead.$id}`);
+                            router.push(`/client/${lead.$id}`);
                           }}
                         >
                           View

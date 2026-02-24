@@ -52,13 +52,13 @@ describe('Lead Service', () => {
       const input: CreateLeadInput = {
         data: mockLeadData,
         assignedToId: mockAgentId,
-        status: 'New',
+        status: 'Interested',
       };
 
       const mockCreatedLead: Lead = {
         $id: 'lead-123',
         data: JSON.stringify(mockLeadData),
-        status: 'New',
+        status: 'Interested',
         ownerId: mockManagerId,
         assignedToId: mockAgentId,
         isClosed: false,
@@ -76,7 +76,7 @@ describe('Lead Service', () => {
         'unique()',
         {
           data: JSON.stringify(mockLeadData),
-          status: 'New',
+          status: 'Interested',
           ownerId: mockManagerId,
           assignedToId: mockAgentId,
           branchId: null,

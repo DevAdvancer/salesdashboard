@@ -141,7 +141,7 @@ export async function updateLead(
 
     // Log audit
     if (actorId && actorName) {
-         await logAction({
+      await logAction({
             action: 'LEAD_UPDATE',
             actorId: actorId,
             actorName: actorName,

@@ -13,8 +13,8 @@ import { LeadAssignmentDropdown } from '@/components/lead-assignment-dropdown';
 
 interface DynamicLeadFormProps {
   formConfig: FormField[];
-  onSubmit: (data: Record<string, any>) => void | Promise<void>;
-  defaultValues?: Record<string, any>;
+  onSubmit: (data: Record<string, unknown>) => void | Promise<void>;
+  defaultValues?: Record<string, unknown>;
   submitLabel?: string;
   isLoading?: boolean;
 }
@@ -41,9 +41,9 @@ export function DynamicLeadForm({
   const { user, isAgent } = useAuth();
 
   // State for the lead assignment dropdown (Requirement 4.2, 4.3, 4.4)
-  // Agents auto-assign to themselves; managers/team leads pick from dropdown
+  // Agents auto-assign to themselves; managers/team leads default to creator
   const [assignedToId, setAssignedToId] = useState<string | null>(
-    isAgent && user ? user.$id : null
+    isAgent && user ? user.$id : (user ? user.$id : null)
   );
 
   // Filter out ownerId and assignedToId from configurable form fields (Requirement 4.5)
@@ -72,7 +72,7 @@ export function DynamicLeadForm({
     defaultValues,
   });
 
-  const handleFormSubmit = async (data: Record<string, any>) => {
+  const handleFormSubmit = async (data: Record<string, unknown>) => {
     // Inject assignedToId into the submitted data (Requirement 4.2, 4.3, 4.4)
     const submissionData = {
       ...data,

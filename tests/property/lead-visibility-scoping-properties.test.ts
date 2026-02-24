@@ -52,7 +52,7 @@ const leadArb = (branchPool: string[], userIdPool: string[]) =>
   fc.record({
     $id: leadIdArb,
     data: fc.constant('{"name":"Test Lead"}'),
-    status: fc.constantFrom('New', 'Contacted', 'Qualified'),
+    status: fc.constantFrom('Interested', 'Not-Interested', 'Pipeline', 'Prospect', 'Signed'),
     ownerId: fc.constantFrom(...userIdPool),
     assignedToId: fc.oneof(fc.constantFrom(...userIdPool), fc.constant(null as string | null)),
     branchId: fc.oneof(fc.constantFrom(...branchPool), fc.constant(null as string | null)),

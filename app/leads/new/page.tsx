@@ -100,11 +100,14 @@ function NewLeadContent() {
       // Extract assignedToId added by DynamicLeadForm and prevent it from being stored in data JSON
       const { assignedToId, ...sanitizedData } = data as { assignedToId?: string } & Record<string, any>;
 
-      // Create lead with auto-set owner and optional assigned agent
+      // Auto-assign to creator if no one is selected
+      const finalAssignedToId = assignedToId || user.$id;
+
+      // Create lead with auto-set owner and assigned agent (defaults to creator)
       await createLead(user.$id, {
         data: sanitizedData,
-        assignedToId: assignedToId || undefined,
-        status: sanitizedData.status || 'New',
+        assignedToId: finalAssignedToId,
+        status: sanitizedData.status || 'Interested',
         branchId,
       }, user.name);
 

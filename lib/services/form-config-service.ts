@@ -37,7 +37,7 @@ export const DEFAULT_FIELDS: FormField[] = [
     required: true,
     visible: true,
     order: 7,
-    options: ['New', 'Contacted', 'Qualified', 'Proposal', 'Negotiation'],
+    options: ['Interested', 'Not-Interested', 'Pipeline', 'Prospect', 'Signed'],
   },
   { id: '10', type: 'text', label: 'Legal Name', key: 'legalName', required: false, visible: true, order: 8 },
   {

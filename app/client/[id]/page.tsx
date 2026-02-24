@@ -75,12 +75,12 @@ function HistoryDetailContent() {
 
         setOwner(ownerUser);
         setAssignedTo(assignedUser);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Error loading related users:', err);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading lead:', err);
-      setError(err.message || 'Failed to load lead');
+      setError(err instanceof Error ? err.message : 'Failed to load lead');
     } finally {
       setIsLoading(false);
     }
@@ -90,7 +90,7 @@ function HistoryDetailContent() {
     try {
       const config = await getFormConfig();
       setFormFields(config.fields.sort((a, b) => a.order - b.order));
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading form config:', err);
     }
   };
@@ -107,11 +107,11 @@ function HistoryDetailContent() {
       });
       setShowReopenDialog(false);
       router.push(`/leads/${leadId}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error reopening lead:', err);
       toast({
         title: 'Error',
-        description: err.message || 'Failed to reopen lead',
+        description: err instanceof Error ? err.message : 'Failed to reopen lead',
         variant: 'destructive',
       });
     } finally {
@@ -193,7 +193,7 @@ function HistoryDetailContent() {
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground">{error || 'Client record not found'}</p>
-            <Button onClick={() => router.push('/history')} className="mt-4">
+            <Button onClick={() => router.push('/client')} className="mt-4">
               Back to Clients
             </Button>
           </CardContent>
@@ -208,7 +208,7 @@ function HistoryDetailContent() {
         <div>
           <Button
             variant="outline"
-            onClick={() => router.push('/history')}
+            onClick={() => router.push('/client')}
             className="mb-2"
           >
             ← Back to Clients

@@ -20,7 +20,7 @@ function simulateCreateLead(creatingUserId: string, input: CreateLeadInput): Lea
   return {
     $id: 'lead-' + Math.random().toString(36).slice(2),
     data: JSON.stringify(input.data),
-    status: input.status || 'New',
+    status: input.status || 'Interested',
     ownerId,
     assignedToId: input.assignedToId || null,
     branchId: input.branchId || null,

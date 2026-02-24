@@ -228,11 +228,11 @@ function LeadsContent() {
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
                 <option value="">All Statuses</option>
-                <option value="New">New</option>
-                <option value="Contacted">Contacted</option>
-                <option value="Qualified">Qualified</option>
-                <option value="Proposal">Proposal</option>
-                <option value="Negotiation">Negotiation</option>
+                <option value="Interested">Interested</option>
+                <option value="Not-Interested">Not-Interested</option>
+                <option value="Pipeline">Pipeline</option>
+                <option value="Prospect">Prospect</option>
+                <option value="Signed">Signed</option>
               </select>
             </div>
 

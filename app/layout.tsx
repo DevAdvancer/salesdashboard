@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/contexts/auth-context";
 import { AccessControlProvider } from "@/lib/contexts/access-control-context";
+import { AzureMsalProvider } from "@/components/azure-msal-provider";
 import { Toaster } from "@/components/ui/toaster";
 import { AppLayout } from "@/components/app-layout";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -32,14 +33,16 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ErrorBoundary>
-          <AuthProvider>
-            <AccessControlProvider>
-              <AppLayout>{children}</AppLayout>
-              <Toaster />
-            </AccessControlProvider>
-          </AuthProvider>
-        </ErrorBoundary>
+        <AzureMsalProvider>
+          <ErrorBoundary>
+            <AuthProvider>
+              <AccessControlProvider>
+                <AppLayout>{children}</AppLayout>
+                <Toaster />
+              </AccessControlProvider>
+            </AuthProvider>
+          </ErrorBoundary>
+        </AzureMsalProvider>
       </body>
     </html>
   );

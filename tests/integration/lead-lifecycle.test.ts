@@ -50,7 +50,7 @@ describe('Integration: Complete Lead Lifecycle', () => {
     email: 'alice@example.com',
     phone: '+1234567890',
     company: 'TechCorp',
-    status: 'New',
+    status: 'Interested',
   };
 
   let currentLead: Lead;
@@ -64,7 +64,7 @@ describe('Integration: Complete Lead Lifecycle', () => {
     const createdLead: Lead = {
       $id: 'lead-lifecycle-1',
       data: JSON.stringify(leadData),
-      status: 'New',
+      status: 'Interested',
       ownerId: managerId,
       assignedToId: null,
       isClosed: false,
@@ -77,7 +77,7 @@ describe('Integration: Complete Lead Lifecycle', () => {
 
     currentLead = await createLead(managerId, {
       data: leadData,
-      status: 'New',
+      status: 'Interested',
     });
 
     expect(currentLead.$id).toBe('lead-lifecycle-1');

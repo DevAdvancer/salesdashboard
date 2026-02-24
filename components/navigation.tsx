@@ -16,6 +16,7 @@ import {
   Menu,
   X,
   ClipboardList,
+  Mail,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -51,10 +52,16 @@ const NAV_ITEMS: NavItem[] = [
     icon: FileText,
   },
   {
-    key: 'history',
+    key: 'client',
     label: 'Client',
-    href: '/history',
+    href: '/client',
     icon: Briefcase,
+  },
+  {
+    key: 'mock',
+    label: 'Mock',
+    href: '/mock',
+    icon: Mail,
   },
   {
     key: 'user-management',
@@ -106,33 +113,6 @@ export function Navigation() {
     canAccess(item.key as ComponentKey)
   );
 
-  const NavLinks = () => (
-    <>
-      {visibleItems.map((item) => {
-        const Icon = item.icon;
-        const isActive = pathname === item.href;
-
-        return (
-          <button
-            key={item.key}
-            onClick={() => {
-              router.push(item.href);
-              setMobileMenuOpen(false);
-            }}
-            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors w-full text-left ${
-              isActive
-                ? 'bg-primary text-primary-foreground'
-                : 'hover:bg-accent hover:text-accent-foreground'
-            }`}
-          >
-            <Icon className="h-5 w-5" />
-            <span>{item.label}</span>
-          </button>
-        );
-      })}
-    </>
-  );
-
   return (
     <>
       {/* Mobile menu button */}
@@ -172,7 +152,28 @@ export function Navigation() {
 
         {/* Navigation */}
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-          <NavLinks />
+          {visibleItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = pathname === item.href;
+
+            return (
+              <button
+                key={item.key}
+                onClick={() => {
+                  router.push(item.href);
+                  setMobileMenuOpen(false);
+                }}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors w-full text-left ${
+                  isActive
+                    ? 'bg-primary text-primary-foreground'
+                    : 'hover:bg-accent hover:text-accent-foreground'
+                }`}
+              >
+                <Icon className="h-5 w-5" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
         </nav>
 
         {/* User info and logout */}
