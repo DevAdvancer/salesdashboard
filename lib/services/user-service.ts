@@ -24,9 +24,6 @@ function mapDocToUser(doc: any): User {
 }
 
 /**
- * Create a new team lead account
- *
-/**
  * Create a new manager account (admin only).
  * Admin can assign any combination of active branches.
  */
@@ -93,22 +90,36 @@ export async function createTeamLead(input: CreateTeamLeadInput, currentUser: Us
   }
 
   try {
-    const managerDoc = await databases.getDocument(
-      DATABASE_ID,
-      USERS_COLLECTION_ID,
-      managerId
-    );
-    const managerBranchIds: string[] = Array.isArray(managerDoc.branchIds) ? managerDoc.branchIds : [];
+    let managerBranchIds: string[] = [];
+    if (managerId) {
+      const managerDoc = await databases.getDocument(
+        DATABASE_ID,
+        USERS_COLLECTION_ID,
+        managerId
+      );
+      managerBranchIds = Array.isArray(managerDoc.branchIds) ? managerDoc.branchIds : [];
 
-    // Validate branchIds ⊆ manager.branchIds
-    for (const bid of branchIds) {
-      if (!managerBranchIds.includes(bid)) {
-        throw new Error(`Branch ${bid} is not in your assigned branches`);
+      // Validate branchIds ⊆ manager.branchIds
+      for (const bid of branchIds) {
+        if (!managerBranchIds.includes(bid)) {
+          throw new Error(`Branch ${bid} is not in your assigned branches`);
+        }
       }
     }
 
     const userId = ID.unique();
     await account.create(userId, email, password, name);
+
+    const permissions = [
+      Permission.read(Role.user(userId)),
+      Permission.update(Role.user(userId)),
+    ];
+
+    if (managerId) {
+      permissions.push(Permission.read(Role.user(managerId)));
+      permissions.push(Permission.update(Role.user(managerId)));
+      permissions.push(Permission.delete(Role.user(managerId)));
+    }
 
     const userDoc = await databases.createDocument(
       DATABASE_ID,
@@ -118,16 +129,10 @@ export async function createTeamLead(input: CreateTeamLeadInput, currentUser: Us
         name,
         email,
         role: 'team_lead',
-        managerId,
+        managerId: managerId || null,
         branchIds,
       },
-      [
-        Permission.read(Role.user(userId)),
-        Permission.read(Role.user(managerId)),
-        Permission.update(Role.user(userId)),
-        Permission.update(Role.user(managerId)),
-        Permission.delete(Role.user(managerId)),
-      ]
+      permissions
     );
 
     await logAction({
@@ -424,6 +429,26 @@ export async function getAgentsByManager(managerId: string): Promise<User[]> {
 }
 
 /**
+ * Get all agents for a specific team lead
+ */
+export async function getAgentsByTeamLead(teamLeadId: string): Promise<User[]> {
+  try {
+    const response = await databases.listDocuments(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      [
+        Query.equal('role', 'agent'),
+        Query.equal('teamLeadId', teamLeadId),
+      ]
+    );
+    return response.documents.map(mapDocToUser);
+  } catch (error: any) {
+    console.error('Error fetching agents by team lead:', error);
+    throw new Error(error.message || 'Failed to fetch agents by team lead');
+  }
+}
+
+/**
  * Get a user by ID
  */
 export async function getUserById(userId: string): Promise<User> {
@@ -501,18 +526,110 @@ export async function updateUser(
 }
 
 /**
- * Delete an agent account
- * Note: This only deletes the user document, not the Appwrite Auth account
+ * Update a user's assigned team lead
  */
-export async function deleteAgent(agentId: string): Promise<void> {
+export async function updateUserTeamLead(
+  agentId: string,
+  teamLeadId: string | null
+): Promise<User> {
   try {
-    await databases.deleteDocument(
+    const userDoc = await databases.updateDocument(
       DATABASE_ID,
       USERS_COLLECTION_ID,
-      agentId
+      agentId,
+      {
+        teamLeadId: teamLeadId,
+      }
     );
+    return mapDocToUser(userDoc);
   } catch (error: any) {
-    console.error('Error deleting agent:', error);
-    throw new Error(error.message || 'Failed to delete agent');
+    console.error('Error updating user team lead:', error);
+    throw new Error(error.message || 'Failed to update user team lead');
+  }
+}
+
+/**
+ * Update a user's role
+ */
+export async function updateUserRole(
+  userId: string,
+  role: UserRole
+): Promise<User> {
+  try {
+    const userDoc = await databases.updateDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      userId,
+      {
+        role: role,
+      }
+    );
+    return mapDocToUser(userDoc);
+  } catch (error: any) {
+    console.error('Error updating user role:', error);
+    throw new Error(error.message || 'Failed to update user role');
+  }
+}
+
+/**
+ * Update a user's assigned manager
+ */
+export async function updateUserManager(
+  userId: string,
+  managerId: string | null
+): Promise<User> {
+  try {
+    const userDoc = await databases.updateDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      userId,
+      {
+        managerId: managerId,
+      }
+    );
+    return mapDocToUser(userDoc);
+  } catch (error: any) {
+    console.error('Error updating user manager:', error);
+    throw new Error(error.message || 'Failed to update user manager');
+  }
+}
+
+/**
+ * Get all managers (for assigning to team leads/agents)
+ */
+export async function getAllManagers(): Promise<User[]> {
+  try {
+    const response = await databases.listDocuments(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      [Query.equal('role', 'manager')]
+    );
+    return response.documents.map(mapDocToUser);
+  } catch (error: any) {
+    console.error('Error fetching managers:', error);
+    throw new Error(error.message || 'Failed to fetch managers');
+  }
+}
+
+/**
+ * Get all team leads (optionally filtered by branchIds)
+ */
+export async function getTeamLeads(branchIds?: string[]): Promise<User[]> {
+  try {
+    const queries = [Query.equal('role', 'team_lead')];
+    
+    if (branchIds && branchIds.length > 0) {
+      queries.push(Query.contains('branchIds', branchIds));
+    }
+
+    const response = await databases.listDocuments(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      queries
+    );
+    return response.documents.map(mapDocToUser);
+  } catch (error: any) {
+    console.error('Error fetching team leads:', error);
+    throw new Error(error.message || 'Failed to fetch team leads');
   }
 }

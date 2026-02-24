@@ -95,7 +95,7 @@ function NewLeadContent() {
       // Determine branchId: admin can specify, others inherit from their user
       const branchId = isAdmin && selectedBranch
         ? selectedBranch
-        : user.branchId || undefined;
+        : user.branchId || (user.branchIds && user.branchIds.length > 0 ? user.branchIds[0] : undefined);
 
       // Extract assignedToId added by DynamicLeadForm and prevent it from being stored in data JSON
       const { assignedToId, ...sanitizedData } = data as { assignedToId?: string } & Record<string, any>;

@@ -20,6 +20,7 @@ function LeadsContent() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [agents, setAgents] = useState<User[]>([]);
   const [owners, setOwners] = useState<Map<string, User>>(new Map());
+  const [assignedUsers, setAssignedUsers] = useState<Map<string, User>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -49,8 +50,40 @@ function LeadsContent() {
   useEffect(() => {
     if (leads.length > 0) {
       loadOwnerNames();
+      loadAssignedAgentNames();
     }
   }, [leads]);
+
+  const loadAssignedAgentNames = async () => {
+    if (!user || leads.length === 0) return;
+
+    try {
+      const assignedIds = [...new Set(leads.filter(l => l.assignedToId).map(lead => lead.assignedToId!))];
+      const userMap = new Map<string, User>();
+
+      // Check if we already have these users in 'agents' or 'assignedUsers'
+      for (const id of assignedIds) {
+        // Try finding in existing agents list first
+        const existingAgent = agents.find(a => a.$id === id);
+        if (existingAgent) {
+          userMap.set(id, existingAgent);
+          continue;
+        }
+
+        // Fetch from server if not found
+        try {
+          const fetchedUser = await getUserByIdService(id);
+          userMap.set(id, fetchedUser);
+        } catch (err) {
+          console.error(`Error loading assigned user ${id}:`, err);
+        }
+      }
+
+      setAssignedUsers(prev => new Map([...prev, ...userMap]));
+    } catch (err) {
+      console.error('Error loading assigned agent names:', err);
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -324,7 +357,7 @@ function LeadsContent() {
                           className="border-b hover:bg-accent/50 transition-colors"
                         >
                           <td className="p-3 md:p-4">
-                            {leadData.firstName} {leadData.lastName}
+                            {leadData.firstName} {leadData.lastName || ''}
                           </td>
                           <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">
                             {leadData.email}
@@ -337,7 +370,7 @@ function LeadsContent() {
                           {(user?.role === 'manager' || user?.role === 'team_lead') && (
                             <td className="p-3 md:p-4 text-muted-foreground hidden md:table-cell">
                               {lead.assignedToId ? (
-                                <AssignedAgentName agentId={lead.assignedToId} agents={agents} />
+                                <AssignedAgentName agentId={lead.assignedToId} assignedUsers={assignedUsers} />
                               ) : (
                                 'Unassigned'
                               )}
@@ -401,8 +434,8 @@ function LeadsContent() {
   );
 }
 
-function AssignedAgentName({ agentId, agents }: { agentId: string; agents: User[] }) {
-  const agent = agents.find((a) => a.$id === agentId);
+function AssignedAgentName({ agentId, assignedUsers }: { agentId: string; assignedUsers: Map<string, User> }) {
+  const agent = assignedUsers.get(agentId);
   return <span>{agent?.name || 'Unknown'}</span>;
 }
 

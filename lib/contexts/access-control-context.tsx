@@ -15,7 +15,9 @@ export type ComponentKey =
   | 'field-management'
   | 'settings'
   | 'branch-management'
-  | 'audit-logs';
+  | 'audit-logs'
+  | 'mock'
+  | 'hierarchy';
 
 interface AccessRule {
   $id: string;
@@ -93,18 +95,34 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
     // team_lead=dashboard+leads+history+user-management only
     // agent=dashboard+leads only
     if (user.role === 'manager') {
-      return componentKey !== 'branch-management' && componentKey !== 'audit-logs';
+      return (
+        componentKey === 'dashboard' ||
+        componentKey === 'leads' ||
+        componentKey === 'history' ||
+        componentKey === 'user-management' ||
+        componentKey === 'field-management' ||
+        componentKey === 'settings' ||
+        componentKey === 'mock' ||
+        componentKey === 'hierarchy'
+      );
     }
     if (user.role === 'team_lead') {
       return (
         componentKey === 'dashboard' ||
         componentKey === 'leads' ||
         componentKey === 'history' ||
-        componentKey === 'user-management'
+        componentKey === 'user-management' ||
+        componentKey === 'mock' ||
+        componentKey === 'settings'
       );
     }
     if (user.role === 'agent') {
-      return componentKey === 'dashboard' || componentKey === 'leads';
+      return (
+        componentKey === 'dashboard' ||
+        componentKey === 'leads' ||
+        componentKey === 'mock' ||
+        componentKey === 'settings'
+      );
     }
     return false;
   }, [user, isAdmin, rules]);

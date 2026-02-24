@@ -201,7 +201,7 @@ function HistoryContent() {
                       onClick={() => router.push(`/client/${lead.$id}`)}
                     >
                       <td className="p-3 md:p-4">
-                        {data.firstName} {data.lastName}
+                        {data.firstName} {data.lastName || ''}
                       </td>
                       <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">{data.email || 'N/A'}</td>
                       <td className="p-3 md:p-4">

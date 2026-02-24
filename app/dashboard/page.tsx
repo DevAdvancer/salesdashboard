@@ -27,6 +27,7 @@ function DashboardContent() {
   });
   const [managerName, setManagerName] = useState<string | null>(null);
   const [teamLeadName, setTeamLeadName] = useState<string | null>(null);
+  const [assignedAgents, setAssignedAgents] = useState<any[]>([]);
 
   useEffect(() => {
     async function fetchMetrics() {
@@ -37,33 +38,35 @@ function DashboardContent() {
         const activeLeads = await listLeads(
           { isClosed: false },
           user.$id,
-          user.role
+          user.role,
+          user.branchIds
         );
 
         // Fetch closed leads count
         const closedLeads = await listLeads(
           { isClosed: true },
           user.$id,
-          user.role
+          user.role,
+          user.branchIds
         );
 
-        // Fetch team members count
+        // Fetch team members count and agents for team lead
         let teamMembersCount = 0;
         if (isAdmin || isManager || isTeamLead) {
-          const { getUsersByBranches } = await import('@/lib/services/user-service');
-
-          if (user.branchIds && user.branchIds.length > 0) {
-            const users = await getUsersByBranches(user.branchIds);
-
-            if (isManager) {
-              // Managers see team leads count
-              teamMembersCount = users.filter(u => u.role === 'team_lead').length;
-            } else if (isTeamLead) {
-              // Team leads see agents count
-              teamMembersCount = users.filter(u => u.role === 'agent').length;
-            } else if (isAdmin) {
-              // Admins see all users count
-              teamMembersCount = users.length;
+          if (isTeamLead) {
+            const { getAgentsByTeamLead } = await import('@/lib/services/user-service');
+            const agents = await getAgentsByTeamLead(user.$id);
+            teamMembersCount = agents.length;
+            setAssignedAgents(agents);
+          } else {
+            const { getUsersByBranches } = await import('@/lib/services/user-service');
+            if (user.branchIds && user.branchIds.length > 0) {
+              const users = await getUsersByBranches(user.branchIds);
+              if (isManager) {
+                teamMembersCount = users.filter(u => u.role === 'team_lead').length;
+              } else if (isAdmin) {
+                teamMembersCount = users.length;
+              }
             }
           }
         }
@@ -340,13 +343,22 @@ function DashboardContent() {
               View Leads
             </Button>
             {(isAdmin || isManager || isTeamLead) && (
-              <Button
-                className="w-full"
-                variant="outline"
-                onClick={() => router.push('/users')}
-              >
-                Manage Users
-              </Button>
+              <>
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  onClick={() => router.push('/users')}
+                >
+                  Manage Users
+                </Button>
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  onClick={() => router.push('/users?action=create')}
+                >
+                  Create User
+                </Button>
+              </>
             )}
             {(isAdmin || isManager) && (
               <Button
@@ -369,6 +381,44 @@ function DashboardContent() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Assigned Agents Section (Team Lead Only) */}
+      {isTeamLead && assignedAgents.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>My Agents</CardTitle>
+            <CardDescription>
+              Agents assigned to your team
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="border-b">
+                  <tr className="text-left">
+                    <th className="p-3 font-semibold text-sm">Name</th>
+                    <th className="p-3 font-semibold text-sm">Email</th>
+                    <th className="p-3 font-semibold text-sm">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {assignedAgents.map((agent) => (
+                    <tr key={agent.$id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                      <td className="p-3 text-sm">{agent.name}</td>
+                      <td className="p-3 text-sm text-muted-foreground">{agent.email}</td>
+                      <td className="p-3 text-sm">
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                          Active
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

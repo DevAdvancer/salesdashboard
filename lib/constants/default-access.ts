@@ -6,7 +6,9 @@ export type ComponentKey =
   | 'field-management'
   | 'settings'
   | 'branch-management'
-  | 'audit-logs';
+  | 'audit-logs'
+  | 'mock'
+  | 'hierarchy';
 
 export type UserRole = 'admin' | 'manager' | 'team_lead' | 'agent';
 
@@ -26,6 +28,8 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'settings', role: 'admin', allowed: true },
   { componentKey: 'branch-management', role: 'admin', allowed: true },
   { componentKey: 'audit-logs', role: 'admin', allowed: true },
+  { componentKey: 'mock', role: 'admin', allowed: true },
+  { componentKey: 'hierarchy', role: 'admin', allowed: true },
   // Manager rules
   { componentKey: 'dashboard', role: 'manager', allowed: true },
   { componentKey: 'leads', role: 'manager', allowed: true },
@@ -35,6 +39,8 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'settings', role: 'manager', allowed: true },
   { componentKey: 'branch-management', role: 'manager', allowed: false },
   { componentKey: 'audit-logs', role: 'manager', allowed: false },
+  { componentKey: 'mock', role: 'manager', allowed: true },
+  { componentKey: 'hierarchy', role: 'manager', allowed: true },
   // Team Lead rules
   { componentKey: 'dashboard', role: 'team_lead', allowed: true },
   { componentKey: 'leads', role: 'team_lead', allowed: true },
@@ -44,6 +50,8 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'settings', role: 'team_lead', allowed: false },
   { componentKey: 'branch-management', role: 'team_lead', allowed: false },
   { componentKey: 'audit-logs', role: 'team_lead', allowed: false },
+  { componentKey: 'mock', role: 'team_lead', allowed: true },
+  { componentKey: 'hierarchy', role: 'team_lead', allowed: false },
   // Agent rules
   { componentKey: 'dashboard', role: 'agent', allowed: true },
   { componentKey: 'leads', role: 'agent', allowed: true },
@@ -53,4 +61,6 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'settings', role: 'agent', allowed: false },
   { componentKey: 'branch-management', role: 'agent', allowed: false },
   { componentKey: 'audit-logs', role: 'agent', allowed: false },
+  { componentKey: 'mock', role: 'agent', allowed: true },
+  { componentKey: 'hierarchy', role: 'agent', allowed: false },
 ];

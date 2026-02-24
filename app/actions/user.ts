@@ -187,9 +187,9 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
         throw e;
     }
 
-    // For admins, managerId is null unless specified (not supported in UI yet, so null)
+    // For admins, use the provided managerId or null
     // For managers, they are the manager
-    const managerId = callerDoc.role === 'manager' ? callerDoc.$id : null;
+    const managerId = callerDoc.role === 'manager' ? callerDoc.$id : (teamLeadInput.managerId || null);
 
     try {
         await databases.createDocument(
@@ -257,8 +257,8 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
 
     const isTeamLead = callerDoc.role === 'team_lead';
     const isManager = callerDoc.role === 'manager';
-    // For admin, we default to no hierarchy for now
-    const managerId = isTeamLead ? (callerDoc.managerId || null) : (isManager ? callerDoc.$id : null);
+    // For admin, we default to no hierarchy for now unless specified
+    const managerId = isTeamLead ? (callerDoc.managerId || null) : (isManager ? callerDoc.$id : (agentInput.managerId || null));
     const teamLeadId = isTeamLead ? callerDoc.$id : (agentInput.teamLeadId || null);
 
     try {
@@ -310,5 +310,91 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
         console.error("DB Creation failed, rolling back Auth User", error);
         await users.delete(userId);
         throw new Error("Failed to create user profile: " + error.message);
+    }
+}
+
+export async function updateUserAction(input: {
+    userId: string;
+    role?: UserRole;
+    managerId?: string | null;
+    teamLeadId?: string | null;
+    branchIds?: string[];
+    currentUserId: string;
+}) {
+    const { userId, role, managerId, teamLeadId, branchIds, currentUserId } = input;
+
+    if (!currentUserId) throw new Error("Unauthorized");
+
+    const callerDoc = await getUserDoc(currentUserId);
+    if (!callerDoc) throw new Error("User profile not found");
+
+    const isCallerAdmin = callerDoc.role === 'admin';
+    const isCallerManager = callerDoc.role === 'manager';
+
+    // Permission Check
+    if (!isCallerAdmin && !isCallerManager) {
+        throw new Error("Permission denied");
+    }
+
+    const { databases } = await createAdminClient();
+
+    try {
+        const updates: any = {};
+
+        // 1. Handle Role Update (Admin Only)
+        if (role && role !== callerDoc.role) { // Prevent self-lockout logic if needed
+             if (!isCallerAdmin) throw new Error("Only admins can change user roles");
+             updates.role = role;
+             
+             // Reset hierarchy fields based on new role
+             if (role === 'manager') {
+                 updates.managerId = null;
+                 updates.teamLeadId = null;
+             } else if (role === 'team_lead') {
+                 updates.teamLeadId = null;
+             }
+        }
+
+        // 2. Handle Manager Update
+        if (managerId !== undefined) {
+             if (!isCallerAdmin && !isCallerManager) throw new Error("Permission denied");
+             updates.managerId = managerId;
+        }
+
+        // 3. Handle Team Lead Update
+        if (teamLeadId !== undefined) {
+             updates.teamLeadId = teamLeadId;
+        }
+
+        // 4. Handle Branch Update
+        if (branchIds) {
+             updates.branchIds = branchIds;
+        }
+
+        if (Object.keys(updates).length === 0) return { success: true };
+
+        await databases.updateDocument(
+            DATABASE_ID,
+            USERS_COLLECTION_ID,
+            userId,
+            updates
+        );
+
+        // Log audit
+        await logAuditAction(
+            databases,
+            'USER_UPDATE',
+            callerDoc.$id,
+            callerDoc.name,
+            userId,
+            'user',
+            updates
+        );
+
+        return { success: true };
+
+    } catch (error: any) {
+        console.error("Update failed", error);
+        throw new Error("Failed to update user: " + error.message);
     }
 }

@@ -32,7 +32,7 @@ export interface CreateTeamLeadInput {
   name: string;
   email: string;
   password: string;
-  managerId: string;
+  managerId?: string;
   branchIds: string[];
 }
 
@@ -41,6 +41,7 @@ export interface CreateAgentInput {
   email: string;
   password: string;
   teamLeadId?: string;
+  managerId?: string;
   branchIds: string[];
 }
 
@@ -144,7 +145,9 @@ export type ComponentKey =
   | 'field-management'
   | 'settings'
   | 'branch-management'
-  | 'audit-logs';
+  | 'audit-logs'
+  | 'mock'
+  | 'hierarchy';
 
 export interface AccessRule {
   $id?: string;

@@ -246,7 +246,7 @@ function LeadDetailContent() {
             ← Back to Leads
           </Button>
           <h1 className="text-2xl md:text-3xl font-bold">
-            {leadData.firstName} {leadData.lastName}
+            {leadData.firstName} {leadData.lastName || ''}
           </h1>
           <p className="text-muted-foreground mt-1">
             {lead.isClosed ? 'Closed Lead' : 'Active Lead'}

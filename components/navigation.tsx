@@ -17,6 +17,8 @@ import {
   X,
   ClipboardList,
   Mail,
+  Network,
+  GitGraph,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -64,6 +66,12 @@ const NAV_ITEMS: NavItem[] = [
     icon: Mail,
   },
   {
+    key: 'hierarchy',
+    label: 'Hierarchy',
+    href: '/hierarchy',
+    icon: Network,
+  },
+  {
     key: 'user-management',
     label: 'User Management',
     href: '/users',
@@ -84,7 +92,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     key: 'settings',
     label: 'Settings',
-    href: '/settings/access',
+    href: '/settings',
     icon: Settings,
   },
 ];
@@ -154,7 +162,8 @@ export function Navigation() {
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           {visibleItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href;
+            // Check for exact match or nested routes (e.g., /settings/access should match /settings)
+            const isActive = pathname === item.href || (pathname?.startsWith(item.href) && pathname.charAt(item.href.length) === '/');
 
             return (
               <button

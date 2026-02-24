@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -27,19 +26,31 @@ import { ProtectedRoute } from '@/components/protected-route';
 interface MockFormData {
   to: string;
   cc: string;
-  subject: string;
+  // subject is computed dynamically based on candidate name
   resume: File | null;
-  isAvailable: boolean;
-  signature: string;
+  role: string;
+  mode: string;
+  schedule: string; // ISO string from datetime-local input
+  emailBody: string; // "part 1"
+  // Signature fields
+  yourName: string;
+  yourRole: string;
+  yourPhone: string;
+  company: 'Silverspace Inc.' | 'Other Company' | 'Vizva Consultancy';
 }
 
 const INITIAL_FORM_DATA: MockFormData = {
   to: '',
   cc: '',
-  subject: 'Mock Interview Request',
   resume: null,
-  isAvailable: false,
-  signature: '',
+  role: '',
+  mode: 'Evaluation',
+  schedule: '',
+  emailBody: 'Hi Team,\n\nThe candidate is available for the whole day.',
+  yourName: '',
+  yourRole: '',
+  yourPhone: '',
+  company: 'Silverspace Inc.',
 };
 
 function MockContent() {
@@ -75,6 +86,19 @@ function MockContent() {
     };
 
     checkConnection();
+
+    // Load signature preferences
+    const storedSignature = localStorage.getItem('mockSignature');
+    if (storedSignature) {
+      const parsed = JSON.parse(storedSignature);
+      setFormData(prev => ({
+        ...prev,
+        yourName: parsed.yourName || '',
+        yourRole: parsed.yourRole || '',
+        yourPhone: parsed.yourPhone || '',
+        company: parsed.company || 'Silverspace Inc.',
+      }));
+    }
   }, []);
 
   const loadLeads = useCallback(async () => {
@@ -144,14 +168,15 @@ function MockContent() {
 
   const handleCreateMock = (lead: Lead) => {
     setSelectedLead(lead);
-    const leadData = JSON.parse(lead.data);
 
-    // Pre-fill To field with candidate email if available
-    setFormData({
+    setFormData(prev => ({
       ...INITIAL_FORM_DATA,
-      to: leadData.email || '',
-      subject: `Mock Interview Request - ${leadData.firstName} ${leadData.lastName}`,
-    });
+      // Preserve signature preferences
+      yourName: prev.yourName,
+      yourRole: prev.yourRole,
+      yourPhone: prev.yourPhone,
+      company: prev.company,
+    }));
     setFileInputKey(Date.now()); // Reset file input
 
     setIsModalOpen(true);
@@ -189,6 +214,14 @@ function MockContent() {
       setIsSending(true);
       const leadData = JSON.parse(selectedLead.data);
 
+      // Save signature preferences
+      localStorage.setItem('mockSignature', JSON.stringify({
+        yourName: formData.yourName,
+        yourRole: formData.yourRole,
+        yourPhone: formData.yourPhone,
+        company: formData.company,
+      }));
+
       // Convert file to base64
       let attachment = null;
       if (formData.resume) {
@@ -213,23 +246,52 @@ function MockContent() {
         };
       }
 
+      // Format Schedule
+      let formattedSchedule = '';
+      if (formData.schedule) {
+        const date = new Date(formData.schedule);
+        // Format: Feb 20, 2026 at 3:00 PM
+        const datePart = new Intl.DateTimeFormat('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        }).format(date);
+
+        const timePart = new Intl.DateTimeFormat('en-US', {
+          hour: 'numeric',
+          minute: 'numeric',
+          hour12: true,
+        }).format(date);
+
+        formattedSchedule = `${datePart} at ${timePart}`;
+      }
+
+      // Determine logo URL based on company
+      let logoUrl = 'https://egvjgtfjstxgszpzvvbx.supabase.co/storage/v1/object/public/images//20250610_1111_3D%20Gradient%20Logo_remix_01jxd69dc9ex29jbj9r701yjkf%20(2).png';
+      if (formData.company === 'Vizva Consultancy') {
+        logoUrl = 'https://egvjgtfjstxgszpzvvbx.supabase.co/storage/v1/object/public/images//20250611_1634_3D%20Logo%20Design_remix_01jxgb3x1qebfa2hsxw7sdagw1%20(1).png';
+      }
+
       // Construct email body
       const emailBody = `
         <html>
-          <body>
-            <p>Dear ${leadData.firstName} ${leadData.lastName},</p>
-            <p>We are pleased to invite you for a mock interview.</p>
+          <body style="font-family: Arial, sans-serif; color: #333;">
+            <p>${formData.emailBody.replace(/\n/g, '<br/>')}</p>
 
-            <h3>Candidate Details:</h3>
-            <ul>
-              <li><strong>Name:</strong> ${leadData.firstName} ${leadData.lastName}</li>
-              <li><strong>Phone:</strong> ${leadData.phone || 'N/A'}</li>
-              <li><strong>Email:</strong> ${leadData.email || 'N/A'}</li>
-              <li><strong>Company:</strong> ${leadData.company || 'N/A'}</li>
-              <li><strong>Available Today:</strong> ${formData.isAvailable ? 'Yes' : 'No'}</li>
-            </ul>
+            <table cellpadding="5" cellspacing="0" border="0" style="width: 100%; max-width: 600px; margin-top: 20px; border-collapse: collapse;">
+              <tr><td style="font-weight: bold; width: 150px; padding: 5px;">Candidate Name</td><td style="padding: 5px;">${leadData.firstName} ${leadData.lastName}</td></tr>
+              <tr><td style="font-weight: bold; padding: 5px;">End Client</td><td style="padding: 5px;">${leadData.company || 'Silverspace Inc'}</td></tr>
+              <tr><td style="font-weight: bold; padding: 5px;">Role</td><td style="padding: 5px;">${formData.role}</td></tr>
+              <tr><td style="font-weight: bold; padding: 5px;">Mode</td><td style="padding: 5px;">${formData.mode}</td></tr>
+              <tr><td style="font-weight: bold; padding: 5px;">Schedule</td><td style="padding: 5px;">${formattedSchedule}</td></tr>
+              <tr><td style="font-weight: bold; padding: 5px;">Email ID</td><td style="padding: 5px;">${leadData.email || ''}</td></tr>
+              <tr><td style="font-weight: bold; padding: 5px;">Contact Number</td><td style="padding: 5px;">${leadData.phone || ''}</td></tr>
+            </table>
 
-            ${formData.signature ? `<br/><div class="signature">${formData.signature}</div>` : ''}
+            <br/>
+            <p>Regards,</p>
+
+            <table cellpadding="0" cellspacing="0" border="0" style="font-family: Arial, sans-serif; font-size: 14px; color: rgb(255, 255, 255); background-color: #1a1a1a; padding: 10px; border-radius: 5px;"><tbody><tr><td style="padding-right: 20px;"><div style="filter: drop-shadow(rgba(255, 255, 255, 0.8) 0px 0px 4px) drop-shadow(rgba(255, 255, 255, 0.4) 0px 0px 20px); padding: 4px;"><img src="${logoUrl}" alt="${formData.company} logo" width="130" style="display: block; max-width: 100%; height: auto;"></div></td><td style="border-left: 2px solid rgb(248, 98, 149); padding-left: 20px;"><strong style="font-size: 18px; color: rgb(255, 255, 255); display: block; margin-bottom: 4px;">${formData.yourName}</strong><span style="display: block; margin-bottom: 2px; color: rgb(255, 255, 255);">${formData.yourRole}</span><span style="color: rgb(204, 204, 204); display: block; margin-bottom: 12px;">${formData.company}</span><a href="mailto:${formData.yourName.toLowerCase().replace(/\s+/g, '.')}@silverspaceinc.com" style="color: rgb(255, 255, 255); text-decoration: none; display: block; margin-bottom: 4px;">📧 ${formData.yourName.toLowerCase().replace(/\s+/g, '.')}@silverspaceinc.com</a><a href="tel:${formData.yourPhone}" style="color: rgb(255, 255, 255); text-decoration: none; display: block; margin-bottom: 4px;">📞 ${formData.yourPhone}</a><a href="https://www.silverspaceinc.com" target="_blank" style="color: rgb(255, 255, 255); text-decoration: none; display: block;">🔗 www.silverspaceinc.com</a></td></tr></tbody></table>
           </body>
         </html>
       `;
@@ -237,7 +299,7 @@ function MockContent() {
       // Construct payload for our API
       const payload = {
         message: {
-          subject: formData.subject,
+          subject: `Request to schedule mock interview - ${leadData.firstName} ${leadData.lastName}`,
           body: {
             contentType: 'HTML',
             content: emailBody,
@@ -272,7 +334,30 @@ function MockContent() {
         description: 'Mock interview email sent successfully!',
       });
       setIsModalOpen(false);
-      setFormData(INITIAL_FORM_DATA);
+      // We don't reset form data here to preserve signature, or we do reset but signature is re-read from state?
+      // Actually handleCreateMock resets it properly.
+      // But let's reset to initial state for next time, but keep signature?
+      // For now, simple reset is fine, next open will re-read or use handleCreateMock logic.
+      // Wait, handleCreateMock uses INITIAL_FORM_DATA and merges current state.
+      // So if I reset here, I lose current state signature.
+      // I should update INITIAL_FORM_DATA to have empty signature, but `handleCreateMock` preserves it.
+      // So I can just reset to INITIAL_FORM_DATA here.
+      // However, if I close and reopen without refreshing, `prev` in handleCreateMock will be INITIAL_FORM_DATA (empty).
+      // So I need to ensure signature is persisted in state or localStorage is read again.
+      // `handleCreateMock` reads `prev` state. If I reset state to INITIAL here, `prev` will be empty.
+      // So I should reload from localStorage or just not reset the signature fields.
+
+      const storedSignature = localStorage.getItem('mockSignature');
+      const parsedSignature = storedSignature ? JSON.parse(storedSignature) : {};
+
+      setFormData({
+          ...INITIAL_FORM_DATA,
+          yourName: parsedSignature.yourName || '',
+          yourRole: parsedSignature.yourRole || '',
+          yourPhone: parsedSignature.yourPhone || '',
+          company: parsedSignature.company || 'Silverspace Inc.',
+      });
+
     } catch (error: unknown) {
       console.error('Error sending email:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to send email';
@@ -425,12 +510,64 @@ function MockContent() {
               </div>
 
               <div className="col-span-2">
-                <Label htmlFor="subject">Subject</Label>
-                <Input
-                  id="subject"
-                  value={formData.subject}
-                  onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                <Label>Subject</Label>
+                <div className="p-2 border rounded-md bg-muted text-muted-foreground">
+                  Request to schedule mock interview - {selectedLead ? JSON.parse(selectedLead.data).firstName + ' ' + JSON.parse(selectedLead.data).lastName : ''}
+                </div>
+              </div>
+
+              <div className="col-span-2">
+                <Label htmlFor="emailBody">Email Content</Label>
+                <Textarea
+                  id="emailBody"
+                  value={formData.emailBody}
+                  onChange={(e) => setFormData({ ...formData, emailBody: e.target.value })}
+                  rows={4}
                 />
+              </div>
+
+              <div className="col-span-2 md:col-span-1">
+                <Label htmlFor="role">Role</Label>
+                <Input
+                  id="role"
+                  value={formData.role}
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  placeholder="e.g. Data Analyst"
+                />
+              </div>
+
+              <div className="col-span-2 md:col-span-1">
+                <Label htmlFor="mode">Mode</Label>
+                <Input
+                  id="mode"
+                  value={formData.mode}
+                  onChange={(e) => setFormData({ ...formData, mode: e.target.value })}
+                  placeholder="Evaluation"
+                />
+              </div>
+
+              <div className="col-span-2 md:col-span-1">
+                <Label htmlFor="schedule">Schedule</Label>
+                <Input
+                  id="schedule"
+                  type="datetime-local"
+                  value={formData.schedule}
+                  onChange={(e) => setFormData({ ...formData, schedule: e.target.value })}
+                />
+              </div>
+
+              <div className="col-span-2 md:col-span-1">
+                <Label htmlFor="company">Company (Signature)</Label>
+                <select
+                    id="company"
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    value={formData.company}
+                    onChange={(e) => setFormData({ ...formData, company: e.target.value as any })}
+                >
+                    <option value="Silverspace Inc.">Silverspace Inc.</option>
+                    <option value="Vizva Consultancy">Vizva Consultancy</option>
+                    <option value="Other Company">Other Company</option>
+                </select>
               </div>
 
               <div className="col-span-2">
@@ -444,26 +581,37 @@ function MockContent() {
                 />
               </div>
 
-              <div className="flex items-center space-x-2 col-span-2">
-                <Checkbox
-                  id="available"
-                  checked={formData.isAvailable}
-                  onCheckedChange={(checked) =>
-                    setFormData({ ...formData, isAvailable: checked as boolean })
-                  }
-                />
-                <Label htmlFor="available">Candidate is available today</Label>
-              </div>
-
-              <div className="col-span-2">
-                <Label htmlFor="signature">Signature</Label>
-                <Textarea
-                  id="signature"
-                  value={formData.signature}
-                  onChange={(e) => setFormData({ ...formData, signature: e.target.value })}
-                  placeholder="Best regards,&#10;[Your Name]"
-                  rows={4}
-                />
+              <div className="col-span-2 border-t pt-4 mt-2">
+                <h3 className="font-semibold mb-2">Signature Details</h3>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2 md:col-span-1">
+                        <Label htmlFor="yourName">Your Name</Label>
+                        <Input
+                        id="yourName"
+                        value={formData.yourName}
+                        onChange={(e) => setFormData({ ...formData, yourName: e.target.value })}
+                        placeholder="John Doe"
+                        />
+                    </div>
+                    <div className="col-span-2 md:col-span-1">
+                        <Label htmlFor="yourRole">Your Role</Label>
+                        <Input
+                        id="yourRole"
+                        value={formData.yourRole}
+                        onChange={(e) => setFormData({ ...formData, yourRole: e.target.value })}
+                        placeholder="HR Manager"
+                        />
+                    </div>
+                    <div className="col-span-2 md:col-span-1">
+                        <Label htmlFor="yourPhone">Your Phone</Label>
+                        <Input
+                        id="yourPhone"
+                        value={formData.yourPhone}
+                        onChange={(e) => setFormData({ ...formData, yourPhone: e.target.value })}
+                        placeholder="+1 (555) 123-4567"
+                        />
+                    </div>
+                </div>
               </div>
             </div>
           </div>
@@ -483,10 +631,8 @@ function MockContent() {
 }
 
 export default function MockPage() {
-  // Using 'leads' permission as a proxy for access to mock feature
-  // Adjust componentKey if a new one is needed
   return (
-    <ProtectedRoute componentKey="leads">
+    <ProtectedRoute componentKey="mock">
       <MockContent />
     </ProtectedRoute>
   );

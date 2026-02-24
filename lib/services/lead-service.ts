@@ -233,19 +233,48 @@ export async function listLeads(
 
     // Role-based filtering
     if (userRole === 'agent') {
-      // Agents see only leads assigned to them
-      queries.push(Query.equal('assignedToId', userId));
+      // Agents see leads assigned to them OR leads they created
+      queries.push(
+        Query.or([
+          Query.equal('assignedToId', userId),
+          Query.equal('ownerId', userId),
+        ])
+      );
     } else if (userRole === 'admin') {
       // Admins see all leads across all branches — no branch/owner filter
     } else if (userRole === 'manager') {
       // Managers can see all leads from all branches (no filtering needed)
     } else if (userRole === 'team_lead') {
-      // Team Leads see only leads in their branches
+      // Team Leads see:
+      // 1. Leads in their branches
+      // 2. Leads they created (ownerId = userId)
+      // 3. Leads created by their assigned agents (ownerId IN agentIds)
+      
+      const orConditions = [
+        Query.equal('ownerId', userId),
+      ];
+
       if (branchIds && branchIds.length > 0) {
-        queries.push(Query.equal('branchId', branchIds));
+        orConditions.push(Query.equal('branchId', branchIds));
+      }
+
+      try {
+        // Dynamic import to avoid potential circular dependencies
+        const { getAgentsByTeamLead } = await import('@/lib/services/user-service');
+        const agents = await getAgentsByTeamLead(userId);
+        
+        if (agents.length > 0) {
+          const agentIds = agents.map(a => a.$id);
+          orConditions.push(Query.equal('ownerId', agentIds));
+        }
+      } catch (err) {
+        console.error('Error fetching team agents for lead visibility:', err);
+      }
+
+      if (orConditions.length > 1) {
+        queries.push(Query.or(orConditions));
       } else {
-        // Team Lead without branches sees only their own leads
-        queries.push(Query.equal('ownerId', userId));
+        queries.push(orConditions[0]);
       }
     }
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { createManagerAction, createTeamLeadAction, createAgentAction } from '@/app/actions/user';
 import {
@@ -10,7 +10,7 @@ import {
 } from '@/lib/services/user-service';
 import { getVisibleUserBranches } from '@/lib/utils/branch-visibility';
 import { listBranches } from '@/lib/services/branch-service';
-import { User, Branch } from '@/lib/types';
+import { User, Branch, UserRole } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,6 +27,7 @@ export default function UserManagementPage() {
 
 function UserManagementContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, isManager, isAdmin, isTeamLead } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [allBranches, setAllBranches] = useState<Branch[]>([]);
@@ -43,13 +44,50 @@ function UserManagementContent() {
   const [formEmail, setFormEmail] = useState('');
   const [formPassword, setFormPassword] = useState('');
   const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>([]);
+  const [selectedTeamLeadId, setSelectedTeamLeadId] = useState<string | null>(null);
+  const [selectedManagerId, setSelectedManagerId] = useState<string | null>(null); // Shared for Create & Edit
+  const [availableManagers, setAvailableManagers] = useState<User[]>([]);
+  const [editRole, setEditRole] = useState<UserRole | null>(null); // Only for Edit
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [availableTeamLeads, setAvailableTeamLeads] = useState<User[]>([]);
+
+  // Create Role State
+  const isMgr = user?.role === 'manager';
+  const [createRole, setCreateRole] = useState<'manager' | 'team_lead' | 'agent'>('team_lead');
+
+  // Initialize createRole when dialog opens or user changes
+  useEffect(() => {
+    if (isAdmin) setCreateRole('manager');
+    else if (isMgr) setCreateRole('team_lead');
+    else if (isTeamLead) setCreateRole('agent');
+  }, [isAdmin, isMgr, isTeamLead, showCreateDialog]);
+
+  useEffect(() => {
+    async function loadManagers() {
+      if (isAdmin) {
+        try {
+          const { getAllManagers } = await import('@/lib/services/user-service');
+          const mgrs = await getAllManagers();
+          setAvailableManagers(mgrs);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    }
+    loadManagers();
+  }, [isAdmin]);
 
   // Determine which role the current user can create
   const canCreateManager = isAdmin;
   const canCreateTeamLead = isManager && user?.role === 'manager';
   const canCreateAgent = isTeamLead || (isManager && user?.role === 'manager');
   const canCreate = canCreateManager || canCreateTeamLead || canCreateAgent;
+
+  useEffect(() => {
+    if (searchParams.get('action') === 'create' && canCreate) {
+      setShowCreateDialog(true);
+    }
+  }, [searchParams, canCreate]);
 
   // The branches available for assignment (subset of current user's branchIds)
   const availableBranches = allBranches.filter(
@@ -92,13 +130,14 @@ function UserManagementContent() {
         // Managers should not see other managers (except themselves)
         const filteredUsers = usersList.filter(u => u.role !== 'manager' || u.$id === user.$id);
         setUsers(filteredUsers);
-      } else if (user.role === 'team_lead' && user.branchIds.length > 0) {
-        const usersList = await getUsersByBranches(user.branchIds);
-        // Team lead sees everyone with overlapping branches
-        setUsers(usersList);
-      } else {
-        const agentsList = await getAgentsByManager(user.$id);
+      } else if (user.role === 'team_lead') {
+        // Team Lead sees their agents
+        const { getAgentsByTeamLead } = await import('@/lib/services/user-service');
+        const agentsList = await getAgentsByTeamLead(user.$id);
         setUsers(agentsList);
+      } else {
+        // Agents see no one
+        setUsers([]);
       }
     } catch (err: any) {
       console.error('Error fetching users:', err);
@@ -120,11 +159,42 @@ function UserManagementContent() {
     }
   };
 
+  useEffect(() => {
+    async function loadTeamLeads() {
+      // Load Team Leads when Admin/Manager is creating Agent/TL or editing Agent/TL
+      const isAgentTarget = (showCreateDialog && createRole === 'agent') || (editingUser?.role === 'agent');
+      // For Admin, also load if creating Team Lead? No, Team Lead doesn't report to Team Lead.
+      
+      if ((isAdmin || isManager) && isAgentTarget) {
+        try {
+          const { getTeamLeads } = await import('@/lib/services/user-service');
+          
+          let teamLeads: User[] = [];
+          if (isAdmin) {
+            teamLeads = await getTeamLeads();
+          } else if (isManager && user?.branchIds) {
+            teamLeads = await getTeamLeads(user.branchIds);
+          }
+          
+          setAvailableTeamLeads(teamLeads);
+        } catch (err) {
+          console.error('Error loading team leads:', err);
+        }
+      }
+    }
+    
+    if (showCreateDialog || editingUser) {
+      loadTeamLeads();
+    }
+  }, [showCreateDialog, editingUser, createRole, isAdmin, isManager, user]);
+
   const resetForm = () => {
     setFormName('');
     setFormEmail('');
     setFormPassword('');
     setSelectedBranchIds([]);
+    setSelectedTeamLeadId(null);
+    setSelectedManagerId(null);
     setFormErrors({});
     setError(null);
   };
@@ -150,30 +220,36 @@ function UserManagementContent() {
   const handleEdit = (userToEdit: User) => {
     setEditingUser(userToEdit);
     setSelectedBranchIds(userToEdit.branchIds || []);
+    setSelectedTeamLeadId(userToEdit.teamLeadId || null);
+    setSelectedManagerId(userToEdit.managerId || null);
+    setEditRole(userToEdit.role);
     setError(null);
   };
 
-  const handleUpdateBranches = async () => {
+  const handleUpdateUser = async () => {
     if (!editingUser || !user) return;
 
     try {
       setIsUpdating(true);
       setError(null);
 
-      const { databases } = await import('@/lib/appwrite');
-      await databases.updateDocument(
-        process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
-        process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
-        editingUser.$id,
-        { branchIds: selectedBranchIds }
-      );
+      const { updateUserAction } = await import('@/app/actions/user');
+      
+      await updateUserAction({
+          userId: editingUser.$id,
+          role: (editRole as UserRole) || undefined,
+          managerId: selectedManagerId,
+          teamLeadId: selectedTeamLeadId,
+          branchIds: selectedBranchIds,
+          currentUserId: user.$id
+      });
 
       setEditingUser(null);
       setSelectedBranchIds([]);
       await fetchUsers();
     } catch (err: any) {
-      console.error('Error updating user branches:', err);
-      setError(err.message || 'Failed to update user branches');
+      console.error('Error updating user:', err);
+      setError(err.message || 'Failed to update user');
     } finally {
       setIsUpdating(false);
     }
@@ -200,7 +276,7 @@ function UserManagementContent() {
               name: formName.trim(),
               email: formEmail.trim(),
               password: formPassword,
-              managerId: user.$id, // Admin passes their ID, but action handles it as null/fallback
+              managerId: selectedManagerId || undefined, // Admin can assign manager
               branchIds: selectedBranchIds,
               currentUserId: user.$id,
             });
@@ -209,7 +285,8 @@ function UserManagementContent() {
               name: formName.trim(),
               email: formEmail.trim(),
               password: formPassword,
-              teamLeadId: undefined, // Admin creates independent agent
+              teamLeadId: selectedTeamLeadId || undefined,
+              managerId: selectedManagerId || undefined, // Admin can assign manager
               branchIds: selectedBranchIds,
               currentUserId: user.$id,
             });
@@ -221,6 +298,7 @@ function UserManagementContent() {
             email: formEmail.trim(),
             password: formPassword,
             branchIds: selectedBranchIds,
+            teamLeadId: selectedTeamLeadId || undefined,
             currentUserId: user.$id,
           });
         } else {
@@ -254,16 +332,6 @@ function UserManagementContent() {
       setIsCreating(false);
     }
   };
-
-  const isMgr = user?.role === 'manager';
-  const [createRole, setCreateRole] = useState<'manager' | 'team_lead' | 'agent'>('team_lead');
-
-  // Initialize createRole when dialog opens or user changes
-  useEffect(() => {
-    if (isAdmin) setCreateRole('manager');
-    else if (isMgr) setCreateRole('team_lead');
-    else if (isTeamLead) setCreateRole('agent');
-  }, [isAdmin, isMgr, isTeamLead, showCreateDialog]);
 
   const createButtonLabel = isAdmin
     ? (createRole === 'manager' ? 'Create Manager' : createRole === 'team_lead' ? 'Create Team Lead' : 'Create Agent')
@@ -302,8 +370,6 @@ function UserManagementContent() {
     if (!targetUserBranchIds || targetUserBranchIds.length === 0) return '—';
 
     // Calculate visible branches based on current user's role and assignments.
-    // This ensures that managers only see branch data relevant to their own assignments,
-    // preventing information leak about cross-branch assignments they don't control.
     const { visibleBranchIds, hasVisibilityMismatch } = getVisibleUserBranches(
       targetUserBranchIds,
       user?.role || 'agent',
@@ -316,13 +382,6 @@ function UserManagementContent() {
       .join(', ');
 
     if (hasVisibilityMismatch && (isAdmin || isMgr)) {
-      // Optional: Add a visual indicator for managers/admins that some branches are hidden
-      // For now, we just append a count if the user is an admin or manager to let them know
-      // strictly following the requirement "shows only their assigned branch", we might not want this,
-      // but "comprehensive logging" implies we care about mismatches.
-      // However, the UI requirement implies strict filtering.
-      // Let's stick to showing only visible ones, but maybe with a subtle hint if desired.
-      // For this implementation, I will just return the visible ones as requested.
       return branchNames || '—';
     }
 
@@ -388,7 +447,7 @@ function UserManagementContent() {
                     <th className="text-left py-3 px-4 font-semibold">Role</th>
                     <th className="text-left py-3 px-4 font-semibold">Branches</th>
                     <th className="text-left py-3 px-4 font-semibold">Created</th>
-                    {isAdmin && <th className="text-left py-3 px-4 font-semibold">Actions</th>}
+                    {(isAdmin || isManager) && <th className="text-left py-3 px-4 font-semibold">Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -408,15 +467,15 @@ function UserManagementContent() {
                       <td className="py-3 px-4">
                         {u.$createdAt ? new Date(u.$createdAt).toLocaleDateString() : 'N/A'}
                       </td>
-                      {isAdmin && (
+                      {(isAdmin || isManager) && (
                         <td className="py-3 px-4">
-                          {(u.role === 'manager' || u.role === 'team_lead' || u.role === 'agent') && (
+                          {(u.role === 'team_lead' || u.role === 'agent' || (isAdmin && u.role === 'manager')) && (
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => handleEdit(u)}
                             >
-                              Edit Branches
+                              Edit
                             </Button>
                           )}
                         </td>
@@ -489,6 +548,50 @@ function UserManagementContent() {
                     <p className="text-sm text-red-600 dark:text-red-400 mt-1">{formErrors.password}</p>
                   )}
                 </div>
+
+                {/* Manager Selection (For Admin Creating Team Lead/Agent) */}
+                {isAdmin && (createRole === 'team_lead' || createRole === 'agent') && (
+                  <div>
+                    <Label htmlFor="create-manager">Assign Manager</Label>
+                    <div className="mt-1">
+                      <select
+                        id="create-manager"
+                        className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        value={selectedManagerId || ''}
+                        onChange={(e) => setSelectedManagerId(e.target.value || null)}
+                      >
+                        <option value="">Select a Manager (Optional)</option>
+                        {availableManagers.map((m) => (
+                          <option key={m.$id} value={m.$id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {/* Team Lead Selection (for Agents created by Admin/Manager) */}
+                {(isAdmin || isMgr) && createRole === 'agent' && (
+                  <div>
+                    <Label htmlFor="create-team-lead">Assign Team Lead</Label>
+                    <div className="mt-1">
+                      <select
+                        id="create-team-lead"
+                        className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        value={selectedTeamLeadId || ''}
+                        onChange={(e) => setSelectedTeamLeadId(e.target.value || null)}
+                      >
+                        <option value="">Select a Team Lead (Optional)</option>
+                        {availableTeamLeads.map((tl) => (
+                          <option key={tl.$id} value={tl.$id}>
+                            {tl.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
 
                 {/* Branch multi-select */}
                 <div>
@@ -579,18 +682,73 @@ function UserManagementContent() {
         </div>
       )}
 
-      {/* Edit User Branches Dialog */}
+      {/* Edit User Dialog */}
       {editingUser && (
         <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50">
           <Card className="w-full sm:max-w-md sm:mx-4 rounded-b-none sm:rounded-b-lg">
             <CardHeader>
-              <CardTitle>Edit User Branches</CardTitle>
+              <CardTitle>Edit User</CardTitle>
               <CardDescription>
-                Update branch assignments for {editingUser.name} ({formatRole(editingUser.role)})
+                Update details for {editingUser.name} ({formatRole(editingUser.role)})
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
+                {/* Role Selection (Admin Only) */}
+                {isAdmin && (
+                  <div>
+                    <Label>Role</Label>
+                    <select
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                      value={editRole || ''}
+                      onChange={(e) => setEditRole(e.target.value as UserRole)}
+                    >
+                      <option value="admin">Admin</option>
+                      <option value="manager">Manager</option>
+                      <option value="team_lead">Team Lead</option>
+                      <option value="agent">Agent</option>
+                    </select>
+                  </div>
+                )}
+
+                {/* Manager Selection (For Team Leads/Agents when Admin is editing) */}
+                {isAdmin && (editRole === 'team_lead' || editRole === 'agent') && (
+                  <div>
+                    <Label>Assign Manager</Label>
+                    <select
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                      value={selectedManagerId || ''}
+                      onChange={(e) => setSelectedManagerId(e.target.value || null)}
+                    >
+                      <option value="">Select Manager</option>
+                      {availableManagers.map(m => (
+                        <option key={m.$id} value={m.$id}>{m.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                    {/* Team Lead Selection */}
+                {(isAdmin || isMgr) && (editingUser.role === 'agent' || editRole === 'agent') && (
+                  <div>
+                    <Label htmlFor="edit-team-lead">Assign Team Lead</Label>
+                    <div className="mt-1">
+                      <select
+                        id="edit-team-lead"
+                        className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        value={selectedTeamLeadId || ''}
+                        onChange={(e) => setSelectedTeamLeadId(e.target.value || null)}
+                      >
+                        <option value="">Select a Team Lead (Optional)</option>
+                        {availableTeamLeads.map((tl) => (
+                          <option key={tl.$id} value={tl.$id}>
+                            {tl.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
                 {error && (
                   <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                     <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
@@ -640,11 +798,11 @@ function UserManagementContent() {
                   </Button>
                   <Button
                     type="button"
-                    onClick={handleUpdateBranches}
+                    onClick={handleUpdateUser}
                     disabled={isUpdating}
                     className="w-full sm:w-auto"
                   >
-                    {isUpdating ? 'Updating...' : 'Update Branches'}
+                    {isUpdating ? 'Updating...' : 'Update User'}
                   </Button>
                 </div>
               </div>
