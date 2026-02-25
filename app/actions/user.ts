@@ -198,9 +198,9 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
 
     // Generate permissions for all managers
     const managerPermissions = managerIds.flatMap(mid => [
-        `read("user:${mid}")`,
-        `update("user:${mid}")`,
-        `delete("user:${mid}")`
+        Permission.read(Role.user(mid)),
+        Permission.update(Role.user(mid)),
+        Permission.delete(Role.user(mid))
     ]);
 
     try {
@@ -218,9 +218,9 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
                 branchIds
             },
             [
-                 `read("user:${userId}")`,
-                 `read("users")`,
-                 `update("user:${userId}")`,
+                 Permission.read(Role.user(userId)),
+                 Permission.read(Role.users()),
+                 Permission.update(Role.user(userId)),
                  ...managerPermissions
             ]
         );
@@ -282,15 +282,15 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
 
     try {
         const permissions = [
-            `read("user:${userId}")`,
-            `read("users")`,
-            ...(teamLeadId ? [`read("user:${teamLeadId}")`] : []),
-            ...(managerId ? [`read("user:${managerId}")`] : []),
-            `update("user:${userId}")`,
-            ...(teamLeadId ? [`update("user:${teamLeadId}")`] : []),
+            Permission.read(Role.user(userId)),
+            Permission.read(Role.users()),
+            ...(teamLeadId ? [Permission.read(Role.user(teamLeadId))] : []),
+            ...(managerId ? [Permission.read(Role.user(managerId))] : []),
+            Permission.update(Role.user(userId)),
+            ...(teamLeadId ? [Permission.update(Role.user(teamLeadId))] : []),
         ];
 
-        if (managerId) permissions.push(`delete("user:${managerId}")`);
+        if (managerId) permissions.push(Permission.delete(Role.user(managerId)));
 
         await databases.createDocument(
             DATABASE_ID,
@@ -454,9 +454,9 @@ export async function updateUserAction(input: {
             const finalTeamLeadId = updates.teamLeadId !== undefined ? updates.teamLeadId : targetUserDoc.teamLeadId;
 
             permissions = [
-                `read("user:${userId}")`,
-                `read("users")`,
-                `update("user:${userId}")`
+                Permission.read(Role.user(userId)),
+                Permission.read(Role.users()),
+                Permission.update(Role.user(userId))
             ];
 
             // Add manager permissions
@@ -470,8 +470,8 @@ export async function updateUserAction(input: {
 
             // Add Team Lead permissions
             if (finalTeamLeadId) {
-                permissions!.push(`read("user:${finalTeamLeadId}")`);
-                permissions!.push(`update("user:${finalTeamLeadId}")`);
+                permissions!.push(Permission.read(Role.user(finalTeamLeadId)));
+                permissions!.push(Permission.update(Role.user(finalTeamLeadId)));
             }
         }
 
