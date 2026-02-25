@@ -65,8 +65,7 @@ export async function reopenLeadAction(leadId: string, actorId: string, actorNam
         const tsxCmd = path.join(process.cwd(), 'node_modules', '.bin', isWin ? 'tsx.cmd' : 'tsx');
 
         // Fallback logic not needed if we ensure tsx is installed, but for robustness:
-        // const fs = require('fs'); // Removed duplicate require
-
+        
         if (fs.existsSync(tsxCmd)) {
              console.log('Executing worker with execFile:', tsxCmd);
              // Inherit environment variables but ensure API key is present
