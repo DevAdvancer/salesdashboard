@@ -60,7 +60,15 @@ export async function reopenLeadAction(leadId: string, actorId: string, actorNam
         // but for isolation, exec is safer.
 
         // Let's use 'npx tsx' but with an absolute path and explicit env
-        const cmd = `npx tsx "${scriptPath}" "${leadId}" "${sessionUserId}" "${sessionUserName}"`;
+        // Determine platform-specific command
+        const isWin = process.platform === 'win32';
+        const tsxCmd = path.join(process.cwd(), 'node_modules', '.bin', isWin ? 'tsx.cmd' : 'tsx');
+        
+        // Fallback to npx if direct path doesn't exist (e.g. in some container setups)
+        const fs = require('fs');
+        const cmd = fs.existsSync(tsxCmd) 
+            ? `"${tsxCmd}" "${scriptPath}" "${leadId}" "${sessionUserId}" "${sessionUserName}"`
+            : `npx tsx "${scriptPath}" "${leadId}" "${sessionUserId}" "${sessionUserName}"`;
         console.log('Executing worker command:', cmd);
 
         // Inherit environment variables but ensure API key is present

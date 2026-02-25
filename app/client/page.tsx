@@ -20,6 +20,8 @@ function HistoryContent() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<HistoryFilters>({});
   const [closedByMap, setClosedByMap] = useState<Record<string, string>>({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
 
   useEffect(() => {
     if (!user) {
@@ -101,6 +103,7 @@ function HistoryContent() {
 
   const clearFilters = () => {
     setFilters({});
+    setCurrentPage(1);
   };
 
   const formatDate = (dateString: string | null | undefined) => {
@@ -128,6 +131,13 @@ function HistoryContent() {
       </div>
     );
   }
+
+  const paginatedLeads = leads.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  const totalPages = Math.ceil(leads.length / ITEMS_PER_PAGE);
 
   return (
     <div className="container mx-auto">
@@ -185,14 +195,14 @@ function HistoryContent() {
               </tr>
             </thead>
             <tbody>
-              {leads.length === 0 ? (
+              {paginatedLeads.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="text-center py-8 text-muted-foreground">
                     No client records found
                   </td>
                 </tr>
               ) : (
-                leads.map((lead) => {
+                paginatedLeads.map((lead) => {
                   const data = getLeadData(lead);
                   return (
                     <tr
@@ -234,9 +244,32 @@ function HistoryContent() {
         </div>
       </Card>
 
+      {/* Pagination Controls */}
+      {leads.length > 0 && (
+        <div className="flex justify-between items-center mt-4">
+          <Button
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            variant="outline"
+          >
+            Previous
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Page {currentPage} of {totalPages}
+          </span>
+          <Button
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            variant="outline"
+          >
+            Next
+          </Button>
+        </div>
+      )}
+
       {/* Summary */}
       <div className="mt-4 text-muted-foreground text-sm">
-        Showing {leads.length} client record{leads.length !== 1 ? 's' : ''}
+        Showing {paginatedLeads.length} of {leads.length} client record{leads.length !== 1 ? 's' : ''}
       </div>
     </div>
   );

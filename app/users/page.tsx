@@ -256,6 +256,15 @@ function UserManagementContent() {
 
       const role = (editRole as UserRole) || undefined;
 
+      // Validate hierarchy consistency
+      if (role === 'team_lead' && (!selectedManagerIds || selectedManagerIds.length === 0)) {
+          setError('Team Leads must have at least one Manager assigned');
+          setIsUpdating(false);
+          return;
+      }
+      // If agent, could validate manager/team lead, but requirements vary. 
+      // Assuming existing validation covers basic requirements or it's optional.
+
       await updateUserAction({
           userId: editingUser.$id,
           role,

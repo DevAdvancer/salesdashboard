@@ -2,7 +2,7 @@
 
 import { ID, Query } from 'node-appwrite';
 import { createAdminClient } from '@/lib/server/appwrite';
-// import { COLLECTIONS, DATABASE_ID } from '@/lib/appwrite'; // Avoid client-side import in server action
+// import { COLLECTIONS, DATABASE_ID } from '@/lib/appwrite'; // Server-side imports only
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const MOCK_ATTEMPTS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_MOCK_ATTEMPTS_COLLECTION_ID || 'mock_attempts';
@@ -22,7 +22,9 @@ export async function getMockAttempts(userId: string, leadIds: string[]) {
             MOCK_ATTEMPTS_COLLECTION_ID,
             [
                 Query.equal('userId', userId),
-                Query.contains('leadId', leadIds)
+                // Use equal for IN query (Appwrite convention for arrays) or multiple queries if needed.
+                // Assuming leadIds is array of strings and we want attempts where leadId is in leadIds.
+                Query.equal('leadId', leadIds)
             ]
         );
 

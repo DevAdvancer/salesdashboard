@@ -1,6 +1,6 @@
 'use server';
 
-import { ID } from 'node-appwrite';
+import { ID, Permission, Role } from 'node-appwrite';
 import { createAdminClient, createSessionClient } from '@/lib/server/appwrite';
 import { CreateManagerInput, CreateTeamLeadInput, CreateAgentInput, UserRole } from '@/lib/types';
 
@@ -61,9 +61,9 @@ async function logAuditAction(
                 performedAt: new Date().toISOString(),
             },
             [
-                'read("any")',
-                'update("label:admin")',
-                'delete("label:admin")',
+                Permission.read(Role.any()),
+                Permission.update(Role.label('admin')),
+                Permission.delete(Role.label('admin')),
             ]
         );
     } catch (error) {
@@ -131,9 +131,9 @@ export async function createManagerAction(input: CreateManagerInput & { currentU
                 branchIds
             },
             [
-                 `read("user:${userId}")`,
-                 `read("users")`,
-                 `update("user:${userId}")`,
+                 Permission.read(Role.user(userId)),
+                 Permission.read(Role.users()),
+                 Permission.update(Role.user(userId)),
             ]
         );
 
