@@ -65,7 +65,7 @@ export async function reopenLeadAction(leadId: string, actorId: string, actorNam
         const tsxCmd = path.join(process.cwd(), 'node_modules', '.bin', isWin ? 'tsx.cmd' : 'tsx');
 
         // Fallback logic not needed if we ensure tsx is installed, but for robustness:
-        const fs = require('fs');
+        // const fs = require('fs'); // Removed duplicate require
 
         if (fs.existsSync(tsxCmd)) {
              console.log('Executing worker with execFile:', tsxCmd);
@@ -128,12 +128,18 @@ export async function reopenLeadAction(leadId: string, actorId: string, actorNam
         } else {
             // Fallback to npx (less secure but compatible) if direct binary not found
             // This path should ideally not be reached in standard installs
-            const cmd = `npx tsx "${scriptPath}" "${leadId}" "${sessionUserId}" "${sessionUserName}"`;
-            console.log('Executing worker command (fallback):', cmd);
+            // Use execFile with npx to avoid shell injection even in fallback
+            console.log('Executing worker command (fallback via npx):');
             const env = { ...process.env };
-            const { exec } = require('child_process'); // Re-import exec locally for fallback
+            const { execFile } = require('child_process'); // Use execFile instead of exec
 
-            exec(cmd, { env }, (error: any, stdout: any, stderr: any) => {
+            // npx command, args array
+            // On Windows npx is a batch file, so we might need shell: true or call npx.cmd
+            // But execFile generally expects an executable.
+            // Safe approach for cross-platform npx without shell:
+            const npxCmd = isWin ? 'npx.cmd' : 'npx';
+
+            execFile(npxCmd, ['tsx', scriptPath, leadId, sessionUserId, sessionUserName], { env }, (error: any, stdout: any, stderr: any) => {
                 if (error) {
                     reject(new Error(`Failed to reopen lead (worker fallback failed): ${stderr || error.message}`));
                     return;
