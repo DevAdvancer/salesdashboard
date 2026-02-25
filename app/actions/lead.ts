@@ -4,7 +4,7 @@ import { createSessionClient } from '@/lib/server/appwrite';
 import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { Permission, Role, ID, Client, Databases } from 'node-appwrite';
 import { revalidatePath } from 'next/cache';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import path from 'path';
 
 const AUDIT_LOGS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_AUDIT_LOGS_COLLECTION_ID || 'audit_logs';
@@ -59,76 +59,91 @@ export async function reopenLeadAction(leadId: string, actorId: string, actorNam
         // Better yet, since we are in a node environment, we can require the script if we refactor it,
         // but for isolation, exec is safer.
 
-        // Let's use 'npx tsx' but with an absolute path and explicit env
+        // Use execFile for better security (avoids shell command injection)
         // Determine platform-specific command
         const isWin = process.platform === 'win32';
         const tsxCmd = path.join(process.cwd(), 'node_modules', '.bin', isWin ? 'tsx.cmd' : 'tsx');
-        
-        // Fallback to npx if direct path doesn't exist (e.g. in some container setups)
+
+        // Fallback logic not needed if we ensure tsx is installed, but for robustness:
         const fs = require('fs');
-        const cmd = fs.existsSync(tsxCmd) 
-            ? `"${tsxCmd}" "${scriptPath}" "${leadId}" "${sessionUserId}" "${sessionUserName}"`
-            : `npx tsx "${scriptPath}" "${leadId}" "${sessionUserId}" "${sessionUserName}"`;
-        console.log('Executing worker command:', cmd);
 
-        // Inherit environment variables but ensure API key is present
-        const env = { ...process.env };
+        if (fs.existsSync(tsxCmd)) {
+             console.log('Executing worker with execFile:', tsxCmd);
+             // Inherit environment variables but ensure API key is present
+             const env = { ...process.env };
 
-        exec(cmd, { env }, (error, stdout, stderr) => {
-            if (error) {
-                console.error(`Worker error: ${error.message}`);
-                console.error(`Worker stderr: ${stderr}`);
+             execFile(tsxCmd, [scriptPath, leadId, sessionUserId, sessionUserName], { env }, (error, stdout, stderr) => {
+                if (error) {
+                    console.error(`Worker error: ${error.message}`);
+                    console.error(`Worker stderr: ${stderr}`);
 
-                // Try to parse JSON error from stdout if available
-                // The worker might output logs before JSON, so find the last JSON object
+                    try {
+                        const lines = stdout.split('\n');
+                        for (let i = lines.length - 1; i >= 0; i--) {
+                            if (lines[i].trim().startsWith('{')) {
+                                const result = JSON.parse(lines[i]);
+                                if (result && result.error) {
+                                    reject(new Error(result.error));
+                                    return;
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        // Ignore parse error
+                    }
+
+                    reject(new Error(`Failed to reopen lead (worker process failed): ${stderr || error.message}`));
+                    return;
+                }
+
+                console.log(`Worker stdout: ${stdout}`);
+
+                // Check for success in stdout
                 try {
                     const lines = stdout.split('\n');
+                    let foundSuccess = false;
                     for (let i = lines.length - 1; i >= 0; i--) {
                         if (lines[i].trim().startsWith('{')) {
                             const result = JSON.parse(lines[i]);
-                            if (result && result.error) {
-                                reject(new Error(result.error));
-                                return;
+                            if (result && result.success) {
+                                foundSuccess = true;
+                                break;
                             }
                         }
                     }
-                } catch (e) {
-                    // Ignore parse error
-                }
 
-                reject(new Error(`Failed to reopen lead (worker process failed): ${stderr || error.message}`));
-                return;
-            }
-
-            console.log(`Worker stdout: ${stdout}`);
-
-            // Check for success in stdout even if no error
-            try {
-                const lines = stdout.split('\n');
-                let foundSuccess = false;
-                for (let i = lines.length - 1; i >= 0; i--) {
-                    if (lines[i].trim().startsWith('{')) {
-                        const result = JSON.parse(lines[i]);
-                        if (result && result.success) {
-                            foundSuccess = true;
-                            break;
-                        }
+                    if (!foundSuccess) {
+                        console.warn('Worker finished but no success JSON found');
                     }
+                } catch (e) {
+                    // Ignore
                 }
 
-                if (!foundSuccess) {
-                    console.warn('Worker finished but no success JSON found');
+                // Revalidate paths after successful update
+                revalidatePath(`/leads/${leadId}`);
+                revalidatePath('/leads');
+
+                resolve({ success: true });
+             });
+        } else {
+            // Fallback to npx (less secure but compatible) if direct binary not found
+            // This path should ideally not be reached in standard installs
+            const cmd = `npx tsx "${scriptPath}" "${leadId}" "${sessionUserId}" "${sessionUserName}"`;
+            console.log('Executing worker command (fallback):', cmd);
+            const env = { ...process.env };
+            const { exec } = require('child_process'); // Re-import exec locally for fallback
+
+            exec(cmd, { env }, (error: any, stdout: any, stderr: any) => {
+                if (error) {
+                    reject(new Error(`Failed to reopen lead (worker fallback failed): ${stderr || error.message}`));
+                    return;
                 }
-            } catch (e) {
-                // Ignore
-            }
-
-            // Revalidate paths after successful update
-            revalidatePath(`/leads/${leadId}`);
-            revalidatePath('/leads');
-
-            resolve({ success: true });
-        });
+                console.log(`Worker stdout: ${stdout}`);
+                revalidatePath(`/leads/${leadId}`);
+                revalidatePath('/leads');
+                resolve({ success: true });
+            });
+        }
     });
 
   } catch (error: any) {

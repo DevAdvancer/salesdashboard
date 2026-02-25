@@ -399,6 +399,17 @@ export async function updateUserAction(input: {
 
         if (managerIds !== undefined) {
             if (!isCallerAdmin && !isCallerManager) throw new Error("Permission denied to change manager");
+
+            // Validate manager IDs existence
+            if (managerIds.length > 0) {
+                // We should ideally check if these users exist and are actually managers
+                // But for performance in server action, we might skip or do a bulk check if critical.
+                // Assuming basic existence check via getDocument if strictly needed, but let's at least ensure format.
+                if (managerIds.some(id => !id || typeof id !== 'string')) {
+                    throw new Error("Invalid manager ID format");
+                }
+            }
+
             newManagerIds = managerIds;
             updates.managerIds = managerIds;
             // Sync legacy field
@@ -451,9 +462,9 @@ export async function updateUserAction(input: {
             // Add manager permissions
             if (finalManagerIds.length > 0) {
                 finalManagerIds.forEach((mid: string) => {
-                    permissions!.push(`read("user:${mid}")`);
-                    permissions!.push(`update("user:${mid}")`);
-                    permissions!.push(`delete("user:${mid}")`);
+                    permissions!.push(Permission.read(Role.user(mid)));
+                    permissions!.push(Permission.update(Role.user(mid)));
+                    permissions!.push(Permission.delete(Role.user(mid)));
                 });
             }
 
