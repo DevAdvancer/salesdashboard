@@ -219,7 +219,7 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
             },
             [
                  Permission.read(Role.user(userId)),
-                 Permission.read(Role.users()),
+                 // Permission.read(Role.users()), // Removed global read access for security
                  Permission.update(Role.user(userId)),
                  ...managerPermissions
             ]
@@ -283,7 +283,7 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
     try {
         const permissions = [
             Permission.read(Role.user(userId)),
-            Permission.read(Role.users()),
+            // Permission.read(Role.users()), // Removed global read access for security
             ...(teamLeadId ? [Permission.read(Role.user(teamLeadId))] : []),
             ...(managerId ? [Permission.read(Role.user(managerId))] : []),
             Permission.update(Role.user(userId)),
@@ -455,7 +455,7 @@ export async function updateUserAction(input: {
 
             permissions = [
                 Permission.read(Role.user(userId)),
-                Permission.read(Role.users()),
+                // Permission.read(Role.users()), // Removed global read access for security
                 Permission.update(Role.user(userId))
             ];
 

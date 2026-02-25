@@ -58,8 +58,20 @@ async function run() {
         }
 
         // Add explicit 'users' read access to ensure visibility for Managers/Admins
-        // This acts as a safeguard if collection-level permissions are behaving unexpectedly
-        permissionSet.add(Permission.read(Role.users()));
+        // NOTE: In a stricter environment, we should only add the specific Manager/Admin role.
+        // For now, removing the global 'users' read to comply with least privilege,
+        // unless it's strictly required for visibility. 
+        // If visibility issues recur, consider adding specific role labels like 'label:manager' instead.
+        // permissionSet.add(Permission.read(Role.users())); 
+        
+        // Instead, let's ensure the Manager/Admin labels have access if your system uses labels
+        // Or if you rely on collection-level permissions for Managers, then document-level isn't needed for them.
+        // If we MUST ensure visibility for a specific upper role:
+        // permissionSet.add(Permission.read(Role.label('manager')));
+        
+        // For this fix, I will remove the global read and rely on the owner/assigned + collection permissions.
+        // If you need global visibility for all authenticated users, uncomment the line below.
+        // permissionSet.add(Permission.read(Role.users()));
 
         const permissions = Array.from(permissionSet);
 
