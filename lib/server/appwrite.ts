@@ -8,26 +8,32 @@ export async function createSessionClient() {
 
   const cookieStore = await cookies();
   const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!;
-  
+
   // Try different cookie name formats
   let session = cookieStore.get(`a_session_${projectId}`);
-  
+
   if (!session || !session.value) {
     // Try legacy format
     session = cookieStore.get(`a_session_${projectId}_legacy`);
   }
-  
+
   if (!session || !session.value) {
     // Try without prefix
     session = cookieStore.get(projectId);
   }
-  
+
   if (!session || !session.value) {
     const allCookies = cookieStore.getAll();
-    console.error('Session cookie not found.');
-    console.error('Expected cookie name:', `a_session_${projectId}`);
-    console.error('Available cookies:', allCookies.map(c => ({ name: c.name, hasValue: !!c.value })));
-    throw new Error("No session");
+    
+    // Fallback: Check for ANY cookie starting with a_session_
+    const anySession = allCookies.find(c => c.name.startsWith('a_session_'));
+    if (anySession && anySession.value) {
+        session = anySession;
+    } else {
+        // Log available cookies to debug why session is missing
+        console.error('Session cookie not found. Available cookies:', allCookies.map(c => c.name));
+        throw new Error("No session");
+    }
   }
 
   client.setSession(session.value);

@@ -282,6 +282,8 @@ export async function listLeads(
     if (filters.isClosed !== undefined) {
       queries.push(Query.equal('isClosed', filters.isClosed));
     } else {
+      // If we are listing leads and explicitly want all (e.g. for search or if logic demands), we might skip this.
+      // But typically "listLeads" implies active leads unless specified otherwise.
       queries.push(Query.equal('isClosed', false));
     }
 

@@ -17,4 +17,4 @@ export const msalServerConfig: Configuration = {
   }
 };
 
-export const REDIRECT_URI = 'http://localhost:5000/';
+export const REDIRECT_URI = process.env.NEXT_PUBLIC_AZURE_REDIRECT_URI;

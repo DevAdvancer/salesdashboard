@@ -53,10 +53,10 @@ function LeadsContent() {
         } catch (e) {
             console.error('Failed to parse lead data', e);
         }
-        
+
         // Add all keys from this lead to the set
         Object.keys(data).forEach(key => allKeys.add(key));
-        
+
         return {
             ...lead,
             parsedData: data
@@ -65,11 +65,11 @@ function LeadsContent() {
 
       // 2. Define standard headers we always want first
       const standardHeaders = ['firstName', 'lastName', 'email', 'phone', 'company', 'status', 'sourceName', 'referralName'];
-      
+
       // 3. Create final list of headers (standard + any others found)
       // Filter out standard ones from allKeys to avoid duplicates, then spread the rest
       const otherKeys = Array.from(allKeys).filter(key => !standardHeaders.includes(key));
-      
+
       // Create display headers (Capitalized)
       const displayHeaders = [
           'First Name', 'Last Name', 'Email', 'Phone', 'Company', 'Status', 'Source Name', 'Referral Name', 'Created At',
@@ -79,7 +79,7 @@ function LeadsContent() {
       // 4. Map data rows
       const rows = parsedLeads.map(lead => {
         const data = lead.parsedData;
-        
+
         // Smart mapping for Source and Referral
         // Use sourceName if available, otherwise fall back to 'source' field
         const sourceVal = data.sourceName || data.source || '';
@@ -179,9 +179,11 @@ function LeadsContent() {
 
   useEffect(() => {
     if (user) {
+      // Don't reload if filters haven't changed meaningfully to avoid loops
+      // but ensure we do load when filters *do* change.
       loadLeads();
     }
-  }, [filters]);
+  }, [filters, user]); // Added user to dependencies to ensure load on initial auth
 
   const loadAgents = async () => {
     if (!user || (user.role !== 'manager' && user.role !== 'team_lead')) return;
@@ -232,7 +234,17 @@ function LeadsContent() {
     try {
       setIsLoading(true);
       setError(null);
-      const fetchedLeads = await listLeads(filters, user.$id, user.role, user.branchIds);
+      // Ensure we explicitly pass isClosed=false to the filters, as listLeads defaults to that
+      // but let's be explicit. Also, if filters already has isClosed, it will be respected.
+      const currentFilters = { ...filters };
+
+      // If we are searching, we might want to search across ALL leads (closed and open)?
+      // For now, let's stick to active leads unless user filters for closed.
+      if (currentFilters.isClosed === undefined) {
+          currentFilters.isClosed = false;
+      }
+
+      const fetchedLeads = await listLeads(currentFilters, user.$id, user.role, user.branchIds);
       setLeads(fetchedLeads);
       setCurrentPage(1);
     } catch (err) {
@@ -275,7 +287,10 @@ function LeadsContent() {
     setAssignedToFilter('');
     setDateFromFilter('');
     setDateToFilter('');
+    // Explicitly set empty object to reset everything, including hidden isClosed logic
     setFilters({});
+    // Force reload immediately
+    setTimeout(() => loadLeads(), 0);
   };
 
   const paginatedLeads = leads.slice(
@@ -354,6 +369,11 @@ function LeadsContent() {
                 placeholder="Search leads..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                        handleApplyFilters();
+                    }
+                }}
               />
             </div>
 

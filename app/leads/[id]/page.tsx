@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { useRouter, useParams } from 'next/navigation';
 import { getLead, updateLead, closeLead, assignLead } from '@/lib/services/lead-service';
+import { reopenLeadAction } from '@/app/actions/lead';
 import { getAgentsByManager } from '@/lib/services/user-service';
 import { getFormConfig } from '@/lib/services/form-config-service';
 import { Lead, User, FormField, LeadData } from '@/lib/types';
@@ -132,6 +133,29 @@ function LeadDetailContent() {
       toast({
         title: 'Error',
         description: err.message || 'Failed to close lead',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleReopenLead = async () => {
+    if (!lead || !user) return;
+
+    try {
+      setIsSaving(true);
+      await reopenLeadAction(leadId, user.$id, user.name);
+      toast({
+        title: 'Success',
+        description: 'Lead reopened successfully',
+      });
+      await loadLead();
+    } catch (err: any) {
+      console.error('Error reopening lead:', err);
+      toast({
+        title: 'Error',
+        description: err.message || 'Failed to reopen lead',
         variant: 'destructive',
       });
     } finally {
@@ -276,6 +300,11 @@ function LeadDetailContent() {
                 </>
               )}
             </>
+          )}
+          {lead.isClosed && (user?.role === 'manager' || user?.role === 'admin') && (
+            <Button onClick={handleReopenLead} disabled={isSaving}>
+              {isSaving ? 'Reopening...' : 'Reopen Lead'}
+            </Button>
           )}
         </div>
       </div>
