@@ -46,8 +46,8 @@ interface MockFormData {
 }
 
 const INITIAL_FORM_DATA: MockFormData = {
-  // to: 'tech.leaders@silverspaceinc.com',
-  to: 'prateek.narvariya@silverspaceinc.com',
+  to: 'tech.leaders@silverspaceinc.com',
+  // to: 'prateek.narvariya@silverspaceinc.com',
   cc: '',
   resume: null,
   role: '',
