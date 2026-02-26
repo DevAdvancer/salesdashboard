@@ -25,6 +25,7 @@ import { ProtectedRoute } from '@/components/protected-route';
 // import { Query, ID } from 'appwrite';
 import { Clock, RefreshCw, AlertCircle } from 'lucide-react';
 import { getMockAttempts, recordMockAttempt } from '@/app/actions/mock'; // Import Server Actions
+import { useDebounce } from '@/lib/hooks/use-debounce';
 // import { useMsal } from "@azure/msal-react";
 // import { loginRequest } from "@/lib/msal-config";
 
@@ -45,8 +46,8 @@ interface MockFormData {
 }
 
 const INITIAL_FORM_DATA: MockFormData = {
-  to: 'tech.leaders@silverspaceinc.com',
-  // to: 'prateek.narvariya@silverspaceinc.com',
+  // to: 'tech.leaders@silverspaceinc.com',
+  to: 'prateek.narvariya@silverspaceinc.com',
   cc: '',
   resume: null,
   role: '',
@@ -74,6 +75,7 @@ function MockContent() {
   const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
   const [filter, setFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -129,18 +131,30 @@ function MockContent() {
           // Use Server Action instead of client DB call
           const attempts = await getMockAttempts(user.$id, leadIds);
 
-          const attemptsMap = new Map<string, MockAttempt>();
-          attempts.forEach((doc: any) => {
-              attemptsMap.set(doc.leadId, {
-                  $id: doc.$id,
-                  leadId: doc.leadId,
-                  userId: doc.userId,
-                  attemptCount: doc.attemptCount,
-                  lastAttemptAt: doc.lastAttemptAt
-              });
-          });
+          setMockAttempts(prev => {
+              const newMap = new Map(prev);
+              let hasChanges = false;
 
-          setMockAttempts(prev => new Map([...prev, ...attemptsMap]));
+              attempts.forEach((doc: any) => {
+                  const existing = newMap.get(doc.leadId);
+                  // Only update if data actually changed
+                  if (!existing ||
+                      existing.attemptCount !== doc.attemptCount ||
+                      existing.lastAttemptAt !== doc.lastAttemptAt) {
+
+                      newMap.set(doc.leadId, {
+                          $id: doc.$id,
+                          leadId: doc.leadId,
+                          userId: doc.userId,
+                          attemptCount: doc.attemptCount,
+                          lastAttemptAt: doc.lastAttemptAt
+                      });
+                      hasChanges = true;
+                  }
+              });
+
+              return hasChanges ? newMap : prev;
+          });
       } catch (err) {
           console.error('Error loading mock attempts:', err);
       } finally {
@@ -200,8 +214,8 @@ function MockContent() {
       });
     }
 
-    if (searchQuery) {
-      const lowerQuery = searchQuery.toLowerCase();
+    if (debouncedSearchQuery) {
+      const lowerQuery = debouncedSearchQuery.toLowerCase();
       result = result.filter(lead => {
         const data = JSON.parse(lead.data);
         return (
@@ -215,7 +229,7 @@ function MockContent() {
     }
 
     setFilteredLeads(result);
-  }, [leads, filter, searchQuery, mockAttempts]);
+  }, [leads, filter, debouncedSearchQuery, mockAttempts]);
 
   // Reset file input key to force re-render and clear file
   const [fileInputKey, setFileInputKey] = useState(Date.now());
@@ -678,6 +692,11 @@ function MockContent() {
                       <td className="p-4">{leadData.email || 'N/A'}</td>
                       <td className="p-4">{leadData.company || 'N/A'}</td>
                       <td className="p-4 flex items-center gap-2">
+                        {attemptsCount > 0 && (
+                            <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded border border-green-200">
+                                Mock Created
+                            </span>
+                        )}
                         {attemptsCount === 0 ? (
                             <Button
                                 size="sm"

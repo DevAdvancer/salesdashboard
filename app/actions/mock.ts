@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/server/appwrite';
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const MOCK_ATTEMPTS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_MOCK_ATTEMPTS_COLLECTION_ID || 'mock_attempts';
+const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID || 'users';
 
 /**
  * Get all mock attempts for a user and a set of lead IDs
@@ -51,6 +52,15 @@ export async function recordMockAttempt(userId: string, leadId: string) {
         const { databases } = await createAdminClient();
         const collectionId = MOCK_ATTEMPTS_COLLECTION_ID;
 
+        // Fetch User to check Role
+        const user = await databases.getDocument(
+            DATABASE_ID,
+            USERS_COLLECTION_ID,
+            userId
+        );
+
+        const isAdmin = user.role === 'admin';
+
         // Check for existing attempt
         const existing = await databases.listDocuments(
             DATABASE_ID,
@@ -66,27 +76,31 @@ export async function recordMockAttempt(userId: string, leadId: string) {
         if (existing.total > 0) {
             const attempt = existing.documents[0];
 
-            // Security check: max 2 attempts
-            if (attempt.attemptCount >= 2) {
+            // Security check: max 2 attempts (SKIP IF ADMIN)
+            if (!isAdmin && attempt.attemptCount >= 2) {
                 throw new Error('Maximum attempts reached');
             }
 
-            // Security check: cooldown 30 min
+            // Security check: cooldown 30 min (SKIP IF ADMIN)
             const lastAttempt = new Date(attempt.lastAttemptAt);
             const diffMs = new Date(now).getTime() - lastAttempt.getTime();
             const diffMinutes = diffMs / (1000 * 60);
 
-            // Allow retry if > 30 mins
-            if (diffMinutes < 30) {
+            // Allow retry if > 30 mins (SKIP IF ADMIN)
+            if (!isAdmin && diffMinutes < 30) {
                 throw new Error('Cooldown period active');
             }
+
+            // Update attempt
+            // If admin, keep the same count (doesn't increment)
+            const newCount = isAdmin ? attempt.attemptCount : attempt.attemptCount + 1;
 
             const updated = await databases.updateDocument(
                 DATABASE_ID,
                 collectionId,
                 attempt.$id,
                 {
-                    attemptCount: attempt.attemptCount + 1,
+                    attemptCount: newCount,
                     lastAttemptAt: now
                 }
             );
