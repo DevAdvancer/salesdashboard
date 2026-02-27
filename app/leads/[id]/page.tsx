@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { useRouter, useParams } from 'next/navigation';
-import { getLead, updateLead, closeLead, assignLead } from '@/lib/services/lead-service';
+import { getLead, updateLead, closeLead } from '@/lib/services/lead-service';
 import { reopenLeadAction } from '@/app/actions/lead';
+import { assignLeadAction } from '@/lib/actions/lead-actions';
 import { getAgentsByManager } from '@/lib/services/user-service';
 import { getFormConfig } from '@/lib/services/form-config-service';
 import { Lead, User, FormField, LeadData } from '@/lib/types';
@@ -167,7 +168,7 @@ function LeadDetailContent() {
     if (!lead || !user) return;
 
     try {
-      await assignLead(leadId, agentId, user.$id, user.name);
+      await assignLeadAction(leadId, agentId, user.$id, user.name);
       toast({
         title: 'Success',
         description: 'Lead assigned successfully',
