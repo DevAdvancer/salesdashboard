@@ -1,7 +1,7 @@
 // User types
-export type UserRole = 'admin' | 'manager' | 'team_lead' | 'agent';
+export type UserRole = 'admin' | 'manager' | 'assistant_manager' | 'team_lead' | 'agent';
 
-export const VALID_ROLES: UserRole[] = ['admin', 'manager', 'team_lead', 'agent'];
+export const VALID_ROLES: UserRole[] = ['admin', 'manager', 'assistant_manager', 'team_lead', 'agent'];
 
 export function isValidRole(value: string): value is UserRole {
   return VALID_ROLES.includes(value as UserRole);
@@ -14,6 +14,7 @@ export interface User {
   role: UserRole;
   managerId: string | null; // @deprecated Use managerIds instead
   managerIds?: string[]; // New field for multiple managers
+  assistantManagerId?: string | null; // New field for Assistant Manager
   teamLeadId: string | null;
   branchIds: string[];
   /** @deprecated Use branchIds instead */
@@ -29,11 +30,33 @@ export interface CreateManagerInput {
   branchIds: string[];
 }
 
+export interface CreateAssistantManagerInput {
+  name: string;
+  email: string;
+  password: string;
+  managerIds?: string[];
+  branchIds: string[];
+}
+
+export interface CreateUserInput {
+  name: string;
+  email: string;
+  password: string;
+  role: UserRole;
+  managerId?: string;
+  managerIds?: string[];
+  assistantManagerId?: string;
+  teamLeadId?: string;
+  branchIds: string[];
+}
+
 export interface CreateTeamLeadInput {
   name: string;
   email: string;
   password: string;
-  managerIds?: string[]; // Changed from managerId
+  managerId?: string;
+  managerIds?: string[];
+  assistantManagerId?: string;
   branchIds: string[];
 }
 
@@ -42,10 +65,9 @@ export interface CreateAgentInput {
   email: string;
   password: string;
   teamLeadId?: string;
-  managerId?: string; // Agents still have one manager? Or should they also have multiple? Assuming one for now via TL, or direct report.
-  // Actually, if TL has multiple managers, the Agent under that TL effectively reports to all those managers.
-  // But if Agent is direct report to Manager (no TL), maybe still one manager?
-  // Let's stick to TL having multiple managers as requested.
+  managerId?: string;
+  managerIds?: string[]; // Added managerIds
+  assistantManagerId?: string;
   branchIds: string[];
 }
 
@@ -195,6 +217,7 @@ export interface AuthContext {
   user: User | null;
   isAdmin: boolean;
   isManager: boolean;
+  isAssistantManager: boolean;
   isTeamLead: boolean;
   isAgent: boolean;
   loading: boolean;

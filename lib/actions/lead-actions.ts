@@ -3,7 +3,66 @@
 import { createAdminClient } from '@/lib/server/appwrite';
 import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { Permission, Role, ID } from 'node-appwrite';
-import { Lead } from '@/lib/types';
+import { Lead, User } from '@/lib/types';
+
+/**
+ * Helper to get permissions for supervisors up the chain (Server Side)
+ */
+async function getHierarchyPermissionsServer(userId: string, databases: any): Promise<string[]> {
+    const permissions: string[] = [];
+    try {
+        let currentId = userId;
+        const visited = new Set<string>();
+        
+        // Walk up the hierarchy (max 5 levels to prevent loops)
+        while (currentId && !visited.has(currentId) && visited.size < 5) {
+            visited.add(currentId);
+            
+            try {
+                const user = await databases.getDocument(
+                    DATABASE_ID,
+                    COLLECTIONS.USERS,
+                    currentId
+                ) as unknown as User;
+                
+                // Add supervisors
+                const supervisors = new Set<string>();
+                if (user.teamLeadId) supervisors.add(user.teamLeadId);
+                if (user.managerId) supervisors.add(user.managerId);
+                if (user.managerIds && user.managerIds.length > 0) {
+                    user.managerIds.forEach(mid => supervisors.add(mid));
+                }
+                
+                // Add permissions for supervisors
+                for (const supId of supervisors) {
+                    if (!visited.has(supId)) {
+                        permissions.push(Permission.read(Role.user(supId)));
+                        permissions.push(Permission.update(Role.user(supId)));
+                        permissions.push(Permission.delete(Role.user(supId)));
+                    }
+                }
+                
+                // Move up to the next level
+                if (user.teamLeadId) {
+                    currentId = user.teamLeadId;
+                } else if (user.managerId) {
+                    currentId = user.managerId;
+                } else if (user.managerIds && user.managerIds.length > 0) {
+                    currentId = user.managerIds[0];
+                } else {
+                    break; // Top of chain
+                }
+            } catch (err) {
+                // User might not exist or other error, break chain
+                console.error(`Error fetching user ${currentId} for hierarchy:`, err);
+                break;
+            }
+        }
+    } catch (e) {
+        console.error(`Error fetching hierarchy permissions for user ${userId}:`, e);
+    }
+    return permissions;
+}
 
 /**
  * Assign a lead to an agent using server-side admin client
@@ -32,6 +91,10 @@ export async function assignLeadAction(
             Permission.update(Role.user(currentLead.ownerId)),
             Permission.delete(Role.user(currentLead.ownerId)),
         ];
+        
+        // Add owner's hierarchy permissions
+        const ownerHierarchyPerms = await getHierarchyPermissionsServer(currentLead.ownerId, databases);
+        permissions.push(...ownerHierarchyPerms);
 
         // Add new agent permissions
         if (!currentLead.isClosed) {
@@ -43,6 +106,10 @@ export async function assignLeadAction(
             // For closed leads, agent gets read-only access
             permissions.push(Permission.read(Role.user(agentId)));
         }
+        
+        // Add assigned agent's hierarchy permissions
+        const assignedHierarchyPerms = await getHierarchyPermissionsServer(agentId, databases);
+        permissions.push(...assignedHierarchyPerms);
 
         // Update the lead
         const lead = await databases.updateDocument(

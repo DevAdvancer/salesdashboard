@@ -1,7 +1,7 @@
 import { ID, Permission, Role, Query } from 'appwrite';
 import { account, databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { logAction } from '@/lib/services/audit-service';
-import { User, UserRole, CreateAgentInput, CreateTeamLeadInput, CreateManagerInput } from '@/lib/types';
+import { User, UserRole, CreateAgentInput, CreateTeamLeadInput, CreateManagerInput, CreateAssistantManagerInput } from '@/lib/types';
 
 const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
 
@@ -78,6 +78,59 @@ export async function createManager(input: CreateManagerInput, currentUser: User
 }
 
 /**
+ * Create a new assistant manager under a manager.
+ */
+export async function createAssistantManager(input: CreateAssistantManagerInput, currentUser: User): Promise<User> {
+  const { name, email, password, managerIds, branchIds } = input;
+
+  if (!branchIds.length) {
+    throw new Error('At least one branch must be assigned');
+  }
+
+  try {
+    const userId = ID.unique();
+    await account.create(userId, email, password, name);
+
+    const userDoc = await databases.createDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      userId,
+      {
+        name,
+        email,
+        role: 'assistant_manager',
+        managerIds: managerIds || [],
+        managerId: managerIds?.[0] || null, // Set primary manager
+        teamLeadId: null,
+        branchIds,
+      },
+      [
+        Permission.read(Role.user(userId)),
+        Permission.read(Role.users()),
+        Permission.update(Role.user(userId)),
+      ]
+    );
+
+    await logAction({
+      action: 'USER_CREATE',
+      actorId: currentUser.$id,
+      actorName: currentUser.name,
+      targetId: userDoc.$id,
+      targetType: 'assistant_manager',
+      metadata: { branchIds, managerIds }
+    });
+
+    return mapDocToUser(userDoc);
+  } catch (error: any) {
+    console.error('Error creating assistant manager:', error);
+    if (error.code === 409 || error.message?.includes('already exists')) {
+      throw new Error('A user with this email already exists');
+    }
+    throw error;
+  }
+}
+
+/**
  * Create a new team lead under a manager.
  * This function:
  * 1. Fetches the manager and validates branchIds ⊆ manager.branchIds
@@ -96,7 +149,7 @@ export async function createTeamLead(input: CreateTeamLeadInput, currentUser: Us
     // Validate against first manager if available (simplification for now, or check all?)
     // Actually we just need to ensure branch validity.
     // If managerIds are provided, check their branches? Or just trust admin/manager caller?
-    
+
     // For now, let's process permissions for all managers
     const permissions = [
       Permission.read(Role.user(ID.custom('temp'))), // Placeholder ID will be replaced
@@ -119,7 +172,7 @@ export async function createTeamLead(input: CreateTeamLeadInput, currentUser: Us
       Permission.read(Role.users()),
       Permission.update(Role.user(userId)),
     ];
-    
+
     if (managerIds && managerIds.length > 0) {
         for (const mid of managerIds) {
             finalPermissions.push(Permission.read(Role.user(mid)));
@@ -372,7 +425,8 @@ export async function getAssignableUsers(
 
   try {
     const allowedRoles: UserRole[] =
-      creatorRole === 'manager' ? ['team_lead', 'agent'] :
+      creatorRole === 'manager' ? ['assistant_manager', 'team_lead', 'agent'] :
+      creatorRole === 'assistant_manager' ? ['team_lead', 'agent'] :
       creatorRole === 'team_lead' ? ['agent'] :
       [];
 
@@ -619,6 +673,56 @@ export async function updateUserManager(
   } catch (error: any) {
     console.error('Error updating user manager:', error);
     throw new Error(error.message || 'Failed to update user manager');
+  }
+}
+
+/**
+ * Get all subordinates for a user (Manager or Assistant Manager)
+ * This includes:
+ * 1. Users who have this user as managerId
+ * 2. Users who have this user in their managerIds array
+ * 3. Users who have a teamLeadId that reports to this user (recursive)
+ */
+export async function getSubordinates(userId: string): Promise<User[]> {
+  try {
+    const directReportsResponse = await databases.listDocuments(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      [
+        Query.or([
+          Query.equal('managerId', userId),
+          Query.contains('managerIds', [userId])
+        ])
+      ]
+    );
+    const directReports = directReportsResponse.documents.map(mapDocToUser);
+
+    // 2. Identify Team Leads among direct reports
+    const teamLeadIds = directReports
+      .filter(u => u.role === 'team_lead')
+      .map(u => u.$id);
+
+    // 3. Fetch indirect reports (Agents assigned to these Team Leads)
+    let indirectReports: User[] = [];
+    if (teamLeadIds.length > 0) {
+      const indirectReportsResponse = await databases.listDocuments(
+        DATABASE_ID,
+        USERS_COLLECTION_ID,
+        [
+          Query.equal('teamLeadId', teamLeadIds)
+        ]
+      );
+      indirectReports = indirectReportsResponse.documents.map(mapDocToUser);
+    }
+
+    // 4. Combine and deduplicate
+    const allSubordinates = [...directReports, ...indirectReports];
+    const uniqueSubordinates = Array.from(new Map(allSubordinates.map(item => [item.$id, item])).values());
+
+    return uniqueSubordinates;
+  } catch (error: any) {
+    console.error('Error fetching subordinates:', error);
+    throw new Error(error.message || 'Failed to fetch subordinates');
   }
 }
 

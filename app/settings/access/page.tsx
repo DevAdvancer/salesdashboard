@@ -14,7 +14,7 @@ const ACCESS_CONFIG_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_ACCESS_CONF
 interface AccessRule {
   $id?: string;
   componentKey: ComponentKey;
-  role: 'admin' | 'manager' | 'team_lead' | 'agent';
+  role: 'admin' | 'manager' | 'assistant_manager' | 'team_lead' | 'agent';
   allowed: boolean;
 }
 
@@ -75,10 +75,12 @@ function AccessConfigContent() {
     }
   };
 
-  const toggleAccess = async (componentKey: ComponentKey, role: 'manager' | 'team_lead' | 'agent') => {
+  const toggleAccess = async (componentKey: ComponentKey, role: 'manager' | 'assistant_manager' | 'team_lead' | 'agent') => {
     const key = `${componentKey}-${role}`;
     const existingRule = rules.get(key);
-    const newAllowed = existingRule ? !existingRule.allowed : true;
+    // Calculate new allowed state based on CURRENT effective permission
+    const currentAllowed = isAllowed(componentKey, role);
+    const newAllowed = !currentAllowed;
 
     try {
       setIsSaving(true);
@@ -121,15 +123,17 @@ function AccessConfigContent() {
     }
   };
 
-  const isAllowed = (componentKey: ComponentKey, role: 'manager' | 'team_lead' | 'agent'): boolean => {
+  const isAllowed = (componentKey: ComponentKey, role: 'manager' | 'assistant_manager' | 'team_lead' | 'agent'): boolean => {
     const key = `${componentKey}-${role}`;
     const rule = rules.get(key);
     if (rule !== undefined) return rule.allowed;
-    // Defaults: 
+    // Defaults:
     // - manager=true (except branch-management)
+    // - assistant_manager=true (except branch-management)
     // - team_lead=true (dashboard, leads, history, user-management)
     // - agent=false (except dashboard, leads)
     if (role === 'manager') return componentKey !== 'branch-management';
+    if (role === 'assistant_manager') return componentKey !== 'branch-management' && componentKey !== 'settings';
     if (role === 'team_lead') return ['dashboard', 'leads', 'history', 'user-management'].includes(componentKey);
     if (role === 'agent') return componentKey === 'dashboard' || componentKey === 'leads';
     return false;
@@ -171,9 +175,10 @@ function AccessConfigContent() {
         <CardContent>
           <div className="space-y-6">
             {/* Header Row */}
-            <div className={`hidden sm:grid gap-4 pb-4 border-b ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'}`}>
+            <div className={`hidden sm:grid gap-4 pb-4 border-b ${isAdmin ? 'grid-cols-6' : 'grid-cols-4'}`}>
               <div className="font-semibold">Component</div>
               {isAdmin && <div className="font-semibold text-center">Manager</div>}
+              {isAdmin && <div className="font-semibold text-center">Asst. Manager</div>}
               <div className="font-semibold text-center">Team Lead</div>
               <div className="font-semibold text-center">Agent</div>
               <div />
@@ -184,7 +189,7 @@ function AccessConfigContent() {
               <div
                 key={component.key}
                 className={`grid grid-cols-1 gap-2 items-center border-b sm:border-b-0 pb-4 sm:pb-0 ${
-                  isAdmin ? 'sm:grid-cols-5 sm:gap-4' : 'sm:grid-cols-4 sm:gap-4'
+                  isAdmin ? 'sm:grid-cols-6 sm:gap-4' : 'sm:grid-cols-4 sm:gap-4'
                 }`}
               >
                 <div>
@@ -202,6 +207,20 @@ function AccessConfigContent() {
                       type="checkbox"
                       checked={isAllowed(component.key, 'manager')}
                       onChange={() => toggleAccess(component.key, 'manager')}
+                      disabled={isSaving}
+                      className="h-5 w-5 rounded border-input disabled:opacity-50 cursor-pointer"
+                    />
+                  </div>
+                )}
+
+                {/* Assistant Manager column — only visible to admin */}
+                {isAdmin && (
+                  <div className="flex sm:justify-center items-center gap-2 sm:gap-0">
+                    <span className="text-sm text-muted-foreground sm:hidden">Asst. Manager:</span>
+                    <input
+                      type="checkbox"
+                      checked={isAllowed(component.key, 'assistant_manager')}
+                      onChange={() => toggleAccess(component.key, 'assistant_manager')}
                       disabled={isSaving}
                       className="h-5 w-5 rounded border-input disabled:opacity-50 cursor-pointer"
                     />

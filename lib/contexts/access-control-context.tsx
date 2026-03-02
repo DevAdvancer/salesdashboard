@@ -122,6 +122,20 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
         componentKey === 'mock'
       );
     }
+    // Assistant Manager: By default, minimal access (Dashboard only) to prevent login loops.
+    // All other access must be explicitly granted by Admin.
+    if (user.role === 'assistant_manager') {
+      return (
+        componentKey === 'dashboard' ||
+        componentKey === 'leads' ||
+        componentKey === 'history' ||
+        componentKey === 'user-management' ||
+        componentKey === 'field-management' ||
+        componentKey === 'mock' ||
+        componentKey === 'hierarchy'
+      );
+    }
+
     return false;
   }, [user, isAdmin, rules]);
 

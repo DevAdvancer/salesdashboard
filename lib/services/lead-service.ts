@@ -3,24 +3,81 @@ import { databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { Lead, CreateLeadInput, LeadData, LeadListFilters, UserRole } from '@/lib/types';
 import { validateLeadUniqueness } from '@/lib/services/lead-validator';
 import { logAction } from './audit-service';
+import { getUserById } from '@/lib/services/user-service';
+
+// Helper to get permissions for supervisors up the chain
+async function getHierarchyPermissions(userId: string): Promise<string[]> {
+    const permissions: string[] = [];
+    try {
+        let currentId = userId;
+        const visited = new Set<string>();
+
+        // Walk up the hierarchy (max 5 levels to prevent loops)
+        while (currentId && !visited.has(currentId) && visited.size < 5) {
+            visited.add(currentId);
+
+            const user = await getUserById(currentId);
+
+            // Add supervisors
+            const supervisors = new Set<string>();
+            if (user.teamLeadId) supervisors.add(user.teamLeadId);
+            if (user.managerId) supervisors.add(user.managerId);
+            if (user.managerIds && user.managerIds.length > 0) {
+                user.managerIds.forEach(mid => supervisors.add(mid));
+            }
+
+            // Add permissions for supervisors
+            for (const supId of supervisors) {
+                if (!visited.has(supId)) {
+                    permissions.push(Permission.read(Role.user(supId)));
+                    permissions.push(Permission.update(Role.user(supId)));
+                    permissions.push(Permission.delete(Role.user(supId))); // Supervisors can delete? Maybe.
+                }
+            }
+
+            // Move up to the next level (prefer Team Lead -> Manager -> Primary Manager)
+            // If multiple managers, we just pick the primary one to continue the chain up.
+            // If user has teamLeadId, next is teamLeadId.
+            // If user has managerId, next is managerId.
+            // This assumes single-path hierarchy for simplicity, though multiple managers get access.
+            if (user.teamLeadId) {
+                currentId = user.teamLeadId;
+            } else if (user.managerId) {
+                currentId = user.managerId;
+            } else if (user.managerIds && user.managerIds.length > 0) {
+                currentId = user.managerIds[0];
+            } else {
+                break; // Top of chain
+            }
+        }
+    } catch (e) {
+        console.error(`Error fetching hierarchy permissions for user ${userId}:`, e);
+    }
+    return permissions;
+}
 
 /**
  * Create a new lead
  *
- * This function creates a new lead with the provided data.
+ * This function creates a new lead document in Appwrite.
  * It validates lead uniqueness (email/phone) across all branches before creation.
- * It automatically sets ownerId to the creating user's ID (Requirement 4.1).
- * It sets the branchId from the input (auto-set from user's branch, or admin-specified).
- * It sets document-level permissions based on owner and assigned agent.
+ * It sets the initial status to "New" and assigns ownership to the creating user.
+ * It also logs the creation action to the audit log.
  *
- * @param creatingUserId - The ID of the user creating the lead (auto-set as ownerId)
- * @param input - The lead creation input
- * @param creatingUserName - The name of the user creating the lead (optional, for logging)
+ * @param ownerId - The ID of the user who owns the lead
+ * @param input - The lead input data
+ * @param creatingUserId - The ID of the user performing the creation (optional, for logging)
+ * @param creatingUserName - The name of the user performing the creation (optional, for logging)
  * @returns The created lead
  */
-export async function createLead(creatingUserId: string, input: CreateLeadInput, creatingUserName?: string): Promise<Lead> {
+export async function createLead(
+    ownerId: string,
+    input: CreateLeadInput,
+    creatingUserId?: string,
+    creatingUserName?: string
+): Promise<Lead> {
   try {
-    // Validate lead uniqueness before creating
+    // Validate lead uniqueness
     const validation = await validateLeadUniqueness(input.data);
     if (!validation.isValid) {
       throw new Error(
@@ -30,7 +87,8 @@ export async function createLead(creatingUserId: string, input: CreateLeadInput,
     }
 
     // Auto-set ownerId to the creating user's ID (Requirement 4.1)
-    const ownerId = creatingUserId;
+    // Note: If creatingUserId is not provided, use ownerId passed in.
+    const finalOwnerId = creatingUserId || ownerId;
 
     // Serialize lead data to JSON
     const dataJson = JSON.stringify(input.data);
@@ -38,10 +96,14 @@ export async function createLead(creatingUserId: string, input: CreateLeadInput,
     // Build permissions array
     const permissions: string[] = [
       // Owner (creator) has full access
-      Permission.read(Role.user(ownerId)),
-      Permission.update(Role.user(ownerId)),
-      Permission.delete(Role.user(ownerId)),
+      Permission.read(Role.user(finalOwnerId)),
+      Permission.update(Role.user(finalOwnerId)),
+      Permission.delete(Role.user(finalOwnerId)),
     ];
+
+    // Add owner's hierarchy permissions
+    const ownerHierarchyPerms = await getHierarchyPermissions(finalOwnerId);
+    permissions.push(...ownerHierarchyPerms);
 
     // If assigned to an agent, grant them read and update access
     if (input.assignedToId) {
@@ -49,6 +111,9 @@ export async function createLead(creatingUserId: string, input: CreateLeadInput,
         Permission.read(Role.user(input.assignedToId)),
         Permission.update(Role.user(input.assignedToId))
       );
+      // Add assigned user's hierarchy permissions too
+      const assignedHierarchyPerms = await getHierarchyPermissions(input.assignedToId);
+      permissions.push(...assignedHierarchyPerms);
     }
 
     // Create the lead document with branchId
@@ -59,7 +124,7 @@ export async function createLead(creatingUserId: string, input: CreateLeadInput,
       {
         data: dataJson,
         status: input.status || 'New',
-        ownerId: ownerId,
+        ownerId: finalOwnerId,
         assignedToId: input.assignedToId || null,
         branchId: input.branchId || null,
         isClosed: false,
@@ -74,8 +139,8 @@ export async function createLead(creatingUserId: string, input: CreateLeadInput,
     if (creatingUserName) {
         await logAction({
             action: 'LEAD_CREATE',
-            actorId: creatingUserId,
-            actorName: creatingUserName,
+            actorId: creatingUserId || finalOwnerId,
+            actorName: creatingUserName || 'System',
             targetId: createdLead.$id,
             targetType: 'LEAD',
             metadata: { ...input.data, branchId: input.branchId }
@@ -244,12 +309,54 @@ export async function listLeads(
       // Admins see all leads across all branches — no branch/owner filter
     } else if (userRole === 'manager') {
       // Managers can see all leads from all branches (no filtering needed)
+    } else if (userRole === 'assistant_manager') {
+      // Assistant Managers see:
+      // 1. Leads they created (ownerId = userId)
+      // 2. Leads created by their subordinates (ownerId IN subordinateIds)
+
+      // Initialize OR conditions with just the user's own leads
+      let orConditions = [
+        Query.equal('ownerId', userId),
+      ];
+
+      try {
+        // Fetch subordinates (TLs and Agents)
+        const { getSubordinates } = await import('@/lib/services/user-service');
+        const subordinates = await getSubordinates(userId);
+
+        if (subordinates.length > 0) {
+          const subordinateIds = subordinates.map(s => s.$id);
+          // Appwrite query optimization: if list is huge, this might fail.
+          // But for reasonable team sizes, it's fine.
+          orConditions.push(Query.equal('ownerId', subordinateIds));
+        }
+      } catch (err) {
+        console.error('Error fetching subordinates for lead visibility:', err);
+      }
+
+      // Important: AMs also need to see leads *assigned* to their subordinates?
+      // Requirement: "only leads created by them and the agents and team leads that are under them will appear."
+      // So filtering by 'ownerId' matches "created by".
+      // Does "assigned to" matter? Usually yes for visibility.
+      // If an Agent is assigned a lead created by Admin, the AM should probably see it too?
+      // "no leads that are created by them will appear. only leads created by them and the agents..."
+      // The user specifically emphasized "created by".
+      // However, usually managers oversee assigned leads too.
+      // Let's stick to "created by" (ownerId) as requested, but also include 'assignedToId' if consistent with other roles.
+      // Team Lead logic includes: ownerId=userId OR branchId=... OR ownerId=agentIds.
+      // Let's stick to the requested "created by them and ... under them".
+
+      if (orConditions.length > 1) {
+        queries.push(Query.or(orConditions));
+      } else {
+        queries.push(orConditions[0]);
+      }
     } else if (userRole === 'team_lead') {
       // Team Leads see:
       // 1. Leads in their branches
       // 2. Leads they created (ownerId = userId)
       // 3. Leads created by their assigned agents (ownerId IN agentIds)
-      
+
       const orConditions = [
         Query.equal('ownerId', userId),
       ];
@@ -262,7 +369,7 @@ export async function listLeads(
         // Dynamic import to avoid potential circular dependencies
         const { getAgentsByTeamLead } = await import('@/lib/services/user-service');
         const agents = await getAgentsByTeamLead(userId);
-        
+
         if (agents.length > 0) {
           const agentIds = agents.map(a => a.$id);
           orConditions.push(Query.equal('ownerId', agentIds));

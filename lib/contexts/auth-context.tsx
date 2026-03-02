@@ -171,7 +171,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Role-based helper properties
   const isAdmin = user?.role === 'admin';
-  const isManager = user?.role === 'manager' || user?.role === 'admin';
+  const isAssistantManager = user?.role === 'assistant_manager';
+  // Manager includes actual managers and assistant managers (since they share access)
+  // Admin is also considered a manager for access purposes
+  const isManager = user?.role === 'manager' || user?.role === 'assistant_manager' || user?.role === 'admin';
   const isTeamLead = user?.role === 'team_lead';
   const isAgent = user?.role === 'agent';
 
@@ -179,6 +182,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     isAdmin,
     isManager,
+    isAssistantManager,
     isTeamLead,
     isAgent,
     loading,

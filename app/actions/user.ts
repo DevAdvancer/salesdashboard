@@ -2,7 +2,8 @@
 
 import { ID, Permission, Role } from 'node-appwrite';
 import { createAdminClient, createSessionClient } from '@/lib/server/appwrite';
-import { CreateManagerInput, CreateTeamLeadInput, CreateAgentInput, UserRole } from '@/lib/types';
+import { CreateManagerInput, CreateTeamLeadInput, CreateAgentInput, UserRole, CreateAssistantManagerInput } from '@/lib/types';
+import { COLLECTIONS } from '@/lib/constants/appwrite';
 
 // Constants
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
@@ -71,6 +72,90 @@ async function logAuditAction(
     }
 }
 
+export async function createAssistantManagerAction(input: CreateAssistantManagerInput & { currentUserId: string }) {
+    const { currentUserId, ...amInput } = input;
+
+    if (!currentUserId) throw new Error("Unauthorized - No user ID provided");
+
+    const callerDoc = await getUserDoc(currentUserId);
+    // Allow admin and manager roles to create assistant managers
+    if (!callerDoc || (callerDoc.role !== 'manager' && callerDoc.role !== 'admin')) {
+        throw new Error("Permission denied: Only managers and admins can create assistant managers");
+    }
+
+    // Validate branches (skip for admin, but verify existence)
+    const BRANCHES_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_BRANCHES_COLLECTION_ID!;
+    const { users, databases } = await createAdminClient();
+
+    if (callerDoc.role !== 'admin') {
+        const callerBranches = (callerDoc.branchIds as string[]) || [];
+        for (const bid of amInput.branchIds) {
+            if (!callerBranches.includes(bid)) {
+                throw new Error(`Branch ${bid} is not in your assigned branches`);
+            }
+        }
+    } else {
+        // For admin, verify branches exist
+        for (const branchId of amInput.branchIds) {
+            try {
+                await databases.getDocument(DATABASE_ID, BRANCHES_COLLECTION_ID, branchId);
+            } catch (error) {
+                throw new Error(`Branch ${branchId} does not exist`);
+            }
+        }
+    }
+
+    const { name, email, password, branchIds, managerIds: inputManagerIds } = amInput;
+    const userId = ID.unique();
+
+    try {
+        await users.create(userId, email, undefined, password, name);
+    } catch (e: any) {
+        if (e.code === 409) throw new Error("A user with this email already exists");
+        throw e;
+    }
+
+    // Determine managerIds
+    let managerIds: string[] = [];
+    if (callerDoc.role === 'manager') {
+        managerIds = [callerDoc.$id];
+    } else if (inputManagerIds && inputManagerIds.length > 0) {
+        // Admin can assign managers
+        managerIds = inputManagerIds;
+    }
+
+    try {
+        await databases.createDocument(
+            DATABASE_ID,
+            USERS_COLLECTION_ID,
+            userId,
+            {
+                name,
+                email,
+                role: 'assistant_manager',
+                managerId: managerIds.length > 0 ? managerIds[0] : null,
+                managerIds: managerIds,
+                teamLeadId: null,
+                branchIds,
+            },
+            [
+                Permission.read(Role.user(userId)),
+                Permission.read(Role.users()), // All users can read user list? Or restrict? Existing logic seems open.
+                Permission.update(Role.user(userId)),
+            ]
+        );
+
+        await logAuditAction(databases, 'USER_CREATE', currentUserId, callerDoc.name, userId, 'assistant_manager', { branchIds });
+
+        return { success: true, userId };
+    } catch (error: any) {
+        console.error('Error creating assistant manager document:', error);
+        // Cleanup Auth user
+        await users.delete(userId);
+        throw new Error(error.message || 'Failed to create assistant manager profile');
+    }
+}
+
 export async function createManagerAction(input: CreateManagerInput & { currentUserId: string }) {
     const { currentUserId, ...managerInput } = input;
 
@@ -101,12 +186,12 @@ export async function createManagerAction(input: CreateManagerInput & { currentU
     const userId = ID.unique();
 
     // Validate branch existence (admin can assign any branches, but they must exist)
-    const BRANCHES_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_BRANCHES_COLLECTION_ID!;
     for (const branchId of branchIds) {
         try {
-            await databases.getDocument(DATABASE_ID, BRANCHES_COLLECTION_ID, branchId);
+            await databases.getDocument(DATABASE_ID, COLLECTIONS.BRANCHES, branchId);
         } catch (error) {
-            throw new Error(`Branch ${branchId} does not exist`);
+            console.error(`Error validating branch ${branchId} in collection ${COLLECTIONS.BRANCHES}:`, error);
+            throw new Error(`Branch ${branchId} does not exist in collection ${COLLECTIONS.BRANCHES}`);
         }
     }
 
@@ -162,9 +247,9 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
     if (!currentUserId) throw new Error("Unauthorized - No user ID provided");
 
     const callerDoc = await getUserDoc(currentUserId);
-    // Allow admin and manager roles to create team leads
-    if (!callerDoc || (callerDoc.role !== 'manager' && callerDoc.role !== 'admin')) {
-        throw new Error("Permission denied: Only managers and admins can create team leads");
+    // Allow admin, manager, and assistant_manager roles to create team leads
+    if (!callerDoc || (callerDoc.role !== 'manager' && callerDoc.role !== 'admin' && callerDoc.role !== 'assistant_manager')) {
+        throw new Error("Permission denied: Only managers, assistant managers, and admins can create team leads");
     }
 
     // Validate branches (skip for admin)
@@ -190,8 +275,15 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
 
     // Determine managerIds
     let managerIds: string[] = [];
+    let assistantManagerId: string | null = null;
+
     if (callerDoc.role === 'manager') {
         managerIds = [callerDoc.$id];
+    } else if (callerDoc.role === 'assistant_manager') {
+        // If created by AM, managerIds should include AM's managers + AM
+        const callerManagerIds = callerDoc.managerIds || (callerDoc.managerId ? [callerDoc.managerId] : []);
+        managerIds = [...callerManagerIds, callerDoc.$id];
+        assistantManagerId = callerDoc.$id;
     } else if (inputManagerIds && Array.isArray(inputManagerIds)) {
         managerIds = inputManagerIds;
     }
@@ -203,6 +295,9 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
         Permission.delete(Role.user(mid))
     ]);
 
+    // Use managerIds[0] as legacy managerId for now if available, or current user if manager
+    const primaryManagerId = managerIds.length > 0 ? managerIds[0] : (callerDoc.role === 'manager' ? callerDoc.$id : null);
+
     try {
         await databases.createDocument(
             DATABASE_ID,
@@ -213,7 +308,8 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
                 email,
                 role: 'team_lead',
                 managerIds, // Use new array field
-                managerId: managerIds[0] || null, // Keep legacy field populated with first manager or null
+                managerId: primaryManagerId,
+                assistantManagerId,
                 teamLeadId: null,
                 branchIds
             },
@@ -233,7 +329,7 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
             callerDoc.name,
             userId,
             'team_lead',
-            { role: 'team_lead', email, name, branchIds, managerIds }
+            { role: 'team_lead', email, name, branchIds, managerId: primaryManagerId, managerIds, assistantManagerId }
         );
 
         return { success: true };
@@ -250,8 +346,8 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
     if (!currentUserId) throw new Error("Unauthorized - No user ID provided");
 
     const callerDoc = await getUserDoc(currentUserId);
-    if (!callerDoc || (callerDoc.role !== 'team_lead' && callerDoc.role !== 'manager' && callerDoc.role !== 'admin')) {
-        throw new Error("Permission denied: Only team leads, managers, or admins can create agents");
+    if (!callerDoc || (callerDoc.role !== 'team_lead' && callerDoc.role !== 'manager' && callerDoc.role !== 'admin' && callerDoc.role !== 'assistant_manager')) {
+        throw new Error("Permission denied: Only team leads, managers, assistant managers, or admins can create agents");
     }
 
     if (callerDoc.role !== 'admin') {
@@ -269,9 +365,95 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
 
     const isTeamLead = callerDoc.role === 'team_lead';
     const isManager = callerDoc.role === 'manager';
+    const isAssistantManager = callerDoc.role === 'assistant_manager';
+
     // For admin, we default to no hierarchy for now unless specified
-    const managerId = isTeamLead ? (callerDoc.managerId || null) : (isManager ? callerDoc.$id : (agentInput.managerId || null));
+    // For manager, allow assigning to another manager (e.g. Assistant Manager) if specified, otherwise default to self
+    let managerId = agentInput.managerId || null;
+    let managerIds: string[] = [];
+    let assistantManagerId: string | null = null;
+
+    // Calculate managerIds logic
+    if (isTeamLead) {
+        managerId = callerDoc.managerId || null;
+        // Inherit managerIds from Team Lead (which includes their managers)
+        managerIds = callerDoc.managerIds || [];
+        if (managerId && !managerIds.includes(managerId)) {
+            managerIds.push(managerId);
+        }
+        // Inherit assistantManagerId from Team Lead
+        assistantManagerId = callerDoc.assistantManagerId || null;
+    } else if (isManager) {
+        if (!managerId) {
+            managerId = callerDoc.$id;
+            managerIds = [callerDoc.$id];
+        } else {
+            // Manager assigned to Assistant Manager?
+            managerIds = [managerId];
+            // Check if assigned manager is an AM
+            if (managerId !== callerDoc.$id) {
+                 // Optimization: We could fetch the user to verify role, but typically UI ensures this.
+                 // For now, if assigned to someone else, assume it might be AM.
+                 // But wait, if Manager assigns to AM, managerId is AM.
+                 assistantManagerId = managerId;
+            }
+        }
+    } else if (isAssistantManager) {
+        if (!managerId) {
+            // If AM creates and no specific manager assigned (e.g. direct report), AM is manager
+            managerId = callerDoc.$id;
+            // AM's managers + AM
+            const callerManagerIds = callerDoc.managerIds || (callerDoc.managerId ? [callerDoc.managerId] : []);
+            managerIds = [...callerManagerIds, callerDoc.$id];
+            assistantManagerId = callerDoc.$id;
+        } else {
+            // Assigned to someone else? (e.g. TL)
+            // If assigned to TL, teamLeadId handles it.
+            // If assigned to another manager? AM usually assigns to TL or self.
+            // If managerId is set, it might be the AM itself passed from UI?
+            if (managerId === callerDoc.$id) {
+                 const callerManagerIds = callerDoc.managerIds || (callerDoc.managerId ? [callerDoc.managerId] : []);
+                 managerIds = [...callerManagerIds, callerDoc.$id];
+                 assistantManagerId = callerDoc.$id;
+            } else {
+                 // Should inherit from that manager?
+                 managerIds = [managerId];
+                 assistantManagerId = managerId;
+            }
+        }
+    } else {
+        // Admin or other: trust input or single managerId
+        if (managerId) managerIds = [managerId];
+    }
+
+    // Ensure managerId is synced with managerIds[0] if needed or vice versa?
+    // Actually managerId is primary.
+
     const teamLeadId = isTeamLead ? callerDoc.$id : (agentInput.teamLeadId || null);
+
+    // If Team Lead is assigned, we should also include their managers in managerIds?
+    // If TL is assigned, the Agent's managerId should technically be the TL's manager.
+    // The current logic above for isTeamLead sets managerId = callerDoc.managerId.
+    // If Admin/Manager/AM assigns a TL, we need to fetch that TL to get their manager.
+    if (teamLeadId && !isTeamLead) {
+        try {
+            const tlDoc = await getUserDoc(teamLeadId);
+            if (tlDoc) {
+                // Agent inherits manager from TL
+                managerId = tlDoc.managerId;
+                managerIds = tlDoc.managerIds || [];
+                if (managerId && !managerIds.includes(managerId)) {
+                    managerIds.push(managerId);
+                }
+                // Inherit AM from TL
+                if (tlDoc.assistantManagerId) {
+                    assistantManagerId = tlDoc.assistantManagerId;
+                }
+            }
+        } catch (e) {
+            console.error("Failed to fetch assigned Team Lead details", e);
+        }
+    }
 
     try {
         await users.create(userId, email, undefined, password, name);
@@ -285,12 +467,25 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
             Permission.read(Role.user(userId)),
             // Permission.read(Role.users()), // Removed global read access for security
             ...(teamLeadId ? [Permission.read(Role.user(teamLeadId))] : []),
-            ...(managerId ? [Permission.read(Role.user(managerId))] : []),
             Permission.update(Role.user(userId)),
             ...(teamLeadId ? [Permission.update(Role.user(teamLeadId))] : []),
         ];
 
-        if (managerId) permissions.push(Permission.delete(Role.user(managerId)));
+        // Add permissions for all managers in the chain
+        if (managerIds.length > 0) {
+            managerIds.forEach(mid => {
+                permissions.push(Permission.read(Role.user(mid)));
+                // Only primary manager or specific roles might get delete?
+                // For now giving read access to all up chain is key.
+                // Give update/delete to managers?
+                permissions.push(Permission.update(Role.user(mid))); // Managers can update agents
+                permissions.push(Permission.delete(Role.user(mid))); // Managers can delete agents
+            });
+        } else if (managerId) {
+             permissions.push(Permission.read(Role.user(managerId)));
+             permissions.push(Permission.update(Role.user(managerId)));
+             permissions.push(Permission.delete(Role.user(managerId)));
+        }
 
         await databases.createDocument(
             DATABASE_ID,
@@ -301,6 +496,8 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
                 email,
                 role: 'agent',
                 managerId,
+                managerIds, // Save the chain
+                assistantManagerId, // Save the AM ID
                 teamLeadId,
                 branchIds
             },
@@ -315,7 +512,7 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
             callerDoc.name,
             userId,
             'agent',
-            { role: 'agent', email, name, branchIds, managerId, teamLeadId }
+            { role: 'agent', email, name, branchIds, managerId, managerIds, assistantManagerId, teamLeadId }
         );
 
         return { success: true };
@@ -347,10 +544,11 @@ export async function updateUserAction(input: {
 
     const isCallerAdmin = callerDoc.role === 'admin';
     const isCallerManager = callerDoc.role === 'manager';
+    const isCallerAssistantManager = callerDoc.role === 'assistant_manager';
     const isCallerTeamLead = callerDoc.role === 'team_lead';
 
     // Permission Check
-    if (!isCallerAdmin && !isCallerManager && !isCallerTeamLead) {
+    if (!isCallerAdmin && !isCallerManager && !isCallerTeamLead && !isCallerAssistantManager) {
         throw new Error("Permission denied");
     }
 
@@ -366,12 +564,13 @@ export async function updateUserAction(input: {
                  updates.role = role;
              }
              // Manager can promote Agent -> Team Lead or demote Team Lead -> Agent
+             // Manager can also manage Assistant Managers (Agent/TL -> AM, AM -> Agent/TL)
              else if (isCallerManager) {
-                 if ((targetUserDoc.role === 'agent' && role === 'team_lead') ||
-                     (targetUserDoc.role === 'team_lead' && role === 'agent')) {
+                 const allowedRoles = ['agent', 'team_lead', 'assistant_manager'];
+                 if (allowedRoles.includes(targetUserDoc.role) && allowedRoles.includes(role)) {
                      updates.role = role;
                  } else {
-                     throw new Error("Managers can only promote Agents to Team Leads or demote Team Leads to Agents.");
+                     throw new Error("Managers can only manage Agents, Team Leads, and Assistant Managers.");
                  }
              }
              else {
@@ -383,6 +582,13 @@ export async function updateUserAction(input: {
                  updates.managerId = null;
                  updates.managerIds = [];
                  updates.teamLeadId = null;
+             } else if (role === 'assistant_manager') {
+                 updates.teamLeadId = null;
+                 // If promoted by manager, ensure managerId is set to the caller (manager) if not explicitly set
+                 if (isCallerManager && !updates.managerId && !managerId && !managerIds && !targetUserDoc.managerId) {
+                     updates.managerId = currentUserId;
+                     updates.managerIds = [currentUserId];
+                 }
              } else if (role === 'team_lead') {
                  updates.teamLeadId = null;
                  // If promoted by manager, ensure managerId is set to the caller (manager) if not explicitly set
@@ -398,13 +604,16 @@ export async function updateUserAction(input: {
         let newManagerIds: string[] | undefined;
 
         if (managerIds !== undefined) {
-            if (!isCallerAdmin && !isCallerManager) throw new Error("Permission denied to change manager");
+            // Check if managerIds are actually changing
+            const currentManagerIds = targetUserDoc.managerIds || [];
+            const isManagerIdsChanged = JSON.stringify(managerIds.sort()) !== JSON.stringify(currentManagerIds.sort());
+
+            if (isManagerIdsChanged) {
+                 if (!isCallerAdmin && !isCallerManager && !isCallerAssistantManager) throw new Error("Permission denied to change manager");
+            }
 
             // Validate manager IDs existence
             if (managerIds.length > 0) {
-                // We should ideally check if these users exist and are actually managers
-                // But for performance in server action, we might skip or do a bulk check if critical.
-                // Assuming basic existence check via getDocument if strictly needed, but let's at least ensure format.
                 if (managerIds.some(id => !id || typeof id !== 'string')) {
                     throw new Error("Invalid manager ID format");
                 }
@@ -415,7 +624,11 @@ export async function updateUserAction(input: {
             // Sync legacy field
             updates.managerId = managerIds.length > 0 ? managerIds[0] : null;
         } else if (managerId !== undefined) {
-             if (!isCallerAdmin && !isCallerManager) throw new Error("Permission denied to change manager");
+             // Check if managerId is actually changing
+             if (managerId !== targetUserDoc.managerId) {
+                  if (!isCallerAdmin && !isCallerManager && !isCallerAssistantManager) throw new Error("Permission denied to change manager");
+             }
+             
              // If legacy field is used, treat as single manager array
              newManagerIds = managerId ? [managerId] : [];
              updates.managerIds = newManagerIds;
@@ -424,7 +637,37 @@ export async function updateUserAction(input: {
 
         // 3. Handle Team Lead Update
         if (teamLeadId !== undefined && teamLeadId !== targetUserDoc.teamLeadId) {
-             updates.teamLeadId = teamLeadId;
+             // Admin, Manager, and Assistant Manager can assign Team Leads
+             if (isCallerAdmin || isCallerManager || isCallerAssistantManager) {
+                 updates.teamLeadId = teamLeadId;
+                 
+                 // When TL changes, we should sync manager fields from new TL if available
+                 if (teamLeadId) {
+                    try {
+                        const tlDoc = await getUserDoc(teamLeadId);
+                        if (tlDoc) {
+                            // Inherit managers from new TL
+                            updates.managerId = tlDoc.managerId;
+                            updates.managerIds = tlDoc.managerIds || [];
+                            // Ensure TL's manager is in the list
+                            if (tlDoc.managerId && !updates.managerIds.includes(tlDoc.managerId)) {
+                                updates.managerIds.push(tlDoc.managerId);
+                            }
+                            // Inherit AM from new TL
+                            if (tlDoc.assistantManagerId) {
+                                updates.assistantManagerId = tlDoc.assistantManagerId;
+                            }
+                        }
+                    } catch (e) {
+                        console.error("Failed to sync manager fields from new Team Lead", e);
+                    }
+                 }
+             } else if (isCallerTeamLead) {
+                 // Team Lead cannot assign other Team Leads, usually.
+                 // But maybe they can assign themselves? No, they create agents.
+                 // Let's restrict: Team Leads cannot change teamLeadId of an existing user (unless it's during creation which is handled separately)
+                 throw new Error("Team Leads cannot reassign Team Leads.");
+             }
         }
 
         // 4. Handle Branch Update
