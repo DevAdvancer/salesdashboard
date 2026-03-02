@@ -320,8 +320,11 @@ export async function listLeads(
   try {
     const queries: string[] = [];
 
-    // Role-based filtering
-    if (userRole === 'agent') {
+    // Check for special user access
+    const currentUser = await getUserById(userId);
+    if (currentUser.email === 'shashi.pathak@silverspaceinc.com') {
+        // Special user sees all leads - no filters applied
+    } else if (userRole === 'agent') {
       // Agents see leads assigned to them OR leads they created
       queries.push(
         Query.or([
@@ -364,7 +367,7 @@ export async function listLeads(
         }
 
         // Fetch managers of this user (upwards)
-        const currentUser = await getUserById(userId);
+        // currentUser is already fetched at the top of the function
         const managerIds: string[] = [];
         if (currentUser.managerId) managerIds.push(currentUser.managerId);
         if (currentUser.managerIds && currentUser.managerIds.length > 0) {

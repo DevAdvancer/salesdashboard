@@ -158,7 +158,7 @@ export async function createLeadAction(
                  permissions.push(...assignedHierarchyPerms);
              }
         }
-        
+
         // Remove duplicates in permissions
         const uniquePermissions = [...new Set(permissions)];
 
@@ -185,7 +185,7 @@ export async function createLeadAction(
         // We should reimplement simplified logging here or ensure audit-service works on server.
         // For now, let's skip audit log or assume it works if env vars are same.
         // Actually, better to implement logging here using Admin Client to be safe.
-        
+
         try {
             if (creatingUserName) {
                  await databases.createDocument(
@@ -283,7 +283,13 @@ export async function listLeadsAction(
     const queries: string[] = [];
 
     // Role-based filtering
-    if (userRole === 'agent') {
+    const userDoc = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, userId);
+
+    // Special access for Shashi Pathak - View ALL leads
+    if (userDoc.email === 'shashi.pathak@silverspaceinc.com') {
+         // No filters applied - sees all leads (same as admin)
+         // We explicitly don't push any owner/branch filters
+    } else if (userRole === 'agent') {
       // Agents see leads assigned to them OR leads they created
       queries.push(
         Query.or([
@@ -318,7 +324,7 @@ export async function listLeadsAction(
       // Also include leads from subordinates AND managers (as requested)
       try {
         // Fetch current user to get managerIds (UPWARDS)
-        const userDoc = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, userId);
+        // userDoc is already fetched at the top of the function
         const managerIds: string[] = [];
         if (userDoc.managerId) managerIds.push(userDoc.managerId);
         if (userDoc.managerIds && Array.isArray(userDoc.managerIds)) {
