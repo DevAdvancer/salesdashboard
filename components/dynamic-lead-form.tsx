@@ -46,20 +46,68 @@ export function DynamicLeadForm({
     isAgent && user ? user.$id : (user ? user.$id : null)
   );
 
+  // Filter out ownerId, assignedToId, and lastName from configurable form fields (Requirement 4.5)
   // Filter out ownerId and assignedToId from configurable form fields (Requirement 4.5)
   // These are handled automatically: ownerId by createLead, assignedToId by the dropdown
   const filteredConfig = formConfig.filter(
     (f) => f.key !== 'ownerId' && f.key !== 'assignedToId'
   );
 
+  // If lastName is not in the config (removed by user), inject it manually just under firstName (or at start if firstName missing)
+  const hasLastName = filteredConfig.some(f => f.key === 'lastName');
+  let effectiveConfig = [...filteredConfig];
+
+  if (!hasLastName) {
+    const firstNameIndex = effectiveConfig.findIndex(f => f.key === 'firstName');
+    const lastNameField: FormField = {
+        id: 'static-lastname',
+        key: 'lastName',
+        label: 'Last Name',
+        type: 'text',
+        required: false, // Updated to not required as requested
+        visible: true,
+        order: 0 // Will be ignored by splice logic below, or handled by visible fields sort
+    };
+
+    if (firstNameIndex !== -1) {
+        // Insert after firstName
+        effectiveConfig.splice(firstNameIndex + 1, 0, lastNameField);
+    } else {
+        // If no firstName, add to start (or end?) - let's add to start to be safe
+        effectiveConfig.unshift(lastNameField);
+    }
+  }
+
   // Filter visible fields for agents (Requirement 3.8)
   // Managers see all fields in form builder, but in lead forms, we filter for agents
   const visibleFields = isAgent
-    ? getVisibleFields(filteredConfig)
-    : filteredConfig.filter(f => f.visible).sort((a, b) => a.order - b.order);
+    ? getVisibleFields(effectiveConfig)
+    : effectiveConfig.filter(f => f.visible).sort((a, b) => {
+        // If we injected a field, its order might be 0.
+        // If we spliced it, the array order is already correct-ish, but sort might mess it up if we don't adjust 'order' property.
+        // If we injected it, let's assume we want to keep the spliced order relative to neighbors.
+        // Actually, 'sort' relies on 'order' property.
+        // If I injected it with order 0, it might jump to top.
+        // I should set its order to be firstName.order + 0.1?
+        return a.order - b.order;
+    });
+
+  // Correction for injected field order:
+  // If we injected lastName, we want it visually after firstName.
+  // The 'visibleFields' sort might reorder it based on 'order'.
+  // Let's fix the order property of the injected field if it exists.
+  if (!hasLastName) {
+      const firstNameField = effectiveConfig.find(f => f.key === 'firstName');
+      const lastNameField = effectiveConfig.find(f => f.key === 'lastName');
+      if (firstNameField && lastNameField) {
+          lastNameField.order = firstNameField.order + 0.1;
+      }
+      // Re-sort visibleFields if we modified order
+      visibleFields.sort((a, b) => a.order - b.order);
+  }
 
   // Generate zod schema from form config (Requirements 10.5, 11.1, 11.2, 11.3)
-  const schema = generateZodSchema(filteredConfig);
+  const schema = generateZodSchema(effectiveConfig);
 
   // Initialize react-hook-form (Requirement 10.4)
   const {

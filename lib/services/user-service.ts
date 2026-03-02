@@ -247,7 +247,35 @@ export async function createAgent(input: CreateAgentInput, currentUser?: User): 
       teamLeadId
     );
     const teamLeadBranchIds: string[] = Array.isArray(teamLeadDoc.branchIds) ? teamLeadDoc.branchIds : [];
-    const managerId = (teamLeadDoc.managerId as string) || null;
+
+    // Re-evaluating the traversal:
+     // 1. Get Team Lead (TL)
+     // 2. TL.managerId -> Supervisor (S1)
+     // 3. If S1 is AM, S1.managerId -> Manager (M1). Set Agent.managerId = M1.
+     // 4. If S1 is Manager, Set Agent.managerId = S1.
+
+     let managerId: string | null = null;
+     const supervisorId = (teamLeadDoc.managerId as string) || null;
+
+     if (supervisorId) {
+         try {
+             const supervisorDoc = await databases.getDocument(
+                DATABASE_ID,
+                USERS_COLLECTION_ID,
+                supervisorId
+             );
+             if (supervisorDoc.role === 'assistant_manager') {
+                 // S1 is AM. M1 is S1.managerId. Agent gets assigned to M1.
+                 managerId = (supervisorDoc.managerId as string) || null;
+             } else {
+                 // S1 is Manager (or something else, assume Manager)
+                 managerId = supervisorId;
+             }
+         } catch (e) {
+             console.warn('Could not fetch supervisor details, using direct ID', e);
+             managerId = supervisorId;
+         }
+     }
 
     // Validate branchIds ⊆ teamLead.branchIds
     for (const bid of branchIds) {
@@ -528,6 +556,15 @@ export async function getAgentsByTeamLead(teamLeadId: string): Promise<User[]> {
  * Get a user by ID
  */
 export async function getUserById(userId: string): Promise<User> {
+  // Validate ID format before calling Appwrite
+  // Appwrite ID rules: max 36 chars, a-z, A-Z, 0-9, period, hyphen, underscore. Can't start with special char.
+  const validIdPattern = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,35}$/;
+
+  if (!userId || !validIdPattern.test(userId)) {
+    console.warn(`[getUserById] Skipped invalid ID: "${userId}"`);
+    throw new Error(`Invalid ID format: ${userId}`);
+  }
+
   try {
     const userDoc = await databases.getDocument(
       DATABASE_ID,

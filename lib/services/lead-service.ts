@@ -5,6 +5,13 @@ import { validateLeadUniqueness } from '@/lib/services/lead-validator';
 import { logAction } from './audit-service';
 import { getUserById } from '@/lib/services/user-service';
 
+// Helper to validate Appwrite ID format
+function isValidId(id: string | null | undefined): boolean {
+    if (!id) return false;
+    const validIdPattern = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,35}$/;
+    return validIdPattern.test(id);
+}
+
 // Helper to get permissions for supervisors up the chain
 async function getHierarchyPermissions(userId: string): Promise<string[]> {
     const permissions: string[] = [];
@@ -14,6 +21,12 @@ async function getHierarchyPermissions(userId: string): Promise<string[]> {
 
         // Walk up the hierarchy (max 5 levels to prevent loops)
         while (currentId && !visited.has(currentId) && visited.size < 5) {
+            // Validate ID format before fetching
+            if (!isValidId(currentId)) {
+                console.warn(`[getHierarchyPermissions] Stopping traversal at invalid ID: "${currentId}"`);
+                break;
+            }
+
             visited.add(currentId);
 
             const user = await getUserById(currentId);
@@ -28,10 +41,12 @@ async function getHierarchyPermissions(userId: string): Promise<string[]> {
 
             // Add permissions for supervisors
             for (const supId of supervisors) {
-                if (!visited.has(supId)) {
+                if (!visited.has(supId) && isValidId(supId)) {
                     permissions.push(Permission.read(Role.user(supId)));
                     permissions.push(Permission.update(Role.user(supId)));
                     permissions.push(Permission.delete(Role.user(supId))); // Supervisors can delete? Maybe.
+                } else if (supId && !isValidId(supId)) {
+                    console.warn(`[getHierarchyPermissions] Skipped invalid supervisor ID: "${supId}"`);
                 }
             }
 
@@ -90,6 +105,10 @@ export async function createLead(
     // Note: If creatingUserId is not provided, use ownerId passed in.
     const finalOwnerId = creatingUserId || ownerId;
 
+    if (!isValidId(finalOwnerId)) {
+        throw new Error(`Invalid owner ID format: "${finalOwnerId}"`);
+    }
+
     // Serialize lead data to JSON
     const dataJson = JSON.stringify(input.data);
 
@@ -107,13 +126,18 @@ export async function createLead(
 
     // If assigned to an agent, grant them read and update access
     if (input.assignedToId) {
-      permissions.push(
-        Permission.read(Role.user(input.assignedToId)),
-        Permission.update(Role.user(input.assignedToId))
-      );
-      // Add assigned user's hierarchy permissions too
-      const assignedHierarchyPerms = await getHierarchyPermissions(input.assignedToId);
-      permissions.push(...assignedHierarchyPerms);
+      if (isValidId(input.assignedToId)) {
+          permissions.push(
+            Permission.read(Role.user(input.assignedToId)),
+            Permission.update(Role.user(input.assignedToId))
+          );
+
+          // Add assigned user's hierarchy permissions too (Managers of the assigned agent)
+          const assignedHierarchyPerms = await getHierarchyPermissions(input.assignedToId);
+          permissions.push(...assignedHierarchyPerms);
+      } else {
+          console.warn(`[createLead] Skipped invalid assignedToId: "${input.assignedToId}"`);
+      }
     }
 
     // Create the lead document with branchId
@@ -318,7 +342,13 @@ export async function listLeads(
         Query.equal('ownerId', userId),
       ];
 
-      if (branchIds && branchIds.length > 0) {
+      // Logic change:
+      // Managers always see branch leads.
+      // Assistant Managers with > 1 branch ALSO see all branch leads (same as Manager).
+      // Assistant Managers with 1 branch only see their own leads + subordinate leads.
+      const shouldSeeAllBranchLeads = userRole === 'manager' || (userRole === 'assistant_manager' && branchIds && branchIds.length > 1);
+
+      if (shouldSeeAllBranchLeads && branchIds && branchIds.length > 0) {
         orConditions.push(Query.equal('branchId', branchIds));
       }
 

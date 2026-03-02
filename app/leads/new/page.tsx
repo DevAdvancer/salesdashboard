@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { useRouter } from 'next/navigation';
-import { createLead } from '@/lib/services/lead-service';
+import { createLeadAction } from '@/app/actions/lead';
 import { validateLeadUniqueness } from '@/lib/services/lead-validator';
 import { listBranches } from '@/lib/services/branch-service';
 import { getFormConfig } from '@/lib/services/form-config-service';
@@ -104,12 +104,17 @@ function NewLeadContent() {
       const finalAssignedToId = assignedToId || user.$id;
 
       // Create lead with auto-set owner and assigned agent (defaults to creator)
-      await createLead(user.$id, {
-        data: sanitizedData,
-        assignedToId: finalAssignedToId,
-        status: sanitizedData.status || 'Interested',
-        branchId,
-      }, user.name);
+      await createLeadAction(
+        user.$id, 
+        {
+          data: sanitizedData,
+          assignedToId: finalAssignedToId,
+          status: sanitizedData.status || 'Interested',
+          branchId,
+        }, 
+        user.$id, 
+        user.name
+      );
 
       toast({
         title: 'Success',

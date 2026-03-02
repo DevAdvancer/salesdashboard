@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
-import { listLeads } from '@/lib/services/lead-service';
+import { listLeadsAction } from '@/app/actions/lead';
 import { Lead, LeadData, HistoryFilters, AuditLog } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,7 +37,7 @@ function HistoryContent() {
 
     try {
       setLoading(true);
-      const closedLeads = await listLeads(
+      const closedLeads = await listLeadsAction(
         {
           isClosed: true,
           assignedToId: filters.agentId,
@@ -45,7 +45,8 @@ function HistoryContent() {
           dateTo: filters.dateTo,
         },
         user.$id,
-        user.role
+        user.role,
+        user.branchIds
       );
       setLeads(closedLeads);
       loadClosedBy(closedLeads);

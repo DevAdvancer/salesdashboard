@@ -12,7 +12,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { ProtectedRoute } from '@/components/protected-route';
-import { listLeads } from '@/lib/services/lead-service';
+import { listLeadsAction } from '@/app/actions/lead';
 import { getAgentsByManager, getTeamLeads } from '@/lib/services/user-service';
 import { getBranchById } from '@/lib/services/branch-service';
 import { FileText, Briefcase, Users, TrendingUp, DollarSign } from 'lucide-react';
@@ -32,6 +32,7 @@ function DashboardContent() {
   });
   const [amountData, setAmountData] = useState<any[]>([]);
   const [managerName, setManagerName] = useState<string | null>(null);
+  const [assistantManagerName, setAssistantManagerName] = useState<string | null>(null);
   const [teamLeadName, setTeamLeadName] = useState<string | null>(null);
   const [assignedAgents, setAssignedAgents] = useState<any[]>([]);
   const [isOutlookChecking, setIsOutlookChecking] = useState(true);
@@ -64,23 +65,26 @@ function DashboardContent() {
   useEffect(() => {
     async function fetchMetrics() {
       if (!user) return;
+      console.log('[Dashboard] Fetching metrics for user:', { id: user.$id, role: user.role, branchIds: user.branchIds });
 
       try {
         // Fetch active leads count
-        const activeLeads = await listLeads(
+        const activeLeads = await listLeadsAction(
           { isClosed: false },
           user.$id,
           user.role,
           user.branchIds
         );
+        console.log('[Dashboard] Active leads count:', activeLeads.length);
 
         // Fetch closed leads count
-        const closedLeads = await listLeads(
+        const closedLeads = await listLeadsAction(
           { isClosed: true },
           user.$id,
           user.role,
           user.branchIds
         );
+        console.log('[Dashboard] Closed leads count:', closedLeads.length);
 
         // Fetch team members count and agents for team lead
         let teamMembersCount = 0;
@@ -213,12 +217,102 @@ function DashboardContent() {
 
         // Fetch manager name if user has managerId
         if (user.managerId) {
-          const managerDoc = await databases.getDocument(
-            process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
-            process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
-            user.managerId
-          );
-          setManagerName(managerDoc.name);
+          try {
+              const managerDoc = await databases.getDocument(
+                process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+                process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
+                user.managerId
+              );
+              setManagerName(managerDoc.name);
+          } catch (e) {
+              console.warn("Could not fetch manager details");
+          }
+        }
+
+        // Check for Assistant Manager in the hierarchy
+        // If user is Agent: Team Lead -> Assistant Manager -> Manager
+        // If user is Team Lead: Assistant Manager -> Manager
+        if (isAgent || isTeamLead) {
+             let supervisorId: string | null = null;
+
+             if (isAgent && user.teamLeadId) {
+                 // Fetch Team Lead to find their manager
+                 const tlDoc = await databases.getDocument(
+                     process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+                     process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
+                     user.teamLeadId
+                 );
+                 supervisorId = tlDoc.managerId || null;
+             } else if (isTeamLead && user.managerId) {
+                 // For Team Lead, their managerId might be AM or Manager
+                 // But wait, if user.managerId IS the AM (based on our createAgent logic update), then we already fetched it as 'managerName'.
+                 // Let's refine this.
+
+                 // Current logic in createAgent: Agent.managerId = Manager (Top). Agent.teamLeadId = TeamLead.
+                 // So Agent.managerId is ALREADY the Top Manager.
+                 // And Agent.teamLeadId is the Team Lead.
+                 // Where is the Assistant Manager stored for the Agent?
+                 // It's implicitly the Team Lead's manager.
+                 supervisorId = user.managerId; // Start checking from top? No.
+             }
+
+             // Correct approach:
+             // 1. Fetch Team Lead (for Agent)
+             // 2. Check Team Lead's manager. If AM, display AM.
+
+             if (isAgent && user.teamLeadId) {
+                 try {
+                     const tlDoc = await databases.getDocument(
+                         process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+                         process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
+                         user.teamLeadId
+                     );
+                     // If TL's manager is AM
+                     if (tlDoc.managerId) {
+                         const supDoc = await databases.getDocument(
+                             process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+                             process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
+                             tlDoc.managerId
+                         );
+                         if (supDoc.role === 'assistant_manager') {
+                             setAssistantManagerName(supDoc.name);
+                         }
+                     }
+                 } catch (e) {}
+             }
+
+             // For Team Lead:
+             // Their 'managerId' might be AM or Manager.
+             // If they report to AM, managerId is AM.
+             // If they report to Manager, managerId is Manager.
+             if (isTeamLead && user.managerId) {
+                  try {
+                      const mDoc = await databases.getDocument(
+                          process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+                          process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
+                          user.managerId
+                      );
+                      if (mDoc.role === 'assistant_manager') {
+                          setAssistantManagerName(mDoc.name);
+                          setManagerName(null); // Clear manager name if it's actually AM, to avoid duplication or confusion?
+                          // Wait, we want to show BOTH if possible.
+                          // If TL -> AM -> Manager.
+                          // TL.managerId = AM.
+                          // AM.managerId = Manager.
+
+                          // So we fetched AM.
+                          // Now fetch AM's manager to get the "Big Manager".
+                          if (mDoc.managerId) {
+                              const bigBoss = await databases.getDocument(
+                                  process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+                                  process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
+                                  mDoc.managerId
+                              );
+                              setManagerName(bigBoss.name);
+                          }
+                      }
+                  } catch(e) {}
+             }
         }
 
         // Fetch team lead name if user has teamLeadId
@@ -291,27 +385,7 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
-        {isAssistantManager && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Assistant Manager Access</CardTitle>
-              <CardDescription>
-                You have system access
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                As an assistant manager, you can:
-              </p>
-              <ul className="list-disc list-inside text-sm mt-2 space-y-1">
-                <li>Create and manage team leads</li>
-                <li>View team members</li>
-                <li>Manage assigned leads</li>
-                <li>Access client records</li>
-              </ul>
-            </CardContent>
-          </Card>
-        )}
+
 
         {isAgent && (
           <Card>
@@ -429,6 +503,11 @@ function DashboardContent() {
               <p className="text-sm">
                 <strong>Role:</strong> {user.role === 'team_lead' ? 'Team Lead' : user.role.charAt(0).toUpperCase() + user.role.slice(1)}
               </p>
+              {assistantManagerName && (
+                <p className="text-sm">
+                  <strong>Assistant Manager:</strong> {assistantManagerName}
+                </p>
+              )}
               {managerName && (
                 <p className="text-sm">
                   <strong>Manager:</strong> {managerName}
