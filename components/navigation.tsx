@@ -54,7 +54,7 @@ const NAV_ITEMS: NavItem[] = [
     icon: FileText,
   },
   {
-    key: 'client',
+    key: 'history',
     label: 'Client',
     href: '/client',
     icon: Briefcase,

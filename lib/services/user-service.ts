@@ -137,7 +137,7 @@ export async function createAssistantManager(input: CreateAssistantManagerInput,
  * 2. Creates an Appwrite Auth account
  * 3. Creates a user document with role='team_lead', managerId, and branchIds
  */
-export async function createTeamLead(input: CreateTeamLeadInput, currentUser: User): Promise<User> {
+export async function createTeamLead(input: CreateTeamLeadInput, currentUser?: User): Promise<User> {
   const { name, email, password, managerIds, branchIds } = input;
 
   if (!branchIds.length) {
@@ -198,17 +198,19 @@ export async function createTeamLead(input: CreateTeamLeadInput, currentUser: Us
       finalPermissions
     );
 
-    await logAction({
-      action: 'USER_CREATE',
-      actorId: currentUser.$id,
-      actorName: currentUser.name,
-      targetId: userDoc.$id,
-      targetType: 'team_lead',
-      metadata: {
-          branchIds,
-          managerIds
-      }
-    });
+    if (currentUser) {
+      await logAction({
+        action: 'USER_CREATE',
+        actorId: currentUser.$id,
+        actorName: currentUser.name,
+        targetId: userDoc.$id,
+        targetType: 'team_lead',
+        metadata: {
+            branchIds,
+            managerIds
+        }
+      });
+    }
 
     return mapDocToUser(userDoc);
   } catch (error: any) {
@@ -228,7 +230,7 @@ export async function createTeamLead(input: CreateTeamLeadInput, currentUser: Us
  * 2. Creates an Appwrite Auth account
  * 3. Creates a user document with role='agent', managerId (from team lead), teamLeadId, and branchIds
  */
-export async function createAgent(input: CreateAgentInput, currentUser: User): Promise<User> {
+export async function createAgent(input: CreateAgentInput, currentUser?: User): Promise<User> {
   const { name, email, password, teamLeadId, branchIds } = input;
 
   if (!branchIds.length) {
@@ -280,17 +282,19 @@ export async function createAgent(input: CreateAgentInput, currentUser: User): P
       ]
     );
 
-    await logAction({
-      action: 'USER_CREATE',
-      actorId: currentUser.$id,
-      actorName: currentUser.name,
-      targetId: userDoc.$id,
-      targetType: 'agent',
-      metadata: {
-          branchIds,
-          teamLeadId
-      }
-    });
+    if (currentUser) {
+      await logAction({
+        action: 'USER_CREATE',
+        actorId: currentUser.$id,
+        actorName: currentUser.name,
+        targetId: userDoc.$id,
+        targetType: 'agent',
+        metadata: {
+            branchIds,
+            teamLeadId
+        }
+      });
+    }
 
     return mapDocToUser(userDoc);
   } catch (error: any) {
@@ -421,10 +425,12 @@ export async function getAssignableUsers(
   creatorBranchIds: string[],
   creatorId?: string
 ): Promise<User[]> {
-  if (creatorRole === 'agent' || !creatorBranchIds.length) return [];
+  if (creatorRole === 'agent') return [];
+  if (creatorRole !== 'admin' && !creatorBranchIds.length) return [];
 
   try {
     const allowedRoles: UserRole[] =
+      creatorRole === 'admin' ? ['manager', 'assistant_manager', 'team_lead', 'agent'] :
       creatorRole === 'manager' ? ['assistant_manager', 'team_lead', 'agent'] :
       creatorRole === 'assistant_manager' ? ['team_lead', 'agent'] :
       creatorRole === 'team_lead' ? ['agent'] :
@@ -432,15 +438,20 @@ export async function getAssignableUsers(
 
     if (!allowedRoles.length) return [];
 
+    const queries = [
+      allowedRoles.length === 1
+        ? Query.equal('role', allowedRoles[0])
+        : Query.equal('role', allowedRoles)
+    ];
+
+    if (creatorRole !== 'admin') {
+      queries.push(Query.contains('branchIds', creatorBranchIds));
+    }
+
     const response = await databases.listDocuments(
       DATABASE_ID,
       USERS_COLLECTION_ID,
-      [
-        Query.contains('branchIds', creatorBranchIds),
-        ...(allowedRoles.length === 1
-          ? [Query.equal('role', allowedRoles[0])]
-          : [Query.equal('role', allowedRoles)]),
-      ]
+      queries
     );
 
     // Filter out the creator themselves
@@ -697,19 +708,28 @@ export async function getSubordinates(userId: string): Promise<User[]> {
     );
     const directReports = directReportsResponse.documents.map(mapDocToUser);
 
-    // 2. Identify Team Leads among direct reports
-    const teamLeadIds = directReports
-      .filter(u => u.role === 'team_lead')
+    // 2. Identify Assistant Managers and Team Leads among direct reports
+    const middleManagerIds = directReports
+      .filter(u => u.role === 'team_lead' || u.role === 'assistant_manager')
       .map(u => u.$id);
 
-    // 3. Fetch indirect reports (Agents assigned to these Team Leads)
+    // 3. Fetch indirect reports (Users assigned to these AMs/TLs)
     let indirectReports: User[] = [];
-    if (teamLeadIds.length > 0) {
+    if (middleManagerIds.length > 0) {
       const indirectReportsResponse = await databases.listDocuments(
         DATABASE_ID,
         USERS_COLLECTION_ID,
         [
-          Query.equal('teamLeadId', teamLeadIds)
+          Query.or([
+             Query.equal('teamLeadId', middleManagerIds),
+             Query.equal('managerId', middleManagerIds),
+             // Note: Query.contains for array fields like managerIds isn't directly supported with IN operator on value list in standard Appwrite
+             // But we can iterate or hope for the best. For strict correctness, we might need multiple queries if list is huge.
+             // However, for this context, let's assume direct assignment first.
+             // Actually, managerIds is array of strings. Query.equal('managerIds', value) works if value is single.
+             // If value is array, it matches if ANY.
+             // Let's stick to teamLeadId and managerId for now which covers most cases.
+          ])
         ]
       );
       indirectReports = indirectReportsResponse.documents.map(mapDocToUser);

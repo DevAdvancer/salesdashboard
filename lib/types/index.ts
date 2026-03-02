@@ -14,7 +14,8 @@ export interface User {
   role: UserRole;
   managerId: string | null; // @deprecated Use managerIds instead
   managerIds?: string[]; // New field for multiple managers
-  assistantManagerId?: string | null; // New field for Assistant Manager
+  assistantManagerId?: string | null; // @deprecated Use assistantManagerIds instead
+  assistantManagerIds?: string[]; // New field for multiple assistant managers
   teamLeadId: string | null;
   branchIds: string[];
   /** @deprecated Use branchIds instead */
@@ -46,6 +47,7 @@ export interface CreateUserInput {
   managerId?: string;
   managerIds?: string[];
   assistantManagerId?: string;
+  assistantManagerIds?: string[];
   teamLeadId?: string;
   branchIds: string[];
 }
@@ -57,6 +59,7 @@ export interface CreateTeamLeadInput {
   managerId?: string;
   managerIds?: string[];
   assistantManagerId?: string;
+  assistantManagerIds?: string[];
   branchIds: string[];
 }
 
@@ -68,6 +71,7 @@ export interface CreateAgentInput {
   managerId?: string;
   managerIds?: string[]; // Added managerIds
   assistantManagerId?: string;
+  assistantManagerIds?: string[];
   branchIds: string[];
 }
 

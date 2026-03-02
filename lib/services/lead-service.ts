@@ -307,49 +307,54 @@ export async function listLeads(
       );
     } else if (userRole === 'admin') {
       // Admins see all leads across all branches — no branch/owner filter
-    } else if (userRole === 'manager') {
-      // Managers can see all leads from all branches (no filtering needed)
-    } else if (userRole === 'assistant_manager') {
-      // Assistant Managers see:
-      // 1. Leads they created (ownerId = userId)
-      // 2. Leads created by their subordinates (ownerId IN subordinateIds)
+    } else if (userRole === 'manager' || userRole === 'assistant_manager') {
+      // Managers & Assistant Managers see:
+      // 1. Leads in their assigned branches
+      // 2. OR Leads they own
+      // 3. OR Leads owned by their Managers (upwards)
+      // 4. OR Leads owned/assigned to their Subordinates (downwards)
 
-      // Initialize OR conditions with just the user's own leads
-      let orConditions = [
+      const orConditions = [
         Query.equal('ownerId', userId),
       ];
 
+      if (branchIds && branchIds.length > 0) {
+        orConditions.push(Query.equal('branchId', branchIds));
+      }
+
       try {
         // Fetch subordinates (TLs and Agents)
-        const { getSubordinates } = await import('@/lib/services/user-service');
+        const { getSubordinates, getUserById } = await import('@/lib/services/user-service');
         const subordinates = await getSubordinates(userId);
 
         if (subordinates.length > 0) {
           const subordinateIds = subordinates.map(s => s.$id);
-          // Appwrite query optimization: if list is huge, this might fail.
-          // But for reasonable team sizes, it's fine.
           orConditions.push(Query.equal('ownerId', subordinateIds));
+          orConditions.push(Query.equal('assignedToId', subordinateIds));
         }
+
+        // Fetch managers of this user (upwards)
+        const currentUser = await getUserById(userId);
+        const managerIds: string[] = [];
+        if (currentUser.managerId) managerIds.push(currentUser.managerId);
+        if (currentUser.managerIds && currentUser.managerIds.length > 0) {
+            currentUser.managerIds.forEach(mid => {
+                if (!managerIds.includes(mid)) managerIds.push(mid);
+            });
+        }
+
+        if (managerIds.length > 0) {
+            orConditions.push(Query.equal('ownerId', managerIds));
+        }
+
       } catch (err) {
-        console.error('Error fetching subordinates for lead visibility:', err);
+        console.error('Error fetching subordinates/managers for lead visibility:', err);
       }
 
-      // Important: AMs also need to see leads *assigned* to their subordinates?
-      // Requirement: "only leads created by them and the agents and team leads that are under them will appear."
-      // So filtering by 'ownerId' matches "created by".
-      // Does "assigned to" matter? Usually yes for visibility.
-      // If an Agent is assigned a lead created by Admin, the AM should probably see it too?
-      // "no leads that are created by them will appear. only leads created by them and the agents..."
-      // The user specifically emphasized "created by".
-      // However, usually managers oversee assigned leads too.
-      // Let's stick to "created by" (ownerId) as requested, but also include 'assignedToId' if consistent with other roles.
-      // Team Lead logic includes: ownerId=userId OR branchId=... OR ownerId=agentIds.
-      // Let's stick to the requested "created by them and ... under them".
-
       if (orConditions.length > 1) {
-        queries.push(Query.or(orConditions));
+         queries.push(Query.or(orConditions));
       } else {
-        queries.push(orConditions[0]);
+         queries.push(orConditions[0]);
       }
     } else if (userRole === 'team_lead') {
       // Team Leads see:
@@ -400,7 +405,7 @@ export async function listLeads(
     }
 
     // Apply assigned agent filter (for managers and admins)
-    if (filters.assignedToId && (userRole === 'manager' || userRole === 'team_lead' || userRole === 'admin')) {
+    if (filters.assignedToId && (userRole === 'manager' || userRole === 'team_lead' || userRole === 'admin' || userRole === 'assistant_manager')) {
       queries.push(Query.equal('assignedToId', filters.assignedToId));
     }
 

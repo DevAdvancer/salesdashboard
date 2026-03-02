@@ -84,7 +84,6 @@ export async function createAssistantManagerAction(input: CreateAssistantManager
     }
 
     // Validate branches (skip for admin, but verify existence)
-    const BRANCHES_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_BRANCHES_COLLECTION_ID!;
     const { users, databases } = await createAdminClient();
 
     if (callerDoc.role !== 'admin') {
@@ -98,8 +97,9 @@ export async function createAssistantManagerAction(input: CreateAssistantManager
         // For admin, verify branches exist
         for (const branchId of amInput.branchIds) {
             try {
-                await databases.getDocument(DATABASE_ID, BRANCHES_COLLECTION_ID, branchId);
+                await databases.getDocument(DATABASE_ID, COLLECTIONS.BRANCHES, branchId);
             } catch (error) {
+                console.error(`Error validating branch ${branchId} in collection ${COLLECTIONS.BRANCHES}:`, error);
                 throw new Error(`Branch ${branchId} does not exist`);
             }
         }
@@ -262,7 +262,7 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
         }
     }
 
-    const { name, email, password, branchIds, managerIds: inputManagerIds } = teamLeadInput;
+    const { name, email, password, branchIds, managerIds: inputManagerIds, assistantManagerId: inputAssistantManagerId, assistantManagerIds: inputAssistantManagerIds } = teamLeadInput;
     const { users, databases } = await createAdminClient();
     const userId = ID.unique();
 
@@ -275,7 +275,12 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
 
     // Determine managerIds
     let managerIds: string[] = [];
-    let assistantManagerId: string | null = null;
+    let assistantManagerIds: string[] = inputAssistantManagerIds || [];
+
+    // If using legacy single ID but not array, sync them
+    if (inputAssistantManagerId && !assistantManagerIds.includes(inputAssistantManagerId)) {
+        assistantManagerIds.push(inputAssistantManagerId);
+    }
 
     if (callerDoc.role === 'manager') {
         managerIds = [callerDoc.$id];
@@ -283,9 +288,21 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
         // If created by AM, managerIds should include AM's managers + AM
         const callerManagerIds = callerDoc.managerIds || (callerDoc.managerId ? [callerDoc.managerId] : []);
         managerIds = [...callerManagerIds, callerDoc.$id];
-        assistantManagerId = callerDoc.$id;
+        // And this AM is one of the assistant managers
+        if (!assistantManagerIds.includes(callerDoc.$id)) {
+            assistantManagerIds.push(callerDoc.$id);
+        }
     } else if (inputManagerIds && Array.isArray(inputManagerIds)) {
         managerIds = inputManagerIds;
+    }
+
+    // Ensure all assistant managers are in managerIds
+    if (assistantManagerIds.length > 0) {
+        assistantManagerIds.forEach(amId => {
+            if (!managerIds.includes(amId)) {
+                managerIds.push(amId);
+            }
+        });
     }
 
     // Generate permissions for all managers
@@ -309,7 +326,7 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
                 role: 'team_lead',
                 managerIds, // Use new array field
                 managerId: primaryManagerId,
-                assistantManagerId,
+                assistantManagerIds,
                 teamLeadId: null,
                 branchIds
             },
@@ -329,7 +346,7 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
             callerDoc.name,
             userId,
             'team_lead',
-            { role: 'team_lead', email, name, branchIds, managerId: primaryManagerId, managerIds, assistantManagerId }
+            { role: 'team_lead', email, name, branchIds, managerId: primaryManagerId, managerIds, assistantManagerId: inputAssistantManagerId, assistantManagerIds }
         );
 
         return { success: true };
@@ -372,6 +389,7 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
     let managerId = agentInput.managerId || null;
     let managerIds: string[] = [];
     let assistantManagerId: string | null = null;
+    let assistantManagerIds: string[] = agentInput.assistantManagerIds || [];
 
     // Calculate managerIds logic
     if (isTeamLead) {
@@ -382,7 +400,7 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
             managerIds.push(managerId);
         }
         // Inherit assistantManagerId from Team Lead
-        assistantManagerId = callerDoc.assistantManagerId || null;
+        assistantManagerIds = callerDoc.assistantManagerIds || [];
     } else if (isManager) {
         if (!managerId) {
             managerId = callerDoc.$id;
@@ -395,7 +413,9 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
                  // Optimization: We could fetch the user to verify role, but typically UI ensures this.
                  // For now, if assigned to someone else, assume it might be AM.
                  // But wait, if Manager assigns to AM, managerId is AM.
-                 assistantManagerId = managerId;
+                 if (!assistantManagerIds.includes(managerId)) {
+                     assistantManagerIds.push(managerId);
+                 }
             }
         }
     } else if (isAssistantManager) {
@@ -405,7 +425,9 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
             // AM's managers + AM
             const callerManagerIds = callerDoc.managerIds || (callerDoc.managerId ? [callerDoc.managerId] : []);
             managerIds = [...callerManagerIds, callerDoc.$id];
-            assistantManagerId = callerDoc.$id;
+            if (!assistantManagerIds.includes(callerDoc.$id)) {
+                assistantManagerIds.push(callerDoc.$id);
+            }
         } else {
             // Assigned to someone else? (e.g. TL)
             // If assigned to TL, teamLeadId handles it.
@@ -414,11 +436,15 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
             if (managerId === callerDoc.$id) {
                  const callerManagerIds = callerDoc.managerIds || (callerDoc.managerId ? [callerDoc.managerId] : []);
                  managerIds = [...callerManagerIds, callerDoc.$id];
-                 assistantManagerId = callerDoc.$id;
+                 if (!assistantManagerIds.includes(callerDoc.$id)) {
+                     assistantManagerIds.push(callerDoc.$id);
+                 }
             } else {
                  // Should inherit from that manager?
                  managerIds = [managerId];
-                 assistantManagerId = managerId;
+                 if (!assistantManagerIds.includes(managerId)) {
+                     assistantManagerIds.push(managerId);
+                 }
             }
         }
     } else {
@@ -446,8 +472,8 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
                     managerIds.push(managerId);
                 }
                 // Inherit AM from TL
-                if (tlDoc.assistantManagerId) {
-                    assistantManagerId = tlDoc.assistantManagerId;
+                if (tlDoc.assistantManagerIds && tlDoc.assistantManagerIds.length > 0) {
+                    assistantManagerIds = tlDoc.assistantManagerIds;
                 }
             }
         } catch (e) {
@@ -497,7 +523,7 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
                 role: 'agent',
                 managerId,
                 managerIds, // Save the chain
-                assistantManagerId, // Save the AM ID
+                assistantManagerIds, // Save AM IDs
                 teamLeadId,
                 branchIds
             },
@@ -528,11 +554,13 @@ export async function updateUserAction(input: {
     role?: UserRole;
     managerId?: string | null; // @deprecated
     managerIds?: string[]; // New field
+    assistantManagerId?: string | null; // @deprecated
+    assistantManagerIds?: string[]; // New field
     teamLeadId?: string | null;
     branchIds?: string[];
     currentUserId: string;
 }) {
-    const { userId, role, managerId, managerIds, teamLeadId, branchIds, currentUserId } = input;
+    const { userId, role, managerId, managerIds, assistantManagerId, assistantManagerIds, teamLeadId, branchIds, currentUserId } = input;
 
     if (!currentUserId) throw new Error("Unauthorized");
 
@@ -628,19 +656,61 @@ export async function updateUserAction(input: {
              if (managerId !== targetUserDoc.managerId) {
                   if (!isCallerAdmin && !isCallerManager && !isCallerAssistantManager) throw new Error("Permission denied to change manager");
              }
-             
+
              // If legacy field is used, treat as single manager array
              newManagerIds = managerId ? [managerId] : [];
              updates.managerIds = newManagerIds;
              updates.managerId = managerId;
         }
 
-        // 3. Handle Team Lead Update
+        // 3. Handle Assistant Manager Update
+        if (assistantManagerIds !== undefined) {
+             updates.assistantManagerIds = assistantManagerIds;
+
+             // Ensure all AMs are in managerIds
+             if (assistantManagerIds.length > 0) {
+                 const currentManagerIds = updates.managerIds || targetUserDoc.managerIds || [];
+                 // Avoid duplicates
+                 const newManagerIds = [...currentManagerIds];
+                 let changed = false;
+
+                 assistantManagerIds.forEach(amId => {
+                     if (!newManagerIds.includes(amId)) {
+                         newManagerIds.push(amId);
+                         changed = true;
+                     }
+                 });
+
+                 if (changed) {
+                     updates.managerIds = newManagerIds;
+                 }
+             }
+        } else if (assistantManagerId !== undefined) {
+             // Legacy handling
+             // Update array too
+             updates.assistantManagerIds = assistantManagerId ? [assistantManagerId] : [];
+
+             // If assistant manager is set, ensure they are in managerIds
+             if (assistantManagerId && updates.managerIds) {
+                 if (!updates.managerIds.includes(assistantManagerId)) {
+                     updates.managerIds.push(assistantManagerId);
+                 }
+             } else if (assistantManagerId && targetUserDoc.managerIds) {
+                 // If managerIds not changing but AM is, update managerIds
+                 const currentIds = [...targetUserDoc.managerIds];
+                 if (!currentIds.includes(assistantManagerId)) {
+                     currentIds.push(assistantManagerId);
+                     updates.managerIds = currentIds;
+                 }
+             }
+        }
+
+        // 4. Handle Team Lead Update
         if (teamLeadId !== undefined && teamLeadId !== targetUserDoc.teamLeadId) {
              // Admin, Manager, and Assistant Manager can assign Team Leads
              if (isCallerAdmin || isCallerManager || isCallerAssistantManager) {
                  updates.teamLeadId = teamLeadId;
-                 
+
                  // When TL changes, we should sync manager fields from new TL if available
                  if (teamLeadId) {
                     try {
@@ -670,7 +740,7 @@ export async function updateUserAction(input: {
              }
         }
 
-        // 4. Handle Branch Update
+        // 5. Handle Branch Update
         if (branchIds) {
              // Validate branches if not Admin
              if (!isCallerAdmin) {

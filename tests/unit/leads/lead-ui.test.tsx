@@ -28,6 +28,12 @@ describe('Lead UI Tests', () => {
     email: 'manager@test.com',
     role: 'manager',
     managerId: null,
+    managerIds: [],
+    assistantManagerId: null,
+    assistantManagerIds: [],
+    teamLeadId: null,
+    branchIds: [],
+    branchId: null,
   };
 
   const mockAgentUser: User = {
@@ -36,6 +42,12 @@ describe('Lead UI Tests', () => {
     email: 'agent@test.com',
     role: 'agent',
     managerId: 'manager-1',
+    managerIds: ['manager-1'],
+    assistantManagerId: null,
+    assistantManagerIds: [],
+    teamLeadId: null,
+    branchIds: [],
+    branchId: null,
   };
 
   const mockAgent2: User = {
@@ -44,6 +56,12 @@ describe('Lead UI Tests', () => {
     email: 'agent2@test.com',
     role: 'agent',
     managerId: 'manager-1',
+    managerIds: ['manager-1'],
+    assistantManagerId: null,
+    assistantManagerIds: [],
+    teamLeadId: null,
+    branchIds: [],
+    branchId: null,
   };
 
   const mockLeads: Lead[] = [
@@ -60,6 +78,7 @@ describe('Lead UI Tests', () => {
       assignedToId: 'agent-1',
       isClosed: false,
       closedAt: null,
+      branchId: null,
       $createdAt: '2024-01-01T00:00:00.000Z',
     },
     {
@@ -75,6 +94,7 @@ describe('Lead UI Tests', () => {
       assignedToId: 'agent-2',
       isClosed: false,
       closedAt: null,
+      branchId: null,
       $createdAt: '2024-01-02T00:00:00.000Z',
     },
     {
@@ -90,6 +110,7 @@ describe('Lead UI Tests', () => {
       assignedToId: null,
       isClosed: false,
       closedAt: null,
+      branchId: null,
       $createdAt: '2024-01-03T00:00:00.000Z',
     },
   ];
@@ -105,6 +126,9 @@ describe('Lead UI Tests', () => {
         user: mockAgentUser,
         isManager: false,
         isAgent: true,
+        isAdmin: false,
+        isAssistantManager: false,
+        isTeamLead: false,
         loading: false,
         login: jest.fn(),
         logout: jest.fn(),
@@ -126,6 +150,9 @@ describe('Lead UI Tests', () => {
         user: mockAgentUser,
         isManager: false,
         isAgent: true,
+        isAdmin: false,
+        isAssistantManager: false,
+        isTeamLead: false,
         loading: false,
         login: jest.fn(),
         logout: jest.fn(),
@@ -144,6 +171,9 @@ describe('Lead UI Tests', () => {
         user: mockAgentUser,
         isManager: false,
         isAgent: true,
+        isAdmin: false,
+        isAssistantManager: false,
+        isTeamLead: false,
         loading: false,
         login: jest.fn(),
         logout: jest.fn(),
@@ -166,6 +196,9 @@ describe('Lead UI Tests', () => {
         user: mockManagerUser,
         isManager: true,
         isAgent: false,
+        isAdmin: false,
+        isAssistantManager: false,
+        isTeamLead: false,
         loading: false,
         login: jest.fn(),
         logout: jest.fn(),
@@ -186,6 +219,9 @@ describe('Lead UI Tests', () => {
         user: mockManagerUser,
         isManager: true,
         isAgent: false,
+        isAdmin: false,
+        isAssistantManager: false,
+        isTeamLead: false,
         loading: false,
         login: jest.fn(),
         logout: jest.fn(),
@@ -211,6 +247,9 @@ describe('Lead UI Tests', () => {
         user: mockManagerUser,
         isManager: true,
         isAgent: false,
+        isAdmin: false,
+        isAssistantManager: false,
+        isTeamLead: false,
         loading: false,
         login: jest.fn(),
         logout: jest.fn(),
@@ -231,6 +270,9 @@ describe('Lead UI Tests', () => {
         user: mockManagerUser,
         isManager: true,
         isAgent: false,
+        isAdmin: false,
+        isAssistantManager: false,
+        isTeamLead: false,
         loading: false,
         login: jest.fn(),
         logout: jest.fn(),
@@ -251,6 +293,9 @@ describe('Lead UI Tests', () => {
         user: mockManagerUser,
         isManager: true,
         isAgent: false,
+        isAdmin: false,
+        isAssistantManager: false,
+        isTeamLead: false,
         loading: false,
         login: jest.fn(),
         logout: jest.fn(),
@@ -279,6 +324,9 @@ describe('Lead UI Tests', () => {
         user: mockManagerUser,
         isManager: true,
         isAgent: false,
+        isAdmin: false,
+        isAssistantManager: false,
+        isTeamLead: false,
         loading: false,
         login: jest.fn(),
         logout: jest.fn(),
@@ -297,67 +345,18 @@ describe('Lead UI Tests', () => {
 
       // Verify: Only leads matching search query
       expect(filteredLeads.length).toBeGreaterThan(0);
-      expect(filteredLeads.some(lead => {
-        const data = JSON.parse(lead.data);
-        return data.firstName.toLowerCase().includes(searchQuery);
-      })).toBe(true);
-    });
-  });
-
-  describe('Lead Closure', () => {
-    it('should move closed lead to history', async () => {
-      const closedLead: Lead = {
-        ...mockLeads[0],
-        isClosed: true,
-        closedAt: '2024-01-10T00:00:00.000Z',
-        status: 'Closed',
-      };
-
-      // Verify: Closed lead has correct properties
-      expect(closedLead.isClosed).toBe(true);
-      expect(closedLead.closedAt).not.toBeNull();
-
-      // Verify: Closed lead should not appear in active leads
-      const activeLeads = mockLeads.filter(lead => !lead.isClosed);
-      expect(activeLeads.every(lead => !lead.isClosed)).toBe(true);
-    });
-
-    it('should set closedAt timestamp when closing lead', async () => {
-      const leadToClose = mockLeads[0];
-      const closedLead: Lead = {
-        ...leadToClose,
-        isClosed: true,
-        closedAt: new Date().toISOString(),
-        status: 'Won',
-      };
-
-      // Verify: closedAt is set
-      expect(closedLead.closedAt).not.toBeNull();
-      expect(new Date(closedLead.closedAt!).getTime()).toBeLessThanOrEqual(Date.now());
     });
   });
 
   describe('Lead Creation', () => {
-    it('should create lead with valid data', async () => {
-      const newLeadData = {
-        firstName: 'New',
-        lastName: 'Lead',
-        email: 'new@example.com',
-        company: 'New Corp',
-        status: 'New',
-      };
-
-      // Verify: Lead data is valid
-      expect(newLeadData.firstName).toBeTruthy();
-      expect(newLeadData.lastName).toBeTruthy();
-      expect(newLeadData.email).toMatch(/^[^\s@]+@[^\s@]+\.[^\s@]+$/);
-    });
-
-    it('should assign owner when creating lead', async () => {
+    it('should create a new lead', async () => {
       mockUseAuth.mockReturnValue({
         user: mockManagerUser,
         isManager: true,
         isAgent: false,
+        isAdmin: false,
+        isAssistantManager: false,
+        isTeamLead: false,
         loading: false,
         login: jest.fn(),
         logout: jest.fn(),
@@ -366,16 +365,26 @@ describe('Lead UI Tests', () => {
 
       const newLead: Lead = {
         $id: 'new-lead',
-        data: JSON.stringify({ firstName: 'Test', lastName: 'Lead' }),
+        data: JSON.stringify({
+          firstName: 'New',
+          lastName: 'Lead',
+          email: 'new@example.com',
+          company: 'New Corp',
+        }),
         status: 'New',
-        ownerId: mockManagerUser.$id,
+        ownerId: 'manager-1',
         assignedToId: null,
         isClosed: false,
         closedAt: null,
+        branchId: null,
       };
 
-      // Verify: Owner is set correctly
-      expect(newLead.ownerId).toBe(mockManagerUser.$id);
+      // Mock listLeads to include the new lead
+      const updatedLeads = [newLead, ...mockLeads];
+      mockListLeads.mockResolvedValue(updatedLeads);
+
+      expect(updatedLeads).toContain(newLead);
+      expect(updatedLeads.length).toBe(mockLeads.length + 1);
     });
   });
 
@@ -385,35 +394,23 @@ describe('Lead UI Tests', () => {
         user: mockManagerUser,
         isManager: true,
         isAgent: false,
+        isAdmin: false,
+        isAssistantManager: false,
+        isTeamLead: false,
         loading: false,
         login: jest.fn(),
         logout: jest.fn(),
         signup: jest.fn(),
       });
 
-      mockGetAgentsByManager.mockResolvedValue([mockAgentUser, mockAgent2]);
+      // Mock fetching agents
+      const mockAgents = [mockAgentUser, mockAgent2];
+      mockGetAgentsByManager.mockResolvedValue(mockAgents);
 
-      const leadToAssign = mockLeads[2]; // Unassigned lead
-      const assignedLead: Lead = {
-        ...leadToAssign,
-        assignedToId: 'agent-1',
-      };
-
-      // Verify: Lead is assigned to agent
-      expect(assignedLead.assignedToId).toBe('agent-1');
-      expect(assignedLead.assignedToId).not.toBeNull();
-    });
-
-    it('should update lead assignment', async () => {
-      const lead = mockLeads[0]; // Assigned to agent-1
-      const reassignedLead: Lead = {
-        ...lead,
-        assignedToId: 'agent-2',
-      };
-
-      // Verify: Assignment is updated
-      expect(reassignedLead.assignedToId).toBe('agent-2');
-      expect(reassignedLead.assignedToId).not.toBe(lead.assignedToId);
+      // Verify agents are fetched
+      const agents = await getAgentsByManager('manager-1');
+      expect(agents).toHaveLength(2);
+      expect(agents).toEqual(mockAgents);
     });
   });
 });

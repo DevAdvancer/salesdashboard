@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { useRouter } from 'next/navigation';
-import { listLeads } from '@/lib/services/lead-service';
+import { listLeadsAction } from '@/app/actions/lead';
 import { getAgentsByManager, getAssignableUsers, getUserById as getUserByIdService } from '@/lib/services/user-service';
 import { Lead, User, LeadListFilters } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -133,7 +133,7 @@ function LeadsContent() {
 
     if (user) {
       loadLeads();
-      if (user.role === 'manager' || user.role === 'team_lead') {
+      if (['admin', 'manager', 'assistant_manager', 'team_lead'].includes(user.role)) {
         loadAgents();
       }
     }
@@ -186,13 +186,13 @@ function LeadsContent() {
   }, [filters, user]); // Added user to dependencies to ensure load on initial auth
 
   const loadAgents = async () => {
-    if (!user || (user.role !== 'manager' && user.role !== 'team_lead')) return;
+    if (!user || !['admin', 'manager', 'assistant_manager', 'team_lead'].includes(user.role)) return;
 
     try {
       let fetchedUsers: User[] = [];
 
-      if (user.role === 'manager') {
-        // For managers, load assignable users (team leads and agents) based on their branch scope
+      if (user.role === 'manager' || user.role === 'admin' || user.role === 'assistant_manager') {
+        // For managers, AMs and admins, load assignable users
         fetchedUsers = await getAssignableUsers(user.role, user.branchIds || [], user.$id);
       } else {
         // Team leads can only see agents assigned to them
@@ -244,7 +244,7 @@ function LeadsContent() {
           currentFilters.isClosed = false;
       }
 
-      const fetchedLeads = await listLeads(currentFilters, user.$id, user.role, user.branchIds);
+      const fetchedLeads = await listLeadsAction(currentFilters, user.$id, user.role, user.branchIds);
       setLeads(fetchedLeads);
       setCurrentPage(1);
     } catch (err) {
@@ -394,7 +394,7 @@ function LeadsContent() {
               </select>
             </div>
 
-            {(user?.role === 'manager' || user?.role === 'team_lead') && (
+            {['admin', 'manager', 'assistant_manager', 'team_lead'].includes(user?.role || '') && (
               <div>
                 <Label htmlFor="assignedTo">Assigned To</Label>
                 <select
@@ -469,10 +469,10 @@ function LeadsContent() {
                           <th className="p-3 md:p-4 font-semibold hidden lg:table-cell">Referral</th>
                         </>
                       )}
-                      {(user?.role === 'manager' || user?.role === 'team_lead') && (
+                      {['admin', 'manager', 'assistant_manager', 'team_lead'].includes(user?.role || '') && (
                         <th className="p-3 md:p-4 font-semibold hidden md:table-cell">Assigned To</th>
                       )}
-                      {(user?.role === 'manager' || user?.role === 'team_lead') && (
+                      {['admin', 'manager', 'assistant_manager', 'team_lead'].includes(user?.role || '') && (
                         <th className="p-3 md:p-4 font-semibold hidden lg:table-cell">Owner</th>
                       )}
                       <th className="p-3 md:p-4 font-semibold hidden sm:table-cell">Created</th>
@@ -508,7 +508,7 @@ function LeadsContent() {
                               </td>
                             </>
                           )}
-                          {(user?.role === 'manager' || user?.role === 'team_lead') && (
+                          {['admin', 'manager', 'assistant_manager', 'team_lead'].includes(user?.role || '') && (
                             <td className="p-3 md:p-4 text-muted-foreground hidden md:table-cell">
                               {lead.assignedToId ? (
                                 <AssignedAgentName agentId={lead.assignedToId} assignedUsers={assignedUsers} />
@@ -517,7 +517,7 @@ function LeadsContent() {
                               )}
                             </td>
                           )}
-                          {(user?.role === 'manager' || user?.role === 'team_lead') && (
+                          {['admin', 'manager', 'assistant_manager', 'team_lead'].includes(user?.role || '') && (
                             <td className="p-3 md:p-4 text-muted-foreground hidden lg:table-cell">
                               <OwnerName ownerId={lead.ownerId} owners={owners} />
                             </td>

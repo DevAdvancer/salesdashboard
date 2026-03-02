@@ -63,6 +63,7 @@ describe('Lead Service', () => {
         assignedToId: mockAgentId,
         isClosed: false,
         closedAt: null,
+        branchId: null,
       };
 
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedLead);
@@ -107,6 +108,7 @@ describe('Lead Service', () => {
         assignedToId: null,
         isClosed: false,
         closedAt: null,
+        branchId: null,
       };
 
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedLead);
@@ -144,6 +146,7 @@ describe('Lead Service', () => {
         assignedToId: null,
         isClosed: false,
         closedAt: null,
+        branchId: null,
       };
 
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedLead);
@@ -186,6 +189,7 @@ describe('Lead Service', () => {
         assignedToId: mockAgentId,
         isClosed: false,
         closedAt: null,
+        branchId: null,
       };
 
       const updatedData: Partial<LeadData> = {
@@ -228,6 +232,7 @@ describe('Lead Service', () => {
         assignedToId: mockAgentId,
         isClosed: false,
         closedAt: null,
+        branchId: null,
       };
 
       const partialUpdate: Partial<LeadData> = {
@@ -294,6 +299,7 @@ describe('Lead Service', () => {
         assignedToId: mockAgentId,
         isClosed: false,
         closedAt: null,
+        branchId: null,
       };
 
       (databases.getDocument as jest.Mock).mockResolvedValue(mockLead);
@@ -327,6 +333,7 @@ describe('Lead Service', () => {
         assignedToId: mockAgentId,
         isClosed: false,
         closedAt: null,
+        branchId: null,
       },
       {
         $id: 'lead-2',
@@ -336,6 +343,7 @@ describe('Lead Service', () => {
         assignedToId: mockAgentId,
         isClosed: false,
         closedAt: null,
+        branchId: null,
       },
     ];
 
@@ -420,6 +428,7 @@ describe('Lead Service', () => {
         assignedToId: mockAgentId,
         isClosed: false,
         closedAt: null,
+        branchId: null,
       };
 
       const closedLead: Lead = {
@@ -464,6 +473,7 @@ describe('Lead Service', () => {
         assignedToId: mockAgentId,
         isClosed: false,
         closedAt: null,
+        branchId: null,
       };
 
       (databases.getDocument as jest.Mock).mockResolvedValue(currentLead);
@@ -499,6 +509,7 @@ describe('Lead Service', () => {
         assignedToId: null,
         isClosed: false,
         closedAt: null,
+        branchId: null,
       };
 
       (databases.getDocument as jest.Mock).mockResolvedValue(currentLead);
@@ -532,6 +543,7 @@ describe('Lead Service', () => {
         assignedToId: mockAgentId,
         isClosed: true,
         closedAt: '2024-01-15T10:00:00.000Z',
+        branchId: null,
       };
 
       const reopenedLead: Lead = {
@@ -574,6 +586,7 @@ describe('Lead Service', () => {
         assignedToId: mockAgentId,
         isClosed: true,
         closedAt: originalClosedAt,
+        branchId: null,
       };
 
       (databases.getDocument as jest.Mock).mockResolvedValue(closedLead);
@@ -602,6 +615,7 @@ describe('Lead Service', () => {
         assignedToId: mockAgentId,
         isClosed: true,
         closedAt: '2024-01-15T10:00:00.000Z',
+        branchId: null,
       };
 
       (databases.getDocument as jest.Mock).mockResolvedValue(closedLead);
@@ -637,6 +651,7 @@ describe('Lead Service', () => {
         assignedToId: null,
         isClosed: true,
         closedAt: '2024-01-15T10:00:00.000Z',
+        branchId: null,
       };
 
       (databases.getDocument as jest.Mock).mockResolvedValue(closedLead);
@@ -671,6 +686,7 @@ describe('Lead Service', () => {
         assignedToId: mockAgentId,
         isClosed: false,
         closedAt: null,
+        branchId: null,
       };
 
       const assignedLead: Lead = {
@@ -712,6 +728,7 @@ describe('Lead Service', () => {
         assignedToId: mockAgentId,
         isClosed: false,
         closedAt: null,
+        branchId: null,
       };
 
       (databases.getDocument as jest.Mock).mockResolvedValue(currentLead);
@@ -747,6 +764,7 @@ describe('Lead Service', () => {
         assignedToId: mockAgentId,
         isClosed: true,
         closedAt: '2024-01-15T10:00:00.000Z',
+        branchId: null,
       };
 
       (databases.getDocument as jest.Mock).mockResolvedValue(closedLead);
@@ -782,6 +800,7 @@ describe('Lead Service', () => {
         assignedToId: mockAgentId,
         isClosed: false,
         closedAt: null,
+        branchId: null,
       };
 
       (databases.getDocument as jest.Mock).mockResolvedValue(currentLead);
@@ -814,6 +833,7 @@ describe('Lead Service', () => {
         assignedToId: mockAgentId,
         isClosed: false,
         closedAt: null,
+        branchId: null,
       };
 
       (databases.getDocument as jest.Mock).mockResolvedValue(currentLead);

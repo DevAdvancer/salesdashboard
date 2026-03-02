@@ -22,9 +22,38 @@ function TreeNode({ user, allUsers, level = 0 }: { user: User; allUsers: User[];
 
   // Find children for this node
   const directReports = allUsers.filter((u) => {
-    // Manager sees Team Leads AND direct-report Agents (agents with no TL but assigned to this manager)
+    // Manager sees Assistant Managers, Team Leads AND direct-report Agents
     if (user.role === 'manager') {
         const isAssigned = (u.managerIds && u.managerIds.includes(user.$id)) || u.managerId === user.$id;
+        
+        if (!isAssigned) return false;
+
+        if (u.role === 'assistant_manager') return true;
+
+        if (u.role === 'team_lead') {
+            // If Team Lead has an Assistant Manager who is also under this Manager, hide them from direct view
+            const amIds = u.assistantManagerIds || (u.assistantManagerId ? [u.assistantManagerId] : []);
+            if (amIds.length > 0) {
+                const hasReportingAM = amIds.some(amId => {
+                    const am = allUsers.find(au => au.$id === amId);
+                    // Check if this AM reports to the current manager
+                    return am && am.role === 'assistant_manager' && 
+                           ((am.managerIds && am.managerIds.includes(user.$id)) || am.managerId === user.$id);
+                });
+                if (hasReportingAM) return false;
+            }
+            return true;
+        }
+
+        return u.role === 'agent' && !u.teamLeadId;
+    }
+    // Assistant Manager sees Team Leads AND direct-report Agents assigned to them
+    if (user.role === 'assistant_manager') {
+        const isAssigned = (u.managerIds && u.managerIds.includes(user.$id)) || 
+                           u.managerId === user.$id ||
+                           (u.assistantManagerIds && u.assistantManagerIds.includes(user.$id)) ||
+                           u.assistantManagerId === user.$id;
+
         return (isAssigned && u.role === 'team_lead') ||
                (isAssigned && u.role === 'agent' && !u.teamLeadId);
     }
@@ -33,11 +62,13 @@ function TreeNode({ user, allUsers, level = 0 }: { user: User; allUsers: User[];
     return false;
   });
 
-  // Sort children: Team Leads first, then Agents. Alphabetically within roles.
+  // Sort children: Assistant Managers < Team Leads < Agents
   const sortedReports = directReports.sort((a, b) => {
-    // Priority: Team Leads < Agents
-    if (a.role === 'team_lead' && b.role !== 'team_lead') return -1;
-    if (a.role !== 'team_lead' && b.role === 'team_lead') return 1;
+    const rolePriority = { 'assistant_manager': 0, 'team_lead': 1, 'agent': 2 };
+    const priorityA = rolePriority[a.role as keyof typeof rolePriority] ?? 99;
+    const priorityB = rolePriority[b.role as keyof typeof rolePriority] ?? 99;
+    
+    if (priorityA !== priorityB) return priorityA - priorityB;
 
     // Secondary: Alphabetical by Name
     return a.name.localeCompare(b.name);
@@ -66,11 +97,13 @@ function TreeNode({ user, allUsers, level = 0 }: { user: User; allUsers: User[];
             className={cn(
               "p-2 rounded-full",
               user.role === 'manager' && "bg-blue-100 text-blue-600 dark:bg-blue-900/20",
+              user.role === 'assistant_manager' && "bg-indigo-100 text-indigo-600 dark:bg-indigo-900/20",
               user.role === 'team_lead' && "bg-purple-100 text-purple-600 dark:bg-purple-900/20",
               user.role === 'agent' && "bg-green-100 text-green-600 dark:bg-green-900/20"
             )}
           >
             {user.role === 'manager' && <Users className="h-4 w-4" />}
+            {user.role === 'assistant_manager' && <Users className="h-4 w-4" />}
             {user.role === 'team_lead' && <UserIcon className="h-4 w-4" />}
             {user.role === 'agent' && <UserIcon className="h-4 w-4" />}
           </div>
@@ -132,6 +165,8 @@ function HierarchyContent() {
           role: doc.role,
           managerId: doc.managerId || null,
           managerIds: doc.managerIds || [],
+          assistantManagerId: doc.assistantManagerId || null,
+          assistantManagerIds: doc.assistantManagerIds || [],
           teamLeadId: doc.teamLeadId || null,
           branchIds: doc.branchIds || [],
           branchId: doc.branchId || null,

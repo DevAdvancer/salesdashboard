@@ -19,12 +19,13 @@ import { FileText, Briefcase, Users, TrendingUp, DollarSign } from 'lucide-react
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 function DashboardContent() {
-  const { user, isAdmin, isManager, isAgent, isTeamLead, loading } = useAuth();
+  const { user, isAdmin, isManager, isAgent, isTeamLead, isAssistantManager, loading } = useAuth();
   const router = useRouter();
   const [metrics, setMetrics] = useState({
     activeLeads: 0,
     closedLeads: 0,
     teamMembersCount: 0,
+    assistantManagersCount: 0,
     totalAmount: 0,
     netAmount: 0,
     loading: true,
@@ -83,7 +84,8 @@ function DashboardContent() {
 
         // Fetch team members count and agents for team lead
         let teamMembersCount = 0;
-        if (isAdmin || isManager || isTeamLead) {
+        let assistantManagersCount = 0;
+        if (isAdmin || isManager || isTeamLead || isAssistantManager) {
           if (isTeamLead) {
             const { getAgentsByTeamLead } = await import('@/lib/services/user-service');
             const agents = await getAgentsByTeamLead(user.$id);
@@ -109,14 +111,34 @@ function DashboardContent() {
             teamMembersCount = agents.length;
             setAssignedAgents(agentsWithBranches);
           } else if (isManager) {
-            const { getUsersByBranches } = await import('@/lib/services/user-service');
-            if (user.branchIds && user.branchIds.length > 0) {
-              const users = await getUsersByBranches(user.branchIds);
-              teamMembersCount = users.filter(u => u.role === 'team_lead').length;
-            }
+            const { getSubordinates } = await import('@/lib/services/user-service');
+            const subordinates = await getSubordinates(user.$id);
+            teamMembersCount = subordinates.filter(u => u.role === 'team_lead').length;
+            assistantManagersCount = subordinates.filter(u => u.role === 'assistant_manager').length;
+          } else if (isAssistantManager) {
+            // Assistant Manager sees Team Leads under them
+            const { getSubordinates } = await import('@/lib/services/user-service');
+            const subordinates = await getSubordinates(user.$id);
+            teamMembersCount = subordinates.filter(u => u.role === 'team_lead').length;
           } else if (isAdmin) {
             const teamLeads = await getTeamLeads();
             teamMembersCount = teamLeads.length;
+
+            // Fetch assistant managers for admin
+            const { getAllManagers } = await import('@/lib/services/user-service');
+            // This is a bit inefficient, better to have getAssistantManagers
+            // But we can filter all users or similar.
+            // For now let's reuse logic or add service method if needed.
+            // Actually `getAllManagers` only returns 'manager' role.
+            // Let's use listDocuments with role query
+            const { databases } = await import('@/lib/appwrite');
+            const { Query } = await import('appwrite'); // Use appwrite package for Query
+            const amResponse = await databases.listDocuments(
+                process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+                process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
+                [Query.equal('role', 'assistant_manager')]
+            );
+            assistantManagersCount = amResponse.total;
           }
         }
 
@@ -145,7 +167,7 @@ function DashboardContent() {
                 // Group by Month for Chart
                 const date = new Date(lead.$createdAt || new Date());
                 const monthKey = date.toLocaleString('default', { month: 'short', year: 'numeric' });
-                
+
                 if (!monthlyData[monthKey]) {
                     monthlyData[monthKey] = { total: 0, net: 0 };
                 }
@@ -165,6 +187,7 @@ function DashboardContent() {
           activeLeads: activeLeads.length,
           closedLeads: closedLeads.length,
           teamMembersCount,
+          assistantManagersCount,
           totalAmount,
           netAmount,
           loading: false,
@@ -179,7 +202,7 @@ function DashboardContent() {
     if (user) {
       fetchMetrics();
     }
-  }, [user, isAdmin, isManager, isTeamLead]);
+  }, [user, isAdmin, isManager, isTeamLead, isAssistantManager]);
 
   useEffect(() => {
     async function fetchUserNames() {
@@ -268,6 +291,28 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
+        {isAssistantManager && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Assistant Manager Access</CardTitle>
+              <CardDescription>
+                You have system access
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                As an assistant manager, you can:
+              </p>
+              <ul className="list-disc list-inside text-sm mt-2 space-y-1">
+                <li>Create and manage team leads</li>
+                <li>View team members</li>
+                <li>Manage assigned leads</li>
+                <li>Access client records</li>
+              </ul>
+            </CardContent>
+          </Card>
+        )}
+
         {isAgent && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -285,11 +330,11 @@ function DashboardContent() {
           </Card>
         )}
 
-        {(isAdmin || isManager || isTeamLead) && (
+        {(isAdmin || isManager || isTeamLead || isAssistantManager) && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                {isManager ? 'Team Leads' : isTeamLead ? 'Agents' : 'Team Members'}
+                {isManager || isAssistantManager ? 'Team Leads' : isTeamLead ? 'Agents' : 'Team Members'}
               </CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
@@ -298,7 +343,26 @@ function DashboardContent() {
                 {metrics.loading ? '...' : metrics.teamMembersCount}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                {isManager ? 'Your team leads' : isTeamLead ? 'Your agents' : 'Team members'}
+                {isManager || isAssistantManager ? 'Your team leads' : isTeamLead ? 'Your agents' : 'Team members'}
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {(isAdmin || isManager) && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                Assistant Managers
+              </CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {metrics.loading ? '...' : metrics.assistantManagersCount}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {isManager ? 'Your assistant managers' : 'Total assistant managers'}
               </p>
             </CardContent>
           </Card>
