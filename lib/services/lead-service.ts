@@ -332,10 +332,10 @@ export async function listLeads(
           Query.equal('ownerId', userId),
         ])
       );
-    } else if (userRole === 'admin') {
-      // Admins see all leads across all branches — no branch/owner filter
-    } else if (userRole === 'manager' || userRole === 'assistant_manager') {
-      // Managers & Assistant Managers see:
+    } else if (userRole === 'admin' || userRole === 'manager') {
+      // Admins and Managers see all leads across all branches — no branch/owner filter
+    } else if (userRole === 'assistant_manager') {
+      // Assistant Managers see:
       // 1. Leads in their assigned branches
       // 2. OR Leads they own
       // 3. OR Leads owned by their Managers (upwards)
@@ -346,10 +346,9 @@ export async function listLeads(
       ];
 
       // Logic change:
-      // Managers always see branch leads.
       // Assistant Managers with > 1 branch ALSO see all branch leads (same as Manager).
       // Assistant Managers with 1 branch only see their own leads + subordinate leads.
-      const shouldSeeAllBranchLeads = userRole === 'manager' || (userRole === 'assistant_manager' && branchIds && branchIds.length > 1);
+      const shouldSeeAllBranchLeads = (userRole === 'assistant_manager' && branchIds && branchIds.length > 1);
 
       if (shouldSeeAllBranchLeads && branchIds && branchIds.length > 0) {
         orConditions.push(Query.equal('branchId', branchIds));
@@ -438,7 +437,7 @@ export async function listLeads(
     }
 
     // Apply assigned agent filter (for managers and admins)
-    if (filters.assignedToId && (userRole === 'manager' || userRole === 'team_lead' || userRole === 'admin' || userRole === 'assistant_manager')) {
+    if (filters.assignedToId) {
       queries.push(Query.equal('assignedToId', filters.assignedToId));
     }
 
