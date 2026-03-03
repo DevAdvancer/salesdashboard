@@ -378,33 +378,31 @@ export async function listLeadsAction(
       }
     } else if (userRole === 'team_lead') {
       // Team Leads see:
-      // 1. Leads in their branches
-      // 2. Leads they created (ownerId = userId)
-      // 3. Leads created by their assigned agents (ownerId IN agentIds) - This part is complex to do purely with queries if we don't have agent IDs handy.
-      // But the original logic had:
-      /*
+      // 1. Leads they created (ownerId = userId)
+      // 2. Leads created by their assigned agents (ownerId IN agentIds)
+      // 3. Leads assigned to their agents (assignedToId IN agentIds)
+      // 4. Leads assigned to themselves (assignedToId = userId)
+
+      // Fetch agents for this Team Lead
+      const agents = await databases.listDocuments(
+        DATABASE_ID,
+        COLLECTIONS.USERS,
+        [
+          Query.equal('teamLeadId', userId),
+          Query.equal('role', 'agent'),
+        ]
+      );
+
+      const teamIds = [userId];
+      agents.documents.forEach((agent) => {
+        teamIds.push(agent.$id);
+      });
+
+      // Filter leads where ownerId OR assignedToId is in the team
       const orConditions = [
-        Query.equal('ownerId', userId),
+        Query.equal('ownerId', teamIds),
+        Query.equal('assignedToId', teamIds),
       ];
-      if (branchIds && branchIds.length > 0) {
-        orConditions.push(Query.equal('branchId', branchIds));
-      }
-      // ... fetch agents ...
-      */
-
-      // Since we are using Admin client, we can simplify for TLs to just see Branch leads + Own leads.
-      // Most agents are in the same branch.
-      // If we strictly follow the requirement "Leads in their branches", that covers most cases.
-      // The previous logic added "ownerId = agentIds" but usually those agents are in the branch.
-      // Let's stick to Branch + Own for simplicity and performance, effectively matching AM logic but for TL.
-
-      const orConditions = [
-        Query.equal('ownerId', userId),
-      ];
-
-      if (branchIds && branchIds.length > 0) {
-        orConditions.push(Query.equal('branchId', branchIds));
-      }
 
       queries.push(Query.or(orConditions));
     }

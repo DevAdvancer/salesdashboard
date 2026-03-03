@@ -390,35 +390,38 @@ export async function listLeads(
       }
     } else if (userRole === 'team_lead') {
       // Team Leads see:
-      // 1. Leads in their branches
-      // 2. Leads they created (ownerId = userId)
-      // 3. Leads created by their assigned agents (ownerId IN agentIds)
-
-      const orConditions = [
-        Query.equal('ownerId', userId),
-      ];
-
-      if (branchIds && branchIds.length > 0) {
-        orConditions.push(Query.equal('branchId', branchIds));
-      }
+      // 1. Leads they created (ownerId = userId)
+      // 2. Leads created by their assigned agents (ownerId IN agentIds)
+      // 3. Leads assigned to their agents (assignedToId IN agentIds)
+      // 4. Leads assigned to themselves (assignedToId = userId)
 
       try {
-        // Dynamic import to avoid potential circular dependencies
-        const { getAgentsByTeamLead } = await import('@/lib/services/user-service');
-        const agents = await getAgentsByTeamLead(userId);
+        // Fetch agents for this Team Lead directly using Client SDK (permissions permitting)
+        const agents = await databases.listDocuments(
+          DATABASE_ID,
+          COLLECTIONS.USERS,
+          [
+            Query.equal('teamLeadId', userId),
+            Query.equal('role', 'agent'),
+          ]
+        );
 
-        if (agents.length > 0) {
-          const agentIds = agents.map(a => a.$id);
-          orConditions.push(Query.equal('ownerId', agentIds));
-        }
+        const teamIds = [userId];
+        agents.documents.forEach((agent) => {
+          teamIds.push(agent.$id);
+        });
+
+        // Filter leads where ownerId OR assignedToId is in the team
+        const orConditions = [
+          Query.equal('ownerId', teamIds),
+          Query.equal('assignedToId', teamIds),
+        ];
+
+        queries.push(Query.or(orConditions));
       } catch (err) {
         console.error('Error fetching team agents for lead visibility:', err);
-      }
-
-      if (orConditions.length > 1) {
-        queries.push(Query.or(orConditions));
-      } else {
-        queries.push(orConditions[0]);
+        // Fallback: see own leads
+        queries.push(Query.equal('ownerId', userId));
       }
     }
 

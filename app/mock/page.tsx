@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { listLeads } from '@/lib/services/lead-service';
-import { getUserById, getUsersByBranches, getAllManagers } from '@/lib/services/user-service';
+import { getUserById, getUsersByBranches, getAllManagers, getAssistantManagersByBranches } from '@/lib/services/user-service';
 import type { Lead, User } from '@/lib/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -349,6 +349,17 @@ function MockContent() {
           const allManagers = await getAllManagers();
           allManagers.forEach(m => {
               if (m.email && m.$id !== currentUser.$id) ccEmails.push(m.email);
+          });
+      }
+
+      // 3. Add Assistant Managers in the branch(es)
+      // Determine branch(es) context: Use lead's branch if available, otherwise user's branches.
+      const targetBranchIds: string[] = lead.branchId ? [lead.branchId] : (currentUser.branchIds || []);
+
+      if (targetBranchIds.length > 0) {
+          const assistantManagers = await getAssistantManagersByBranches(targetBranchIds);
+          assistantManagers.forEach(am => {
+              if (am.email) ccEmails.push(am.email);
           });
       }
 

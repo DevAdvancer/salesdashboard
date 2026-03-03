@@ -443,6 +443,28 @@ export async function getUsersByBranches(branchIds: string[]): Promise<User[]> {
 }
 
 /**
+ * Get all assistant managers by branch IDs.
+ * Returns all assistant managers whose branchIds array contains any of the given branchIds.
+ */
+export async function getAssistantManagersByBranches(branchIds: string[]): Promise<User[]> {
+  if (!branchIds.length) return [];
+  try {
+    const response = await databases.listDocuments(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      [
+        Query.equal('role', 'assistant_manager'),
+        Query.contains('branchIds', branchIds)
+      ]
+    );
+    return response.documents.map(mapDocToUser);
+  } catch (error: any) {
+    console.error('Error fetching assistant managers by branches:', error);
+    throw new Error(error.message || 'Failed to fetch assistant managers by branches');
+  }
+}
+
+/**
  * Get users assignable to a lead based on the creator's role and branches.
  * - Manager: team_leads + agents with overlapping branchIds (excluding self)
  * - Team Lead: agents with overlapping branchIds (excluding self)
