@@ -1,17 +1,17 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/contexts/auth-context';
-import { listLeadsAction } from '@/app/actions/lead';
-import { Lead, LeadData, HistoryFilters, AuditLog } from '@/lib/types';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { TableSkeleton } from '@/components/ui/skeleton';
-import { ProtectedRoute } from '@/components/protected-route';
-import { getAuditLogs } from '@/lib/services/audit-service';
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/contexts/auth-context";
+import { listLeadsAction } from "@/app/actions/lead";
+import { Lead, LeadData, HistoryFilters, AuditLog } from "@/lib/types";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { TableSkeleton } from "@/components/ui/skeleton";
+import { ProtectedRoute } from "@/components/protected-route";
+import { getAuditLogs } from "@/lib/services/audit-service";
 
 function HistoryContent() {
   const router = useRouter();
@@ -25,7 +25,7 @@ function HistoryContent() {
 
   useEffect(() => {
     if (!user) {
-      router.push('/login');
+      router.push("/login");
       return;
     }
 
@@ -46,12 +46,12 @@ function HistoryContent() {
         },
         user.$id,
         user.role,
-        user.branchIds
+        user.branchIds,
       );
       setLeads(closedLeads);
       loadClosedBy(closedLeads);
     } catch (error) {
-      console.error('Error loading closed leads:', error);
+      console.error("Error loading closed leads:", error);
     } finally {
       setLoading(false);
     }
@@ -66,12 +66,12 @@ function HistoryContent() {
           try {
             const { logs } = await getAuditLogs({
               targetId: lead.$id,
-              targetType: 'LEAD',
+              targetType: "LEAD",
               limit: 10,
             });
 
             const closeLog = logs.find((log: AuditLog) => {
-              if (log.action !== 'LEAD_UPDATE' || !log.metadata) return false;
+              if (log.action !== "LEAD_UPDATE" || !log.metadata) return false;
               try {
                 const metadata = JSON.parse(log.metadata);
                 return metadata.isClosed === true;
@@ -84,14 +84,14 @@ function HistoryContent() {
               entries[lead.$id] = closeLog.actorName;
             }
           } catch (error) {
-            console.error('Error loading closedBy for lead', lead.$id, error);
+            console.error("Error loading closedBy for lead", lead.$id, error);
           }
-        })
+        }),
       );
 
       setClosedByMap(entries);
     } catch (error) {
-      console.error('Error loading closedBy names:', error);
+      console.error("Error loading closedBy names:", error);
     }
   };
 
@@ -108,7 +108,7 @@ function HistoryContent() {
   };
 
   const formatDate = (dateString: string | null | undefined) => {
-    if (!dateString) return 'N/A';
+    if (!dateString) return "N/A";
     return new Date(dateString).toLocaleDateString();
   };
 
@@ -124,7 +124,9 @@ function HistoryContent() {
     return (
       <div className="container mx-auto">
         <div className="mb-6">
-          <h1 className="text-2xl md:text-3xl font-bold mb-2">Client History</h1>
+          <h1 className="text-2xl md:text-3xl font-bold mb-2">
+            Client History
+          </h1>
         </div>
         <Card className="p-4 md:p-6">
           <TableSkeleton rows={5} />
@@ -135,7 +137,7 @@ function HistoryContent() {
 
   const paginatedLeads = leads.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
+    currentPage * ITEMS_PER_PAGE,
   );
 
   const totalPages = Math.ceil(leads.length / ITEMS_PER_PAGE);
@@ -156,8 +158,8 @@ function HistoryContent() {
             <Input
               id="dateFrom"
               type="date"
-              value={filters.dateFrom || ''}
-              onChange={(e) => handleFilterChange('dateFrom', e.target.value)}
+              value={filters.dateFrom || ""}
+              onChange={(e) => handleFilterChange("dateFrom", e.target.value)}
             />
           </div>
           <div>
@@ -165,16 +167,12 @@ function HistoryContent() {
             <Input
               id="dateTo"
               type="date"
-              value={filters.dateTo || ''}
-              onChange={(e) => handleFilterChange('dateTo', e.target.value)}
+              value={filters.dateTo || ""}
+              onChange={(e) => handleFilterChange("dateTo", e.target.value)}
             />
           </div>
           <div className="flex items-end">
-            <Button
-              onClick={clearFilters}
-              variant="outline"
-              className="w-full"
-            >
+            <Button onClick={clearFilters} variant="outline" className="w-full">
               Clear Filters
             </Button>
           </div>
@@ -188,17 +186,28 @@ function HistoryContent() {
             <thead>
               <tr className="border-b border-border">
                 <th className="text-left p-3 md:p-4 font-semibold">Name</th>
-                <th className="text-left p-3 md:p-4 font-semibold hidden sm:table-cell">Email</th>
+                <th className="text-left p-3 md:p-4 font-semibold hidden sm:table-cell">
+                  Email
+                </th>
                 <th className="text-left p-3 md:p-4 font-semibold">Status</th>
-                <th className="text-left p-3 md:p-4 font-semibold hidden md:table-cell">Closed By</th>
-                <th className="text-left p-3 md:p-4 font-semibold hidden sm:table-cell">Closed Date</th>
+                <th className="text-left p-3 md:p-4 font-semibold hidden lg:table-cell">
+                  Source
+                </th>
+                <th className="text-left p-3 md:p-4 font-semibold hidden md:table-cell">
+                  Closed By
+                </th>
+                <th className="text-left p-3 md:p-4 font-semibold hidden sm:table-cell">
+                  Closed Date
+                </th>
                 <th className="text-left p-3 md:p-4 font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
               {paginatedLeads.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <td
+                    colSpan={6}
+                    className="text-center py-8 text-muted-foreground">
                     No client records found
                   </td>
                 </tr>
@@ -209,21 +218,27 @@ function HistoryContent() {
                     <tr
                       key={lead.$id}
                       className="border-b border-border hover:bg-accent/50 cursor-pointer transition-colors"
-                      onClick={() => router.push(`/client/${lead.$id}`)}
-                    >
+                      onClick={() => router.push(`/client/${lead.$id}`)}>
                       <td className="p-3 md:p-4">
-                        {data.firstName} {data.lastName || ''}
+                        {data.firstName} {data.lastName || ""}
                       </td>
-                      <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">{data.email || 'N/A'}</td>
+                      <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">
+                        {data.email || "N/A"}
+                      </td>
                       <td className="p-3 md:p-4">
                         <span className="px-2 py-1 rounded-full text-xs bg-secondary text-secondary-foreground">
                           {lead.status}
                         </span>
                       </td>
-                      <td className="p-3 md:p-4 text-muted-foreground hidden md:table-cell">
-                        {closedByMap[lead.$id] || 'N/A'}
+                      <td className="p-3 md:p-4 text-muted-foreground hidden lg:table-cell">
+                        {data.sourceName || data.source || "-"}
                       </td>
-                      <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">{formatDate(lead.closedAt)}</td>
+                      <td className="p-3 md:p-4 text-muted-foreground hidden md:table-cell">
+                        {closedByMap[lead.$id] || "N/A"}
+                      </td>
+                      <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">
+                        {formatDate(lead.closedAt)}
+                      </td>
                       <td className="p-3 md:p-4">
                         <Button
                           variant="outline"
@@ -231,8 +246,7 @@ function HistoryContent() {
                           onClick={(e) => {
                             e.stopPropagation();
                             router.push(`/client/${lead.$id}`);
-                          }}
-                        >
+                          }}>
                           View
                         </Button>
                       </td>
@@ -251,8 +265,7 @@ function HistoryContent() {
           <Button
             onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
             disabled={currentPage === 1}
-            variant="outline"
-          >
+            variant="outline">
             Previous
           </Button>
           <span className="text-sm text-muted-foreground">
@@ -261,8 +274,7 @@ function HistoryContent() {
           <Button
             onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
             disabled={currentPage === totalPages}
-            variant="outline"
-          >
+            variant="outline">
             Next
           </Button>
         </div>
@@ -270,7 +282,8 @@ function HistoryContent() {
 
       {/* Summary */}
       <div className="mt-4 text-muted-foreground text-sm">
-        Showing {paginatedLeads.length} of {leads.length} client record{leads.length !== 1 ? 's' : ''}
+        Showing {paginatedLeads.length} of {leads.length} client record
+        {leads.length !== 1 ? "s" : ""}
       </div>
     </div>
   );
