@@ -13,13 +13,72 @@ import {
 } from '@/components/ui/card';
 import { ProtectedRoute } from '@/components/protected-route';
 import { listLeadsAction } from '@/app/actions/lead';
-import { getAgentsByManager, getTeamLeads } from '@/lib/services/user-service';
+import { getTeamLeads } from '@/lib/services/user-service';
 import { getBranchById } from '@/lib/services/branch-service';
+import type { User } from '@/lib/types';
 import { FileText, Briefcase, Users, TrendingUp, DollarSign } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
+type AmountChartDatum = {
+  name: string;
+  Total: number;
+  Net: number;
+};
+
+type AssignedAgent = User & {
+  branchNames: string;
+};
+
+const currencyFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
+
+function parseCurrencyAmount(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value !== 'string') {
+    return 0;
+  }
+
+  const normalizedValue = value.replace(/[^0-9.-]/g, '');
+  if (!normalizedValue) {
+    return 0;
+  }
+
+  const parsedValue = Number.parseFloat(normalizedValue);
+  return Number.isFinite(parsedValue) ? parsedValue : 0;
+}
+
+function getLeadAmount(leadData: Record<string, unknown>): number {
+  return parseCurrencyAmount(leadData.amount ?? leadData.dealValue ?? 0);
+}
+
+function getMetricDate(lead: { isClosed: boolean; closedAt: string | null; $createdAt?: string; $updatedAt?: string }) {
+  const candidateDates = lead.isClosed
+    ? [lead.closedAt, lead.$updatedAt, lead.$createdAt]
+    : [lead.$createdAt, lead.$updatedAt];
+
+  for (const candidateDate of candidateDates) {
+    if (!candidateDate) {
+      continue;
+    }
+
+    const parsedDate = new Date(candidateDate);
+    if (!Number.isNaN(parsedDate.getTime())) {
+      return parsedDate;
+    }
+  }
+
+  return new Date();
+}
+
 function DashboardContent() {
-  const { user, isAdmin, isManager, isAgent, isTeamLead, isAssistantManager, loading } = useAuth();
+  const { user, isAdmin, isManager, isAgent, isTeamLead, isAssistantManager } = useAuth();
   const router = useRouter();
   const [metrics, setMetrics] = useState({
     activeLeads: 0,
@@ -30,12 +89,14 @@ function DashboardContent() {
     netAmount: 0,
     loading: true,
   });
-  const [amountData, setAmountData] = useState<any[]>([]);
+  const [amountData, setAmountData] = useState<AmountChartDatum[]>([]);
   const [managerName, setManagerName] = useState<string | null>(null);
   const [assistantManagerName, setAssistantManagerName] = useState<string | null>(null);
   const [teamLeadName, setTeamLeadName] = useState<string | null>(null);
-  const [assignedAgents, setAssignedAgents] = useState<any[]>([]);
+  const [assignedAgents, setAssignedAgents] = useState<AssignedAgent[]>([]);
   const [isOutlookChecking, setIsOutlookChecking] = useState(true);
+  const [financialView, setFinancialView] = useState<'total' | 'monthly'>('total');
+  const [selectedMonth, setSelectedMonth] = useState('');
 
   // Check Outlook connection status
   useEffect(() => {
@@ -68,29 +129,33 @@ function DashboardContent() {
       console.log('[Dashboard] Fetching metrics for user:', { id: user.$id, role: user.role, branchIds: user.branchIds });
 
       try {
-        // Fetch active leads count
-        const activeLeads = await listLeadsAction(
-          { isClosed: false },
-          user.$id,
-          user.role,
-          user.branchIds
-        );
-        console.log('[Dashboard] Active leads count:', activeLeads.length);
+        const userIsAdmin = user.role === 'admin';
+        const userIsManager = user.role === 'manager';
+        const userIsTeamLead = user.role === 'team_lead';
+        const userIsAssistantManager = user.role === 'assistant_manager';
 
-        // Fetch closed leads count
-        const closedLeads = await listLeadsAction(
-          { isClosed: true },
-          user.$id,
-          user.role,
-          user.branchIds
-        );
+        const [activeLeads, closedLeads] = await Promise.all([
+          listLeadsAction(
+            { isClosed: false },
+            user.$id,
+            user.role,
+            user.branchIds
+          ),
+          listLeadsAction(
+            { isClosed: true },
+            user.$id,
+            user.role,
+            user.branchIds
+          ),
+        ]);
+        console.log('[Dashboard] Active leads count:', activeLeads.length);
         console.log('[Dashboard] Closed leads count:', closedLeads.length);
 
         // Fetch team members count and agents for team lead
         let teamMembersCount = 0;
         let assistantManagersCount = 0;
-        if (isAdmin || isManager || isTeamLead || isAssistantManager) {
-          if (isTeamLead) {
+        if (userIsAdmin || userIsManager || userIsTeamLead || userIsAssistantManager) {
+          if (userIsTeamLead) {
             const { getAgentsByTeamLead } = await import('@/lib/services/user-service');
             const agents = await getAgentsByTeamLead(user.$id);
 
@@ -105,7 +170,7 @@ function DashboardContent() {
                         return branch.name;
                     }));
                     return { ...agent, branchNames: branchNames.join(', ') };
-                } catch (e) {
+                } catch {
                     return { ...agent, branchNames: 'Unknown' };
                 }
               }
@@ -114,27 +179,21 @@ function DashboardContent() {
 
             teamMembersCount = agents.length;
             setAssignedAgents(agentsWithBranches);
-          } else if (isManager) {
+          } else if (userIsManager) {
             const { getSubordinates } = await import('@/lib/services/user-service');
             const subordinates = await getSubordinates(user.$id);
             teamMembersCount = subordinates.filter(u => u.role === 'team_lead').length;
             assistantManagersCount = subordinates.filter(u => u.role === 'assistant_manager').length;
-          } else if (isAssistantManager) {
+          } else if (userIsAssistantManager) {
             // Assistant Manager sees Team Leads under them
             const { getSubordinates } = await import('@/lib/services/user-service');
             const subordinates = await getSubordinates(user.$id);
             teamMembersCount = subordinates.filter(u => u.role === 'team_lead').length;
-          } else if (isAdmin) {
+          } else if (userIsAdmin) {
             const teamLeads = await getTeamLeads();
             teamMembersCount = teamLeads.length;
 
             // Fetch assistant managers for admin
-            const { getAllManagers } = await import('@/lib/services/user-service');
-            // This is a bit inefficient, better to have getAssistantManagers
-            // But we can filter all users or similar.
-            // For now let's reuse logic or add service method if needed.
-            // Actually `getAllManagers` only returns 'manager' role.
-            // Let's use listDocuments with role query
             const { databases } = await import('@/lib/appwrite');
             const { Query } = await import('appwrite'); // Use appwrite package for Query
             const amResponse = await databases.listDocuments(
@@ -149,43 +208,54 @@ function DashboardContent() {
         // Calculate Amounts (Total and Net)
         let totalAmount = 0;
         let netAmount = 0;
-        const monthlyData: { [key: string]: { total: number; net: number } } = {};
+        const monthlyData: Record<string, { total: number; net: number; monthStart: number }> = {};
 
-        // Process all leads (active + closed) for amounts
+        // Total deal value includes both open leads and closed clients.
+        // Net revenue only includes closed clients.
         [...activeLeads, ...closedLeads].forEach(lead => {
-            let leadData: any;
+            let leadData: Record<string, unknown>;
             try {
-                leadData = JSON.parse(lead.data);
-            } catch (e) { return; }
+                leadData = JSON.parse(lead.data) as Record<string, unknown>;
+            } catch { return; }
 
-            const amount = parseFloat(leadData.dealValue || '0') || 0;
-            // Assuming Net Amount is same as Total for now, or if there's a specific field like 'netValue'
-            // If netValue exists use it, else use dealValue
-            const net = parseFloat(leadData.netValue || leadData.dealValue || '0') || 0;
+            const amount = getLeadAmount(leadData);
 
-            // Only add if amount > 0
-            if (amount > 0) {
-                totalAmount += amount;
-                netAmount += net;
+            if (amount <= 0) {
+                return;
+            }
 
-                // Group by Month for Chart
-                const date = new Date(lead.$createdAt || new Date());
-                const monthKey = date.toLocaleString('default', { month: 'short', year: 'numeric' });
+            totalAmount += amount;
 
-                if (!monthlyData[monthKey]) {
-                    monthlyData[monthKey] = { total: 0, net: 0 };
-                }
-                monthlyData[monthKey].total += amount;
-                monthlyData[monthKey].net += net;
+            const metricDate = getMetricDate(lead);
+            const monthKey = metricDate.toLocaleString('default', { month: 'short', year: 'numeric' });
+            const monthStart = new Date(metricDate.getFullYear(), metricDate.getMonth(), 1).getTime();
+
+            if (!monthlyData[monthKey]) {
+                monthlyData[monthKey] = { total: 0, net: 0, monthStart };
+            }
+
+            monthlyData[monthKey].total += amount;
+
+            if (lead.isClosed) {
+                netAmount += amount;
+                monthlyData[monthKey].net += amount;
             }
         });
 
         // Format chart data
-        const chartData = Object.entries(monthlyData).map(([name, data]) => ({
+        const chartData = Object.entries(monthlyData)
+          .map(([name, data]) => ({
             name,
             Total: data.total,
-            Net: data.net
-        }));
+            Net: data.net,
+            monthStart: data.monthStart,
+          }))
+          .sort((a, b) => a.monthStart - b.monthStart)
+          .map((data) => ({
+            name: data.name,
+            Total: data.Total,
+            Net: data.Net,
+          }));
 
         setMetrics({
           activeLeads: activeLeads.length,
@@ -206,14 +276,20 @@ function DashboardContent() {
     if (user) {
       fetchMetrics();
     }
-  }, [user, isAdmin, isManager, isTeamLead, isAssistantManager]);
+  }, [user]);
 
   useEffect(() => {
     async function fetchUserNames() {
       if (!user) return;
 
       try {
+        const userIsAgent = user.role === 'agent';
+        const userIsTeamLead = user.role === 'team_lead';
         const { databases } = await import('@/lib/appwrite');
+
+        setManagerName(null);
+        setAssistantManagerName(null);
+        setTeamLeadName(null);
 
         // Fetch manager name if user has managerId
         if (user.managerId) {
@@ -224,7 +300,7 @@ function DashboardContent() {
                 user.managerId
               );
               setManagerName(managerDoc.name);
-          } catch (e) {
+          } catch {
               console.warn("Could not fetch manager details");
           }
         }
@@ -232,38 +308,15 @@ function DashboardContent() {
         // Check for Assistant Manager in the hierarchy
         // If user is Agent: Team Lead -> Assistant Manager -> Manager
         // If user is Team Lead: Assistant Manager -> Manager
-        if (isAgent || isTeamLead) {
-             let supervisorId: string | null = null;
+        if (userIsAgent || userIsTeamLead) {
+              // Correct approach:
+              // 1. Fetch Team Lead (for Agent)
+              // 2. Check Team Lead's manager. If AM, display AM.
 
-             if (isAgent && user.teamLeadId) {
-                 // Fetch Team Lead to find their manager
-                 const tlDoc = await databases.getDocument(
-                     process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
-                     process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
-                     user.teamLeadId
-                 );
-                 supervisorId = tlDoc.managerId || null;
-             } else if (isTeamLead && user.managerId) {
-                 // For Team Lead, their managerId might be AM or Manager
-                 // But wait, if user.managerId IS the AM (based on our createAgent logic update), then we already fetched it as 'managerName'.
-                 // Let's refine this.
-
-                 // Current logic in createAgent: Agent.managerId = Manager (Top). Agent.teamLeadId = TeamLead.
-                 // So Agent.managerId is ALREADY the Top Manager.
-                 // And Agent.teamLeadId is the Team Lead.
-                 // Where is the Assistant Manager stored for the Agent?
-                 // It's implicitly the Team Lead's manager.
-                 supervisorId = user.managerId; // Start checking from top? No.
-             }
-
-             // Correct approach:
-             // 1. Fetch Team Lead (for Agent)
-             // 2. Check Team Lead's manager. If AM, display AM.
-
-             if (isAgent && user.teamLeadId) {
-                 try {
-                     const tlDoc = await databases.getDocument(
-                         process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+             if (userIsAgent && user.teamLeadId) {
+                  try {
+                      const tlDoc = await databases.getDocument(
+                          process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
                          process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
                          user.teamLeadId
                      );
@@ -278,17 +331,17 @@ function DashboardContent() {
                              setAssistantManagerName(supDoc.name);
                          }
                      }
-                 } catch (e) {}
-             }
+                  } catch {}
+              }
 
              // For Team Lead:
-             // Their 'managerId' might be AM or Manager.
-             // If they report to AM, managerId is AM.
-             // If they report to Manager, managerId is Manager.
-             if (isTeamLead && user.managerId) {
-                  try {
-                      const mDoc = await databases.getDocument(
-                          process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+              // Their 'managerId' might be AM or Manager.
+              // If they report to AM, managerId is AM.
+              // If they report to Manager, managerId is Manager.
+              if (userIsTeamLead && user.managerId) {
+                   try {
+                       const mDoc = await databases.getDocument(
+                           process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
                           process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
                           user.managerId
                       );
@@ -311,8 +364,8 @@ function DashboardContent() {
                               setManagerName(bigBoss.name);
                           }
                       }
-                  } catch(e) {}
-             }
+                   } catch {}
+              }
         }
 
         // Fetch team lead name if user has teamLeadId
@@ -333,6 +386,27 @@ function DashboardContent() {
       fetchUserNames();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (amountData.length === 0) {
+      setSelectedMonth('');
+      return;
+    }
+
+    const monthStillExists = amountData.some((dataPoint) => dataPoint.name === selectedMonth);
+    if (!selectedMonth || !monthStillExists) {
+      setSelectedMonth(amountData[amountData.length - 1].name);
+    }
+  }, [amountData, selectedMonth]);
+
+  const selectedMonthData = amountData.find((dataPoint) => dataPoint.name === selectedMonth) ?? null;
+  const isMonthlyView = financialView === 'monthly';
+  const displayedTotalAmount = isMonthlyView && selectedMonthData ? selectedMonthData.Total : metrics.totalAmount;
+  const displayedNetAmount = isMonthlyView && selectedMonthData ? selectedMonthData.Net : metrics.netAmount;
+  const displayedChartData = isMonthlyView && selectedMonthData ? [selectedMonthData] : amountData;
+  const displayedPeriodLabel = isMonthlyView
+    ? (selectedMonthData?.name ?? 'Selected month')
+    : 'All time';
 
   if (!user || isOutlookChecking) {
     return (
@@ -448,39 +522,95 @@ function DashboardContent() {
         <Card>
           <CardHeader>
             <CardTitle>Financial Insights</CardTitle>
-            <CardDescription>Revenue overview over time</CardDescription>
+            <CardDescription>Total deal value includes leads and clients. Net revenue includes clients only.</CardDescription>
           </CardHeader>
           <CardContent>
+            <div className="flex flex-col gap-4 mb-6 md:flex-row md:items-center md:justify-between">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant={financialView === 'total' ? 'default' : 'outline'}
+                  onClick={() => setFinancialView('total')}
+                  type="button"
+                >
+                  Total
+                </Button>
+                <Button
+                  variant={financialView === 'monthly' ? 'default' : 'outline'}
+                  onClick={() => setFinancialView('monthly')}
+                  type="button"
+                >
+                  Monthly
+                </Button>
+              </div>
+
+              {financialView === 'monthly' && (
+                <div className="flex items-center gap-2">
+                  <label htmlFor="financial-month" className="text-sm text-muted-foreground">
+                    Month
+                  </label>
+                  <select
+                    id="financial-month"
+                    className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    value={selectedMonth}
+                    onChange={(event) => setSelectedMonth(event.target.value)}
+                    disabled={amountData.length === 0}
+                  >
+                    {amountData.length === 0 ? (
+                      <option value="">No data</option>
+                    ) : (
+                      amountData.map((dataPoint) => (
+                        <option key={dataPoint.name} value={dataPoint.name}>
+                          {dataPoint.name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <div className="flex flex-col gap-1 p-4 border rounded-lg bg-card shadow-sm">
-                    <span className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                        <DollarSign className="h-4 w-4" /> Total Deal Value
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Period
                     </span>
-                    <span className="text-2xl font-bold">${metrics.totalAmount.toLocaleString()}</span>
+                    <span className="text-2xl font-bold">{displayedPeriodLabel}</span>
                 </div>
                 <div className="flex flex-col gap-1 p-4 border rounded-lg bg-card shadow-sm">
                     <span className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                        <TrendingUp className="h-4 w-4" /> Net Revenue
+                        <DollarSign className="h-4 w-4" /> {isMonthlyView ? 'Monthly Deal Value' : 'Total Deal Value'}
                     </span>
-                    <span className="text-2xl font-bold text-green-600">${metrics.netAmount.toLocaleString()}</span>
+                    <span className="text-2xl font-bold">{currencyFormatter.format(displayedTotalAmount)}</span>
+                </div>
+                <div className="flex flex-col gap-1 p-4 border rounded-lg bg-card shadow-sm">
+                    <span className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4" /> {isMonthlyView ? 'Monthly Net Revenue' : 'Net Revenue'}
+                    </span>
+                    <span className="text-2xl font-bold text-green-600">{currencyFormatter.format(displayedNetAmount)}</span>
                 </div>
             </div>
 
             <div className="h-[300px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={amountData}>
+                {displayedChartData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={displayedChartData}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="name" />
-                        <YAxis />
+                        <YAxis tickFormatter={(value) => currencyFormatter.format(Number(value))} />
                         <Tooltip
-                            formatter={(value) => `$${Number(value).toLocaleString()}`}
+                            formatter={(value) => currencyFormatter.format(Number(value))}
                             contentStyle={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}
                         />
                         <Legend />
                         <Bar dataKey="Total" fill="#8884d8" name="Total Deal Value" radius={[4, 4, 0, 0]} />
                         <Bar dataKey="Net" fill="#82ca9d" name="Net Revenue" radius={[4, 4, 0, 0]} />
                     </BarChart>
-                </ResponsiveContainer>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-full items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
+                    No financial data available yet.
+                  </div>
+                )}
             </div>
           </CardContent>
         </Card>

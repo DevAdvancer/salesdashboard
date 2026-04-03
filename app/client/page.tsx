@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { listLeadsAction } from "@/app/actions/lead";
 import { Lead, LeadData, HistoryFilters, AuditLog } from "@/lib/types";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,13 +15,18 @@ import { getAuditLogs } from "@/lib/services/audit-service";
 
 function HistoryContent() {
   const router = useRouter();
-  const { user, isManager, isAgent } = useAuth();
+  const { user } = useAuth();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<HistoryFilters>({});
   const [closedByMap, setClosedByMap] = useState<Record<string, string>>({});
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
+  const paginatedLeads = leads.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE,
+  );
+  const totalPages = Math.ceil(leads.length / ITEMS_PER_PAGE);
 
   useEffect(() => {
     if (!user) {
@@ -30,7 +35,23 @@ function HistoryContent() {
     }
 
     loadClosedLeads();
-  }, [user, filters]);
+  }, [user, filters, router]);
+
+  useEffect(() => {
+    const visibleLeads = leads.slice(
+      (currentPage - 1) * ITEMS_PER_PAGE,
+      currentPage * ITEMS_PER_PAGE,
+    );
+    const leadsMissingClosedBy = visibleLeads.filter(
+      (lead) => !closedByMap[lead.$id],
+    );
+
+    if (leadsMissingClosedBy.length === 0) {
+      return;
+    }
+
+    void loadClosedBy(leadsMissingClosedBy);
+  }, [leads, currentPage, closedByMap]);
 
   const loadClosedLeads = async () => {
     if (!user) return;
@@ -49,7 +70,6 @@ function HistoryContent() {
         user.branchIds,
       );
       setLeads(closedLeads);
-      loadClosedBy(closedLeads);
     } catch (error) {
       console.error("Error loading closed leads:", error);
     } finally {
@@ -89,7 +109,12 @@ function HistoryContent() {
         }),
       );
 
-      setClosedByMap(entries);
+      if (Object.keys(entries).length > 0) {
+        setClosedByMap((prev) => ({
+          ...prev,
+          ...entries,
+        }));
+      }
     } catch (error) {
       console.error("Error loading closedBy names:", error);
     }
@@ -134,13 +159,6 @@ function HistoryContent() {
       </div>
     );
   }
-
-  const paginatedLeads = leads.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE,
-  );
-
-  const totalPages = Math.ceil(leads.length / ITEMS_PER_PAGE);
 
   return (
     <div className="container mx-auto">

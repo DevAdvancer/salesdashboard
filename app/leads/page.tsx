@@ -9,7 +9,7 @@ import {
   getAssignableUsers,
   getUserById as getUserByIdService,
 } from "@/lib/services/user-service";
-import { Lead, User, LeadListFilters } from "@/lib/types";
+import { Lead, User, LeadListFilters, LeadData } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,15 @@ import { handleError } from "@/lib/utils/error-handler";
 import { ProtectedRoute } from "@/components/protected-route";
 
 import { Download } from "lucide-react";
+
+function parseLeadData(lead: Lead): LeadData {
+  try {
+    return JSON.parse(lead.data) as LeadData;
+  } catch (error) {
+    console.error("Failed to parse lead data", error);
+    return {};
+  }
+}
 
 function LeadsContent() {
   const { user, loading } = useAuth();
@@ -53,12 +62,7 @@ function LeadsContent() {
       // 1. Collect all unique keys from all leads' data
       const allKeys = new Set<string>();
       const parsedLeads = leads.map((lead) => {
-        let data: any = {};
-        try {
-          data = JSON.parse(lead.data);
-        } catch (e) {
-          console.error("Failed to parse lead data", e);
-        }
+        const data = parseLeadData(lead);
 
         // Add all keys from this lead to the set
         Object.keys(data).forEach((key) => allKeys.add(key));
@@ -196,6 +200,7 @@ function LeadsContent() {
         ),
       ];
       const userMap = new Map<string, User>();
+      const missingAssignedIds: string[] = [];
 
       // Check if we already have these users in 'agents' or 'assignedUsers'
       for (const id of assignedIds) {
@@ -206,16 +211,36 @@ function LeadsContent() {
           continue;
         }
 
-        // Fetch from server if not found
-        try {
-          const fetchedUser = await getUserByIdService(id);
-          userMap.set(id, fetchedUser);
-        } catch (err) {
-          console.error(`Error loading assigned user ${id}:`, err);
+        const existingAssignedUser = assignedUsers.get(id);
+        if (existingAssignedUser) {
+          userMap.set(id, existingAssignedUser);
+          continue;
         }
+
+        missingAssignedIds.push(id);
       }
 
-      setAssignedUsers((prev) => new Map([...prev, ...userMap]));
+      const fetchedUsers = await Promise.all(
+        missingAssignedIds.map(async (id) => {
+          try {
+            const fetchedUser = await getUserByIdService(id);
+            return [id, fetchedUser] as const;
+          } catch (err) {
+            console.error(`Error loading assigned user ${id}:`, err);
+            return null;
+          }
+        }),
+      );
+
+      fetchedUsers.forEach((entry) => {
+        if (entry) {
+          userMap.set(entry[0], entry[1]);
+        }
+      });
+
+      if (userMap.size > 0) {
+        setAssignedUsers((prev) => new Map([...prev, ...userMap]));
+      }
     } catch (err) {
       console.error("Error loading assigned agent names:", err);
     }
@@ -269,18 +294,29 @@ function LeadsContent() {
     try {
       const ownerIds = [...new Set(leads.map((lead) => lead.ownerId))];
       const ownerMap = new Map<string, User>();
+      const missingOwnerIds = ownerIds.filter((ownerId) => !owners.has(ownerId));
 
-      // Fetch owner details
-      for (const ownerId of ownerIds) {
-        try {
-          const owner = await getUserByIdService(ownerId);
-          ownerMap.set(ownerId, owner);
-        } catch (err) {
-          console.error(`Error loading owner ${ownerId}:`, err);
+      const fetchedOwners = await Promise.all(
+        missingOwnerIds.map(async (ownerId) => {
+          try {
+            const owner = await getUserByIdService(ownerId);
+            return [ownerId, owner] as const;
+          } catch (err) {
+            console.error(`Error loading owner ${ownerId}:`, err);
+            return null;
+          }
+        }),
+      );
+
+      fetchedOwners.forEach((entry) => {
+        if (entry) {
+          ownerMap.set(entry[0], entry[1]);
         }
-      }
+      });
 
-      setOwners(ownerMap);
+      if (ownerMap.size > 0) {
+        setOwners((prev) => new Map([...prev, ...ownerMap]));
+      }
     } catch (err) {
       console.error("Error loading owner names:", err);
     }
@@ -352,8 +388,6 @@ function LeadsContent() {
     setDateToFilter("");
     // Explicitly set empty object to reset everything, including hidden isClosed logic
     setFilters({});
-    // Force reload immediately
-    setTimeout(() => loadLeads(), 0);
   };
 
   const paginatedLeads = leads.slice(
@@ -564,7 +598,7 @@ function LeadsContent() {
                   </thead>
                   <tbody>
                     {paginatedLeads.map((lead) => {
-                      const leadData = JSON.parse(lead.data);
+                      const leadData = parseLeadData(lead);
                       return (
                         <tr
                           key={lead.$id}
