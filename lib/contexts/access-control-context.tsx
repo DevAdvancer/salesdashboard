@@ -17,6 +17,8 @@ export type ComponentKey =
   | 'branch-management'
   | 'audit-logs'
   | 'mock'
+  | 'assessment-support'
+  | 'interview-support'
   | 'hierarchy';
 
 interface AccessRule {
@@ -103,6 +105,8 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
         componentKey === 'field-management' ||
         componentKey === 'settings' ||
         componentKey === 'mock' ||
+        componentKey === 'assessment-support' ||
+        componentKey === 'interview-support' ||
         componentKey === 'hierarchy'
       );
     }
@@ -112,14 +116,18 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
         componentKey === 'leads' ||
         componentKey === 'history' ||
         componentKey === 'user-management' ||
-        componentKey === 'mock'
+        componentKey === 'mock' ||
+        componentKey === 'assessment-support' ||
+        componentKey === 'interview-support'
       );
     }
     if (user.role === 'agent') {
       return (
         componentKey === 'dashboard' ||
         componentKey === 'leads' ||
-        componentKey === 'mock'
+        componentKey === 'mock' ||
+        componentKey === 'assessment-support' ||
+        componentKey === 'interview-support'
       );
     }
     // Assistant Manager: By default, minimal access (Dashboard only) to prevent login loops.
@@ -132,6 +140,8 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
         componentKey === 'user-management' ||
         componentKey === 'field-management' ||
         componentKey === 'mock' ||
+        componentKey === 'assessment-support' ||
+        componentKey === 'interview-support' ||
         componentKey === 'hierarchy'
       );
     }

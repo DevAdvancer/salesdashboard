@@ -17,8 +17,9 @@ import {
   X,
   ClipboardList,
   Mail,
+  ClipboardCheck,
+  Video,
   Network,
-  GitGraph,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -61,9 +62,21 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     key: 'mock',
-    label: 'Mock',
+    label: 'Mock Interview',
     href: '/mock',
     icon: Mail,
+  },
+  {
+    key: 'assessment-support',
+    label: 'Assessment Support',
+    href: '/assessment-support',
+    icon: ClipboardCheck,
+  },
+  {
+    key: 'interview-support',
+    label: 'Interview Support',
+    href: '/interview-support',
+    icon: Video,
   },
   {
     key: 'hierarchy',

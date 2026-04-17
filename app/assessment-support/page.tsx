@@ -21,23 +21,24 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { handleError } from "@/lib/utils/error-handler";
 import { useToast } from "@/components/ui/use-toast";
 import { ProtectedRoute } from "@/components/protected-route";
-// import { databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite'; // Removed client-side DB usage
-// import { Query, ID } from 'appwrite';
-import { Clock, RefreshCw, AlertCircle } from "lucide-react";
-import { getMockAttempts, recordMockAttempt } from "@/app/actions/mock"; // Import Server Actions
+import { AlertCircle } from "lucide-react";
+import { getAssessmentAttempts, recordAssessmentAttempt, checkDuplicateSubject } from "@/app/actions/assessment";
 import { useDebounce } from "@/lib/hooks/use-debounce";
-// import { useMsal } from "@azure/msal-react";
-// import { loginRequest } from "@/lib/msal-config";
 
-interface MockFormData {
+interface AssessmentFormData {
   to: string;
   cc: string;
-  // subject is computed dynamically based on candidate name
+  assessmentReceived: string; // ISO string from datetime-local input
+  candidateName: string;
+  technology: string;
+  emailId: string;
+  contactNumber: string;
+  endClient: string;
+  jobTitle: string;
+  assessmentDuration: string;
   resume: File | null;
-  role: string;
-  mode: string;
-  schedule: string; // ISO string from datetime-local input
-  emailBody: string; // "part 1"
+  additionalAttachment: File | null;
+  jobDescription: string;
   // Signature fields
   yourName: string;
   yourRole: string;
@@ -45,30 +46,37 @@ interface MockFormData {
   company: "Silverspace Inc." | "Vizva Consultancy";
 }
 
-const INITIAL_FORM_DATA: MockFormData = {
+const INITIAL_FORM_DATA: AssessmentFormData = {
   to: "tech.leaders@silverspaceinc.com",
-  // to: 'prateek.narvariya@silverspaceinc.com',
+  // to: "prateek.narvariya@silverspaceinc.com",
   cc: "",
+  assessmentReceived: "",
+  candidateName: "",
+  technology: "",
+  emailId: "",
+  contactNumber: "",
+  endClient: "",
+  jobTitle: "",
+  assessmentDuration: "",
   resume: null,
-  role: "",
-  mode: "Evaluation",
-  schedule: "",
-  emailBody: "Hi Team,\n\nThe candidate is available for the whole day.",
+  additionalAttachment: null,
+  jobDescription: "",
   yourName: "",
   yourRole: "",
   yourPhone: "",
   company: "Silverspace Inc.",
 };
 
-interface MockAttempt {
+interface AssessmentAttempt {
   $id: string;
   leadId: string;
   userId: string;
   attemptCount: number;
   lastAttemptAt: string;
+  sentSubjects: string[];
 }
 
-function MockContent() {
+function AssessmentContent() {
   const { user, loading } = useAuth();
   const { toast } = useToast();
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -80,15 +88,14 @@ function MockContent() {
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [formData, setFormData] = useState<MockFormData>(INITIAL_FORM_DATA);
+  const [formData, setFormData] = useState<AssessmentFormData>(INITIAL_FORM_DATA);
   const [isSending, setIsSending] = useState(false);
-  // const { instance, accounts } = useMsal();
   const [isOutlookConnected, setIsOutlookConnected] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
 
-  // Mock Attempts State
-  const [mockAttempts, setMockAttempts] = useState<Map<string, MockAttempt>>(
+  // Assessment Attempts State
+  const [assessmentAttempts, setAssessmentAttempts] = useState<Map<string, AssessmentAttempt>>(
     new Map(),
   );
   const [loadingAttempts, setLoadingAttempts] = useState(false);
@@ -112,7 +119,7 @@ function MockContent() {
     checkConnection();
 
     // Load signature preferences
-    const storedSignature = localStorage.getItem("mockSignature");
+    const storedSignature = localStorage.getItem("assessmentSignature");
     if (storedSignature) {
       const parsed = JSON.parse(storedSignature);
       setFormData((prev) => ({
@@ -122,25 +129,36 @@ function MockContent() {
         yourPhone: parsed.yourPhone || "",
         company: parsed.company || "Silverspace Inc.",
       }));
+    } else {
+      // Fallback: try to load from mock signature
+      const mockSignature = localStorage.getItem("mockSignature");
+      if (mockSignature) {
+        const parsed = JSON.parse(mockSignature);
+        setFormData((prev) => ({
+          ...prev,
+          yourName: parsed.yourName || "",
+          yourRole: parsed.yourRole || "",
+          yourPhone: parsed.yourPhone || "",
+          company: parsed.company || "Silverspace Inc.",
+        }));
+      }
     }
   }, []);
 
-  const loadMockAttempts = useCallback(
+  const loadAssessmentAttempts = useCallback(
     async (leadIds: string[]) => {
       if (!leadIds.length || !user) return;
 
       try {
         setLoadingAttempts(true);
-        // Use Server Action instead of client DB call
-        const attempts = await getMockAttempts(user.$id, leadIds);
+        const attempts = await getAssessmentAttempts(user.$id, leadIds);
 
-        setMockAttempts((prev) => {
+        setAssessmentAttempts((prev) => {
           const newMap = new Map(prev);
           let hasChanges = false;
 
           attempts.forEach((doc: any) => {
             const existing = newMap.get(doc.leadId);
-            // Only update if data actually changed
             if (
               !existing ||
               existing.attemptCount !== doc.attemptCount ||
@@ -152,6 +170,7 @@ function MockContent() {
                 userId: doc.userId,
                 attemptCount: doc.attemptCount,
                 lastAttemptAt: doc.lastAttemptAt,
+                sentSubjects: doc.sentSubjects || [],
               });
               hasChanges = true;
             }
@@ -160,7 +179,7 @@ function MockContent() {
           return hasChanges ? newMap : prev;
         });
       } catch (err) {
-        console.error("Error loading mock attempts:", err);
+        console.error("Error loading assessment attempts:", err);
       } finally {
         setLoadingAttempts(false);
       }
@@ -173,7 +192,6 @@ function MockContent() {
 
     try {
       setIsLoading(true);
-      // Reuse listLeads with existing role-based logic
       const fetchedLeads = await listLeads(
         {},
         user.$id,
@@ -206,21 +224,21 @@ function MockContent() {
         currentPage * ITEMS_PER_PAGE,
       );
       const leadIds = pageLeads.map((l) => l.$id);
-      loadMockAttempts(leadIds);
+      loadAssessmentAttempts(leadIds);
     }
-  }, [filteredLeads, currentPage, loadMockAttempts]);
+  }, [filteredLeads, currentPage, loadAssessmentAttempts]);
 
   useEffect(() => {
     let result = leads;
 
-    if (filter === "mock_created") {
+    if (filter === "assessment_created") {
       result = result.filter((lead) => {
-        const attempt = mockAttempts.get(lead.$id);
+        const attempt = assessmentAttempts.get(lead.$id);
         return attempt && attempt.attemptCount > 0;
       });
-    } else if (filter === "mock_not_created") {
+    } else if (filter === "assessment_not_created") {
       result = result.filter((lead) => {
-        const attempt = mockAttempts.get(lead.$id);
+        const attempt = assessmentAttempts.get(lead.$id);
         return !attempt || attempt.attemptCount === 0;
       });
     }
@@ -240,68 +258,35 @@ function MockContent() {
     }
 
     setFilteredLeads(result);
-  }, [leads, filter, debouncedSearchQuery, mockAttempts]);
+  }, [leads, filter, debouncedSearchQuery, assessmentAttempts]);
 
-  // Reset file input key to force re-render and clear file
-  const [fileInputKey, setFileInputKey] = useState(Date.now());
+  // Reset file input keys to force re-render and clear files
+  const [resumeInputKey, setResumeInputKey] = useState(Date.now());
+  const [additionalInputKey, setAdditionalInputKey] = useState(Date.now() + 1);
 
-  const [isPreparingMock, setIsPreparingMock] = useState(false);
+  const [isPreparingAssessment, setIsPreparingAssessment] = useState(false);
 
-  const getCooldownStatus = (leadId: string) => {
-    const attempt = mockAttempts.get(leadId);
-    if (!attempt) return { canCreate: true, remainingTime: 0, count: 0 };
 
-    const MAX_ATTEMPTS = 2;
-    const COOLDOWN_MINUTES = 30;
-
-    if (attempt.attemptCount >= MAX_ATTEMPTS) {
-      return {
-        canCreate: false,
-        remainingTime: 0,
-        count: attempt.attemptCount,
-        isMaxed: true,
-      };
-    }
-
-    const lastAttempt = new Date(attempt.lastAttemptAt);
-    const now = new Date();
-    const diffMs = now.getTime() - lastAttempt.getTime();
-    const diffMinutes = diffMs / (1000 * 60);
-
-    if (diffMinutes < COOLDOWN_MINUTES) {
-      return {
-        canCreate: false,
-        remainingTime: Math.ceil(COOLDOWN_MINUTES - diffMinutes),
-        count: attempt.attemptCount,
-      };
-    }
-
-    return { canCreate: true, remainingTime: 0, count: attempt.attemptCount };
+  // Multiple assessments are always allowed; duplicates are checked by subject
+  const canCreateAssessment = (_leadId: string) => {
+    return true;
   };
 
-  const handleCreateMock = async (lead: Lead) => {
-    // Check restrictions again
-    const status = getCooldownStatus(lead.$id);
-    if (!status.canCreate) {
-      if (status.isMaxed) {
-        toast({
-          title: "Limit Reached",
-          description: "Maximum of 2 mock attempts allowed.",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Cooldown Active",
-          description: `Please wait ${status.remainingTime} minutes before retrying.`,
-          variant: "destructive",
-        });
-      }
+  const handleCreateAssessment = async (lead: Lead) => {
+    if (!canCreateAssessment(lead.$id)) {
+      toast({
+        title: "Already Sent",
+        description: "Assessment support has already been sent for this lead.",
+        variant: "destructive",
+      });
       return;
     }
 
     try {
-      setIsPreparingMock(true);
+      setIsPreparingAssessment(true);
       setSelectedLead(lead);
+
+      const leadData = JSON.parse(lead.data);
 
       // Reset form data but keep signature preferences
       setFormData((prev) => ({
@@ -310,11 +295,17 @@ function MockContent() {
         yourRole: prev.yourRole,
         yourPhone: prev.yourPhone,
         company: prev.company,
+        // Pre-fill from lead data
+        candidateName: `${leadData.firstName || ""} ${leadData.lastName || ""}`.trim(),
+        emailId: leadData.email || "",
+        contactNumber: leadData.phone || "",
+        endClient: leadData.company || "",
       }));
-      setFileInputKey(Date.now()); // Reset file input
+      setResumeInputKey(Date.now());
+      setAdditionalInputKey(Date.now() + 1);
 
       const currentUser = user;
-      if (!currentUser) return; // Should be protected route anyway
+      if (!currentUser) return;
 
       try {
         const ccEmails = await getSupportRequestCcEmails(currentUser);
@@ -330,33 +321,54 @@ function MockContent() {
 
       setIsModalOpen(true);
     } catch (error) {
-      console.error("Error preparing mock:", error);
+      console.error("Error preparing assessment:", error);
       toast({
         title: "Error",
-        description: "Failed to prepare mock interview form.",
+        description: "Failed to prepare assessment support form.",
         variant: "destructive",
       });
     } finally {
-      setIsPreparingMock(false);
+      setIsPreparingAssessment(false);
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    field: "resume" | "additionalAttachment",
+  ) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       if (file.size > 4 * 1024 * 1024) {
-        // 4MB limit
         toast({
           title: "File too large",
-          description: "Resume must be less than 4MB.",
+          description: "File must be less than 4MB.",
           variant: "destructive",
         });
-        e.target.value = ""; // Reset input
+        e.target.value = "";
         return;
       }
-      setFormData({ ...formData, resume: file });
+      setFormData({ ...formData, [field]: file });
     }
   };
+
+  const formatScheduleEST = (isoString: string) => {
+    if (!isoString) return "";
+    const date = new Date(isoString);
+    const datePart = new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(date);
+    const timePart = new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "numeric",
+      hour12: true,
+    }).format(date);
+    return `${datePart} at ${timePart} EST`;
+  };
+
+  // Build the live subject line for real-time preview
+  const liveSubject = `Sales Assessment Support - ${formData.candidateName || '...'} - ${formData.jobTitle || '...'} - ${formData.assessmentReceived ? formatScheduleEST(formData.assessmentReceived) : '...'}`;
 
   const sendEmail = async () => {
     if (!isOutlookConnected) {
@@ -370,13 +382,40 @@ function MockContent() {
 
     if (!selectedLead) return;
 
+    // Validate required fields
+    if (!formData.assessmentReceived) {
+      toast({
+        title: "Missing Field",
+        description: "Please select Assessment Received date/time.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.candidateName.trim()) {
+      toast({
+        title: "Missing Field",
+        description: "Candidate Name is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.jobTitle.trim()) {
+      toast({
+        title: "Missing Field",
+        description: "Job Title is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setIsSending(true);
-      const leadData = JSON.parse(selectedLead.data);
 
       // Save signature preferences
       localStorage.setItem(
-        "mockSignature",
+        "assessmentSignature",
         JSON.stringify({
           yourName: formData.yourName,
           yourRole: formData.yourRole,
@@ -385,48 +424,58 @@ function MockContent() {
         }),
       );
 
-      // Convert file to base64
-      let attachment = null;
-      if (formData.resume) {
-        const reader = new FileReader();
-        const base64Promise = new Promise<string>((resolve, reject) => {
+      // Convert files to base64
+      const fileToBase64 = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
           reader.onload = () => {
             const result = reader.result as string;
-            // Remove data URL prefix (e.g., "data:application/pdf;base64,")
             const base64 = result.split(",")[1];
             resolve(base64);
           };
           reader.onerror = reject;
+          reader.readAsDataURL(file);
         });
-        reader.readAsDataURL(formData.resume);
-        const base64Content = await base64Promise;
+      };
 
-        attachment = {
+      const attachments: any[] = [];
+
+      if (formData.resume) {
+        const base64Content = await fileToBase64(formData.resume);
+        attachments.push({
           "@odata.type": "#microsoft.graph.fileAttachment",
           name: formData.resume.name,
           contentType: formData.resume.type,
           contentBytes: base64Content,
-        };
+        });
       }
 
-      // Format Schedule
-      let formattedSchedule = "";
-      if (formData.schedule) {
-        const date = new Date(formData.schedule);
-        // Format: Feb 20, 2026 at 3:00 PM
-        const datePart = new Intl.DateTimeFormat("en-US", {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        }).format(date);
+      if (formData.additionalAttachment) {
+        const base64Content = await fileToBase64(formData.additionalAttachment);
+        attachments.push({
+          "@odata.type": "#microsoft.graph.fileAttachment",
+          name: formData.additionalAttachment.name,
+          contentType: formData.additionalAttachment.type,
+          contentBytes: base64Content,
+        });
+      }
 
-        const timePart = new Intl.DateTimeFormat("en-US", {
-          hour: "numeric",
-          minute: "numeric",
-          hour12: true,
-        }).format(date);
+      // Format Assessment Received
+      const formattedReceived = formatScheduleEST(formData.assessmentReceived);
 
-        formattedSchedule = `${datePart} at ${timePart}`;
+      // Subject line
+      const subject = `Sales Assessment Support - ${formData.candidateName} - ${formData.jobTitle} - ${formattedReceived}`;
+
+      // Check for duplicate subject before sending
+      const isDuplicate = await checkDuplicateSubject(selectedLead.$id, subject);
+      if (isDuplicate) {
+        toast({
+          title: "Duplicate Assessment",
+          description: "An assessment with this exact subject has already been sent for this candidate. Please change the candidate name, job title, or received date to avoid a duplicate.",
+          variant: "destructive",
+        });
+        setIsSending(false);
+        return;
       }
 
       // Determine logo URL and website based on company
@@ -442,21 +491,56 @@ function MockContent() {
         websiteLink = "https://vizvaconsultancyservices.com/";
       }
 
-      // Construct email body
+      // Job Description section
+      const jdSection = formData.jobDescription.trim()
+        ? `<p style="margin-top: 20px;"><strong style="font-size: 14px;">Job Description</strong></p>
+           <p style="white-space: pre-wrap;">${formData.jobDescription.replace(/\n/g, "<br/>")}</p>`
+        : `<p style="margin-top: 20px;"><strong style="font-size: 14px;">Job Description</strong></p>
+           <p style="color: #888;">JD Not Available</p>`;
+
+      // Construct email body - table format matching the screenshot
       const emailBody = `
         <html>
           <body style="font-family: Arial, sans-serif; color: #333;">
-            <p>${formData.emailBody.replace(/\n/g, "<br/>")}</p>
+            <p>Requested by <strong>${formData.yourName || "Team"}</strong></p>
+            <p>Assessment support request details:</p>
 
-            <table cellpadding="5" cellspacing="0" border="0" style="width: 100%; max-width: 600px; margin-top: 20px; border-collapse: collapse;">
-              <tr><td style="font-weight: bold; width: 150px; padding: 5px;">Candidate Name</td><td style="padding: 5px;">${leadData.firstName} ${leadData.lastName}</td></tr>
-              <tr><td style="font-weight: bold; padding: 5px;">End Client</td><td style="padding: 5px;">${leadData.company || "Silverspace Inc"}</td></tr>
-              <tr><td style="font-weight: bold; padding: 5px;">Role</td><td style="padding: 5px;">${formData.role}</td></tr>
-              <tr><td style="font-weight: bold; padding: 5px;">Mode</td><td style="padding: 5px;">${formData.mode}</td></tr>
-              <tr><td style="font-weight: bold; padding: 5px;">Schedule</td><td style="padding: 5px;">${formattedSchedule}</td></tr>
-              <tr><td style="font-weight: bold; padding: 5px;">Email ID</td><td style="padding: 5px;">${leadData.email || ""}</td></tr>
-              <tr><td style="font-weight: bold; padding: 5px;">Contact Number</td><td style="padding: 5px;">${leadData.phone || ""}</td></tr>
+            <table cellpadding="8" cellspacing="0" border="0" style="width: 100%; max-width: 600px; margin-top: 10px; border-collapse: collapse;">
+              <tr>
+                <td style="font-weight: bold; width: 200px; padding: 8px 12px; background-color: #4a6741; color: #fff; border: 1px solid #555;">Assessment Received (EST)</td>
+                <td style="padding: 8px 12px; background-color: #c5a832; color: #000; font-weight: bold; border: 1px solid #555;">${formattedReceived}</td>
+              </tr>
+              <tr>
+                <td style="font-weight: bold; padding: 8px 12px; background-color: #2a2a2a; color: #ccc; border: 1px solid #555;">Candidate Name</td>
+                <td style="padding: 8px 12px; background-color: #1a1a1a; color: #ddd; border: 1px solid #555;">${formData.candidateName}</td>
+              </tr>
+              <tr>
+                <td style="font-weight: bold; padding: 8px 12px; background-color: #2a2a2a; color: #ccc; border: 1px solid #555;">Technology</td>
+                <td style="padding: 8px 12px; background-color: #1a1a1a; color: #ddd; border: 1px solid #555;">${formData.technology}</td>
+              </tr>
+              <tr>
+                <td style="font-weight: bold; padding: 8px 12px; background-color: #2a2a2a; color: #ccc; border: 1px solid #555;">Email ID</td>
+                <td style="padding: 8px 12px; background-color: #1a1a1a; color: #ddd; border: 1px solid #555;">${formData.emailId}</td>
+              </tr>
+              <tr>
+                <td style="font-weight: bold; padding: 8px 12px; background-color: #2a2a2a; color: #ccc; border: 1px solid #555;">Contact Number</td>
+                <td style="padding: 8px 12px; background-color: #1a1a1a; color: #ddd; border: 1px solid #555;">${formData.contactNumber}</td>
+              </tr>
+              <tr>
+                <td style="font-weight: bold; padding: 8px 12px; background-color: #2a2a2a; color: #ccc; border: 1px solid #555;">End Client</td>
+                <td style="padding: 8px 12px; background-color: #1a1a1a; color: #ddd; border: 1px solid #555;">${formData.endClient}</td>
+              </tr>
+              <tr>
+                <td style="font-weight: bold; padding: 8px 12px; background-color: #2a2a2a; color: #ccc; border: 1px solid #555;">Job Title</td>
+                <td style="padding: 8px 12px; background-color: #1a1a1a; color: #ddd; border: 1px solid #555;">${formData.jobTitle}</td>
+              </tr>
+              <tr>
+                <td style="font-weight: bold; padding: 8px 12px; background-color: #2a2a2a; color: #ccc; border: 1px solid #555;">Assessment Duration</td>
+                <td style="padding: 8px 12px; background-color: #1a1a1a; color: #ddd; border: 1px solid #555;">${formData.assessmentDuration}</td>
+              </tr>
             </table>
+
+            ${jdSection}
 
             <br/>
             <p>Regards,</p>
@@ -469,7 +553,7 @@ function MockContent() {
       // Construct payload for our API
       const payload = {
         message: {
-          subject: `Request to schedule mock interview - ${leadData.firstName} ${leadData.lastName}`,
+          subject,
           body: {
             contentType: "HTML",
             content: emailBody,
@@ -486,13 +570,13 @@ function MockContent() {
               emailAddress: { address: email.trim() },
             }))
             .filter((r) => r.emailAddress.address),
-          attachments: attachment ? [attachment] : [],
+          attachments,
         },
         saveToSentItems: "true",
       };
 
       // Send via our server-side API
-      const response = await fetch("/api/mock/send-email", {
+      const response = await fetch("/api/assessment/send-email", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -505,60 +589,42 @@ function MockContent() {
         throw new Error(errorData.error || "Failed to send email");
       }
 
-      toast({
-        title: "Success",
-        description: "Mock interview email sent successfully!",
-      });
-      setIsModalOpen(false);
-      // We don't reset form data here to preserve signature, or we do reset but signature is re-read from state?
-      // Actually handleCreateMock resets it properly.
-      // But let's reset to initial state for next time, but keep signature?
-      // For now, simple reset is fine, next open will re-read or use handleCreateMock logic.
-      // Wait, handleCreateMock uses INITIAL_FORM_DATA and merges current state.
-      // So if I reset here, I lose current state signature.
-      // I should update INITIAL_FORM_DATA to have empty signature, but `handleCreateMock` preserves it.
-      // So I can just reset to INITIAL_FORM_DATA here.
-      // However, if I close and reopen without refreshing, `prev` in handleCreateMock will be INITIAL_FORM_DATA (empty).
-      // So I need to ensure signature is persisted in state or localStorage is read again.
-      // `handleCreateMock` reads `prev` state. If I reset state to INITIAL here, `prev` will be empty.
-      // So I should reload from localStorage or just not reset the signature fields.
-
-      const storedSignature = localStorage.getItem("mockSignature");
-      const parsedSignature = storedSignature
-        ? JSON.parse(storedSignature)
-        : {};
-
-      // Update Mock Attempts Count using Server Action
+      // Record assessment attempt with subject for duplicate tracking
       if (user) {
         try {
-          const updatedAttempt = await recordMockAttempt(
+          const updatedAttempt = await recordAssessmentAttempt(
             user.$id,
             selectedLead.$id,
+            subject,
           );
 
-          setMockAttempts((prev) =>
+          setAssessmentAttempts((prev) =>
             new Map(prev).set(selectedLead.$id, {
               $id: updatedAttempt.$id,
               leadId: updatedAttempt.leadId,
               userId: updatedAttempt.userId,
               attemptCount: updatedAttempt.attemptCount,
               lastAttemptAt: updatedAttempt.lastAttemptAt,
+              sentSubjects: updatedAttempt.sentSubjects || [],
             }),
           );
         } catch (e: any) {
-          console.error("Failed to record mock attempt:", e);
-          // If failed (e.g. limit reached), notify user but email was already sent?
-          // Ideally this should be checked BEFORE sending email, but we do optimistic check in handleCreateMock.
-          // If server rejects, it means race condition or tampering.
+          console.error("Failed to record assessment attempt:", e);
         }
       }
 
       toast({
         title: "Success",
-        description: "Email sent successfully.",
+        description: "Assessment support email sent successfully.",
       });
 
       setIsModalOpen(false);
+
+      const storedSignature = localStorage.getItem("assessmentSignature");
+      const parsedSignature = storedSignature
+        ? JSON.parse(storedSignature)
+        : {};
+
       setFormData({
         ...INITIAL_FORM_DATA,
         yourName: parsedSignature.yourName || "",
@@ -577,7 +643,6 @@ function MockContent() {
         variant: "destructive",
       });
 
-      // If token expired or invalid (server will return 401)
       if (errorMessage.includes("Not connected")) {
         setIsOutlookConnected(false);
       }
@@ -599,7 +664,7 @@ function MockContent() {
   if (loading || isLoading) {
     return (
       <div className="container mx-auto p-6">
-        <h1 className="text-2xl font-bold mb-6">Mock Interview Setup</h1>
+        <h1 className="text-2xl font-bold mb-6">Sales Assessment Support</h1>
         <Card>
           <CardContent className="p-6">
             <TableSkeleton rows={5} />
@@ -612,7 +677,7 @@ function MockContent() {
   return (
     <div className="container mx-auto p-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Mock Interview Setup</h1>
+        <h1 className="text-2xl font-bold">Sales Assessment Support</h1>
         {!isOutlookConnected ? (
           <Button onClick={handleConnectOutlook} disabled={isAuthLoading}>
             {isAuthLoading ? "Connecting..." : "Connect Outlook"}
@@ -651,8 +716,8 @@ function MockContent() {
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}>
                 <option value="all">All Leads</option>
-                <option value="mock_created">Mock Created</option>
-                <option value="mock_not_created">Mock Not Created</option>
+                <option value="assessment_created">Assessment Created</option>
+                <option value="assessment_not_created">Assessment Not Created</option>
               </select>
             </div>
           </div>
@@ -673,9 +738,9 @@ function MockContent() {
               <tbody>
                 {paginatedLeads.map((lead) => {
                   const leadData = JSON.parse(lead.data);
-                  const status = getCooldownStatus(lead.$id);
-                  const attempt = mockAttempts.get(lead.$id);
+                  const attempt = assessmentAttempts.get(lead.$id);
                   const attemptsCount = attempt?.attemptCount || 0;
+                  const canCreate = canCreateAssessment(lead.$id);
 
                   return (
                     <tr
@@ -695,54 +760,22 @@ function MockContent() {
                         {leadData.sourceName || leadData.source || "-"}
                       </td>
                       <td className="p-4">{leadData.company || "N/A"}</td>
-                      <td className="p-4 flex items-center gap-2">
-                        {attemptsCount > 0 && (
-                          <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded border border-green-200">
-                            Mock Created
-                          </span>
-                        )}
-                        {attemptsCount === 0 ? (
+                      <td className="p-4">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {attemptsCount > 0 && (
+                            <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded border border-green-200">
+                              {attemptsCount} Sent
+                            </span>
+                          )}
                           <Button
                             size="sm"
-                            onClick={() => handleCreateMock(lead)}
-                            disabled={!isOutlookConnected || isPreparingMock}>
-                            {isPreparingMock && selectedLead?.$id === lead.$id
+                            onClick={() => handleCreateAssessment(lead)}
+                            disabled={!isOutlookConnected || isPreparingAssessment}>
+                            {isPreparingAssessment && selectedLead?.$id === lead.$id
                               ? "Preparing..."
-                              : "Create Mock"}
+                              : "Create Assessment"}
                           </Button>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            {/* Attempts count display removed as per request */}
-                            {attemptsCount < 2 &&
-                              (status.canCreate ? (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleCreateMock(lead)}
-                                  disabled={
-                                    !isOutlookConnected || isPreparingMock
-                                  }>
-                                  <RefreshCw className="h-3 w-3 mr-1" />
-                                  Retry
-                                </Button>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  disabled
-                                  className="text-orange-500 border-orange-200 bg-orange-50">
-                                  <Clock className="h-3 w-3 mr-1" />
-                                  {status.remainingTime}m
-                                </Button>
-                              ))}
-                            {attemptsCount >= 2 && (
-                              <span className="text-xs font-medium text-red-500 flex items-center">
-                                <AlertCircle className="h-3 w-3 mr-1" />
-                                Max Limit
-                              </span>
-                            )}
-                          </div>
-                        )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -750,7 +783,7 @@ function MockContent() {
                 {paginatedLeads.length === 0 && (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={6}
                       className="p-8 text-center text-muted-foreground">
                       No leads found.
                     </td>
@@ -790,7 +823,7 @@ function MockContent() {
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Create Mock Interview</DialogTitle>
+            <DialogTitle>Create Assessment Support</DialogTitle>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
@@ -819,65 +852,154 @@ function MockContent() {
 
               <div className="col-span-2">
                 <Label>Subject</Label>
-                <div className="p-2 border rounded-md bg-muted text-muted-foreground">
-                  Request to schedule mock interview -{" "}
-                  {selectedLead
-                    ? JSON.parse(selectedLead.data).firstName +
-                      " " +
-                      JSON.parse(selectedLead.data).lastName
-                    : ""}
+                <div className="p-3 border-2 border-primary/30 rounded-md bg-primary/5 text-sm font-medium transition-all duration-200">
+                  {liveSubject}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  This subject updates in real-time as you fill in the fields below.
+                </p>
+              </div>
+
+              {/* Assessment-specific fields in table-like layout */}
+              <div className="col-span-2 border rounded-md overflow-hidden">
+                <div className="grid grid-cols-[200px_1fr] text-sm">
+                  <div className="p-3 bg-muted font-semibold border-b">Assessment Received (EST)</div>
+                  <div className="p-2 border-b">
+                    <Input
+                      id="assessmentReceived"
+                      type="datetime-local"
+                      min={minDateTime}
+                      value={formData.assessmentReceived}
+                      onChange={(e) =>
+                        setFormData({ ...formData, assessmentReceived: e.target.value })
+                      }
+                      className="h-8"
+                    />
+                  </div>
+
+                  <div className="p-3 bg-muted font-semibold border-b">Candidate Name</div>
+                  <div className="p-2 border-b">
+                    <Input
+                      value={formData.candidateName}
+                      onChange={(e) =>
+                        setFormData({ ...formData, candidateName: e.target.value })
+                      }
+                      placeholder="Full name"
+                      className="h-8"
+                    />
+                  </div>
+
+                  <div className="p-3 bg-muted font-semibold border-b">Technology</div>
+                  <div className="p-2 border-b">
+                    <Input
+                      value={formData.technology}
+                      onChange={(e) =>
+                        setFormData({ ...formData, technology: e.target.value })
+                      }
+                      placeholder="e.g. Full Stack Developer"
+                      className="h-8"
+                    />
+                  </div>
+
+                  <div className="p-3 bg-muted font-semibold border-b">Email ID</div>
+                  <div className="p-2 border-b">
+                    <Input
+                      value={formData.emailId}
+                      onChange={(e) =>
+                        setFormData({ ...formData, emailId: e.target.value })
+                      }
+                      placeholder="candidate@email.com"
+                      className="h-8"
+                    />
+                  </div>
+
+                  <div className="p-3 bg-muted font-semibold border-b">Contact Number</div>
+                  <div className="p-2 border-b">
+                    <Input
+                      value={formData.contactNumber}
+                      onChange={(e) =>
+                        setFormData({ ...formData, contactNumber: e.target.value })
+                      }
+                      placeholder="+1234567890"
+                      className="h-8"
+                    />
+                  </div>
+
+                  <div className="p-3 bg-muted font-semibold border-b">End Client</div>
+                  <div className="p-2 border-b">
+                    <Input
+                      value={formData.endClient}
+                      onChange={(e) =>
+                        setFormData({ ...formData, endClient: e.target.value })
+                      }
+                      placeholder="e.g. Hacker Rank"
+                      className="h-8"
+                    />
+                  </div>
+
+                  <div className="p-3 bg-muted font-semibold border-b">Job Title</div>
+                  <div className="p-2 border-b">
+                    <Input
+                      value={formData.jobTitle}
+                      onChange={(e) =>
+                        setFormData({ ...formData, jobTitle: e.target.value })
+                      }
+                      placeholder="e.g. Sde-2 Backend Engineer"
+                      className="h-8"
+                    />
+                  </div>
+
+                  <div className="p-3 bg-muted font-semibold">Assessment Duration</div>
+                  <div className="p-2">
+                    <Input
+                      value={formData.assessmentDuration}
+                      onChange={(e) =>
+                        setFormData({ ...formData, assessmentDuration: e.target.value })
+                      }
+                      placeholder="e.g. 60 minutes"
+                      className="h-8"
+                    />
+                  </div>
                 </div>
               </div>
 
+              {/* Attachments */}
+              <div className="col-span-2 md:col-span-1">
+                <Label htmlFor="resume">Resume</Label>
+                <Input
+                  id="resume"
+                  key={resumeInputKey}
+                  type="file"
+                  onChange={(e) => handleFileChange(e, "resume")}
+                  accept=".pdf,.doc,.docx"
+                />
+              </div>
+
+              <div className="col-span-2 md:col-span-1">
+                <Label htmlFor="additionalAttachment">Additional Attachment</Label>
+                <Input
+                  id="additionalAttachment"
+                  key={additionalInputKey}
+                  type="file"
+                  onChange={(e) => handleFileChange(e, "additionalAttachment")}
+                />
+              </div>
+
+              {/* Job Description */}
               <div className="col-span-2">
-                <Label htmlFor="emailBody">Email Content</Label>
+                <Label htmlFor="jobDescription">Job Description</Label>
                 <Textarea
-                  id="emailBody"
-                  value={formData.emailBody}
+                  id="jobDescription"
+                  value={formData.jobDescription}
                   onChange={(e) =>
-                    setFormData({ ...formData, emailBody: e.target.value })
+                    setFormData({ ...formData, jobDescription: e.target.value })
                   }
                   rows={4}
+                  placeholder="Paste job description here (leave empty for 'JD Not Available')"
                 />
               </div>
 
-              <div className="col-span-2 md:col-span-1">
-                <Label htmlFor="role">Role</Label>
-                <Input
-                  id="role"
-                  value={formData.role}
-                  onChange={(e) =>
-                    setFormData({ ...formData, role: e.target.value })
-                  }
-                  placeholder="e.g. Data Analyst"
-                />
-              </div>
-
-              <div className="col-span-2 md:col-span-1">
-                <Label htmlFor="mode">Mode</Label>
-                <Input
-                  id="mode"
-                  value={formData.mode}
-                  onChange={(e) =>
-                    setFormData({ ...formData, mode: e.target.value })
-                  }
-                  placeholder="Evaluation"
-                />
-              </div>
-
-              <div className="col-span-2 md:col-span-1">
-                <Label htmlFor="schedule">Schedule</Label>
-                <Input
-                  id="schedule"
-                  type="datetime-local"
-                  min={minDateTime}
-                  value={formData.schedule}
-                  onChange={(e) =>
-                    setFormData({ ...formData, schedule: e.target.value })
-                  }
-                />
-              </div>
-
+              {/* Company selector */}
               <div className="col-span-2 md:col-span-1">
                 <Label htmlFor="company">Company (Signature)</Label>
                 <select
@@ -892,17 +1014,7 @@ function MockContent() {
                 </select>
               </div>
 
-              <div className="col-span-2">
-                <Label htmlFor="resume">Upload Resume</Label>
-                <Input
-                  id="resume"
-                  key={fileInputKey}
-                  type="file"
-                  onChange={handleFileChange}
-                  accept=".pdf,.doc,.docx"
-                />
-              </div>
-
+              {/* Signature Details */}
               <div className="col-span-2 border-t pt-4 mt-2">
                 <h3 className="font-semibold mb-2">Signature Details</h3>
                 <div className="grid grid-cols-2 gap-4">
@@ -949,7 +1061,7 @@ function MockContent() {
               Go Back
             </Button>
             <Button onClick={sendEmail} disabled={isSending}>
-              {isSending ? "Sending..." : "Create Mock"}
+              {isSending ? "Sending..." : "Send Request"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -958,10 +1070,10 @@ function MockContent() {
   );
 }
 
-export default function MockPage() {
+export default function AssessmentSupportPage() {
   return (
-    <ProtectedRoute componentKey="mock">
-      <MockContent />
+    <ProtectedRoute componentKey="assessment-support">
+      <AssessmentContent />
     </ProtectedRoute>
   );
 }

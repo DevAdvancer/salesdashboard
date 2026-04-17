@@ -26,6 +26,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email: userDoc.email as string,
         role: userDoc.role as UserRole,
         managerId: userDoc.managerId as string | null,
+        managerIds: Array.isArray(userDoc.managerIds) ? (userDoc.managerIds as string[]) : [],
+        assistantManagerId: (userDoc.assistantManagerId as string) || null,
+        assistantManagerIds: Array.isArray(userDoc.assistantManagerIds)
+          ? (userDoc.assistantManagerIds as string[])
+          : [],
         teamLeadId: (userDoc.teamLeadId as string) || null,
         branchIds: Array.isArray(userDoc.branchIds) ? (userDoc.branchIds as string[]) : [],
         branchId: (userDoc.branchId as string) || null,
@@ -149,6 +154,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email: userDoc.email as string,
         role: userDoc.role as UserRole,
         managerId: userDoc.managerId as string | null,
+        managerIds: Array.isArray(userDoc.managerIds) ? (userDoc.managerIds as string[]) : [],
+        assistantManagerId: (userDoc.assistantManagerId as string) || null,
+        assistantManagerIds: Array.isArray(userDoc.assistantManagerIds)
+          ? (userDoc.assistantManagerIds as string[])
+          : [],
         teamLeadId: (userDoc.teamLeadId as string) || null,
         branchIds: Array.isArray(userDoc.branchIds) ? (userDoc.branchIds as string[]) : [],
         branchId: (userDoc.branchId as string) || null,

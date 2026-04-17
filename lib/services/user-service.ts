@@ -640,6 +640,23 @@ export async function getAllManagers(): Promise<User[]> {
 }
 
 /**
+ * Get all assistant managers in the system
+ */
+export async function getAllAssistantManagers(): Promise<User[]> {
+  try {
+    const response = await databases.listDocuments(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      [Query.equal('role', 'assistant_manager')]
+    );
+    return response.documents.map(mapDocToUser);
+  } catch (error: any) {
+    console.error('Error fetching all assistant managers:', error);
+    throw new Error(error.message || 'Failed to fetch all assistant managers');
+  }
+}
+
+/**
  * Get all agents in the system (for managers with full access)
  */
 export async function getAllAgents(): Promise<User[]> {
@@ -825,5 +842,72 @@ export async function getTeamLeads(branchIds?: string[]): Promise<User[]> {
   } catch (error: any) {
     console.error('Error fetching team leads:', error);
     throw new Error(error.message || 'Failed to fetch team leads');
+  }
+}
+
+/**
+ * Get default CC recipients for support-request email flows.
+ *
+ * Rules:
+ * - manager: no CC recipients
+ * - assistant_manager: CC only their manager(s)
+ * - team_lead / agent / admin / other: CC all managers and assistant managers except self
+ */
+export async function getSupportRequestCcEmails(
+  sender: Pick<User, 'role' | 'email' | 'managerId' | 'managerIds'>
+): Promise<string[]> {
+  try {
+    if (sender.role === 'manager') {
+      return [];
+    }
+
+    if (sender.role === 'assistant_manager') {
+      const managerIds = new Set<string>();
+
+      if (sender.managerId) {
+        managerIds.add(sender.managerId);
+      }
+
+      sender.managerIds?.forEach((managerId) => {
+        if (managerId) {
+          managerIds.add(managerId);
+        }
+      });
+
+      const managers = await Promise.all(
+        Array.from(managerIds).map(async (managerId) => {
+          try {
+            return await getUserById(managerId);
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      return Array.from(
+        new Set(
+          managers
+            .filter((manager): manager is User => Boolean(manager?.email))
+            .map((manager) => manager.email)
+            .filter((email) => email !== sender.email)
+        )
+      );
+    }
+
+    const [allManagers, allAssistantManagers] = await Promise.all([
+      getAllManagers(),
+      getAllAssistantManagers(),
+    ]);
+
+    return Array.from(
+      new Set(
+        [...allManagers, ...allAssistantManagers]
+          .map((user) => user.email)
+          .filter((email) => Boolean(email) && email !== sender.email)
+      )
+    );
+  } catch (error: any) {
+    console.error('Error fetching support request CC recipients:', error);
+    throw new Error(error.message || 'Failed to fetch support request CC recipients');
   }
 }
