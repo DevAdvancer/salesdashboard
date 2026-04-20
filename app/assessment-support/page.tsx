@@ -596,6 +596,16 @@ function AssessmentContent() {
             user.$id,
             selectedLead.$id,
             subject,
+            {
+              candidateName: formData.candidateName,
+              technology: formData.technology,
+              emailId: formData.emailId,
+              contactNumber: formData.contactNumber,
+              endClient: formData.endClient,
+              jobTitle: formData.jobTitle,
+              assessmentDuration: formData.assessmentDuration,
+              assessmentReceived: formattedReceived,
+            },
           );
 
           setAssessmentAttempts((prev) =>

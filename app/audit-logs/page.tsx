@@ -181,6 +181,93 @@ function AuditLogsContent() {
       );
     }
 
+    // ── Mock Interview ──────────────────────────────────────────────────────────
+    if (log.action === 'MOCK_EMAIL_SENT') {
+      const rows: [string, string][] = [
+        ['Candidate Name', metadata.candidateName || '—'],
+        ['Lead ID', metadata.leadId || log.targetId || '—'],
+        ['Attempt #', String(metadata.attemptCount ?? '—')],
+      ];
+      return (
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+              Mock Interview Email
+            </span>
+          </div>
+          {rows.map(([label, value]) => (
+            <div key={label} className="grid grid-cols-3 gap-2 text-sm border-b py-2 last:border-0">
+              <span className="font-medium text-muted-foreground">{label}</span>
+              <span className="col-span-2 break-all">{value}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // ── Interview Support ───────────────────────────────────────────────────────
+    if (log.action === 'INTERVIEW_EMAIL_SENT') {
+      const rows: [string, string][] = [
+        ['Subject', metadata.subject || '—'],
+        ['Candidate Name', metadata.candidateName || '—'],
+        ['Technology', metadata.technology || '—'],
+        ['End Client', metadata.endClient || '—'],
+        ['Job Title', metadata.jobTitle || '—'],
+        ['Interview Round', metadata.interviewRound || '—'],
+        ['Date & Time (EST)', metadata.interviewDate || '—'],
+        ['Duration', metadata.duration || '—'],
+        ['Email ID', metadata.emailId || '—'],
+        ['Contact Number', metadata.contactNumber || '—'],
+        ['Attempt #', String(metadata.attemptCount ?? '—')],
+      ];
+      return (
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+              Interview Support Email
+            </span>
+          </div>
+          {rows.map(([label, value]) => (
+            <div key={label} className="grid grid-cols-3 gap-2 text-sm border-b py-2 last:border-0">
+              <span className="font-medium text-muted-foreground">{label}</span>
+              <span className="col-span-2 break-all">{value}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // ── Assessment Support ──────────────────────────────────────────────────────
+    if (log.action === 'ASSESSMENT_EMAIL_SENT') {
+      const rows: [string, string][] = [
+        ['Subject', metadata.subject || '—'],
+        ['Candidate Name', metadata.candidateName || '—'],
+        ['Technology', metadata.technology || '—'],
+        ['End Client', metadata.endClient || '—'],
+        ['Job Title', metadata.jobTitle || '—'],
+        ['Assessment Received (EST)', metadata.assessmentReceived || '—'],
+        ['Assessment Duration', metadata.assessmentDuration || '—'],
+        ['Email ID', metadata.emailId || '—'],
+        ['Contact Number', metadata.contactNumber || '—'],
+        ['Attempt #', String(metadata.attemptCount ?? '—')],
+      ];
+      return (
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-800">
+              Assessment Support Email
+            </span>
+          </div>
+          {rows.map(([label, value]) => (
+            <div key={label} className="grid grid-cols-3 gap-2 text-sm border-b py-2 last:border-0">
+              <span className="font-medium text-muted-foreground">{label}</span>
+              <span className="col-span-2 break-all">{value}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
     // Generic JSON renderer with ID resolution
     return (
       <div className="space-y-2">
@@ -278,6 +365,9 @@ function AuditLogsContent() {
                       </TableCell>
                       <TableCell>
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          log.action === 'MOCK_EMAIL_SENT' ? 'bg-purple-100 text-purple-800' :
+                          log.action === 'INTERVIEW_EMAIL_SENT' ? 'bg-indigo-100 text-indigo-800' :
+                          log.action === 'ASSESSMENT_EMAIL_SENT' ? 'bg-teal-100 text-teal-800' :
                           log.action.includes('DELETE') ? 'bg-red-100 text-red-800' :
                           log.action.includes('UPDATE') ? 'bg-blue-100 text-blue-800' :
                           log.action.includes('CREATE') ? 'bg-green-100 text-green-800' :

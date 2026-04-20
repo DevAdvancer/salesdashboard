@@ -5,6 +5,44 @@ import { createAdminClient } from '@/lib/server/appwrite';
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const INTERVIEW_ATTEMPTS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_INTERVIEW_ATTEMPTS_COLLECTION_ID || 'interview_attempts';
+const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID || 'users';
+const AUDIT_LOGS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_AUDIT_LOGS_COLLECTION_ID!;
+
+/**
+ * Write an INTERVIEW_EMAIL_SENT audit log entry (best-effort, does not throw).
+ */
+async function logInterviewAudit(
+  databases: any,
+  userId: string,
+  leadId: string,
+  metadata: Record<string, any>
+) {
+  try {
+    // Fetch user name
+    let actorName = userId;
+    try {
+      const user = await databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, userId);
+      actorName = user.name || userId;
+    } catch {}
+
+    await databases.createDocument(
+      DATABASE_ID,
+      AUDIT_LOGS_COLLECTION_ID,
+      ID.unique(),
+      {
+        action: 'INTERVIEW_EMAIL_SENT',
+        actorId: userId,
+        actorName,
+        targetId: leadId,
+        targetType: 'INTERVIEW',
+        metadata: JSON.stringify(metadata),
+        performedAt: new Date().toISOString(),
+      }
+    );
+  } catch (e) {
+    console.error('[audit] Failed to log INTERVIEW_EMAIL_SENT:', e);
+  }
+}
 
 // Helper: parse attemptCount safely whether stored as string or integer
 function parseCount(val: any): number {
@@ -81,7 +119,7 @@ export async function checkDuplicateInterviewSubject(leadId: string, subject: st
  * Record a new interview attempt or update an existing one.
  * attemptCount is stored as a string to match Appwrite String attribute type.
  */
-export async function recordInterviewAttempt(userId: string, leadId: string, subject: string) {
+export async function recordInterviewAttempt(userId: string, leadId: string, subject: string, auditMetadata?: Record<string, any>) {
     if (!userId || !leadId) throw new Error('Invalid input');
 
     try {
@@ -121,6 +159,13 @@ export async function recordInterviewAttempt(userId: string, leadId: string, sub
                 }
             );
 
+            // Audit log
+            await logInterviewAudit(databases, userId, leadId, {
+                subject,
+                attemptCount: currentCount + 1,
+                ...(auditMetadata || {}),
+            });
+
             return {
                 $id: updated.$id,
                 leadId: updated.leadId,
@@ -143,6 +188,13 @@ export async function recordInterviewAttempt(userId: string, leadId: string, sub
                     sentSubjects: [subject],
                 }
             );
+
+            // Audit log
+            await logInterviewAudit(databases, userId, leadId, {
+                subject,
+                attemptCount: 1,
+                ...(auditMetadata || {}),
+            });
 
             return {
                 $id: newAttempt.$id,

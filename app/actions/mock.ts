@@ -7,6 +7,42 @@ import { createAdminClient } from '@/lib/server/appwrite';
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const MOCK_ATTEMPTS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_MOCK_ATTEMPTS_COLLECTION_ID || 'mock_attempts';
 const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID || 'users';
+const AUDIT_LOGS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_AUDIT_LOGS_COLLECTION_ID!;
+
+/**
+ * Write a MOCK_EMAIL_SENT audit log entry (best-effort, does not throw).
+ */
+async function logMockAudit(
+  databases: any,
+  userId: string,
+  userName: string,
+  leadId: string,
+  candidateName: string,
+  attemptCount: number
+) {
+  try {
+    await databases.createDocument(
+      DATABASE_ID,
+      AUDIT_LOGS_COLLECTION_ID,
+      ID.unique(),
+      {
+        action: 'MOCK_EMAIL_SENT',
+        actorId: userId,
+        actorName: userName,
+        targetId: leadId,
+        targetType: 'MOCK',
+        metadata: JSON.stringify({
+          candidateName,
+          leadId,
+          attemptCount,
+        }),
+        performedAt: new Date().toISOString(),
+      }
+    );
+  } catch (e) {
+    console.error('[audit] Failed to log MOCK_EMAIL_SENT:', e);
+  }
+}
 
 /**
  * Get all mock attempts for a user and a set of lead IDs
@@ -45,7 +81,7 @@ export async function getMockAttempts(userId: string, leadIds: string[]) {
 /**
  * Record a new mock attempt or update an existing one
  */
-export async function recordMockAttempt(userId: string, leadId: string) {
+export async function recordMockAttempt(userId: string, leadId: string, candidateName: string = '') {
     if (!userId || !leadId) throw new Error('Invalid input');
 
     try {
@@ -105,6 +141,16 @@ export async function recordMockAttempt(userId: string, leadId: string) {
                 }
             );
 
+            // Audit log
+            await logMockAudit(
+                databases,
+                userId,
+                user.name || userId,
+                leadId,
+                candidateName,
+                updated.attemptCount
+            );
+
             return {
                 $id: updated.$id,
                 leadId: updated.leadId,
@@ -123,6 +169,16 @@ export async function recordMockAttempt(userId: string, leadId: string) {
                     attemptCount: 1,
                     lastAttemptAt: now
                 }
+            );
+
+            // Audit log
+            await logMockAudit(
+                databases,
+                userId,
+                user.name || userId,
+                leadId,
+                candidateName,
+                1
             );
 
             return {

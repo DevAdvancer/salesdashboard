@@ -514,7 +514,17 @@ function InterviewContent() {
 
       if (user) {
         try {
-          const updatedAttempt = await recordInterviewAttempt(user.$id, selectedLead.$id, subject);
+          const updatedAttempt = await recordInterviewAttempt(user.$id, selectedLead.$id, subject, {
+            candidateName: formData.candidateName,
+            technology: formData.technology,
+            endClient: formData.endClient,
+            jobTitle: formData.jobTitle,
+            interviewRound: formData.interviewRound,
+            interviewDate: formattedDate,
+            duration: formData.duration,
+            emailId: formData.emailId,
+            contactNumber: formData.contactNumber,
+          });
           setInterviewAttempts((prev) =>
             new Map(prev).set(selectedLead.$id, {
               $id: updatedAttempt.$id,

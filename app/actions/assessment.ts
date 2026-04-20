@@ -6,6 +6,42 @@ import { createAdminClient } from '@/lib/server/appwrite';
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const ASSESSMENT_ATTEMPTS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_ASSESSMENT_ATTEMPTS_COLLECTION_ID || 'assessment_attempts';
 const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID || 'users';
+const AUDIT_LOGS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_AUDIT_LOGS_COLLECTION_ID!;
+
+/**
+ * Write an ASSESSMENT_EMAIL_SENT audit log entry (best-effort, does not throw).
+ */
+async function logAssessmentAudit(
+  databases: any,
+  userId: string,
+  leadId: string,
+  metadata: Record<string, any>
+) {
+  try {
+    let actorName = userId;
+    try {
+      const user = await databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, userId);
+      actorName = user.name || userId;
+    } catch {}
+
+    await databases.createDocument(
+      DATABASE_ID,
+      AUDIT_LOGS_COLLECTION_ID,
+      ID.unique(),
+      {
+        action: 'ASSESSMENT_EMAIL_SENT',
+        actorId: userId,
+        actorName,
+        targetId: leadId,
+        targetType: 'ASSESSMENT',
+        metadata: JSON.stringify(metadata),
+        performedAt: new Date().toISOString(),
+      }
+    );
+  } catch (e) {
+    console.error('[audit] Failed to log ASSESSMENT_EMAIL_SENT:', e);
+  }
+}
 
 /**
  * Get all assessment attempts for a user and a set of lead IDs
@@ -78,7 +114,7 @@ export async function checkDuplicateSubject(leadId: string, subject: string): Pr
  * Multiple assessments are allowed per lead, but duplicate subjects are blocked.
  * The subject of each sent email is stored to prevent duplicates.
  */
-export async function recordAssessmentAttempt(userId: string, leadId: string, subject: string) {
+export async function recordAssessmentAttempt(userId: string, leadId: string, subject: string, auditMetadata?: Record<string, any>) {
     if (!userId || !leadId) throw new Error('Invalid input');
 
     try {
@@ -119,6 +155,13 @@ export async function recordAssessmentAttempt(userId: string, leadId: string, su
                 }
             );
 
+            // Audit log
+            await logAssessmentAudit(databases, userId, leadId, {
+                subject,
+                attemptCount: attempt.attemptCount + 1,
+                ...(auditMetadata || {}),
+            });
+
             return {
                 $id: updated.$id,
                 leadId: updated.leadId,
@@ -140,6 +183,13 @@ export async function recordAssessmentAttempt(userId: string, leadId: string, su
                     sentSubjects: [subject],
                 }
             );
+
+            // Audit log
+            await logAssessmentAudit(databases, userId, leadId, {
+                subject,
+                attemptCount: 1,
+                ...(auditMetadata || {}),
+            });
 
             return {
                 $id: newAttempt.$id,

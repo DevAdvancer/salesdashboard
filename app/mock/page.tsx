@@ -531,9 +531,11 @@ function MockContent() {
       // Update Mock Attempts Count using Server Action
       if (user) {
         try {
+          const candidateName = `${leadData.firstName || ''} ${leadData.lastName || ''}`.trim();
           const updatedAttempt = await recordMockAttempt(
             user.$id,
             selectedLead.$id,
+            candidateName,
           );
 
           setMockAttempts((prev) =>

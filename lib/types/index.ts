@@ -203,7 +203,10 @@ export type AuditLogAction =
   | 'BRANCH_CREATE'
   | 'BRANCH_UPDATE'
   | 'LOGIN'
-  | 'LOGOUT';
+  | 'LOGOUT'
+  | 'MOCK_EMAIL_SENT'
+  | 'INTERVIEW_EMAIL_SENT'
+  | 'ASSESSMENT_EMAIL_SENT';
 
 export interface AuditLog {
   $id: string;
