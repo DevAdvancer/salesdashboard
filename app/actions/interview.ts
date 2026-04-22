@@ -55,28 +55,56 @@ function parseCount(val: any): number {
  * Get all interview attempts for a user and a set of lead IDs
  */
 export async function getInterviewAttempts(userId: string, leadIds: string[]) {
-    if (!userId || !leadIds.length) return [];
+    if (!leadIds.length) return [];
 
     try {
         const { databases } = await createAdminClient();
 
-        const response = await databases.listDocuments(
-            DATABASE_ID,
-            INTERVIEW_ATTEMPTS_COLLECTION_ID,
-            [
-                Query.equal('userId', userId),
-                Query.equal('leadId', leadIds)
-            ]
+        const CHUNK = 100;
+        const chunks: string[][] = [];
+        for (let i = 0; i < leadIds.length; i += CHUNK) {
+            chunks.push(leadIds.slice(i, i + CHUNK));
+        }
+
+        // NOTE: We query by leadId only (no userId filter) so that attempts created
+        // by ANY user are visible to everyone who can see that lead.
+        const batchResults = await Promise.all(
+            chunks.map((chunk) =>
+                databases.listDocuments(
+                    DATABASE_ID,
+                    INTERVIEW_ATTEMPTS_COLLECTION_ID,
+                    [
+                        Query.equal('leadId', chunk),
+                        Query.limit(chunk.length),
+                    ]
+                )
+            )
         );
 
-        return response.documents.map((doc: any) => ({
-            $id: doc.$id,
-            leadId: doc.leadId,
-            userId: doc.userId,
-            attemptCount: parseCount(doc.attemptCount),
-            lastAttemptAt: doc.lastAttemptAt,
-            sentSubjects: doc.sentSubjects || [],
-        }));
+        // Merge: if multiple users have attempts for the same lead, combine them
+        const mergedMap = new Map<string, { $id: string; leadId: string; userId: string; attemptCount: number; lastAttemptAt: string; sentSubjects: string[] }>();
+        batchResults.flatMap((res) => res.documents).forEach((doc: any) => {
+            const existing = mergedMap.get(doc.leadId);
+            const count = parseCount(doc.attemptCount);
+            if (!existing) {
+                mergedMap.set(doc.leadId, {
+                    $id: doc.$id,
+                    leadId: doc.leadId,
+                    userId: doc.userId,
+                    attemptCount: count,
+                    lastAttemptAt: doc.lastAttemptAt,
+                    sentSubjects: doc.sentSubjects || [],
+                });
+            } else {
+                existing.attemptCount += count;
+                if (doc.lastAttemptAt > existing.lastAttemptAt) {
+                    existing.lastAttemptAt = doc.lastAttemptAt;
+                }
+                existing.sentSubjects = [...existing.sentSubjects, ...(doc.sentSubjects || [])];
+            }
+        });
+
+        return Array.from(mergedMap.values());
     } catch (error: any) {
         console.error('Error getting interview attempts:', error);
         return [];

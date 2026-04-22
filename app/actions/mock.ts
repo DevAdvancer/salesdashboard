@@ -45,36 +45,69 @@ async function logMockAudit(
 }
 
 /**
- * Get all mock attempts for a user and a set of lead IDs
+ * Get all mock attempts for a user and a set of lead IDs.
+ * Appwrite Query.equal() arrays are capped at 100 items — we batch automatically.
  */
 export async function getMockAttempts(userId: string, leadIds: string[]) {
-    if (!userId || !leadIds.length) return [];
+    if (!leadIds.length) return [];
 
     try {
         const { databases } = await createAdminClient();
 
-        // Appwrite query limits might apply, but for pagination (10 items) it's fine.
-        const response = await databases.listDocuments(
-            DATABASE_ID,
-            MOCK_ATTEMPTS_COLLECTION_ID,
-            [
-                Query.equal('userId', userId),
-                // Use equal for IN query (Appwrite convention for arrays) or multiple queries if needed.
-                // Assuming leadIds is array of strings and we want attempts where leadId is in leadIds.
-                Query.equal('leadId', leadIds)
-            ]
+        // Chunk into batches of 100 (Appwrite hard limit)
+        const CHUNK = 100;
+        const chunks: string[][] = [];
+        for (let i = 0; i < leadIds.length; i += CHUNK) {
+            chunks.push(leadIds.slice(i, i + CHUNK));
+        }
+
+        // Run all batches in parallel
+        // NOTE: We query by leadId only (no userId filter) so that attempts created
+        // by ANY user are visible to everyone who can see that lead.
+        const batchResults = await Promise.all(
+            chunks.map((chunk) =>
+                databases.listDocuments(
+                    DATABASE_ID,
+                    MOCK_ATTEMPTS_COLLECTION_ID,
+                    [
+                        Query.equal('leadId', chunk),
+                        Query.limit(chunk.length),
+                    ]
+                )
+            )
         );
 
-        return response.documents.map((doc: any) => ({
-            $id: doc.$id,
-            leadId: doc.leadId,
-            userId: doc.userId,
-            attemptCount: doc.attemptCount,
-            lastAttemptAt: doc.lastAttemptAt
-        }));
+        // Merge: if multiple users have attempts for the same lead, sum them up
+        // so the badge reflects the total across all users.
+        const mergedMap = new Map<string, { $id: string; leadId: string; userId: string; attemptCount: number; lastAttemptAt: string }>();
+        batchResults.flatMap((res) => res.documents).forEach((doc: any) => {
+            const existing = mergedMap.get(doc.leadId);
+            if (!existing) {
+                mergedMap.set(doc.leadId, {
+                    $id: doc.$id,
+                    leadId: doc.leadId,
+                    userId: doc.userId,
+                    attemptCount: doc.attemptCount,
+                    lastAttemptAt: doc.lastAttemptAt,
+                });
+            } else {
+                // Sum counts and keep the latest timestamp
+                existing.attemptCount += doc.attemptCount;
+                if (doc.lastAttemptAt > existing.lastAttemptAt) {
+                    existing.lastAttemptAt = doc.lastAttemptAt;
+                }
+                // Use this user's record if it's the current user (for cooldown checks)
+                if (doc.userId === userId) {
+                    existing.$id = doc.$id;
+                    existing.userId = doc.userId;
+                }
+            }
+        });
+
+        return Array.from(mergedMap.values());
     } catch (error: any) {
         console.error('Error getting mock attempts:', error);
-        return []; // Return empty array on error
+        return [];
     }
 }
 

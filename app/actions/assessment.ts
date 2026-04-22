@@ -44,31 +44,61 @@ async function logAssessmentAudit(
 }
 
 /**
- * Get all assessment attempts for a user and a set of lead IDs
+ * Get all assessment attempts for a user and a set of lead IDs.
+ * Appwrite Query.equal() arrays are capped at 100 items — we batch automatically.
  */
 export async function getAssessmentAttempts(userId: string, leadIds: string[]) {
-    if (!userId || !leadIds.length) return [];
+    if (!leadIds.length) return [];
 
     try {
         const { databases } = await createAdminClient();
 
-        const response = await databases.listDocuments(
-            DATABASE_ID,
-            ASSESSMENT_ATTEMPTS_COLLECTION_ID,
-            [
-                Query.equal('userId', userId),
-                Query.equal('leadId', leadIds)
-            ]
+        // Chunk into batches of 100 (Appwrite hard limit)
+        const CHUNK = 100;
+        const chunks: string[][] = [];
+        for (let i = 0; i < leadIds.length; i += CHUNK) {
+            chunks.push(leadIds.slice(i, i + CHUNK));
+        }
+
+        // Run all batches in parallel
+        // NOTE: We query by leadId only (no userId filter) so that attempts created
+        // by ANY user are visible to everyone who can see that lead.
+        const batchResults = await Promise.all(
+            chunks.map((chunk) =>
+                databases.listDocuments(
+                    DATABASE_ID,
+                    ASSESSMENT_ATTEMPTS_COLLECTION_ID,
+                    [
+                        Query.equal('leadId', chunk),
+                        Query.limit(chunk.length),
+                    ]
+                )
+            )
         );
 
-        return response.documents.map((doc: any) => ({
-            $id: doc.$id,
-            leadId: doc.leadId,
-            userId: doc.userId,
-            attemptCount: doc.attemptCount,
-            lastAttemptAt: doc.lastAttemptAt,
-            sentSubjects: doc.sentSubjects || [],
-        }));
+        // Merge: if multiple users have attempts for the same lead, combine them
+        const mergedMap = new Map<string, { $id: string; leadId: string; userId: string; attemptCount: number; lastAttemptAt: string; sentSubjects: string[] }>();
+        batchResults.flatMap((res) => res.documents).forEach((doc: any) => {
+            const existing = mergedMap.get(doc.leadId);
+            if (!existing) {
+                mergedMap.set(doc.leadId, {
+                    $id: doc.$id,
+                    leadId: doc.leadId,
+                    userId: doc.userId,
+                    attemptCount: doc.attemptCount,
+                    lastAttemptAt: doc.lastAttemptAt,
+                    sentSubjects: doc.sentSubjects || [],
+                });
+            } else {
+                existing.attemptCount += doc.attemptCount;
+                if (doc.lastAttemptAt > existing.lastAttemptAt) {
+                    existing.lastAttemptAt = doc.lastAttemptAt;
+                }
+                existing.sentSubjects = [...existing.sentSubjects, ...(doc.sentSubjects || [])];
+            }
+        });
+
+        return Array.from(mergedMap.values());
     } catch (error: any) {
         console.error('Error getting assessment attempts:', error);
         return [];

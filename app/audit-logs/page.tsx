@@ -120,14 +120,14 @@ function AuditLogsContent() {
       return (
         <div className="space-y-4">
           {metadata.isCreation && (
-            <div className="p-2 bg-blue-50 text-blue-700 rounded text-sm mb-2">
+            <div style={{ padding: '0.5rem 0.75rem', background: 'rgba(56,152,236,0.12)', border: '1px solid rgba(56,152,236,0.25)', borderRadius: '0.5rem', color: '#60aaee', fontSize: '0.8125rem', marginBottom: '0.5rem' }}>
               Initial Form Configuration Created
             </div>
           )}
 
           {added && added.length > 0 && (
             <div>
-              <h4 className="font-semibold text-green-600 mb-2">Added Fields</h4>
+              <h4 style={{ fontWeight: 600, color: '#4ade80', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Added Fields</h4>
               <ul className="list-disc pl-5 space-y-1 text-sm">
                 {added.map((f: any) => (
                   <li key={f.key}>
@@ -140,7 +140,7 @@ function AuditLogsContent() {
 
           {removed && removed.length > 0 && (
             <div>
-              <h4 className="font-semibold text-red-600 mb-2">Removed Fields</h4>
+              <h4 style={{ fontWeight: 600, color: '#f87171', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Removed Fields</h4>
               <ul className="list-disc pl-5 space-y-1 text-sm">
                 {removed.map((f: any) => (
                   <li key={f.key}>
@@ -153,10 +153,10 @@ function AuditLogsContent() {
 
           {modified && modified.length > 0 && (
             <div>
-              <h4 className="font-semibold text-amber-600 mb-2">Modified Fields</h4>
+              <h4 style={{ fontWeight: 600, color: '#fbbf24', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Modified Fields</h4>
               <div className="space-y-3">
                 {modified.map((m: any) => (
-                  <div key={m.key} className="text-sm border-l-2 border-amber-200 pl-3">
+                  <div key={m.key} style={{ fontSize: '0.875rem', borderLeft: '2px solid rgba(251,191,36,0.4)', paddingLeft: '0.75rem' }}>
                     <p className="font-medium">{m.label}</p>
                     <ul className="mt-1 space-y-1 text-muted-foreground">
                       {Object.entries(m.changes).map(([prop, change]: [string, any]) => (
@@ -191,7 +191,7 @@ function AuditLogsContent() {
       return (
         <div className="space-y-1">
           <div className="flex items-center gap-2 mb-3">
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+            <span style={{ display: 'inline-flex', alignItems: 'center', padding: '0.125rem 0.625rem', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: 500, background: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.30)' }}>
               Mock Interview Email
             </span>
           </div>
@@ -223,7 +223,7 @@ function AuditLogsContent() {
       return (
         <div className="space-y-1">
           <div className="flex items-center gap-2 mb-3">
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+            <span style={{ display: 'inline-flex', alignItems: 'center', padding: '0.125rem 0.625rem', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: 500, background: 'rgba(99,179,237,0.15)', color: '#63b3ed', border: '1px solid rgba(99,179,237,0.30)' }}>
               Interview Support Email
             </span>
           </div>
@@ -254,7 +254,7 @@ function AuditLogsContent() {
       return (
         <div className="space-y-1">
           <div className="flex items-center gap-2 mb-3">
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-800">
+            <span style={{ display: 'inline-flex', alignItems: 'center', padding: '0.125rem 0.625rem', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: 500, background: 'rgba(52,211,153,0.15)', color: '#34d399', border: '1px solid rgba(52,211,153,0.30)' }}>
               Assessment Support Email
             </span>
           </div>
@@ -364,15 +364,24 @@ function AuditLogsContent() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          log.action === 'MOCK_EMAIL_SENT' ? 'bg-purple-100 text-purple-800' :
-                          log.action === 'INTERVIEW_EMAIL_SENT' ? 'bg-indigo-100 text-indigo-800' :
-                          log.action === 'ASSESSMENT_EMAIL_SENT' ? 'bg-teal-100 text-teal-800' :
-                          log.action.includes('DELETE') ? 'bg-red-100 text-red-800' :
-                          log.action.includes('UPDATE') ? 'bg-blue-100 text-blue-800' :
-                          log.action.includes('CREATE') ? 'bg-green-100 text-green-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center',
+                          padding: '0.125rem 0.625rem', borderRadius: '999px',
+                          fontSize: '0.6875rem', fontWeight: 500,
+                          ...(log.action === 'MOCK_EMAIL_SENT'
+                            ? { background: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.30)' }
+                            : log.action === 'INTERVIEW_EMAIL_SENT'
+                            ? { background: 'rgba(99,179,237,0.15)', color: '#63b3ed', border: '1px solid rgba(99,179,237,0.30)' }
+                            : log.action === 'ASSESSMENT_EMAIL_SENT'
+                            ? { background: 'rgba(52,211,153,0.15)', color: '#34d399', border: '1px solid rgba(52,211,153,0.30)' }
+                            : log.action.includes('DELETE')
+                            ? { background: 'rgba(248,113,113,0.15)', color: '#f87171', border: '1px solid rgba(248,113,113,0.30)' }
+                            : log.action.includes('UPDATE')
+                            ? { background: 'rgba(96,170,238,0.15)', color: '#60aaee', border: '1px solid rgba(96,170,238,0.30)' }
+                            : log.action.includes('CREATE')
+                            ? { background: 'rgba(74,222,128,0.15)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.30)' }
+                            : { background: 'var(--surface-2,#252422)', color: 'var(--muted-foreground)', border: '1px solid var(--border)' })
+                        }}>
                           {log.action}
                         </span>
                       </TableCell>

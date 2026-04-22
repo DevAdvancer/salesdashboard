@@ -216,7 +216,7 @@ function AssessmentContent() {
     }
   }, [user, loadLeads]);
 
-  // Load attempts when filtered leads change (or pagination changes)
+  // Load attempts for current page (always)
   useEffect(() => {
     if (filteredLeads.length > 0) {
       const pageLeads = filteredLeads.slice(
@@ -227,6 +227,14 @@ function AssessmentContent() {
       loadAssessmentAttempts(leadIds);
     }
   }, [filteredLeads, currentPage, loadAssessmentAttempts]);
+
+  // When a status filter is active, eagerly load attempts for ALL leads
+  useEffect(() => {
+    if (filter !== "all" && leads.length > 0 && user) {
+      const allLeadIds = leads.map((l) => l.$id);
+      loadAssessmentAttempts(allLeadIds);
+    }
+  }, [filter, leads, user, loadAssessmentAttempts]);
 
   useEffect(() => {
     let result = leads;
@@ -722,7 +730,7 @@ function AssessmentContent() {
               </Label>
               <select
                 id="filter"
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full"
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}>
                 <option value="all">All Leads</option>
@@ -773,7 +781,7 @@ function AssessmentContent() {
                       <td className="p-4">
                         <div className="flex items-center gap-2 flex-wrap">
                           {attemptsCount > 0 && (
-                            <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded border border-green-200">
+                            <span style={{ fontSize: '0.6875rem', fontWeight: 500, color: '#4ade80', background: 'rgba(74,222,128,0.12)', padding: '0.125rem 0.5rem', borderRadius: '999px', border: '1px solid rgba(74,222,128,0.25)' }}>
                               {attemptsCount} Sent
                             </span>
                           )}

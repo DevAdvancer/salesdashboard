@@ -593,21 +593,46 @@ function DashboardContent() {
             <div className="h-[300px] w-full">
                 {displayedChartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={displayedChartData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="name" />
-                        <YAxis tickFormatter={(value) => currencyFormatter.format(Number(value))} />
-                        <Tooltip
-                            formatter={(value) => currencyFormatter.format(Number(value))}
-                            contentStyle={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}
+                    <BarChart data={displayedChartData} margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#30302e" />
+                        <XAxis
+                          dataKey="name"
+                          tick={{ fill: '#87867f', fontSize: 12 }}
+                          axisLine={{ stroke: '#30302e' }}
+                          tickLine={false}
                         />
-                        <Legend />
-                        <Bar dataKey="Total" fill="#8884d8" name="Total Deal Value" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="Net" fill="#82ca9d" name="Net Revenue" radius={[4, 4, 0, 0]} />
+                        <YAxis
+                          width={72}
+                          tick={{ fill: '#87867f', fontSize: 12 }}
+                          axisLine={false}
+                          tickLine={false}
+                          tickFormatter={(value: number) => {
+                            if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
+                            if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
+                            return `$${value}`;
+                          }}
+                        />
+                        <Tooltip
+                            formatter={(value) => [currencyFormatter.format(Number(value)), '']}
+                            contentStyle={{
+                              backgroundColor: '#30302e',
+                              borderColor: '#3d3d3a',
+                              borderRadius: '0.5rem',
+                              color: '#faf9f5',
+                              fontSize: '0.875rem',
+                            }}
+                            labelStyle={{ color: '#b0aea5', marginBottom: '0.25rem' }}
+                            cursor={{ fill: 'rgba(201,100,66,0.06)' }}
+                        />
+                        <Legend
+                          wrapperStyle={{ fontSize: '0.8125rem', color: '#87867f', paddingTop: '0.5rem' }}
+                        />
+                        <Bar dataKey="Total" fill="#c96442" name="Total Deal Value" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="Net" fill="#d97757" name="Net Revenue" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="flex h-full items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
+                  <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-[#30302e] text-sm text-[#87867f]">
                     No financial data available yet.
                   </div>
                 )}

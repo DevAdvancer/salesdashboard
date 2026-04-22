@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Playfair_Display, Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/contexts/auth-context";
 import { AccessControlProvider } from "@/lib/contexts/access-control-context";
@@ -8,19 +8,27 @@ import { Toaster } from "@/components/ui/toaster";
 import { AppLayout } from "@/components/app-layout";
 import { ErrorBoundary } from "@/components/error-boundary";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const playfairDisplay = Playfair_Display({
+  variable: "--font-playfair",
   subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
   title: "SalesHub CRM",
   description: "Manager-controlled customer relationship management system",
+  icons: {
+    icon: "/silverspace.png",
+    apple: "/silverspace.png",
+  },
 };
 
 export default function RootLayout({
@@ -31,7 +39,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${inter.variable} ${playfairDisplay.variable} antialiased`}
       >
         <AzureMsalProvider>
           <ErrorBoundary>
