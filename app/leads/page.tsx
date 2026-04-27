@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { handleError } from "@/lib/utils/error-handler";
 import { ProtectedRoute } from "@/components/protected-route";
+import { canExportLeadsByEmail } from "@/lib/constants/lead-export-access";
 
 import { Download } from "lucide-react";
 
@@ -51,8 +52,9 @@ function LeadsContent() {
 
   const ITEMS_PER_PAGE = 10;
 
-  // Check if current user is Shashi Pathak
-  const isSpecialUser = user?.email === "shashi.pathak@silverspaceinc.com";
+  const canExportLeads = canExportLeadsByEmail(user?.email);
+  const isSpecialUser =
+    user?.email?.toLowerCase() === "shashi.pathak@silverspaceinc.com";
 
   const handleExport = () => {
     if (!leads.length) return;
@@ -435,7 +437,7 @@ function LeadsContent() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <h1 className="text-2xl md:text-3xl font-bold">Active Leads</h1>
         <div className="flex items-center gap-2">
-          {isSpecialUser && (
+          {canExportLeads && (
             <Button
               variant="outline"
               onClick={handleExport}
