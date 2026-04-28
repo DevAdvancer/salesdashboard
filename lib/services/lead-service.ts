@@ -502,6 +502,13 @@ export async function closeLead(
   try {
     // Get the current lead to preserve owner and assigned agent
     const currentLead = await getLead(leadId);
+    let leadData: LeadData = {};
+
+    try {
+      leadData = JSON.parse(currentLead.data) as LeadData;
+    } catch {
+      leadData = {};
+    }
 
     // Build new permissions (read-only for agent, full access for owner)
     const permissions: string[] = [
@@ -536,7 +543,20 @@ export async function closeLead(
             actorName: actorName,
             targetId: leadId,
             targetType: 'LEAD',
-            metadata: { isClosed: true, status: closedStatus }
+            metadata: {
+              isClosed: true,
+              status: closedStatus,
+              leadId,
+              candidateName: `${leadData.firstName || ''} ${leadData.lastName || ''}`.trim() || leadData.legalName || '',
+              email: leadData.email || '',
+              phone: leadData.phone || '',
+              company: leadData.company || '',
+              source: leadData.sourceName || leadData.source || '',
+              ownerId: currentLead.ownerId,
+              assignedToId: currentLead.assignedToId,
+              branchId: currentLead.branchId,
+              closedAt: lead.closedAt,
+            }
         });
     }
 

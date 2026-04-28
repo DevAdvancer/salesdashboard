@@ -13,10 +13,13 @@ import {
 } from '@/components/ui/card';
 import { ProtectedRoute } from '@/components/protected-route';
 import { listLeadsAction } from '@/app/actions/lead';
-import { getTeamLeads } from '@/lib/services/user-service';
+import { getMockAttempts } from '@/app/actions/mock';
+import { getInterviewAttempts } from '@/app/actions/interview';
+import { getAssessmentAttempts } from '@/app/actions/assessment';
 import { getBranchById } from '@/lib/services/branch-service';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { User } from '@/lib/types';
-import { FileText, Briefcase, Users, TrendingUp, DollarSign } from 'lucide-react';
+import { Briefcase, ClipboardCheck, DollarSign, FileText, MessageSquareText, TrendingUp, Video } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 type AmountChartDatum = {
@@ -78,13 +81,14 @@ function getMetricDate(lead: { isClosed: boolean; closedAt: string | null; $crea
 }
 
 function DashboardContent() {
-  const { user, isAdmin, isManager, isAgent, isTeamLead, isAssistantManager } = useAuth();
+  const { user, isAdmin, isManager, isAgent, isTeamLead } = useAuth();
   const router = useRouter();
   const [metrics, setMetrics] = useState({
     activeLeads: 0,
     closedLeads: 0,
-    teamMembersCount: 0,
-    assistantManagersCount: 0,
+    createdMocks: 0,
+    createdInterviewSupport: 0,
+    createdAssessmentSupport: 0,
     totalAmount: 0,
     netAmount: 0,
     loading: true,
@@ -129,10 +133,7 @@ function DashboardContent() {
       console.log('[Dashboard] Fetching metrics for user:', { id: user.$id, role: user.role, branchIds: user.branchIds });
 
       try {
-        const userIsAdmin = user.role === 'admin';
-        const userIsManager = user.role === 'manager';
         const userIsTeamLead = user.role === 'team_lead';
-        const userIsAssistantManager = user.role === 'assistant_manager';
 
         const [activeLeads, closedLeads] = await Promise.all([
           listLeadsAction(
@@ -151,11 +152,8 @@ function DashboardContent() {
         console.log('[Dashboard] Active leads count:', activeLeads.length);
         console.log('[Dashboard] Closed leads count:', closedLeads.length);
 
-        // Fetch team members count and agents for team lead
-        let teamMembersCount = 0;
-        let assistantManagersCount = 0;
-        if (userIsAdmin || userIsManager || userIsTeamLead || userIsAssistantManager) {
-          if (userIsTeamLead) {
+        // Fetch assigned agents for the team lead detail table.
+        if (userIsTeamLead) {
             const { getAgentsByTeamLead } = await import('@/lib/services/user-service');
             const agents = await getAgentsByTeamLead(user.$id);
 
@@ -177,33 +175,26 @@ function DashboardContent() {
               return { ...agent, branchNames: 'N/A' };
             }));
 
-            teamMembersCount = agents.length;
             setAssignedAgents(agentsWithBranches);
-          } else if (userIsManager) {
-            const { getSubordinates } = await import('@/lib/services/user-service');
-            const subordinates = await getSubordinates(user.$id);
-            teamMembersCount = subordinates.filter(u => u.role === 'team_lead').length;
-            assistantManagersCount = subordinates.filter(u => u.role === 'assistant_manager').length;
-          } else if (userIsAssistantManager) {
-            // Assistant Manager sees Team Leads under them
-            const { getSubordinates } = await import('@/lib/services/user-service');
-            const subordinates = await getSubordinates(user.$id);
-            teamMembersCount = subordinates.filter(u => u.role === 'team_lead').length;
-          } else if (userIsAdmin) {
-            const teamLeads = await getTeamLeads();
-            teamMembersCount = teamLeads.length;
-
-            // Fetch assistant managers for admin
-            const { databases } = await import('@/lib/appwrite');
-            const { Query } = await import('appwrite'); // Use appwrite package for Query
-            const amResponse = await databases.listDocuments(
-                process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
-                process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
-                [Query.equal('role', 'assistant_manager')]
-            );
-            assistantManagersCount = amResponse.total;
-          }
         }
+
+        const activeLeadIds = activeLeads.map((lead) => lead.$id);
+        const [mockAttempts, interviewAttempts, assessmentAttempts] = activeLeadIds.length > 0
+          ? await Promise.all([
+              getMockAttempts(user.$id, activeLeadIds),
+              getInterviewAttempts(user.$id, activeLeadIds),
+              getAssessmentAttempts(user.$id, activeLeadIds),
+            ])
+          : [[], [], []];
+
+        const countCreatedRequests = (attempts: { attemptCount?: number | string }[]) =>
+          attempts.reduce((total, attempt) => {
+            const count = typeof attempt.attemptCount === 'number'
+              ? attempt.attemptCount
+              : Number.parseInt(String(attempt.attemptCount ?? 0), 10);
+
+            return total + (Number.isFinite(count) ? count : 0);
+          }, 0);
 
         // Calculate Amounts (Total and Net)
         let totalAmount = 0;
@@ -260,8 +251,9 @@ function DashboardContent() {
         setMetrics({
           activeLeads: activeLeads.length,
           closedLeads: closedLeads.length,
-          teamMembersCount,
-          assistantManagersCount,
+          createdMocks: countCreatedRequests(mockAttempts),
+          createdInterviewSupport: countCreatedRequests(interviewAttempts),
+          createdAssessmentSupport: countCreatedRequests(assessmentAttempts),
           totalAmount,
           netAmount,
           loading: false,
@@ -410,10 +402,38 @@ function DashboardContent() {
 
   if (!user || isOutlookChecking) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-lg">
-          {!user ? 'Loading user...' : 'Checking Outlook connection...'}
-        </p>
+      <div className="space-y-6">
+        <div>
+          <Skeleton className="h-9 w-52" />
+          <Skeleton className="mt-3 h-4 w-72" />
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <Card key={index}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-4 w-4 rounded-full" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-16" />
+                <Skeleton className="mt-3 h-3 w-32" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-40" />
+            <Skeleton className="h-4 w-80" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-5/6" />
+            <Skeleton className="h-10 w-2/3" />
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -428,7 +448,7 @@ function DashboardContent() {
       </div>
 
       {/* Metrics Cards */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Active Leads</CardTitle>
@@ -459,62 +479,50 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Created Mocks</CardTitle>
+            <Video className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {metrics.loading ? '...' : metrics.createdMocks}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Mock requests sent
+            </p>
+          </CardContent>
+        </Card>
 
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Created Interview Support</CardTitle>
+            <MessageSquareText className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {metrics.loading ? '...' : metrics.createdInterviewSupport}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Interview emails sent
+            </p>
+          </CardContent>
+        </Card>
 
-        {isAgent && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Leads</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {metrics.loading ? '...' : metrics.activeLeads + metrics.closedLeads}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                All your leads
-              </p>
-            </CardContent>
-          </Card>
-        )}
-
-        {(isAdmin || isManager || isTeamLead || isAssistantManager) && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {isManager || isAssistantManager ? 'Team Leads' : isTeamLead ? 'Agents' : 'Team Members'}
-              </CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {metrics.loading ? '...' : metrics.teamMembersCount}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {isManager || isAssistantManager ? 'Your team leads' : isTeamLead ? 'Your agents' : 'Team members'}
-              </p>
-            </CardContent>
-          </Card>
-        )}
-
-        {(isAdmin || isManager) && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Assistant Managers
-              </CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {metrics.loading ? '...' : metrics.assistantManagersCount}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {isManager ? 'Your assistant managers' : 'Total assistant managers'}
-              </p>
-            </CardContent>
-          </Card>
-        )}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Created Assessment Support</CardTitle>
+            <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {metrics.loading ? '...' : metrics.createdAssessmentSupport}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Assessment emails sent
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Amount Insights Graph (Admin Only) */}

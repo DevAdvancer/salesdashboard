@@ -268,6 +268,38 @@ function AuditLogsContent() {
       );
     }
 
+    if (log.action === 'LEAD_UPDATE' && metadata.isClosed === true) {
+      const rows: [string, string][] = [
+        ['Candidate Name', metadata.candidateName || metadata.legalName || 'N/A'],
+        ['Final Status', metadata.status || 'N/A'],
+        ['Lead ID', metadata.leadId || log.targetId || 'N/A'],
+        ['Email', metadata.email || 'N/A'],
+        ['Contact Number', metadata.phone || 'N/A'],
+        ['Company', metadata.company || 'N/A'],
+        ['Source', metadata.source || 'N/A'],
+        ['Assigned To', metadata.assignedToId ? resolveName(metadata.assignedToId) : 'N/A'],
+        ['Owner', metadata.ownerId ? resolveName(metadata.ownerId) : 'N/A'],
+        ['Branch', metadata.branchId ? resolveName(metadata.branchId) : 'N/A'],
+        ['Closed At', metadata.closedAt ? new Date(metadata.closedAt).toLocaleString() : 'N/A'],
+      ];
+
+      return (
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 mb-3">
+            <span style={{ display: 'inline-flex', alignItems: 'center', padding: '0.125rem 0.625rem', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: 500, background: 'rgba(248,113,113,0.15)', color: '#f87171', border: '1px solid rgba(248,113,113,0.30)' }}>
+              Lead Closed
+            </span>
+          </div>
+          {rows.map(([label, value]) => (
+            <div key={label} className="grid grid-cols-3 gap-2 text-sm border-b py-2 last:border-0">
+              <span className="font-medium text-muted-foreground">{label}</span>
+              <span className="col-span-2 break-all">{value}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
     // Generic JSON renderer with ID resolution
     return (
       <div className="space-y-2">
