@@ -80,10 +80,9 @@ export function Navigation({
       >
         {/* Brand */}
         <div
-          className={`flex items-start border-b border-border ${isCollapsed ? 'lg:items-center lg:px-3' : ''}`}
-          style={{ padding: '1.25rem' }}
+          className={`flex items-start border-b border-border p-5 ${isCollapsed ? 'lg:items-center lg:justify-center lg:p-3' : ''}`}
         >
-          <div className="min-w-0 flex-1">
+          <div className={`min-w-0 flex-1 ${isCollapsed ? 'lg:hidden' : ''}`}>
             <div className="brand-accent-bar" style={{ marginBottom: '0.625rem' }} />
             <div className={isCollapsed ? 'lg:sr-only' : ''}>
               <h1 style={{
