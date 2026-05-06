@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, type ReactNode } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
-import { listLeads } from "@/lib/services/lead-service";
 import { getSupportRequestCcEmails } from "@/lib/services/user-service";
 import type { Lead } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,9 +22,11 @@ import { useToast } from "@/components/ui/use-toast";
 import { ProtectedRoute } from "@/components/protected-route";
 import {
   getInterviewAttempts,
-  recordInterviewAttempt,
-  checkDuplicateInterviewSubject,
+  reserveInterviewAttempt,
+  rollbackInterviewAttempt,
+  completeInterviewAttempt,
 } from "@/app/actions/interview";
+import { listLeadsAction } from "@/app/actions/lead";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 
 interface InterviewFormData {
@@ -80,6 +81,24 @@ interface InterviewAttempt {
   sentSubjects: string[];
 }
 
+interface GraphAttachment {
+  "@odata.type": "#microsoft.graph.fileAttachment";
+  name: string;
+  contentType: string;
+  contentBytes: string;
+}
+
+function RequiredText({ children }: { children: ReactNode }) {
+  return (
+    <>
+      {children}
+      <span className="ml-1 text-destructive">*</span>
+    </>
+  );
+}
+
+const lockedPrefilledInputClassName = "h-8 bg-muted text-muted-foreground";
+
 function InterviewContent() {
   const { user, loading } = useAuth();
   const { toast } = useToast();
@@ -89,7 +108,7 @@ function InterviewContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const isAuthLoading = false;
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState<InterviewFormData>(INITIAL_FORM_DATA);
@@ -101,7 +120,6 @@ function InterviewContent() {
   const [interviewAttempts, setInterviewAttempts] = useState<Map<string, InterviewAttempt>>(
     new Map()
   );
-  const [loadingAttempts, setLoadingAttempts] = useState(false);
 
   const handleConnectOutlook = async () => {
     window.location.href = "/api/auth/login";
@@ -146,37 +164,33 @@ function InterviewContent() {
 
   const loadInterviewAttempts = useCallback(
     async (leadIds: string[]) => {
-      if (!leadIds.length || !user) return;
+      if (!user) return;
+
+      if (!leadIds.length) {
+        setInterviewAttempts(new Map());
+        return;
+      }
+
       try {
-        setLoadingAttempts(true);
         const attempts = await getInterviewAttempts(user.$id, leadIds);
-        setInterviewAttempts((prev) => {
-          const newMap = new Map(prev);
-          let hasChanges = false;
-          attempts.forEach((doc: any) => {
-            const existing = newMap.get(doc.leadId);
-            if (
-              !existing ||
-              existing.attemptCount !== doc.attemptCount ||
-              existing.lastAttemptAt !== doc.lastAttemptAt
-            ) {
-              newMap.set(doc.leadId, {
-                $id: doc.$id,
-                leadId: doc.leadId,
-                userId: doc.userId,
-                attemptCount: doc.attemptCount,
-                lastAttemptAt: doc.lastAttemptAt,
-                sentSubjects: doc.sentSubjects || [],
-              });
-              hasChanges = true;
-            }
+
+        const nextAttempts = new Map<string, InterviewAttempt>();
+
+        attempts.forEach((doc: InterviewAttempt) => {
+          nextAttempts.set(doc.leadId, {
+            $id: doc.$id,
+            leadId: doc.leadId,
+            userId: doc.userId,
+            attemptCount: doc.attemptCount,
+            lastAttemptAt: doc.lastAttemptAt,
+            sentSubjects: doc.sentSubjects || [],
           });
-          return hasChanges ? newMap : prev;
         });
+
+        setInterviewAttempts(nextAttempts);
       } catch (err) {
         console.error("Error loading interview attempts:", err);
-      } finally {
-        setLoadingAttempts(false);
+        setInterviewAttempts(new Map());
       }
     },
     [user]
@@ -186,39 +200,24 @@ function InterviewContent() {
     if (!user) return;
     try {
       setIsLoading(true);
-      const fetchedLeads = await listLeads({}, user.$id, user.role, user.branchIds);
+      const fetchedLeads = await listLeadsAction({}, user.$id, user.role, user.branchIds);
       setLeads(fetchedLeads);
       setFilteredLeads(fetchedLeads);
+      await loadInterviewAttempts(fetchedLeads.map((lead) => lead.$id));
     } catch (err) {
       handleError(err as Error, { title: "Failed to Load Leads", showToast: true });
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, loadInterviewAttempts]);
 
   useEffect(() => {
     if (user) loadLeads();
   }, [user, loadLeads]);
 
-  // Load attempts for current page (always)
   useEffect(() => {
-    if (filteredLeads.length > 0) {
-      const pageLeads = filteredLeads.slice(
-        (currentPage - 1) * ITEMS_PER_PAGE,
-        currentPage * ITEMS_PER_PAGE
-      );
-      const leadIds = pageLeads.map((l) => l.$id);
-      loadInterviewAttempts(leadIds);
-    }
-  }, [filteredLeads, currentPage, loadInterviewAttempts]);
-
-  // When a status filter is active, eagerly load attempts for ALL leads
-  useEffect(() => {
-    if (filter !== "all" && leads.length > 0 && user) {
-      const allLeadIds = leads.map((l) => l.$id);
-      loadInterviewAttempts(allLeadIds);
-    }
-  }, [filter, leads, user, loadInterviewAttempts]);
+    setCurrentPage(1);
+  }, [filter, debouncedSearchQuery]);
 
   useEffect(() => {
     let result = leads;
@@ -351,16 +350,25 @@ function InterviewContent() {
 
     if (!selectedLead) return;
 
-    if (!formData.interviewDate) {
-      toast({ title: "Missing Field", description: "Please select Date & Time (EST).", variant: "destructive" });
-      return;
-    }
-    if (!formData.candidateName.trim()) {
-      toast({ title: "Missing Field", description: "Candidate Name is required.", variant: "destructive" });
-      return;
-    }
-    if (!formData.technology.trim()) {
-      toast({ title: "Missing Field", description: "Technology is required.", variant: "destructive" });
+    const requiredFields = [
+      { label: "Candidate Name", value: formData.candidateName.trim() },
+      { label: "Technology", value: formData.technology.trim() },
+      { label: "End Client", value: formData.endClient.trim() },
+      { label: "Job Title", value: formData.jobTitle.trim() },
+      { label: "Interview Round", value: formData.interviewRound.trim() },
+      { label: "Date & Time", value: formData.interviewDate },
+      { label: "Duration", value: formData.duration.trim() },
+      { label: "Contact Number", value: formData.contactNumber.trim() },
+      { label: "Resume", value: formData.resume?.name ?? "" },
+    ];
+
+    const missingField = requiredFields.find((field) => !field.value);
+    if (missingField) {
+      toast({
+        title: "Missing Field",
+        description: `${missingField.label} is required.`,
+        variant: "destructive",
+      });
       return;
     }
 
@@ -388,7 +396,7 @@ function InterviewContent() {
           reader.readAsDataURL(file);
         });
 
-      const attachments: any[] = [];
+      const attachments: GraphAttachment[] = [];
       if (formData.resume) {
         attachments.push({
           "@odata.type": "#microsoft.graph.fileAttachment",
@@ -408,17 +416,6 @@ function InterviewContent() {
 
       const formattedDate = formatDateEST(formData.interviewDate);
       const subject = `Sales Interview Support - ${formData.candidateName} - ${formData.technology} - ${formattedDate}`;
-
-      const isDuplicate = await checkDuplicateInterviewSubject(selectedLead.$id, subject);
-      if (isDuplicate) {
-        toast({
-          title: "Duplicate Interview",
-          description: "An interview with this exact subject has already been sent for this candidate. Please change the details to avoid a duplicate.",
-          variant: "destructive",
-        });
-        setIsSending(false);
-        return;
-      }
 
       let logoUrl =
         "https://egvjgtfjstxgszpzvvbx.supabase.co/storage/v1/object/public/images//20250610_1111_3D%20Gradient%20Logo_remix_01jxd69dc9ex29jbj9r701yjkf%20(2).png";
@@ -510,44 +507,50 @@ function InterviewContent() {
         saveToSentItems: "true",
       };
 
-      const response = await fetch("/api/interview/send-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      if (!user) {
+        throw new Error("User session not found");
+      }
+
+      const reservedAttempt = await reserveInterviewAttempt(user.$id, selectedLead.$id, subject);
+
+      try {
+        const response = await fetch("/api/interview/send-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to send email");
+        }
+      } catch (sendError) {
+        await rollbackInterviewAttempt(reservedAttempt.reservation);
+        throw sendError;
+      }
+
+      await completeInterviewAttempt(user.$id, selectedLead.$id, subject, reservedAttempt.attemptCount, {
+        candidateName: formData.candidateName,
+        technology: formData.technology,
+        endClient: formData.endClient,
+        jobTitle: formData.jobTitle,
+        interviewRound: formData.interviewRound,
+        interviewDate: formattedDate,
+        duration: formData.duration,
+        emailId: formData.emailId,
+        contactNumber: formData.contactNumber,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to send email");
-      }
-
-      if (user) {
-        try {
-          const updatedAttempt = await recordInterviewAttempt(user.$id, selectedLead.$id, subject, {
-            candidateName: formData.candidateName,
-            technology: formData.technology,
-            endClient: formData.endClient,
-            jobTitle: formData.jobTitle,
-            interviewRound: formData.interviewRound,
-            interviewDate: formattedDate,
-            duration: formData.duration,
-            emailId: formData.emailId,
-            contactNumber: formData.contactNumber,
-          });
-          setInterviewAttempts((prev) =>
-            new Map(prev).set(selectedLead.$id, {
-              $id: updatedAttempt.$id,
-              leadId: updatedAttempt.leadId,
-              userId: updatedAttempt.userId,
-              attemptCount: updatedAttempt.attemptCount,
-              lastAttemptAt: updatedAttempt.lastAttemptAt,
-              sentSubjects: updatedAttempt.sentSubjects || [],
-            })
-          );
-        } catch (e: any) {
-          console.error("Failed to record interview attempt:", e);
-        }
-      }
+      setInterviewAttempts((prev) =>
+        new Map(prev).set(selectedLead.$id, {
+          $id: reservedAttempt.$id,
+          leadId: reservedAttempt.leadId,
+          userId: reservedAttempt.userId,
+          attemptCount: reservedAttempt.attemptCount,
+          lastAttemptAt: reservedAttempt.lastAttemptAt,
+          sentSubjects: reservedAttempt.sentSubjects || [],
+        })
+      );
 
       toast({ title: "Success", description: "Interview support email sent successfully." });
       setIsModalOpen(false);
@@ -571,7 +574,7 @@ function InterviewContent() {
     }
   };
 
-  const totalPages = Math.ceil(filteredLeads.length / ITEMS_PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(filteredLeads.length / ITEMS_PER_PAGE));
   const paginatedLeads = filteredLeads.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
@@ -760,57 +763,79 @@ function InterviewContent() {
               {/* Interview Details Table */}
               <div className="col-span-2 border rounded-md overflow-hidden">
                 <div className="grid grid-cols-[200px_1fr] text-sm">
-                  <div className="p-3 bg-muted font-semibold border-b">Candidate Name</div>
+                  <div className="p-3 bg-muted font-semibold border-b">
+                    <RequiredText>Candidate Name</RequiredText>
+                  </div>
                   <div className="p-2 border-b">
                     <Input
                       value={formData.candidateName}
-                      onChange={(e) => setFormData({ ...formData, candidateName: e.target.value })}
                       placeholder="Full name"
-                      className="h-8"
+                      className={lockedPrefilledInputClassName}
+                      readOnly
+                      required
+                      aria-required="true"
                     />
                   </div>
 
-                  <div className="p-3 bg-muted font-semibold border-b">Technology</div>
+                  <div className="p-3 bg-muted font-semibold border-b">
+                    <RequiredText>Technology</RequiredText>
+                  </div>
                   <div className="p-2 border-b">
                     <Input
                       value={formData.technology}
                       onChange={(e) => setFormData({ ...formData, technology: e.target.value })}
                       placeholder="e.g. SDET, Java Developer"
                       className="h-8"
+                      required
+                      aria-required="true"
                     />
                   </div>
 
-                  <div className="p-3 bg-muted font-semibold border-b">End Client</div>
+                  <div className="p-3 bg-muted font-semibold border-b">
+                    <RequiredText>End Client</RequiredText>
+                  </div>
                   <div className="p-2 border-b">
                     <Input
                       value={formData.endClient}
                       onChange={(e) => setFormData({ ...formData, endClient: e.target.value })}
                       placeholder="e.g. McAfee"
                       className="h-8"
+                      required
+                      aria-required="true"
                     />
                   </div>
 
-                  <div className="p-3 bg-muted font-semibold border-b">Job Title</div>
+                  <div className="p-3 bg-muted font-semibold border-b">
+                    <RequiredText>Job Title</RequiredText>
+                  </div>
                   <div className="p-2 border-b">
                     <Input
                       value={formData.jobTitle}
                       onChange={(e) => setFormData({ ...formData, jobTitle: e.target.value })}
                       placeholder="e.g. Software Developer In Test"
                       className="h-8"
+                      required
+                      aria-required="true"
                     />
                   </div>
 
-                  <div className="p-3 bg-muted font-semibold border-b">Interview Round</div>
+                  <div className="p-3 bg-muted font-semibold border-b">
+                    <RequiredText>Interview Round</RequiredText>
+                  </div>
                   <div className="p-2 border-b">
                     <Input
                       value={formData.interviewRound}
                       onChange={(e) => setFormData({ ...formData, interviewRound: e.target.value })}
                       placeholder="e.g. 1st Round"
                       className="h-8"
+                      required
+                      aria-required="true"
                     />
                   </div>
 
-                  <div className="p-3 bg-muted font-semibold border-b">Date &amp; Time (EST)</div>
+                  <div className="p-3 bg-muted font-semibold border-b">
+                    <RequiredText>Date &amp; Time (EST)</RequiredText>
+                  </div>
                   <div className="p-2 border-b">
                     <Input
                       id="interviewDate"
@@ -819,16 +844,22 @@ function InterviewContent() {
                       value={formData.interviewDate}
                       onChange={(e) => setFormData({ ...formData, interviewDate: e.target.value })}
                       className="h-8"
+                      required
+                      aria-required="true"
                     />
                   </div>
 
-                  <div className="p-3 bg-muted font-semibold border-b">Duration</div>
+                  <div className="p-3 bg-muted font-semibold border-b">
+                    <RequiredText>Duration</RequiredText>
+                  </div>
                   <div className="p-2 border-b">
                     <Input
                       value={formData.duration}
                       onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
                       placeholder="e.g. 15 minutes"
                       className="h-8"
+                      required
+                      aria-required="true"
                     />
                   </div>
 
@@ -842,13 +873,17 @@ function InterviewContent() {
                     />
                   </div>
 
-                  <div className="p-3 bg-muted font-semibold">Contact Number</div>
+                  <div className="p-3 bg-muted font-semibold">
+                    <RequiredText>Contact Number</RequiredText>
+                  </div>
                   <div className="p-2">
                     <Input
                       value={formData.contactNumber}
                       onChange={(e) => setFormData({ ...formData, contactNumber: e.target.value })}
                       placeholder="+1234567890"
                       className="h-8"
+                      required
+                      aria-required="true"
                     />
                   </div>
                 </div>
@@ -856,13 +891,17 @@ function InterviewContent() {
 
               {/* Attachments */}
               <div className="col-span-2 md:col-span-1">
-                <Label htmlFor="resume">Resume</Label>
+                <Label htmlFor="resume">
+                  <RequiredText>Resume</RequiredText>
+                </Label>
                 <Input
                   id="resume"
                   key={resumeInputKey}
                   type="file"
                   onChange={(e) => handleFileChange(e, "resume")}
                   accept=".pdf,.doc,.docx"
+                  required
+                  aria-required="true"
                 />
               </div>
 
@@ -895,7 +934,9 @@ function InterviewContent() {
                   id="company"
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                   value={formData.company}
-                  onChange={(e) => setFormData({ ...formData, company: e.target.value as any })}>
+                  onChange={(e) =>
+                    setFormData({ ...formData, company: e.target.value as InterviewFormData["company"] })
+                  }>
                   <option value="Silverspace Inc.">Silverspace Inc.</option>
                   <option value="Vizva Consultancy">Vizva Consultancy</option>
                 </select>

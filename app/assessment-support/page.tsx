@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, type ReactNode } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
-import { listLeads } from "@/lib/services/lead-service";
 import { getSupportRequestCcEmails } from "@/lib/services/user-service";
 import type { Lead } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,8 +20,13 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { handleError } from "@/lib/utils/error-handler";
 import { useToast } from "@/components/ui/use-toast";
 import { ProtectedRoute } from "@/components/protected-route";
-import { AlertCircle } from "lucide-react";
-import { getAssessmentAttempts, recordAssessmentAttempt, checkDuplicateSubject } from "@/app/actions/assessment";
+import {
+  getAssessmentAttempts,
+  reserveAssessmentAttempt,
+  rollbackAssessmentAttempt,
+  completeAssessmentAttempt,
+} from "@/app/actions/assessment";
+import { listLeadsAction } from "@/app/actions/lead";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 
 interface AssessmentFormData {
@@ -35,6 +39,7 @@ interface AssessmentFormData {
   contactNumber: string;
   endClient: string;
   jobTitle: string;
+  interviewRound: string;
   assessmentDuration: string;
   resume: File | null;
   additionalAttachment: File | null;
@@ -57,6 +62,7 @@ const INITIAL_FORM_DATA: AssessmentFormData = {
   contactNumber: "",
   endClient: "",
   jobTitle: "",
+  interviewRound: "",
   assessmentDuration: "",
   resume: null,
   additionalAttachment: null,
@@ -76,6 +82,24 @@ interface AssessmentAttempt {
   sentSubjects: string[];
 }
 
+interface GraphAttachment {
+  "@odata.type": "#microsoft.graph.fileAttachment";
+  name: string;
+  contentType: string;
+  contentBytes: string;
+}
+
+function RequiredText({ children }: { children: ReactNode }) {
+  return (
+    <>
+      {children}
+      <span className="ml-1 text-destructive">*</span>
+    </>
+  );
+}
+
+const lockedPrefilledInputClassName = "h-8 bg-muted text-muted-foreground";
+
 function AssessmentContent() {
   const { user, loading } = useAuth();
   const { toast } = useToast();
@@ -85,7 +109,7 @@ function AssessmentContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const isAuthLoading = false;
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState<AssessmentFormData>(INITIAL_FORM_DATA);
@@ -98,7 +122,6 @@ function AssessmentContent() {
   const [assessmentAttempts, setAssessmentAttempts] = useState<Map<string, AssessmentAttempt>>(
     new Map(),
   );
-  const [loadingAttempts, setLoadingAttempts] = useState(false);
 
   const handleConnectOutlook = async () => {
     window.location.href = "/api/auth/login";
@@ -147,41 +170,33 @@ function AssessmentContent() {
 
   const loadAssessmentAttempts = useCallback(
     async (leadIds: string[]) => {
-      if (!leadIds.length || !user) return;
+      if (!user) return;
+
+      if (!leadIds.length) {
+        setAssessmentAttempts(new Map());
+        return;
+      }
 
       try {
-        setLoadingAttempts(true);
         const attempts = await getAssessmentAttempts(user.$id, leadIds);
 
-        setAssessmentAttempts((prev) => {
-          const newMap = new Map(prev);
-          let hasChanges = false;
+        const nextAttempts = new Map<string, AssessmentAttempt>();
 
-          attempts.forEach((doc: any) => {
-            const existing = newMap.get(doc.leadId);
-            if (
-              !existing ||
-              existing.attemptCount !== doc.attemptCount ||
-              existing.lastAttemptAt !== doc.lastAttemptAt
-            ) {
-              newMap.set(doc.leadId, {
-                $id: doc.$id,
-                leadId: doc.leadId,
-                userId: doc.userId,
-                attemptCount: doc.attemptCount,
-                lastAttemptAt: doc.lastAttemptAt,
-                sentSubjects: doc.sentSubjects || [],
-              });
-              hasChanges = true;
-            }
+        attempts.forEach((doc: AssessmentAttempt) => {
+          nextAttempts.set(doc.leadId, {
+            $id: doc.$id,
+            leadId: doc.leadId,
+            userId: doc.userId,
+            attemptCount: doc.attemptCount,
+            lastAttemptAt: doc.lastAttemptAt,
+            sentSubjects: doc.sentSubjects || [],
           });
-
-          return hasChanges ? newMap : prev;
         });
+
+        setAssessmentAttempts(nextAttempts);
       } catch (err) {
         console.error("Error loading assessment attempts:", err);
-      } finally {
-        setLoadingAttempts(false);
+        setAssessmentAttempts(new Map());
       }
     },
     [user],
@@ -192,7 +207,7 @@ function AssessmentContent() {
 
     try {
       setIsLoading(true);
-      const fetchedLeads = await listLeads(
+      const fetchedLeads = await listLeadsAction(
         {},
         user.$id,
         user.role,
@@ -200,6 +215,7 @@ function AssessmentContent() {
       );
       setLeads(fetchedLeads);
       setFilteredLeads(fetchedLeads);
+      await loadAssessmentAttempts(fetchedLeads.map((lead) => lead.$id));
     } catch (err) {
       handleError(err as Error, {
         title: "Failed to Load Leads",
@@ -208,7 +224,7 @@ function AssessmentContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, loadAssessmentAttempts]);
 
   useEffect(() => {
     if (user) {
@@ -216,25 +232,9 @@ function AssessmentContent() {
     }
   }, [user, loadLeads]);
 
-  // Load attempts for current page (always)
   useEffect(() => {
-    if (filteredLeads.length > 0) {
-      const pageLeads = filteredLeads.slice(
-        (currentPage - 1) * ITEMS_PER_PAGE,
-        currentPage * ITEMS_PER_PAGE,
-      );
-      const leadIds = pageLeads.map((l) => l.$id);
-      loadAssessmentAttempts(leadIds);
-    }
-  }, [filteredLeads, currentPage, loadAssessmentAttempts]);
-
-  // When a status filter is active, eagerly load attempts for ALL leads
-  useEffect(() => {
-    if (filter !== "all" && leads.length > 0 && user) {
-      const allLeadIds = leads.map((l) => l.$id);
-      loadAssessmentAttempts(allLeadIds);
-    }
-  }, [filter, leads, user, loadAssessmentAttempts]);
+    setCurrentPage(1);
+  }, [filter, debouncedSearchQuery]);
 
   useEffect(() => {
     let result = leads;
@@ -276,12 +276,12 @@ function AssessmentContent() {
 
 
   // Multiple assessments are always allowed; duplicates are checked by subject
-  const canCreateAssessment = (_leadId: string) => {
+  const canCreateAssessment = () => {
     return true;
   };
 
   const handleCreateAssessment = async (lead: Lead) => {
-    if (!canCreateAssessment(lead.$id)) {
+    if (!canCreateAssessment()) {
       toast({
         title: "Already Sent",
         description: "Assessment support has already been sent for this lead.",
@@ -390,29 +390,23 @@ function AssessmentContent() {
 
     if (!selectedLead) return;
 
-    // Validate required fields
-    if (!formData.assessmentReceived) {
-      toast({
-        title: "Missing Field",
-        description: "Please select Assessment Received date/time.",
-        variant: "destructive",
-      });
-      return;
-    }
+    const requiredFields = [
+      { label: "Candidate Name", value: formData.candidateName.trim() },
+      { label: "Technology", value: formData.technology.trim() },
+      { label: "End Client", value: formData.endClient.trim() },
+      { label: "Job Title", value: formData.jobTitle.trim() },
+      { label: "Interview Round", value: formData.interviewRound.trim() },
+      { label: "Assessment Received (EST)", value: formData.assessmentReceived },
+      { label: "Assessment Duration", value: formData.assessmentDuration.trim() },
+      { label: "Contact Number", value: formData.contactNumber.trim() },
+      { label: "Resume", value: formData.resume?.name ?? "" },
+    ];
 
-    if (!formData.candidateName.trim()) {
+    const missingField = requiredFields.find((field) => !field.value);
+    if (missingField) {
       toast({
         title: "Missing Field",
-        description: "Candidate Name is required.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!formData.jobTitle.trim()) {
-      toast({
-        title: "Missing Field",
-        description: "Job Title is required.",
+        description: `${missingField.label} is required.`,
         variant: "destructive",
       });
       return;
@@ -446,7 +440,7 @@ function AssessmentContent() {
         });
       };
 
-      const attachments: any[] = [];
+      const attachments: GraphAttachment[] = [];
 
       if (formData.resume) {
         const base64Content = await fileToBase64(formData.resume);
@@ -473,18 +467,6 @@ function AssessmentContent() {
 
       // Subject line
       const subject = `Sales Assessment Support - ${formData.candidateName} - ${formData.jobTitle} - ${formattedReceived}`;
-
-      // Check for duplicate subject before sending
-      const isDuplicate = await checkDuplicateSubject(selectedLead.$id, subject);
-      if (isDuplicate) {
-        toast({
-          title: "Duplicate Assessment",
-          description: "An assessment with this exact subject has already been sent for this candidate. Please change the candidate name, job title, or received date to avoid a duplicate.",
-          variant: "destructive",
-        });
-        setIsSending(false);
-        return;
-      }
 
       // Determine logo URL and website based on company
       let logoUrl =
@@ -543,6 +525,10 @@ function AssessmentContent() {
                 <td style="padding: 8px 12px; background-color: #1a1a1a; color: #ddd; border: 1px solid #555;">${formData.jobTitle}</td>
               </tr>
               <tr>
+                <td style="font-weight: bold; padding: 8px 12px; background-color: #2a2a2a; color: #ccc; border: 1px solid #555;">Interview Round</td>
+                <td style="padding: 8px 12px; background-color: #1a1a1a; color: #ddd; border: 1px solid #555;">${formData.interviewRound}</td>
+              </tr>
+              <tr>
                 <td style="font-weight: bold; padding: 8px 12px; background-color: #2a2a2a; color: #ccc; border: 1px solid #555;">Assessment Duration</td>
                 <td style="padding: 8px 12px; background-color: #1a1a1a; color: #ddd; border: 1px solid #555;">${formData.assessmentDuration}</td>
               </tr>
@@ -583,53 +569,58 @@ function AssessmentContent() {
         saveToSentItems: "true",
       };
 
-      // Send via our server-side API
-      const response = await fetch("/api/assessment/send-email", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to send email");
+      if (!user) {
+        throw new Error("User session not found");
       }
 
-      // Record assessment attempt with subject for duplicate tracking
-      if (user) {
-        try {
-          const updatedAttempt = await recordAssessmentAttempt(
-            user.$id,
-            selectedLead.$id,
-            subject,
-            {
-              candidateName: formData.candidateName,
-              technology: formData.technology,
-              emailId: formData.emailId,
-              contactNumber: formData.contactNumber,
-              endClient: formData.endClient,
-              jobTitle: formData.jobTitle,
-              assessmentDuration: formData.assessmentDuration,
-              assessmentReceived: formattedReceived,
-            },
-          );
+      const reservedAttempt = await reserveAssessmentAttempt(user.$id, selectedLead.$id, subject);
 
-          setAssessmentAttempts((prev) =>
-            new Map(prev).set(selectedLead.$id, {
-              $id: updatedAttempt.$id,
-              leadId: updatedAttempt.leadId,
-              userId: updatedAttempt.userId,
-              attemptCount: updatedAttempt.attemptCount,
-              lastAttemptAt: updatedAttempt.lastAttemptAt,
-              sentSubjects: updatedAttempt.sentSubjects || [],
-            }),
-          );
-        } catch (e: any) {
-          console.error("Failed to record assessment attempt:", e);
+      try {
+        const response = await fetch("/api/assessment/send-email", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to send email");
         }
+      } catch (sendError) {
+        await rollbackAssessmentAttempt(reservedAttempt.reservation);
+        throw sendError;
       }
+
+      await completeAssessmentAttempt(
+        user.$id,
+        selectedLead.$id,
+        subject,
+        reservedAttempt.attemptCount,
+        {
+          candidateName: formData.candidateName,
+          technology: formData.technology,
+          emailId: formData.emailId,
+          contactNumber: formData.contactNumber,
+          endClient: formData.endClient,
+          jobTitle: formData.jobTitle,
+          interviewRound: formData.interviewRound,
+          assessmentDuration: formData.assessmentDuration,
+          assessmentReceived: formattedReceived,
+        },
+      );
+
+      setAssessmentAttempts((prev) =>
+        new Map(prev).set(selectedLead.$id, {
+          $id: reservedAttempt.$id,
+          leadId: reservedAttempt.leadId,
+          userId: reservedAttempt.userId,
+          attemptCount: reservedAttempt.attemptCount,
+          lastAttemptAt: reservedAttempt.lastAttemptAt,
+          sentSubjects: reservedAttempt.sentSubjects || [],
+        }),
+      );
 
       toast({
         title: "Success",
@@ -669,7 +660,7 @@ function AssessmentContent() {
     }
   };
 
-  const totalPages = Math.ceil(filteredLeads.length / ITEMS_PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(filteredLeads.length / ITEMS_PER_PAGE));
   const paginatedLeads = filteredLeads.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE,
@@ -758,7 +749,6 @@ function AssessmentContent() {
                   const leadData = JSON.parse(lead.data);
                   const attempt = assessmentAttempts.get(lead.$id);
                   const attemptsCount = attempt?.attemptCount || 0;
-                  const canCreate = canCreateAssessment(lead.$id);
 
                   return (
                     <tr
@@ -881,7 +871,9 @@ function AssessmentContent() {
               {/* Assessment-specific fields in table-like layout */}
               <div className="col-span-2 border rounded-md overflow-hidden">
                 <div className="grid grid-cols-[200px_1fr] text-sm">
-                  <div className="p-3 bg-muted font-semibold border-b">Assessment Received (EST)</div>
+                  <div className="p-3 bg-muted font-semibold border-b">
+                    <RequiredText>Assessment Received (EST)</RequiredText>
+                  </div>
                   <div className="p-2 border-b">
                     <Input
                       id="assessmentReceived"
@@ -892,22 +884,28 @@ function AssessmentContent() {
                         setFormData({ ...formData, assessmentReceived: e.target.value })
                       }
                       className="h-8"
+                      required
+                      aria-required="true"
                     />
                   </div>
 
-                  <div className="p-3 bg-muted font-semibold border-b">Candidate Name</div>
+                  <div className="p-3 bg-muted font-semibold border-b">
+                    <RequiredText>Candidate Name</RequiredText>
+                  </div>
                   <div className="p-2 border-b">
                     <Input
                       value={formData.candidateName}
-                      onChange={(e) =>
-                        setFormData({ ...formData, candidateName: e.target.value })
-                      }
                       placeholder="Full name"
-                      className="h-8"
+                      className={lockedPrefilledInputClassName}
+                      readOnly
+                      required
+                      aria-required="true"
                     />
                   </div>
 
-                  <div className="p-3 bg-muted font-semibold border-b">Technology</div>
+                  <div className="p-3 bg-muted font-semibold border-b">
+                    <RequiredText>Technology</RequiredText>
+                  </div>
                   <div className="p-2 border-b">
                     <Input
                       value={formData.technology}
@@ -916,6 +914,8 @@ function AssessmentContent() {
                       }
                       placeholder="e.g. Full Stack Developer"
                       className="h-8"
+                      required
+                      aria-required="true"
                     />
                   </div>
 
@@ -931,7 +931,9 @@ function AssessmentContent() {
                     />
                   </div>
 
-                  <div className="p-3 bg-muted font-semibold border-b">Contact Number</div>
+                  <div className="p-3 bg-muted font-semibold border-b">
+                    <RequiredText>Contact Number</RequiredText>
+                  </div>
                   <div className="p-2 border-b">
                     <Input
                       value={formData.contactNumber}
@@ -940,10 +942,14 @@ function AssessmentContent() {
                       }
                       placeholder="+1234567890"
                       className="h-8"
+                      required
+                      aria-required="true"
                     />
                   </div>
 
-                  <div className="p-3 bg-muted font-semibold border-b">End Client</div>
+                  <div className="p-3 bg-muted font-semibold border-b">
+                    <RequiredText>End Client</RequiredText>
+                  </div>
                   <div className="p-2 border-b">
                     <Input
                       value={formData.endClient}
@@ -952,10 +958,14 @@ function AssessmentContent() {
                       }
                       placeholder="e.g. Hacker Rank"
                       className="h-8"
+                      required
+                      aria-required="true"
                     />
                   </div>
 
-                  <div className="p-3 bg-muted font-semibold border-b">Job Title</div>
+                  <div className="p-3 bg-muted font-semibold border-b">
+                    <RequiredText>Job Title</RequiredText>
+                  </div>
                   <div className="p-2 border-b">
                     <Input
                       value={formData.jobTitle}
@@ -964,10 +974,30 @@ function AssessmentContent() {
                       }
                       placeholder="e.g. Sde-2 Backend Engineer"
                       className="h-8"
+                      required
+                      aria-required="true"
                     />
                   </div>
 
-                  <div className="p-3 bg-muted font-semibold">Assessment Duration</div>
+                  <div className="p-3 bg-muted font-semibold border-b">
+                    <RequiredText>Interview Round</RequiredText>
+                  </div>
+                  <div className="p-2 border-b">
+                    <Input
+                      value={formData.interviewRound}
+                      onChange={(e) =>
+                        setFormData({ ...formData, interviewRound: e.target.value })
+                      }
+                      placeholder="e.g. 1st Round"
+                      className="h-8"
+                      required
+                      aria-required="true"
+                    />
+                  </div>
+
+                  <div className="p-3 bg-muted font-semibold">
+                    <RequiredText>Assessment Duration</RequiredText>
+                  </div>
                   <div className="p-2">
                     <Input
                       value={formData.assessmentDuration}
@@ -976,6 +1006,8 @@ function AssessmentContent() {
                       }
                       placeholder="e.g. 60 minutes"
                       className="h-8"
+                      required
+                      aria-required="true"
                     />
                   </div>
                 </div>
@@ -983,13 +1015,17 @@ function AssessmentContent() {
 
               {/* Attachments */}
               <div className="col-span-2 md:col-span-1">
-                <Label htmlFor="resume">Resume</Label>
+                <Label htmlFor="resume">
+                  <RequiredText>Resume</RequiredText>
+                </Label>
                 <Input
                   id="resume"
                   key={resumeInputKey}
                   type="file"
                   onChange={(e) => handleFileChange(e, "resume")}
                   accept=".pdf,.doc,.docx"
+                  required
+                  aria-required="true"
                 />
               </div>
 
@@ -1025,7 +1061,7 @@ function AssessmentContent() {
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                   value={formData.company}
                   onChange={(e) =>
-                    setFormData({ ...formData, company: e.target.value as any })
+                    setFormData({ ...formData, company: e.target.value as AssessmentFormData["company"] })
                   }>
                   <option value="Silverspace Inc.">Silverspace Inc.</option>
                   <option value="Vizva Consultancy">Vizva Consultancy</option>

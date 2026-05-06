@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, type ReactNode } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
-import { listLeads } from "@/lib/services/lead-service";
 import { getSupportRequestCcEmails } from "@/lib/services/user-service";
 import type { Lead } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,7 +23,13 @@ import { ProtectedRoute } from "@/components/protected-route";
 // import { databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite'; // Removed client-side DB usage
 // import { Query, ID } from 'appwrite';
 import { Clock, RefreshCw, AlertCircle } from "lucide-react";
-import { getMockAttempts, recordMockAttempt } from "@/app/actions/mock"; // Import Server Actions
+import {
+  getMockAttempts,
+  reserveMockAttempt,
+  rollbackMockAttempt,
+  completeMockAttempt,
+} from "@/app/actions/mock";
+import { listLeadsAction } from "@/app/actions/lead";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 // import { useMsal } from "@azure/msal-react";
 // import { loginRequest } from "@/lib/msal-config";
@@ -33,6 +38,10 @@ interface MockFormData {
   to: string;
   cc: string;
   // subject is computed dynamically based on candidate name
+  candidateName: string;
+  endClient: string;
+  emailId: string;
+  contactNumber: string;
   resume: File | null;
   role: string;
   mode: string;
@@ -49,6 +58,10 @@ const INITIAL_FORM_DATA: MockFormData = {
   to: "tech.leaders@silverspaceinc.com",
   // to: 'prateek.narvariya@silverspaceinc.com',
   cc: "",
+  candidateName: "",
+  endClient: "",
+  emailId: "",
+  contactNumber: "",
   resume: null,
   role: "",
   mode: "Evaluation",
@@ -68,6 +81,17 @@ interface MockAttempt {
   lastAttemptAt: string;
 }
 
+function RequiredText({ children }: { children: ReactNode }) {
+  return (
+    <>
+      {children}
+      <span className="ml-1 text-destructive">*</span>
+    </>
+  );
+}
+
+const lockedPrefilledInputClassName = "h-8 bg-muted text-muted-foreground";
+
 function MockContent() {
   const { user, loading } = useAuth();
   const { toast } = useToast();
@@ -77,7 +101,7 @@ function MockContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const isAuthLoading = false;
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState<MockFormData>(INITIAL_FORM_DATA);
@@ -91,7 +115,6 @@ function MockContent() {
   const [mockAttempts, setMockAttempts] = useState<Map<string, MockAttempt>>(
     new Map(),
   );
-  const [loadingAttempts, setLoadingAttempts] = useState(false);
 
   const handleConnectOutlook = async () => {
     window.location.href = "/api/auth/login";
@@ -127,42 +150,32 @@ function MockContent() {
 
   const loadMockAttempts = useCallback(
     async (leadIds: string[]) => {
-      if (!leadIds.length || !user) return;
+      if (!user) return;
+
+      if (!leadIds.length) {
+        setMockAttempts(new Map());
+        return;
+      }
 
       try {
-        setLoadingAttempts(true);
-        // Use Server Action instead of client DB call
         const attempts = await getMockAttempts(user.$id, leadIds);
 
-        setMockAttempts((prev) => {
-          const newMap = new Map(prev);
-          let hasChanges = false;
+        const nextAttempts = new Map<string, MockAttempt>();
 
-          attempts.forEach((doc: any) => {
-            const existing = newMap.get(doc.leadId);
-            // Only update if data actually changed
-            if (
-              !existing ||
-              existing.attemptCount !== doc.attemptCount ||
-              existing.lastAttemptAt !== doc.lastAttemptAt
-            ) {
-              newMap.set(doc.leadId, {
-                $id: doc.$id,
-                leadId: doc.leadId,
-                userId: doc.userId,
-                attemptCount: doc.attemptCount,
-                lastAttemptAt: doc.lastAttemptAt,
-              });
-              hasChanges = true;
-            }
+        attempts.forEach((doc: MockAttempt) => {
+          nextAttempts.set(doc.leadId, {
+            $id: doc.$id,
+            leadId: doc.leadId,
+            userId: doc.userId,
+            attemptCount: doc.attemptCount,
+            lastAttemptAt: doc.lastAttemptAt,
           });
-
-          return hasChanges ? newMap : prev;
         });
+
+        setMockAttempts(nextAttempts);
       } catch (err) {
         console.error("Error loading mock attempts:", err);
-      } finally {
-        setLoadingAttempts(false);
+        setMockAttempts(new Map());
       }
     },
     [user],
@@ -173,8 +186,7 @@ function MockContent() {
 
     try {
       setIsLoading(true);
-      // Reuse listLeads with existing role-based logic
-      const fetchedLeads = await listLeads(
+      const fetchedLeads = await listLeadsAction(
         {},
         user.$id,
         user.role,
@@ -182,6 +194,7 @@ function MockContent() {
       );
       setLeads(fetchedLeads);
       setFilteredLeads(fetchedLeads);
+      await loadMockAttempts(fetchedLeads.map((lead) => lead.$id));
     } catch (err) {
       handleError(err as Error, {
         title: "Failed to Load Leads",
@@ -190,7 +203,7 @@ function MockContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, loadMockAttempts]);
 
   useEffect(() => {
     if (user) {
@@ -198,26 +211,9 @@ function MockContent() {
     }
   }, [user, loadLeads]);
 
-  // Load attempts for current page (always)
   useEffect(() => {
-    if (filteredLeads.length > 0) {
-      const pageLeads = filteredLeads.slice(
-        (currentPage - 1) * ITEMS_PER_PAGE,
-        currentPage * ITEMS_PER_PAGE,
-      );
-      const leadIds = pageLeads.map((l) => l.$id);
-      loadMockAttempts(leadIds);
-    }
-  }, [filteredLeads, currentPage, loadMockAttempts]);
-
-  // When a status filter is active, eagerly load attempts for ALL leads
-  // so the filter map is complete before filtering runs
-  useEffect(() => {
-    if (filter !== "all" && leads.length > 0 && user) {
-      const allLeadIds = leads.map((l) => l.$id);
-      loadMockAttempts(allLeadIds);
-    }
-  }, [filter, leads, user, loadMockAttempts]);
+    setCurrentPage(1);
+  }, [filter, debouncedSearchQuery]);
 
   useEffect(() => {
     let result = leads;
@@ -257,6 +253,10 @@ function MockContent() {
   const [isPreparingMock, setIsPreparingMock] = useState(false);
 
   const getCooldownStatus = (leadId: string) => {
+    if (user?.role === "admin") {
+      return { canCreate: true, remainingTime: 0, count: 0 };
+    }
+
     const attempt = mockAttempts.get(leadId);
     if (!attempt) return { canCreate: true, remainingTime: 0, count: 0 };
 
@@ -311,6 +311,7 @@ function MockContent() {
     try {
       setIsPreparingMock(true);
       setSelectedLead(lead);
+      const leadData = JSON.parse(lead.data);
 
       // Reset form data but keep signature preferences
       setFormData((prev) => ({
@@ -319,6 +320,10 @@ function MockContent() {
         yourRole: prev.yourRole,
         yourPhone: prev.yourPhone,
         company: prev.company,
+        candidateName: `${leadData.firstName || ""} ${leadData.lastName || ""}`.trim(),
+        endClient: leadData.company || "",
+        emailId: leadData.email || "",
+        contactNumber: leadData.phone || "",
       }));
       setFileInputKey(Date.now()); // Reset file input
 
@@ -381,8 +386,6 @@ function MockContent() {
 
     try {
       setIsSending(true);
-      const leadData = JSON.parse(selectedLead.data);
-
       // Save signature preferences
       localStorage.setItem(
         "mockSignature",
@@ -458,13 +461,13 @@ function MockContent() {
             <p>${formData.emailBody.replace(/\n/g, "<br/>")}</p>
 
             <table cellpadding="5" cellspacing="0" border="0" style="width: 100%; max-width: 600px; margin-top: 20px; border-collapse: collapse;">
-              <tr><td style="font-weight: bold; width: 150px; padding: 5px;">Candidate Name</td><td style="padding: 5px;">${leadData.firstName} ${leadData.lastName}</td></tr>
-              <tr><td style="font-weight: bold; padding: 5px;">End Client</td><td style="padding: 5px;">${leadData.company || "Silverspace Inc"}</td></tr>
+              <tr><td style="font-weight: bold; width: 150px; padding: 5px;">Candidate Name</td><td style="padding: 5px;">${formData.candidateName}</td></tr>
+              <tr><td style="font-weight: bold; padding: 5px;">End Client</td><td style="padding: 5px;">${formData.endClient}</td></tr>
               <tr><td style="font-weight: bold; padding: 5px;">Role</td><td style="padding: 5px;">${formData.role}</td></tr>
               <tr><td style="font-weight: bold; padding: 5px;">Mode</td><td style="padding: 5px;">${formData.mode}</td></tr>
               <tr><td style="font-weight: bold; padding: 5px;">Schedule</td><td style="padding: 5px;">${formattedSchedule}</td></tr>
-              <tr><td style="font-weight: bold; padding: 5px;">Email ID</td><td style="padding: 5px;">${leadData.email || ""}</td></tr>
-              <tr><td style="font-weight: bold; padding: 5px;">Contact Number</td><td style="padding: 5px;">${leadData.phone || ""}</td></tr>
+              <tr><td style="font-weight: bold; padding: 5px;">Email ID</td><td style="padding: 5px;">${formData.emailId}</td></tr>
+              <tr><td style="font-weight: bold; padding: 5px;">Contact Number</td><td style="padding: 5px;">${formData.contactNumber}</td></tr>
             </table>
 
             <br/>
@@ -478,7 +481,7 @@ function MockContent() {
       // Construct payload for our API
       const payload = {
         message: {
-          subject: `Request to schedule mock interview - ${leadData.firstName} ${leadData.lastName}`,
+          subject: `Request to schedule mock interview - ${formData.candidateName}`,
           body: {
             contentType: "HTML",
             content: emailBody,
@@ -500,25 +503,30 @@ function MockContent() {
         saveToSentItems: "true",
       };
 
-      // Send via our server-side API
-      const response = await fetch("/api/mock/send-email", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to send email");
+      if (!user) {
+        throw new Error("User session not found");
       }
 
-      toast({
-        title: "Success",
-        description: "Mock interview email sent successfully!",
-      });
-      setIsModalOpen(false);
+      const reservedAttempt = await reserveMockAttempt(user.$id, selectedLead.$id);
+
+      try {
+        const response = await fetch("/api/mock/send-email", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to send email");
+        }
+      } catch (sendError) {
+        await rollbackMockAttempt(reservedAttempt.reservation);
+        throw sendError;
+      }
+
       // We don't reset form data here to preserve signature, or we do reset but signature is re-read from state?
       // Actually handleCreateMock resets it properly.
       // But let's reset to initial state for next time, but keep signature?
@@ -537,32 +545,23 @@ function MockContent() {
         ? JSON.parse(storedSignature)
         : {};
 
-      // Update Mock Attempts Count using Server Action
-      if (user) {
-        try {
-          const candidateName = `${leadData.firstName || ''} ${leadData.lastName || ''}`.trim();
-          const updatedAttempt = await recordMockAttempt(
-            user.$id,
-            selectedLead.$id,
-            candidateName,
-          );
+      await completeMockAttempt(
+        user.$id,
+        selectedLead.$id,
+        formData.candidateName,
+        reservedAttempt.attemptCount,
+        reservedAttempt.userName,
+      );
 
-          setMockAttempts((prev) =>
-            new Map(prev).set(selectedLead.$id, {
-              $id: updatedAttempt.$id,
-              leadId: updatedAttempt.leadId,
-              userId: updatedAttempt.userId,
-              attemptCount: updatedAttempt.attemptCount,
-              lastAttemptAt: updatedAttempt.lastAttemptAt,
-            }),
-          );
-        } catch (e: any) {
-          console.error("Failed to record mock attempt:", e);
-          // If failed (e.g. limit reached), notify user but email was already sent?
-          // Ideally this should be checked BEFORE sending email, but we do optimistic check in handleCreateMock.
-          // If server rejects, it means race condition or tampering.
-        }
-      }
+      setMockAttempts((prev) =>
+        new Map(prev).set(selectedLead.$id, {
+          $id: reservedAttempt.$id,
+          leadId: reservedAttempt.leadId,
+          userId: reservedAttempt.userId,
+          attemptCount: reservedAttempt.attemptCount,
+          lastAttemptAt: reservedAttempt.lastAttemptAt,
+        }),
+      );
 
       toast({
         title: "Success",
@@ -597,7 +596,7 @@ function MockContent() {
     }
   };
 
-  const totalPages = Math.ceil(filteredLeads.length / ITEMS_PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(filteredLeads.length / ITEMS_PER_PAGE));
   const paginatedLeads = filteredLeads.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE,
@@ -687,6 +686,7 @@ function MockContent() {
                   const status = getCooldownStatus(lead.$id);
                   const attempt = mockAttempts.get(lead.$id);
                   const attemptsCount = attempt?.attemptCount || 0;
+                  const isAdminUser = user?.role === "admin";
 
                   return (
                     <tr
@@ -724,7 +724,7 @@ function MockContent() {
                         ) : (
                           <div className="flex items-center gap-2">
                             {/* Attempts count display removed as per request */}
-                            {attemptsCount < 2 &&
+                            {(isAdminUser || attemptsCount < 2) &&
                               (status.canCreate ? (
                                 <Button
                                   size="sm"
@@ -746,7 +746,7 @@ function MockContent() {
                                   {status.remainingTime}m
                                 </Button>
                               ))}
-                            {attemptsCount >= 2 && (
+                            {!isAdminUser && attemptsCount >= 2 && (
                               <span className="text-xs font-medium text-red-500 flex items-center">
                                 <AlertCircle className="h-3 w-3 mr-1" />
                                 Max Limit
@@ -832,11 +832,61 @@ function MockContent() {
                 <Label>Subject</Label>
                 <div className="p-2 border rounded-md bg-muted text-muted-foreground">
                   Request to schedule mock interview -{" "}
-                  {selectedLead
-                    ? JSON.parse(selectedLead.data).firstName +
-                      " " +
-                      JSON.parse(selectedLead.data).lastName
-                    : ""}
+                  {formData.candidateName}
+                </div>
+              </div>
+
+              <div className="col-span-2 border rounded-md overflow-hidden">
+                <div className="grid grid-cols-[200px_1fr] text-sm">
+                  <div className="p-3 bg-muted font-semibold border-b">
+                    <RequiredText>Candidate Name</RequiredText>
+                  </div>
+                  <div className="p-2 border-b">
+                    <Input
+                      value={formData.candidateName}
+                      placeholder="Full name"
+                      className={lockedPrefilledInputClassName}
+                      readOnly
+                      required
+                      aria-required="true"
+                    />
+                  </div>
+
+                  <div className="p-3 bg-muted font-semibold border-b">End Client</div>
+                  <div className="p-2 border-b">
+                    <Input
+                      value={formData.endClient}
+                      onChange={(e) =>
+                        setFormData({ ...formData, endClient: e.target.value })
+                      }
+                      placeholder="e.g. Vizva INC"
+                      className="h-8"
+                    />
+                  </div>
+
+                  <div className="p-3 bg-muted font-semibold border-b">Email ID</div>
+                  <div className="p-2 border-b">
+                    <Input
+                      value={formData.emailId}
+                      onChange={(e) =>
+                        setFormData({ ...formData, emailId: e.target.value })
+                      }
+                      placeholder="candidate@email.com"
+                      className="h-8"
+                    />
+                  </div>
+
+                  <div className="p-3 bg-muted font-semibold">Contact Number</div>
+                  <div className="p-2">
+                    <Input
+                      value={formData.contactNumber}
+                      onChange={(e) =>
+                        setFormData({ ...formData, contactNumber: e.target.value })
+                      }
+                      placeholder="+1234567890"
+                      className="h-8"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -896,7 +946,7 @@ function MockContent() {
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                   value={formData.company}
                   onChange={(e) =>
-                    setFormData({ ...formData, company: e.target.value as any })
+                    setFormData({ ...formData, company: e.target.value as MockFormData["company"] })
                   }>
                   <option value="Silverspace Inc.">Silverspace Inc.</option>
                   <option value="Vizva Consultancy">Vizva Consultancy</option>

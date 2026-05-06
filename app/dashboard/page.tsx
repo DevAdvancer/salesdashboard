@@ -19,7 +19,8 @@ import { getAssessmentAttempts } from '@/app/actions/assessment';
 import { getBranchById } from '@/lib/services/branch-service';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { User } from '@/lib/types';
-import { Briefcase, ClipboardCheck, DollarSign, FileText, MessageSquareText, TrendingUp, Video } from 'lucide-react';
+import { DollarSign, TrendingUp } from 'lucide-react';
+import { appIcons } from '@/components/navigation-config';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 type AmountChartDatum = {
@@ -178,12 +179,14 @@ function DashboardContent() {
             setAssignedAgents(agentsWithBranches);
         }
 
-        const activeLeadIds = activeLeads.map((lead) => lead.$id);
-        const [mockAttempts, interviewAttempts, assessmentAttempts] = activeLeadIds.length > 0
+        const visibleLeadIds = Array.from(
+          new Set([...activeLeads, ...closedLeads].map((lead) => lead.$id))
+        );
+        const [mockAttempts, interviewAttempts, assessmentAttempts] = visibleLeadIds.length > 0
           ? await Promise.all([
-              getMockAttempts(user.$id, activeLeadIds),
-              getInterviewAttempts(user.$id, activeLeadIds),
-              getAssessmentAttempts(user.$id, activeLeadIds),
+              getMockAttempts(user.$id, visibleLeadIds),
+              getInterviewAttempts(user.$id, visibleLeadIds),
+              getAssessmentAttempts(user.$id, visibleLeadIds),
             ])
           : [[], [], []];
 
@@ -399,6 +402,11 @@ function DashboardContent() {
   const displayedPeriodLabel = isMonthlyView
     ? (selectedMonthData?.name ?? 'Selected month')
     : 'All time';
+  const LeadsIcon = appIcons.leads;
+  const ClientsIcon = appIcons.clients;
+  const MockIcon = appIcons.mock;
+  const InterviewSupportIcon = appIcons.interviewSupport;
+  const AssessmentSupportIcon = appIcons.assessmentSupport;
 
   if (!user || isOutlookChecking) {
     return (
@@ -452,7 +460,7 @@ function DashboardContent() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Active Leads</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
+            <LeadsIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -467,7 +475,7 @@ function DashboardContent() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Clients</CardTitle>
-            <Briefcase className="h-4 w-4 text-muted-foreground" />
+            <ClientsIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -482,7 +490,7 @@ function DashboardContent() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Created Mocks</CardTitle>
-            <Video className="h-4 w-4 text-muted-foreground" />
+            <MockIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -497,7 +505,7 @@ function DashboardContent() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Created Interview Support</CardTitle>
-            <MessageSquareText className="h-4 w-4 text-muted-foreground" />
+            <InterviewSupportIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -512,7 +520,7 @@ function DashboardContent() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Created Assessment Support</CardTitle>
-            <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
+            <AssessmentSupportIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">

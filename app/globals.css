@@ -399,6 +399,22 @@
   }
   .nav-item.active svg { color: #d97757; }
 
+  @media (min-width: 1024px) {
+    .sidebar-collapsed .brand-accent-bar {
+      margin-inline: auto;
+    }
+
+    .sidebar-collapsed .nav-item {
+      justify-content: center;
+      gap: 0;
+      padding-inline: 0;
+    }
+
+    .sidebar-collapsed .nav-item svg {
+      flex-shrink: 0;
+    }
+  }
+
   /* ── Stat card ── */
   .stat-card {
     background-color: var(--card);

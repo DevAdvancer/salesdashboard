@@ -245,6 +245,7 @@ function AuditLogsContent() {
         ['Technology', metadata.technology || '—'],
         ['End Client', metadata.endClient || '—'],
         ['Job Title', metadata.jobTitle || '—'],
+        ['Interview Round', metadata.interviewRound || '—'],
         ['Assessment Received (EST)', metadata.assessmentReceived || '—'],
         ['Assessment Duration', metadata.assessmentDuration || '—'],
         ['Email ID', metadata.emailId || '—'],
