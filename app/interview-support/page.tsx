@@ -525,7 +525,7 @@ function InterviewContent() {
           throw new Error(errorData.error || "Failed to send email");
         }
       } catch (sendError) {
-        await rollbackInterviewAttempt(reservedAttempt.reservation);
+        await rollbackInterviewAttempt(user.$id, reservedAttempt.reservation);
         throw sendError;
       }
 

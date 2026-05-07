@@ -2,6 +2,7 @@
 
 import { ID, Query } from 'node-appwrite';
 import { createAdminClient } from '@/lib/server/appwrite';
+import { assertAuthenticatedUserId } from '@/lib/server/current-user';
 import { createHash } from 'crypto';
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
@@ -147,6 +148,7 @@ async function createAssessmentAttemptDocument(
  * Appwrite Query.equal() arrays are capped at 100 items, so we batch automatically.
  */
 export async function getAssessmentAttempts(userId: string, leadIds: string[]) {
+    await assertAuthenticatedUserId(userId);
     if (!leadIds.length) return [];
 
     try {
@@ -223,6 +225,7 @@ export async function checkDuplicateSubject(leadId: string, subject: string): Pr
  */
 export async function reserveAssessmentAttempt(userId: string, leadId: string, subject: string) {
     if (!userId || !leadId || !subject?.trim()) throw new Error('Invalid input');
+    await assertAuthenticatedUserId(userId);
 
     try {
         const { databases } = await createAdminClient();
@@ -305,7 +308,8 @@ export async function reserveAssessmentAttempt(userId: string, leadId: string, s
 /**
  * Roll back a reserved assessment attempt if the Graph send fails.
  */
-export async function rollbackAssessmentAttempt(reservation: AttemptReservation | null | undefined) {
+export async function rollbackAssessmentAttempt(userId: string, reservation: AttemptReservation | null | undefined) {
+    await assertAuthenticatedUserId(userId);
     if (!reservation?.documentId) return;
 
     try {
@@ -345,6 +349,7 @@ export async function completeAssessmentAttempt(
     attemptCount: number,
     auditMetadata?: Record<string, unknown>
 ) {
+    await assertAuthenticatedUserId(userId);
     const { databases } = await createAdminClient();
 
     await logAssessmentAudit(databases, userId, leadId, {
@@ -358,6 +363,7 @@ export async function completeAssessmentAttempt(
  * Backwards-compatible helper for callers that record after sending.
  */
 export async function recordAssessmentAttempt(userId: string, leadId: string, subject: string, auditMetadata?: Record<string, unknown>) {
+    await assertAuthenticatedUserId(userId);
     const attempt = await reserveAssessmentAttempt(userId, leadId, subject);
     await completeAssessmentAttempt(userId, leadId, subject, attempt.attemptCount, auditMetadata);
     return attempt;

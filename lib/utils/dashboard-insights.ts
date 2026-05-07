@@ -52,6 +52,7 @@ export interface FollowUpQueueItem {
   leadId: string;
   leadName: string;
   assignedToName: string;
+  ownerName: string;
   status: string;
   nextAction: string;
   nextFollowUpAt: string;
@@ -311,10 +312,12 @@ export function buildLeadershipDashboardInsights({
 
     if (hasPendingFollowUp && followUpDate) {
       const assignee = currentLead.assignedToId ? userMap.get(currentLead.assignedToId) : null;
+      const owner = userMap.get(currentLead.ownerId);
       const queueItem: FollowUpQueueItem = {
         leadId: currentLead.$id,
         leadName: getLeadName(currentLead),
         assignedToName: assignee?.name ?? 'Unassigned',
+        ownerName: owner?.name ?? 'Unknown owner',
         status,
         nextAction: currentLead.nextAction || 'Follow up',
         nextFollowUpAt: currentLead.nextFollowUpAt || followUpDate.toISOString(),

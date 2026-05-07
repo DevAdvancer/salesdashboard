@@ -2,6 +2,7 @@
 
 import { ID, Query } from 'node-appwrite';
 import { createAdminClient } from '@/lib/server/appwrite';
+import { assertAuthenticatedUserId } from '@/lib/server/current-user';
 import { createHash } from 'crypto';
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
@@ -148,6 +149,7 @@ async function createInterviewAttemptDocument(
  * Get all interview attempts for a user and a set of lead IDs
  */
 export async function getInterviewAttempts(userId: string, leadIds: string[]) {
+    await assertAuthenticatedUserId(userId);
     if (!leadIds.length) return [];
 
     try {
@@ -229,6 +231,7 @@ export async function checkDuplicateInterviewSubject(leadId: string, subject: st
  */
 export async function reserveInterviewAttempt(userId: string, leadId: string, subject: string) {
     if (!userId || !leadId || !subject?.trim()) throw new Error('Invalid input');
+    await assertAuthenticatedUserId(userId);
 
     try {
         const { databases } = await createAdminClient();
@@ -312,7 +315,8 @@ export async function reserveInterviewAttempt(userId: string, leadId: string, su
 /**
  * Roll back a reserved interview attempt if the Graph send fails.
  */
-export async function rollbackInterviewAttempt(reservation: AttemptReservation | null | undefined) {
+export async function rollbackInterviewAttempt(userId: string, reservation: AttemptReservation | null | undefined) {
+    await assertAuthenticatedUserId(userId);
     if (!reservation?.documentId) return;
 
     try {
@@ -352,6 +356,7 @@ export async function completeInterviewAttempt(
     attemptCount: number,
     auditMetadata?: Record<string, unknown>
 ) {
+    await assertAuthenticatedUserId(userId);
     const { databases } = await createAdminClient();
 
     await logInterviewAudit(databases, userId, leadId, {
@@ -365,6 +370,7 @@ export async function completeInterviewAttempt(
  * Backwards-compatible helper for callers that record after sending.
  */
 export async function recordInterviewAttempt(userId: string, leadId: string, subject: string, auditMetadata?: Record<string, unknown>) {
+    await assertAuthenticatedUserId(userId);
     const attempt = await reserveInterviewAttempt(userId, leadId, subject);
     await completeInterviewAttempt(userId, leadId, subject, attempt.attemptCount, auditMetadata);
     return attempt;

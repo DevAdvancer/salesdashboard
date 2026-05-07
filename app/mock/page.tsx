@@ -523,7 +523,7 @@ function MockContent() {
           throw new Error(errorData.error || "Failed to send email");
         }
       } catch (sendError) {
-        await rollbackMockAttempt(reservedAttempt.reservation);
+        await rollbackMockAttempt(user.$id, reservedAttempt.reservation);
         throw sendError;
       }
 

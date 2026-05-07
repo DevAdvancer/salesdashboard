@@ -2,6 +2,7 @@
 
 import { ID, Query } from 'node-appwrite';
 import { createAdminClient } from '@/lib/server/appwrite';
+import { assertAuthenticatedUserId } from '@/lib/server/current-user';
 import { createHash } from 'crypto';
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
@@ -133,6 +134,7 @@ async function logMockAudit(
  * Appwrite Query.equal() arrays are capped at 100 items, so we batch automatically.
  */
 export async function getMockAttempts(userId: string, leadIds: string[]) {
+    await assertAuthenticatedUserId(userId);
     if (!leadIds.length) return [];
 
     try {
@@ -194,6 +196,7 @@ export async function getMockAttempts(userId: string, leadIds: string[]) {
  */
 export async function reserveMockAttempt(userId: string, leadId: string) {
     if (!userId || !leadId) throw new Error('Invalid input');
+    await assertAuthenticatedUserId(userId);
 
     try {
         const { databases } = await createAdminClient();
@@ -281,7 +284,8 @@ export async function reserveMockAttempt(userId: string, leadId: string) {
 /**
  * Roll back a reserved mock attempt if the Graph send fails.
  */
-export async function rollbackMockAttempt(reservation: AttemptReservation | null | undefined) {
+export async function rollbackMockAttempt(userId: string, reservation: AttemptReservation | null | undefined) {
+    await assertAuthenticatedUserId(userId);
     if (!reservation?.documentId) return;
 
     try {
@@ -320,6 +324,7 @@ export async function completeMockAttempt(
     attemptCount: number,
     userName?: string
 ) {
+    await assertAuthenticatedUserId(userId);
     const { databases } = await createAdminClient();
     let actorName = userName || userId;
 
@@ -344,6 +349,7 @@ export async function completeMockAttempt(
  * Backwards-compatible helper for callers that record after sending.
  */
 export async function recordMockAttempt(userId: string, leadId: string, candidateName: string = '') {
+    await assertAuthenticatedUserId(userId);
     const attempt = await reserveMockAttempt(userId, leadId);
     await completeMockAttempt(userId, leadId, candidateName, attempt.attemptCount, attempt.userName);
     return attempt;

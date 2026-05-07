@@ -5,6 +5,7 @@ import { Lead, LeadData, LeadListFilters, UserRole, CreateLeadInput } from "@/li
 import { Query, ID, Permission, Role } from "node-appwrite";
 import { COLLECTIONS } from "@/lib/constants/appwrite";
 import { logAction } from "@/lib/services/audit-service";
+import { assertAuthenticatedUserId } from "@/lib/server/current-user";
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const LEADS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_LEADS_COLLECTION_ID!;
@@ -117,6 +118,7 @@ export async function createLeadAction(
     creatingUserName?: string
 ): Promise<Lead> {
     try {
+        await assertAuthenticatedUserId(creatingUserId || ownerId);
         const { databases } = await createAdminClient();
 
         // Validate uniqueness
@@ -219,6 +221,11 @@ export async function reopenLeadAction(
     actorId?: string,
     actorName?: string
 ): Promise<Lead> {
+    if (actorId) {
+        await assertAuthenticatedUserId(actorId);
+    } else {
+        throw new Error("Unauthorized");
+    }
     const { databases } = await createAdminClient();
     try {
         // Get the current lead
@@ -278,6 +285,7 @@ export async function listLeadsAction(
   branchIds?: string[]
 ): Promise<Lead[]> {
   try {
+    await assertAuthenticatedUserId(userId);
     console.log('[listLeadsAction] Called with:', { userId, userRole, branchIds, filters });
     const { databases } = await createAdminClient();
     const queries: string[] = [];

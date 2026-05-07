@@ -11,6 +11,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const syncServerSession = useCallback(async () => {
+    const jwt = await account.createJWT();
+    const response = await fetch('/api/auth/appwrite-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jwt: jwt.jwt }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to sync server session');
+    }
+  }, []);
+
+  const clearServerSession = useCallback(async () => {
+    await fetch('/api/auth/appwrite-session', { method: 'DELETE' }).catch(() => {});
+  }, []);
+
   // Fetch user document from database
   const fetchUserDocument = useCallback(async (userId: string): Promise<User | null> => {
     try {
@@ -49,11 +66,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const session = await account.get();
         if (session) {
+          await syncServerSession();
           const userDoc = await fetchUserDocument(session.$id);
           setUser(userDoc);
         }
       } catch (error) {
         // No active session
+        await clearServerSession();
         setUser(null);
       } finally {
         setLoading(false);
@@ -61,7 +80,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     checkSession();
-  }, [fetchUserDocument]);
+  }, [clearServerSession, fetchUserDocument, syncServerSession]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const refreshServerSession = () => {
+      syncServerSession().catch((error) => {
+        console.error('Failed to refresh server session:', error);
+      });
+    };
+
+    const intervalId = window.setInterval(refreshServerSession, 10 * 60 * 1000);
+    window.addEventListener('focus', refreshServerSession);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshServerSession);
+    };
+  }, [syncServerSession, user]);
 
   // Login function
   const login = useCallback(async (email: string, password: string) => {
@@ -71,6 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Get account details
       const accountDetails = await account.get();
+      await syncServerSession();
 
       // Fetch user document
       const userDoc = await fetchUserDocument(accountDetails.$id);
@@ -84,12 +122,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Login error:', error);
       throw error;
     }
-  }, [fetchUserDocument]);
+  }, [fetchUserDocument, syncServerSession]);
 
   // Logout function
   const logout = useCallback(async () => {
     try {
       await account.deleteSession('current');
+      await clearServerSession();
       setUser(null);
     } catch (error) {
       console.error('Logout error:', error);
@@ -148,6 +187,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Set user state
+      await syncServerSession();
+
       const userData: User = {
         $id: userDoc.$id,
         name: userDoc.name as string,
@@ -177,7 +218,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       throw error;
     }
-  }, []);
+  }, [syncServerSession]);
 
   // Role-based helper properties
   const isAdmin = user?.role === 'admin';

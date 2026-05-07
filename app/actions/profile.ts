@@ -2,6 +2,7 @@
 
 import { ID, Permission, Role } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
+import { assertAuthenticatedUserId } from "@/lib/server/current-user";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 
 async function logProfileUpdate(input: {
@@ -42,9 +43,7 @@ export async function updateOwnProfileAction(input: {
 }) {
   const normalizedName = input.name.trim();
 
-  if (!input.currentUserId) {
-    throw new Error("Unauthorized");
-  }
+  await assertAuthenticatedUserId(input.currentUserId);
 
   if (normalizedName.length < 2) {
     throw new Error("Name must be at least 2 characters");

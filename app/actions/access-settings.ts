@@ -2,6 +2,7 @@
 
 import { ID, Permission, Query, Role } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
+import { assertAuthenticatedUserId } from "@/lib/server/current-user";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { isRoleEligibleForComponent } from "@/lib/constants/component-access";
 import type { ComponentKey, UserRole } from "@/lib/types";
@@ -54,9 +55,7 @@ export async function updateAccessRuleAction(input: {
   allowed: boolean;
   ruleId?: string;
 }) {
-  if (!input.currentUserId) {
-    throw new Error("Unauthorized");
-  }
+  await assertAuthenticatedUserId(input.currentUserId);
 
   if (input.componentKey === "settings") {
     throw new Error("Profile settings cannot be disabled");

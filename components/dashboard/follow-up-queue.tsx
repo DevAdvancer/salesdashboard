@@ -55,7 +55,10 @@ function QueueList({
                 <div>
                   <p className="text-sm font-medium">{item.leadName}</p>
                   <p className="text-xs text-muted-foreground">
-                    {item.nextAction} - {item.assignedToName}
+                    {item.nextAction}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Assigned: {item.assignedToName} - Owner: {item.ownerName}
                   </p>
                 </div>
                 <p className="text-right text-xs text-muted-foreground">

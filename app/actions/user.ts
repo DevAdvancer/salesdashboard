@@ -2,6 +2,7 @@
 
 import { ID, Permission, Role } from 'node-appwrite';
 import { createAdminClient, createSessionClient } from '@/lib/server/appwrite';
+import { assertAuthenticatedUserId } from '@/lib/server/current-user';
 import { CreateManagerInput, CreateTeamLeadInput, CreateAgentInput, UserRole, CreateAssistantManagerInput } from '@/lib/types';
 import { COLLECTIONS } from '@/lib/constants/appwrite';
 
@@ -75,7 +76,7 @@ async function logAuditAction(
 export async function createAssistantManagerAction(input: CreateAssistantManagerInput & { currentUserId: string }) {
     const { currentUserId, ...amInput } = input;
 
-    if (!currentUserId) throw new Error("Unauthorized - No user ID provided");
+    await assertAuthenticatedUserId(currentUserId);
 
     const callerDoc = await getUserDoc(currentUserId);
     // Allow admin and manager roles to create assistant managers
@@ -159,10 +160,7 @@ export async function createAssistantManagerAction(input: CreateAssistantManager
 export async function createManagerAction(input: CreateManagerInput & { currentUserId: string }) {
     const { currentUserId, ...managerInput } = input;
 
-    if (!currentUserId) {
-        console.error("createManagerAction: No currentUserId provided");
-        throw new Error("Unauthorized - No user ID provided");
-    }
+    await assertAuthenticatedUserId(currentUserId);
 
     console.log("createManagerAction: Current user ID:", currentUserId);
 
@@ -244,7 +242,7 @@ export async function createManagerAction(input: CreateManagerInput & { currentU
 export async function createTeamLeadAction(input: CreateTeamLeadInput & { currentUserId: string }) {
     const { currentUserId, ...teamLeadInput } = input;
 
-    if (!currentUserId) throw new Error("Unauthorized - No user ID provided");
+    await assertAuthenticatedUserId(currentUserId);
 
     const callerDoc = await getUserDoc(currentUserId);
     // Allow admin, manager, and assistant_manager roles to create team leads
@@ -360,7 +358,7 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
 export async function createAgentAction(input: CreateAgentInput & { currentUserId: string }) {
     const { currentUserId, ...agentInput } = input;
 
-    if (!currentUserId) throw new Error("Unauthorized - No user ID provided");
+    await assertAuthenticatedUserId(currentUserId);
 
     const callerDoc = await getUserDoc(currentUserId);
     if (!callerDoc || (callerDoc.role !== 'team_lead' && callerDoc.role !== 'manager' && callerDoc.role !== 'admin' && callerDoc.role !== 'assistant_manager')) {
@@ -562,7 +560,7 @@ export async function updateUserAction(input: {
 }) {
     const { userId, role, managerId, managerIds, assistantManagerId, assistantManagerIds, teamLeadId, branchIds, currentUserId } = input;
 
-    if (!currentUserId) throw new Error("Unauthorized");
+    await assertAuthenticatedUserId(currentUserId);
 
     const callerDoc = await getUserDoc(currentUserId);
     if (!callerDoc) throw new Error("User profile not found");

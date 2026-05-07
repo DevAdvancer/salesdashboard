@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { getAuthenticatedAccount } from "@/lib/server/current-user";
 
 export async function POST(request: NextRequest) {
   try {
+    await getAuthenticatedAccount();
     const cookieStore = await cookies();
     const token = cookieStore.get("outlook_access_token");
 

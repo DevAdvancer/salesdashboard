@@ -3,6 +3,7 @@
 import { ID, Query } from "node-appwrite";
 import { listLeadsAction } from "@/app/actions/lead";
 import { createAdminClient } from "@/lib/server/appwrite";
+import { assertAuthenticatedUserId } from "@/lib/server/current-user";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { isRoleEligibleForComponent } from "@/lib/constants/component-access";
 import {
@@ -27,6 +28,7 @@ import type {
 } from "@/lib/types";
 
 async function getActor(userId: string): Promise<User> {
+  await assertAuthenticatedUserId(userId);
   const { databases } = await createAdminClient();
   const doc = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, userId);
   return {

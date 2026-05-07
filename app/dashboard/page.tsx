@@ -682,9 +682,9 @@ function DashboardContent() {
                 </div>
             </div>
 
-            <div className="h-[300px] w-full">
+            <div className="h-[300px] min-h-[300px] w-full min-w-0">
                 {displayedChartData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height={300} minWidth={0} minHeight={300}>
                     <BarChart data={displayedChartData} margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#30302e" />
                         <XAxis

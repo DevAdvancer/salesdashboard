@@ -589,7 +589,7 @@ function AssessmentContent() {
           throw new Error(errorData.error || "Failed to send email");
         }
       } catch (sendError) {
-        await rollbackAssessmentAttempt(reservedAttempt.reservation);
+        await rollbackAssessmentAttempt(user.$id, reservedAttempt.reservation);
         throw sendError;
       }
 
