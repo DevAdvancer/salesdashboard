@@ -277,7 +277,7 @@ function LeadDetailContent() {
   return (
     <div className="container mx-auto">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-        <div>
+        <div id="tour-lead-header">
           <Button variant="outline" onClick={() => router.push('/leads')} className="mb-2">
             ← Back to Leads
           </Button>
@@ -288,7 +288,7 @@ function LeadDetailContent() {
             {lead.isClosed ? 'Closed Lead' : 'Active Lead'}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div id="tour-lead-actions" className="flex flex-wrap gap-2">
           {!lead.isClosed && (
             <>
               {!isEditing ? (
@@ -323,7 +323,7 @@ function LeadDetailContent() {
 
       <div className="grid gap-6">
         {/* Lead Information */}
-        <Card>
+        <Card id="tour-lead-info">
           <CardHeader>
             <CardTitle>Lead Information</CardTitle>
           </CardHeader>
@@ -346,7 +346,7 @@ function LeadDetailContent() {
 
         {/* Assignment Section (Manager Only) */}
         {user?.role === 'manager' && (
-          <Card>
+          <Card id="tour-lead-assignment">
             <CardHeader>
               <CardTitle>Assignment</CardTitle>
             </CardHeader>
@@ -382,21 +382,27 @@ function LeadDetailContent() {
           </Card>
         )}
 
-        <LeadFollowUpCard
-          lead={lead}
-          user={user}
-          disabled={lead.isClosed}
-          onUpdated={loadLead}
-        />
+        <div id="tour-lead-followup">
+          <LeadFollowUpCard
+            lead={lead}
+            user={user}
+            disabled={lead.isClosed}
+            onUpdated={loadLead}
+          />
+        </div>
 
         {user && (
-          <LeadNotesCard
-            leadId={lead.$id}
-            user={user}
-          />
+          <div id="tour-lead-notes">
+            <LeadNotesCard
+              leadId={lead.$id}
+              user={user}
+            />
+          </div>
         )}
 
-        <LeadActivityTimeline lead={lead} />
+        <div id="tour-lead-timeline">
+          <LeadActivityTimeline lead={lead} />
+        </div>
 
         {/* Metadata */}
         <Card>

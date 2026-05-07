@@ -168,7 +168,7 @@ function HistoryContent() {
       </div>
 
       {/* Filters */}
-      <Card className="p-4 mb-6">
+      <Card id="tour-clients-filters" className="p-4 mb-6">
         <h2 className="text-lg font-semibold mb-4">Filters</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           <div>
@@ -259,6 +259,7 @@ function HistoryContent() {
                       </td>
                       <td className="p-3 md:p-4">
                         <Button
+                          id="tour-client-view-btn"
                           variant="outline"
                           size="sm"
                           onClick={(e) => {

@@ -505,8 +505,8 @@ function DashboardContent() {
       </div>
 
       {/* Metrics Cards */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
-        <Card>
+      <div id="tour-global-metrics" className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
+        <Card id="tour-active-leads">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Active Leads</CardTitle>
             <LeadsIcon className="h-4 w-4 text-muted-foreground" />
@@ -521,7 +521,7 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card id="tour-clients">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Clients</CardTitle>
             <ClientsIcon className="h-4 w-4 text-muted-foreground" />
@@ -536,7 +536,7 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card id="tour-created-mocks">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Created Mocks</CardTitle>
             <MockIcon className="h-4 w-4 text-muted-foreground" />
@@ -551,7 +551,7 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card id="tour-interview-support">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Created Interview Support</CardTitle>
             <InterviewSupportIcon className="h-4 w-4 text-muted-foreground" />
@@ -566,7 +566,7 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card id="tour-assessment-support">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Created Assessment Support</CardTitle>
             <AssessmentSupportIcon className="h-4 w-4 text-muted-foreground" />
@@ -583,29 +583,35 @@ function DashboardContent() {
       </div>
 
       {(isAdmin || isManager || isAssistantManager) && (
-        <LeadershipDashboard
-          role={user.role}
-          insights={dashboardInsights}
-          isLoading={dashboardInsightsLoading || metrics.loading}
-        />
+        <div id="tour-leadership-dashboard">
+          <LeadershipDashboard
+            role={user.role}
+            insights={dashboardInsights}
+            isLoading={dashboardInsightsLoading || metrics.loading}
+          />
+        </div>
       )}
 
       {(isTeamLead || isAgent) && (
-        <RoleWorkDashboard
-          role={user.role}
-          insights={dashboardInsights}
-          isLoading={dashboardInsightsLoading || metrics.loading}
-        />
+        <div id="tour-role-work-dashboard">
+          <RoleWorkDashboard
+            role={user.role}
+            insights={dashboardInsights}
+            isLoading={dashboardInsightsLoading || metrics.loading}
+          />
+        </div>
       )}
 
-      <FollowUpQueueCard
-        queue={dashboardInsights?.followUpQueue ?? null}
-        isLoading={dashboardInsightsLoading || metrics.loading}
-      />
+      <div id="tour-follow-up-queue">
+        <FollowUpQueueCard
+          queue={dashboardInsights?.followUpQueue ?? null}
+          isLoading={dashboardInsightsLoading || metrics.loading}
+        />
+      </div>
 
       {/* Amount Insights Graph (Admin Only) */}
       {isAdmin && (
-        <Card>
+        <Card id="tour-financial-insights">
           <CardHeader>
             <CardTitle>Financial Insights</CardTitle>
             <CardDescription>Total deal value includes leads and clients. Net revenue includes clients only.</CardDescription>
@@ -727,9 +733,8 @@ function DashboardContent() {
         </Card>
       )}
 
-      {/* User Info and Quick Actions */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
+      <div id="tour-user-quick-actions" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <Card id="tour-user-info">
           <CardHeader>
             <CardTitle>Welcome, {user.name}!</CardTitle>
             <CardDescription>

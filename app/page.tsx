@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, Suspense } from 'react';
+import { useEffect, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
 
@@ -13,6 +13,7 @@ function HomeContent() {
   const searchParams = useSearchParams();
   const { user, loading } = useAuth();
   const code = searchParams.get('code');
+  const hasRedirected = useRef(false);
 
   useEffect(() => {
     if (code) {
@@ -23,11 +24,12 @@ function HomeContent() {
       return;
     }
 
-    if (!loading) {
+    if (!loading && !hasRedirected.current) {
+      hasRedirected.current = true;
       if (user) {
-        router.push('/dashboard');
+        window.location.replace('/dashboard');
       } else {
-        router.push('/login');
+        window.location.replace('/login');
       }
     }
   }, [user, loading, router, code]);

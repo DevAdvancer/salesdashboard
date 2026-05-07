@@ -3,9 +3,10 @@
 import { useAuth } from '@/lib/contexts/auth-context';
 import { useAccess, ComponentKey } from '@/lib/contexts/access-control-context';
 import { useRouter, usePathname } from 'next/navigation';
-import { LogOut, Menu, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
+import { LogOut, Map, Menu, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
 import { useState } from 'react';
 import { NAV_ITEMS } from './navigation-config';
+import { startDashboardTour, startLeadsTour, startClientsTour, startWorkQueueTour, startGenericTour, startLeadDetailTour } from '@/lib/utils/tour-guide';
 
 function formatRoleLabel(role: string): string {
   if (role === 'team_lead') return 'Team Lead';
@@ -180,6 +181,49 @@ export function Navigation({
               </p>
             </div>
           </div>
+
+          {user.role !== 'admin' && (
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                if (pathname === '/dashboard') {
+                  startDashboardTour(user.role);
+                } else if (pathname === '/leads') {
+                  startLeadsTour(user.role);
+                } else if (pathname.startsWith('/leads/') && pathname !== '/leads/new') {
+                  startLeadDetailTour(user.role);
+                } else if (pathname === '/clients') {
+                  startClientsTour(user.role);
+                } else if (pathname === '/work-queue') {
+                  startWorkQueueTour(user.role);
+                } else {
+                  startGenericTour();
+                }
+              }}
+              title="Page Guide"
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.5rem',
+                width: '100%', padding: '0.4375rem 0.625rem',
+                borderRadius: '0.5rem', border: 'none',
+                background: 'transparent',
+                fontSize: '0.875rem', color: 'var(--muted-foreground)',
+                cursor: 'pointer',
+                transition: 'background 0.12s ease, color 0.12s ease',
+                marginBottom: '0.25rem',
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLButtonElement).style.background = 'rgba(201,100,66,0.10)';
+                (e.currentTarget as HTMLButtonElement).style.color = 'var(--foreground)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+                (e.currentTarget as HTMLButtonElement).style.color = 'var(--muted-foreground)';
+              }}
+            >
+              <Map size={14} />
+              <span className={isCollapsed ? 'lg:sr-only' : ''}>Page Guide</span>
+            </button>
+          )}
 
           <button
             onClick={handleLogout}

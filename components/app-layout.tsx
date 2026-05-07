@@ -5,7 +5,7 @@ import { NotificationBell } from './notification-bell';
 import { WhatsNewModal } from './whats-new-modal';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { useRouter, usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
 const PUBLIC_ROUTES = ['/login'];
 
@@ -15,12 +15,28 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const lastRedirectPath = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!loading && !user && !isPublicRoute) {
-      router.push('/login');
-    } else if (!loading && user && pathname === '/login') {
-      router.push('/dashboard');
+    // Reset redirect tracking if we've successfully navigated
+    if (lastRedirectPath.current && lastRedirectPath.current !== pathname) {
+      // We haven't reached the destination yet, don't reset
+      if (
+        (lastRedirectPath.current === '/login' && pathname !== '/login') ||
+        (lastRedirectPath.current === '/dashboard' && pathname !== '/dashboard')
+      ) {
+         // wait for it
+      } else {
+         lastRedirectPath.current = null;
+      }
+    }
+
+    if (!loading && !user && !isPublicRoute && lastRedirectPath.current !== '/login') {
+      lastRedirectPath.current = '/login';
+      router.replace('/login');
+    } else if (!loading && user && pathname === '/login' && lastRedirectPath.current !== '/dashboard') {
+      lastRedirectPath.current = '/dashboard';
+      router.replace('/dashboard');
     }
   }, [user, loading, isPublicRoute, pathname, router]);
 

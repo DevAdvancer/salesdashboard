@@ -89,13 +89,17 @@ function WorkQueueContent() {
       )}
 
       {user && (
-        <RoleWorkDashboard
-          role={user.role}
-          insights={insights}
-          isLoading={loading}
-        />
+        <div id="tour-work-queue-tabs">
+          <RoleWorkDashboard
+            role={user.role}
+            insights={insights}
+            isLoading={loading}
+          />
+        </div>
       )}
-      <FollowUpQueueCard queue={insights?.followUpQueue ?? null} isLoading={loading} />
+      <div id="tour-work-queue-actions">
+        <FollowUpQueueCard queue={insights?.followUpQueue ?? null} isLoading={loading} />
+      </div>
 
       <Card>
         <CardHeader>

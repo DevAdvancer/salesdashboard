@@ -436,7 +436,7 @@ function LeadsContent() {
     <div className="container mx-auto">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <h1 className="text-2xl md:text-3xl font-bold">Active Leads</h1>
-        <div className="flex items-center gap-2">
+        <div id="tour-leads-actions" className="flex items-center gap-2">
           {canExportLeads && (
             <Button
               variant="outline"
@@ -452,7 +452,7 @@ function LeadsContent() {
       </div>
 
       {/* Filters Section */}
-      <Card className="mb-6">
+      <Card id="tour-leads-filters" className="mb-6">
         <CardHeader>
           <CardTitle>Filters</CardTitle>
         </CardHeader>
@@ -664,6 +664,7 @@ function LeadsContent() {
                           </td>
                           <td className="p-3 md:p-4">
                             <Button
+                              id="tour-lead-view-btn"
                               size="sm"
                               variant="outline"
                               onClick={() => router.push(`/leads/${lead.$id}`)}>

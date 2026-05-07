@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { useAccess, ComponentKey } from '@/lib/contexts/access-control-context';
@@ -26,7 +26,7 @@ export function ProtectedRoute({
   useEffect(() => {
     if (!user) {
       // Not authenticated, redirect to login
-      router.push('/login');
+      router.replace('/login');
       return;
     }
 
@@ -36,7 +36,7 @@ export function ProtectedRoute({
         `You don't have permission to access ${componentKey.replace('-', ' ')}`,
         { showToast: true }
       );
-      router.push(fallbackPath);
+      router.replace(fallbackPath);
     }
   }, [user, canAccess, componentKey, isLoading, router, fallbackPath]);
 
