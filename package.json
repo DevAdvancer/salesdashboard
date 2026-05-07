@@ -26,7 +26,7 @@
     "dotenv": "^17.3.1",
     "fast-check": "^4.5.3",
     "lucide-react": "^0.563.0",
-    "next": "16.1.6",
+    "next": "16.2.5",
     "node-appwrite": "^14.1.0",
     "radix-ui": "^1.4.3",
     "react": "19.2.3",
