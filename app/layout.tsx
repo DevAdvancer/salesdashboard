@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Playfair_Display, Inter } from "next/font/google";
+import { Bebas_Neue, Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/contexts/auth-context";
 import { AccessControlProvider } from "@/lib/contexts/access-control-context";
@@ -8,10 +8,10 @@ import { Toaster } from "@/components/ui/toaster";
 import { AppLayout } from "@/components/app-layout";
 import { ErrorBoundary } from "@/components/error-boundary";
 
-const playfairDisplay = Playfair_Display({
-  variable: "--font-playfair",
+const bebasNeue = Bebas_Neue({
+  variable: "--font-bebas",
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  weight: "400",
   display: "swap",
 });
 
@@ -31,15 +31,31 @@ export const metadata: Metadata = {
   },
 };
 
+const themeBootScript = `
+(() => {
+  try {
+    const savedTheme = localStorage.getItem('salesdashboard-theme') || 'light';
+    document.documentElement.classList.toggle('dark', savedTheme === 'dark');
+    document.documentElement.style.colorScheme = savedTheme === 'dark' ? 'dark' : 'light';
+  } catch {
+    document.documentElement.classList.remove('dark');
+    document.documentElement.style.colorScheme = 'light';
+  }
+})();
+`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+      </head>
       <body
-        className={`${inter.variable} ${playfairDisplay.variable} antialiased`}
+        className={`${inter.variable} ${bebasNeue.variable} antialiased`}
       >
         <AzureMsalProvider>
           <ErrorBoundary>

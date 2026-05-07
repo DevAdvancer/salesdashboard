@@ -12,7 +12,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           // Layout
           "flex h-10 w-full",
           // Shape
-          "rounded-[0.625rem] border border-border",
+          "rounded-[1.5rem] border border-transparent",
           // Colors — fully CSS-variable driven
           "bg-[var(--input)] text-foreground placeholder:text-muted-foreground",
           // Spacing
@@ -20,7 +20,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           // File input
           "file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground file:cursor-pointer",
           // Focus — the only blue moment
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3898ec] focus-visible:border-[#3898ec]",
+          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ink)] focus-visible:ring-offset-0 focus-visible:border-[var(--ink)]",
           // Transitions
           "transition-all duration-150",
           // Disabled

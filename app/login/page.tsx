@@ -42,7 +42,7 @@ export default function LoginPage() {
     try {
       await login(data.email, data.password);
       router.push('/dashboard');
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(handleApiError(err, { title: 'Login Failed', showToast: true, retry: () => onSubmit(data) }));
     } finally { setIsLoading(false); }
   };
@@ -113,13 +113,27 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit(onSubmit)} noValidate>
+          <form onSubmit={handleSubmit(onSubmit)} noValidate autoComplete="off" data-lpignore="true">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.125rem' }}>
 
               {/* Email */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
                 <Label htmlFor="email">Email address</Label>
-                <Input id="email" type="email" placeholder="you@company.com" {...register('email')} disabled={isLoading} />
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@company.com"
+                  autoComplete="new-password"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  aria-autocomplete="none"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                  data-bwignore="true"
+                  {...register('email')}
+                  disabled={isLoading}
+                />
                 {errors.email && <p style={{ fontSize: '0.75rem', color: '#e57373', margin: 0 }}>{errors.email.message}</p>}
               </div>
 
@@ -131,6 +145,14 @@ export default function LoginPage() {
                     id="password"
                     type={showPassword ? 'text' : 'password'}
                     placeholder="••••••••"
+                    autoComplete="new-password"
+                    autoCorrect="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    aria-autocomplete="none"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    data-bwignore="true"
                     {...register('password')}
                     disabled={isLoading}
                     style={{ paddingRight: '2.75rem' }}

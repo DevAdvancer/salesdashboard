@@ -47,7 +47,7 @@ function ListSkeleton() {
   return (
     <div className="space-y-3">
       {Array.from({ length: 4 }).map((_, index) => (
-        <div key={index} className="rounded-md border border-border p-3">
+        <div key={index} className="border border-border p-3">
           <Skeleton className="h-4 w-40" />
           <Skeleton className="mt-2 h-3 w-64" />
         </div>
@@ -212,7 +212,7 @@ export function LeadershipDashboard({
               ['Team Leads', roleCounts?.teamLeads ?? 0],
               ['Agents', roleCounts?.agents ?? 0],
             ].map(([label, value]) => (
-              <div key={label} className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+              <div key={label} className="flex items-center justify-between border border-border bg-[var(--soft-cloud)] px-3 py-2">
                 <span className="text-sm text-muted-foreground">{label}</span>
                 <span className="text-sm font-semibold">
                   {isLoading ? <Skeleton className="h-4 w-8" /> : value}
@@ -240,7 +240,7 @@ export function LeadershipDashboard({
             ) : (
               <div className="space-y-3">
                 {branchSummaries.slice(0, 6).map((branch) => (
-                  <div key={branch.branchId} className="rounded-md border border-border p-3">
+                  <div key={branch.branchId} className="border border-border bg-[var(--soft-cloud)] p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-sm font-medium">{branch.branchName}</p>

@@ -642,7 +642,7 @@ function DashboardContent() {
                   </label>
                   <select
                     id="financial-month"
-                    className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    className="flex h-10 rounded-[1.5rem] border border-transparent bg-[var(--soft-cloud)] px-4 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ink)] focus-visible:ring-offset-[12px] focus-visible:ring-offset-[var(--soft-cloud)]"
                     value={selectedMonth}
                     onChange={(event) => setSelectedMonth(event.target.value)}
                     disabled={amountData.length === 0}
@@ -662,23 +662,23 @@ function DashboardContent() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                <div className="flex flex-col gap-1 p-4 border rounded-lg bg-card shadow-sm">
+                <div className="flex flex-col gap-1 border bg-[var(--soft-cloud)] p-4">
                     <span className="text-sm font-medium text-muted-foreground">
                       Period
                     </span>
                     <span className="text-2xl font-bold">{displayedPeriodLabel}</span>
                 </div>
-                <div className="flex flex-col gap-1 p-4 border rounded-lg bg-card shadow-sm">
+                <div className="flex flex-col gap-1 border bg-[var(--soft-cloud)] p-4">
                     <span className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                         <DollarSign className="h-4 w-4" /> {isMonthlyView ? 'Monthly Deal Value' : 'Total Deal Value'}
                     </span>
                     <span className="text-2xl font-bold">{currencyFormatter.format(displayedTotalAmount)}</span>
                 </div>
-                <div className="flex flex-col gap-1 p-4 border rounded-lg bg-card shadow-sm">
+                <div className="flex flex-col gap-1 border bg-[var(--soft-cloud)] p-4">
                     <span className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                         <TrendingUp className="h-4 w-4" /> {isMonthlyView ? 'Monthly Net Revenue' : 'Net Revenue'}
                     </span>
-                    <span className="text-2xl font-bold text-green-600">{currencyFormatter.format(displayedNetAmount)}</span>
+                    <span className="text-2xl font-bold text-[var(--success)]">{currencyFormatter.format(displayedNetAmount)}</span>
                 </div>
             </div>
 
@@ -686,16 +686,16 @@ function DashboardContent() {
                 {displayedChartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={300} minWidth={0} minHeight={300}>
                     <BarChart data={displayedChartData} margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#30302e" />
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--hairline-soft)" />
                         <XAxis
                           dataKey="name"
-                          tick={{ fill: '#87867f', fontSize: 12 }}
-                          axisLine={{ stroke: '#30302e' }}
+                          tick={{ fill: 'var(--mute)', fontSize: 12 }}
+                          axisLine={{ stroke: 'var(--hairline-soft)' }}
                           tickLine={false}
                         />
                         <YAxis
                           width={72}
-                          tick={{ fill: '#87867f', fontSize: 12 }}
+                          tick={{ fill: 'var(--mute)', fontSize: 12 }}
                           axisLine={false}
                           tickLine={false}
                           tickFormatter={(value: number) => {
@@ -707,24 +707,24 @@ function DashboardContent() {
                         <Tooltip
                             formatter={(value) => [currencyFormatter.format(Number(value)), '']}
                             contentStyle={{
-                              backgroundColor: '#30302e',
-                              borderColor: '#3d3d3a',
-                              borderRadius: '0.5rem',
-                              color: '#faf9f5',
+                              backgroundColor: 'var(--canvas)',
+                              borderColor: 'var(--hairline)',
+                              borderRadius: '0',
+                              color: 'var(--ink)',
                               fontSize: '0.875rem',
                             }}
-                            labelStyle={{ color: '#b0aea5', marginBottom: '0.25rem' }}
-                            cursor={{ fill: 'rgba(201,100,66,0.06)' }}
+                            labelStyle={{ color: 'var(--mute)', marginBottom: '0.25rem' }}
+                            cursor={{ fill: 'rgba(17,17,17,0.04)' }}
                         />
                         <Legend
-                          wrapperStyle={{ fontSize: '0.8125rem', color: '#87867f', paddingTop: '0.5rem' }}
+                          wrapperStyle={{ fontSize: '0.8125rem', color: 'var(--mute)', paddingTop: '0.5rem' }}
                         />
-                        <Bar dataKey="Total" fill="#c96442" name="Total Deal Value" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="Net" fill="#d97757" name="Net Revenue" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="Total" fill="var(--chart-1)" name="Total Deal Value" radius={[0, 0, 0, 0]} />
+                        <Bar dataKey="Net" fill="var(--chart-2)" name="Net Revenue" radius={[0, 0, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-[#30302e] text-sm text-[#87867f]">
+                  <div className="flex h-full items-center justify-center border border-dashed border-[var(--hairline)] text-sm text-[var(--mute)]">
                     No financial data available yet.
                   </div>
                 )}
@@ -940,7 +940,7 @@ function DashboardContent() {
                       <td className="p-3 text-sm text-muted-foreground">{agent.email}</td>
                       <td className="p-3 text-sm">{agent.branchNames || 'N/A'}</td>
                       <td className="p-3 text-sm">
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                        <span className="inline-flex items-center rounded-full bg-[var(--soft-cloud)] px-3 py-1 text-xs font-medium text-[var(--success)]">
                           Active
                         </span>
                       </td>

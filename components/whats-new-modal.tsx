@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { X, Sparkles, Bug, Zap, Shield } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -37,10 +37,10 @@ const CHANGES: ChangeItem[] = [
   {
     icon: <Zap size={14} />,
     tag: 'Feature',
-    tagBg: 'rgba(201,100,66,0.15)',
-    tagColor: '#d97757',
-    iconBg: 'rgba(201,100,66,0.12)',
-    iconColor: '#d97757',
+    tagBg: '#f5f5f5',
+    tagColor: '#111111',
+    iconBg: '#f5f5f5',
+    iconColor: '#111111',
     title: 'Interview Support module',
     description:
       'A dedicated Interview Support tab lets you send structured interview emails with candidate details, technology, interview round, and job description — with duplicate subject prevention.',
@@ -48,10 +48,10 @@ const CHANGES: ChangeItem[] = [
   {
     icon: <Zap size={14} />,
     tag: 'Feature',
-    tagBg: 'rgba(201,100,66,0.15)',
-    tagColor: '#d97757',
-    iconBg: 'rgba(201,100,66,0.12)',
-    iconColor: '#d97757',
+    tagBg: '#f5f5f5',
+    tagColor: '#111111',
+    iconBg: '#f5f5f5',
+    iconColor: '#111111',
     title: 'Sales Assessment Support module',
     description:
       'Send assessment support emails directly from the CRM with resume & file attachments, job descriptions, and full audit logging.',
@@ -81,12 +81,9 @@ const CHANGES: ChangeItem[] = [
 ];
 
 export function WhatsNewModal() {
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    const seen = localStorage.getItem(STORAGE_KEY);
-    if (!seen) setOpen(true);
-  }, []);
+  const [open, setOpen] = useState(() => (
+    typeof window !== 'undefined' && !localStorage.getItem(STORAGE_KEY)
+  ));
 
   const dismiss = () => {
     localStorage.setItem(STORAGE_KEY, 'true');
@@ -103,9 +100,7 @@ export function WhatsNewModal() {
         style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(15,15,14,0.72)',
-          backdropFilter: 'blur(6px)',
-          WebkitBackdropFilter: 'blur(6px)',
+          background: 'rgba(17,17,17,0.42)',
           zIndex: 9998,
           animation: 'wnFadeIn 0.22s ease',
         }}
@@ -125,29 +120,28 @@ export function WhatsNewModal() {
           width: 'min(520px, 94vw)',
           maxHeight: '88vh',
           overflowY: 'auto',
-          /* card bg = --surface-1 #1c1b19 */
-          background: '#1c1b19',
-          border: '1px solid #30302e',
-          borderRadius: '0.875rem',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.65), 0 2px 8px rgba(0,0,0,0.4)',
+          background: '#ffffff',
+          border: '1px solid #e5e5e5',
+          borderRadius: 0,
+          boxShadow: 'none',
           animation: 'wnSlideUp 0.28s cubic-bezier(0.34,1.4,0.64,1)',
           fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
           scrollbarWidth: 'thin',
-          scrollbarColor: '#30302e transparent',
+          scrollbarColor: '#cacacb transparent',
         }}
       >
         {/* ── Header ── */}
         <div
           style={{
             padding: '1.375rem 1.375rem 1rem',
-            borderBottom: '1px solid #30302e',
+            borderBottom: '1px solid #e5e5e5',
             display: 'flex',
             alignItems: 'flex-start',
             gap: '0.875rem',
             position: 'sticky',
             top: 0,
-            background: '#1c1b19',
-            borderRadius: '0.875rem 0.875rem 0 0',
+            background: '#ffffff',
+            borderRadius: 0,
             zIndex: 1,
           }}
         >
@@ -156,13 +150,13 @@ export function WhatsNewModal() {
             style={{
               width: 38,
               height: 38,
-              borderRadius: '0.625rem',
-              background: 'rgba(201,100,66,0.16)',
-              border: '1px solid rgba(201,100,66,0.28)',
+              borderRadius: '9999px',
+              background: '#111111',
+              border: '1px solid #111111',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#d97757',
+              color: '#ffffff',
               flexShrink: 0,
             }}
           >
@@ -171,29 +165,28 @@ export function WhatsNewModal() {
 
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-              {/* Playfair Display heading — matches dashboard h-tags */}
               <h2
                 id="wn-title"
                 style={{
                   margin: 0,
                   fontSize: '1.125rem',
                   fontWeight: 500,
-                  color: '#faf9f5',
-                  fontFamily: "'Playfair Display', Georgia, 'Times New Roman', serif",
+                  color: '#111111',
+                  fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif",
                   letterSpacing: 'normal',
                   lineHeight: 1.2,
                 }}
               >
-                What's New
+                What&apos;s New
               </h2>
               {/* Version pill — matches badge-brand */}
               <span
                 style={{
                   fontSize: '0.625rem',
                   fontWeight: 600,
-                  color: '#d97757',
-                  background: 'rgba(201,100,66,0.15)',
-                  border: '1px solid rgba(201,100,66,0.30)',
+                  color: '#111111',
+                  background: '#f5f5f5',
+                  border: '1px solid #cacacb',
                   padding: '0.1rem 0.45rem',
                   borderRadius: '999px',
                   letterSpacing: '0.05em',
@@ -207,11 +200,11 @@ export function WhatsNewModal() {
               style={{
                 margin: '0.2rem 0 0',
                 fontSize: '0.8125rem',
-                color: '#87867f',
+                color: '#707072',
                 lineHeight: 1.5,
               }}
             >
-              Here's what changed in this update
+              Here&apos;s what changed in this update
             </p>
           </div>
 
@@ -221,9 +214,9 @@ export function WhatsNewModal() {
             aria-label="Close"
             style={{
               background: 'transparent',
-              border: '1px solid #30302e',
-              borderRadius: '0.5rem',
-              color: '#87867f',
+              border: '1px solid #e5e5e5',
+              borderRadius: '9999px',
+              color: '#707072',
               cursor: 'pointer',
               padding: '0.3rem',
               display: 'flex',
@@ -234,15 +227,15 @@ export function WhatsNewModal() {
             }}
             onMouseEnter={(e) => {
               const btn = e.currentTarget;
-              btn.style.background = '#2e2d2b';
-              btn.style.color = '#faf9f5';
-              btn.style.borderColor = '#3d3d3a';
+              btn.style.background = '#f5f5f5';
+              btn.style.color = '#111111';
+              btn.style.borderColor = '#cacacb';
             }}
             onMouseLeave={(e) => {
               const btn = e.currentTarget;
               btn.style.background = 'transparent';
-              btn.style.color = '#87867f';
-              btn.style.borderColor = '#30302e';
+              btn.style.color = '#707072';
+              btn.style.borderColor = '#e5e5e5';
             }}
           >
             <X size={15} />
@@ -258,10 +251,10 @@ export function WhatsNewModal() {
                 display: 'flex',
                 gap: '0.875rem',
                 padding: '0.875rem 1.375rem',
-                borderBottom: i < CHANGES.length - 1 ? '1px solid rgba(48,48,46,0.7)' : 'none',
+                borderBottom: i < CHANGES.length - 1 ? '1px solid #e5e5e5' : 'none',
                 transition: 'background 0.12s',
               }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#252422'; }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#f5f5f5'; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
             >
               {/* Icon */}
@@ -269,7 +262,7 @@ export function WhatsNewModal() {
                 style={{
                   width: 30,
                   height: 30,
-                  borderRadius: '0.5rem',
+                  borderRadius: '9999px',
                   background: item.iconBg,
                   display: 'flex',
                   alignItems: 'center',
@@ -311,7 +304,7 @@ export function WhatsNewModal() {
                     style={{
                       fontSize: '0.875rem',
                       fontWeight: 500,
-                      color: '#faf9f5',
+                      color: '#111111',
                       lineHeight: 1.3,
                     }}
                   >
@@ -322,7 +315,7 @@ export function WhatsNewModal() {
                   style={{
                     margin: 0,
                     fontSize: '0.8rem',
-                    color: '#87867f',
+                    color: '#707072',
                     lineHeight: 1.6,
                   }}
                 >
@@ -339,16 +332,16 @@ export function WhatsNewModal() {
             padding: '1rem 1.375rem 1.25rem',
             display: 'flex',
             justifyContent: 'flex-end',
-            borderTop: '1px solid #30302e',
+            borderTop: '1px solid #e5e5e5',
           }}
         >
           <button
             onClick={dismiss}
             style={{
-              background: '#c96442',
+              background: '#111111',
               border: 'none',
-              borderRadius: '0.625rem',
-              color: '#faf9f5',
+              borderRadius: '9999px',
+              color: '#ffffff',
               fontWeight: 500,
               fontSize: '0.875rem',
               padding: '0.5rem 1.375rem',
@@ -358,11 +351,11 @@ export function WhatsNewModal() {
               letterSpacing: '0.01em',
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.background = '#d97757';
-              (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)';
+              (e.currentTarget as HTMLButtonElement).style.background = '#111111';
+              (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.98)';
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.background = '#c96442';
+              (e.currentTarget as HTMLButtonElement).style.background = '#111111';
               (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)';
             }}
           >

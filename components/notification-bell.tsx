@@ -80,18 +80,18 @@ export function NotificationBell() {
         aria-expanded={open}
         title="Notifications"
         onClick={() => setOpen((value) => !value)}
-        className="relative flex size-10 items-center justify-center rounded-md border border-border bg-background text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3898ec]"
+        className="relative flex size-10 items-center justify-center rounded-full border border-border bg-[var(--soft-cloud)] text-foreground shadow-none transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ink)]"
       >
         <Bell className="h-4 w-4" />
         {unreadCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-[#c96442] px-1.5 text-[0.6875rem] font-semibold text-white">
+          <span className="absolute -right-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-[var(--ink)] px-1.5 text-[0.6875rem] font-semibold text-white">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-12 w-[min(22rem,calc(100vw-2rem))] rounded-md border border-border bg-background shadow-lg">
+        <div className="absolute right-0 top-12 w-[min(22rem,calc(100vw-2rem))] border border-border bg-background shadow-none">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div>
               <p className="text-sm font-semibold">Notifications</p>
@@ -122,7 +122,7 @@ export function NotificationBell() {
               <p className="p-3 text-sm text-muted-foreground">No notifications yet.</p>
             ) : (
               visibleNotifications.map((notification) => (
-                <div key={notification.$id} className="rounded-md px-3 py-2 hover:bg-muted/50">
+                <div key={notification.$id} className="px-3 py-2 hover:bg-muted/50">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{notification.title}</p>
@@ -137,7 +137,7 @@ export function NotificationBell() {
                         aria-label="Mark notification read"
                         title="Mark read"
                         onClick={() => markRead(notification.$id)}
-                        className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                        className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
                       >
                         <Check className="h-3.5 w-3.5" />
                       </button>

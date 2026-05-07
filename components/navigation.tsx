@@ -50,9 +50,9 @@ export function Navigation({
             width: '2.5rem', height: '2.5rem',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             borderRadius: '0.5rem',
-            background: 'var(--surface-1)',
+            background: 'var(--soft-cloud)',
             border: '1px solid var(--border)',
-            color: 'var(--muted-foreground)',
+            color: 'var(--ink)',
             cursor: 'pointer',
             transition: 'background 0.12s ease, color 0.12s ease',
           }}
@@ -67,8 +67,7 @@ export function Navigation({
           onClick={() => setMobileMenuOpen(false)}
           style={{
             position: 'fixed', inset: 0, zIndex: 40,
-            background: 'rgba(15,15,14,0.60)',
-            backdropFilter: 'blur(4px)',
+            background: 'rgba(17,17,17,0.42)',
           }}
         />
       )}
@@ -89,9 +88,10 @@ export function Navigation({
             <div className="brand-accent-bar" style={{ marginBottom: '0.625rem' }} />
             <div className={isCollapsed ? 'lg:sr-only' : ''}>
               <h1 style={{
-                fontFamily: "'Playfair Display', Georgia, serif",
-                fontWeight: 500, fontSize: '1.1875rem',
+                fontFamily: "'Bebas Neue', 'Anton', 'Arial Narrow', Arial, sans-serif",
+                fontWeight: 400, fontSize: '1.5rem',
                 color: 'var(--foreground)', lineHeight: 1.20, margin: 0,
+                textTransform: 'uppercase',
               }}>
                 SalesHub CRM
               </h1>
@@ -110,7 +110,7 @@ export function Navigation({
             aria-pressed={isCollapsed}
             title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             onClick={() => onCollapsedChange(!isCollapsed)}
-            className="hidden lg:flex size-9 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="hidden lg:flex size-10 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             {isCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
           </button>
@@ -147,8 +147,8 @@ export function Navigation({
             style={{
               display: 'flex', alignItems: 'center', gap: '0.625rem',
               padding: '0.5rem 0.625rem',
-              borderRadius: '0.5rem',
-              background: 'var(--surface-2)',
+              borderRadius: '1.5rem',
+              background: 'var(--soft-cloud)',
               marginBottom: '0.375rem',
             }}
             title={`${user.name} - ${formatRoleLabel(user.role)}`}
@@ -156,13 +156,13 @@ export function Navigation({
             {/* Avatar */}
             <div style={{
               width: '2rem', height: '2rem', borderRadius: '50%', flexShrink: 0,
-              background: 'rgba(201,100,66,0.18)',
+              background: 'var(--ink)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <span style={{
                 fontSize: '0.8125rem', fontWeight: 600,
-                color: '#d97757',
-                fontFamily: "'Playfair Display', Georgia, serif",
+                color: 'var(--canvas)',
+                fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif",
               }}>
                 {user.name?.charAt(0).toUpperCase() ?? 'U'}
               </span>
@@ -204,7 +204,7 @@ export function Navigation({
               style={{
                 display: 'flex', alignItems: 'center', gap: '0.5rem',
                 width: '100%', padding: '0.4375rem 0.625rem',
-                borderRadius: '0.5rem', border: 'none',
+                borderRadius: '9999px', border: 'none',
                 background: 'transparent',
                 fontSize: '0.875rem', color: 'var(--muted-foreground)',
                 cursor: 'pointer',
@@ -212,7 +212,7 @@ export function Navigation({
                 marginBottom: '0.25rem',
               }}
               onMouseEnter={e => {
-                (e.currentTarget as HTMLButtonElement).style.background = 'rgba(201,100,66,0.10)';
+                (e.currentTarget as HTMLButtonElement).style.background = 'var(--soft-cloud)';
                 (e.currentTarget as HTMLButtonElement).style.color = 'var(--foreground)';
               }}
               onMouseLeave={e => {
@@ -231,7 +231,7 @@ export function Navigation({
             style={{
               display: 'flex', alignItems: 'center', gap: '0.5rem',
               width: '100%', padding: '0.4375rem 0.625rem',
-              borderRadius: '0.5rem', border: 'none',
+              borderRadius: '9999px', border: 'none',
               background: 'transparent',
               fontSize: '0.875rem', color: 'var(--muted-foreground)',
               cursor: 'pointer',
@@ -239,7 +239,7 @@ export function Navigation({
             }}
             onMouseEnter={e => {
               (e.currentTarget as HTMLButtonElement).style.background = 'rgba(181,51,51,0.10)';
-              (e.currentTarget as HTMLButtonElement).style.color = '#c0392b';
+                (e.currentTarget as HTMLButtonElement).style.color = 'var(--sale)';
             }}
             onMouseLeave={e => {
               (e.currentTarget as HTMLButtonElement).style.background = 'transparent';

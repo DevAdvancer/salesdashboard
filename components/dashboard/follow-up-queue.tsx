@@ -44,13 +44,13 @@ function QueueList({
         <span className="text-xs text-muted-foreground">{items.length}</span>
       </div>
       {items.length === 0 ? (
-        <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
+        <p className="border border-dashed border-border p-3 text-sm text-muted-foreground">
           Nothing here right now.
         </p>
       ) : (
         <div className="space-y-2">
           {items.slice(0, 5).map((item) => (
-            <div key={`${title}-${item.leadId}`} className="rounded-md border border-border p-3">
+            <div key={`${title}-${item.leadId}`} className="border border-border bg-[var(--soft-cloud)] p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium">{item.leadName}</p>
@@ -86,7 +86,7 @@ function FollowUpSkeleton() {
             <Skeleton className="h-3 w-6" />
           </div>
           {Array.from({ length: 3 }).map((__, rowIndex) => (
-            <div key={rowIndex} className="rounded-md border border-border p-3">
+            <div key={rowIndex} className="border border-border p-3">
               <Skeleton className="h-4 w-36" />
               <Skeleton className="mt-2 h-3 w-48" />
               <Skeleton className="mt-3 h-3 w-28" />

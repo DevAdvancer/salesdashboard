@@ -6,58 +6,34 @@ import { Spinner } from "./spinner"
 const buttonVariants = cva(
   [
     "inline-flex items-center justify-center gap-2 whitespace-nowrap",
-    "text-sm font-medium leading-none",
+    "text-sm font-medium leading-normal",
     "transition-all duration-150 ease-in-out",
     "cursor-pointer select-none",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3898ec] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ink)] focus-visible:ring-offset-[12px] focus-visible:ring-offset-[var(--soft-cloud)]",
     "disabled:pointer-events-none disabled:opacity-40",
     "[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   ].join(" "),
   {
     variants: {
       variant: {
-        /* ── Terracotta Brand — primary CTA ── */
         default:
-          "bg-[#c96442] text-[#faf9f5] rounded-[0.75rem] px-4 py-2.5 " +
-          "shadow-[0_0_0_1px_#c96442] " +
-          "hover:bg-[#b85838] hover:shadow-[0_0_0_1px_#b85838] " +
-          "active:scale-[0.97]",
-
-        /* ── Warm secondary — works on both dark and light ── */
+          "bg-[var(--ink)] text-[var(--canvas)] rounded-full px-8 py-3 shadow-none hover:bg-[var(--ink)] active:scale-50 active:opacity-50",
         secondary:
-          "bg-[var(--surface-2)] text-[var(--warm-silver)] rounded-[0.625rem] px-4 py-2.5 " +
-          "border border-[var(--border)] " +
-          "hover:bg-[var(--surface-3)] hover:text-[var(--foreground)] hover:border-[var(--dark-warm)] " +
-          "active:scale-[0.97]",
-
-        /* ── Outline / ghost-border ── */
+          "bg-[var(--soft-cloud)] text-[var(--ink)] rounded-full border border-transparent px-8 py-3 hover:bg-[var(--soft-cloud)] active:scale-50 active:opacity-50",
         outline:
-          "bg-transparent text-[var(--foreground)] rounded-[0.625rem] px-4 py-2.5 " +
-          "border border-[var(--border)] " +
-          "hover:bg-[var(--accent)] hover:border-[var(--dark-warm)] " +
-          "active:scale-[0.97]",
-
-        /* ── Ghost — icon actions, low-emphasis ── */
+          "bg-[var(--canvas)] text-[var(--ink)] rounded-full border border-[var(--hairline)] px-6 py-2.5 hover:bg-[var(--soft-cloud)] active:scale-50 active:opacity-50",
         ghost:
-          "bg-transparent text-[var(--muted-foreground)] rounded-[0.5rem] px-3 py-2 " +
-          "hover:bg-[var(--accent)] hover:text-[var(--foreground)] " +
-          "active:scale-[0.97]",
-
-        /* ── Link ── */
+          "bg-transparent text-[var(--mute)] rounded-full px-3 py-2 hover:bg-[var(--accent)] hover:text-[var(--foreground)] active:scale-50 active:opacity-50",
         link:
-          "bg-transparent text-[#d97757] underline-offset-4 rounded px-1 " +
-          "hover:underline hover:text-[#c96442]",
-
-        /* ── Destructive ── */
+          "bg-transparent text-[var(--ink)] underline-offset-4 rounded-none px-1 hover:underline hover:text-[var(--charcoal)]",
         destructive:
-          "bg-[#b53333] text-[#faf9f5] rounded-[0.75rem] px-4 py-2.5 " +
-          "hover:bg-[#9e2c2c] active:scale-[0.97]",
+          "bg-[var(--sale)] text-[var(--canvas)] rounded-full px-8 py-3 hover:bg-[var(--sale-deep)] active:scale-50 active:opacity-50",
       },
       size: {
-        default: "h-9 px-4 py-2",
-        sm:      "h-8 text-xs px-3 rounded-[0.5rem]",
-        lg:      "h-10 px-6 text-base rounded-[0.875rem]",
-        icon:    "h-9 w-9 p-0",
+        default: "h-12 px-8 py-3",
+        sm: "h-10 text-sm px-4 rounded-full",
+        lg: "h-12 px-8 text-base rounded-full",
+        icon: "h-10 w-10 rounded-full p-0",
       },
     },
     defaultVariants: {
@@ -81,7 +57,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
         disabled={disabled || loading}
-        style={{ cursor: 'pointer', ...props.style }}
+        style={{ cursor: "pointer", ...props.style }}
         {...props}
       >
         {loading && <Spinner size="sm" />}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Lock, ShieldCheck, UserRound } from 'lucide-react';
+import { Lock, Moon, ShieldCheck, Sun, UserRound } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { updateOwnProfileAction } from '@/app/actions/profile';
 import { ProtectedRoute } from '@/components/protected-route';
@@ -42,6 +42,25 @@ function SettingsContent() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [branchNames, setBranchNames] = useState<string[]>([]);
   const [teamLeadName, setTeamLeadName] = useState<string | null>(null);
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('salesdashboard-theme') === 'dark' ? 'dark' : 'light';
+    setTheme(savedTheme);
+    document.documentElement.classList.toggle('dark', savedTheme === 'dark');
+    document.documentElement.style.colorScheme = savedTheme;
+  }, []);
+
+  const updateTheme = (nextTheme: 'light' | 'dark') => {
+    setTheme(nextTheme);
+    localStorage.setItem('salesdashboard-theme', nextTheme);
+    document.documentElement.classList.toggle('dark', nextTheme === 'dark');
+    document.documentElement.style.colorScheme = nextTheme;
+    toast({
+      title: `${nextTheme === 'dark' ? 'Dark' : 'Light'} theme saved`,
+      description: 'Your dashboard will use this theme next time you sign in.',
+    });
+  };
 
   useEffect(() => {
     if (user) {
@@ -268,6 +287,43 @@ function SettingsContent() {
             </CardContent>
           </Card>
         )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Appearance</CardTitle>
+            <CardDescription>Choose the dashboard theme saved on this device.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-2 rounded-[1.5rem] bg-[var(--soft-cloud)] p-1">
+              <button
+                type="button"
+                onClick={() => updateTheme('light')}
+                aria-pressed={theme === 'light'}
+                className={`flex h-11 items-center justify-center gap-2 rounded-full text-sm font-medium transition-colors ${
+                  theme === 'light'
+                    ? 'bg-[var(--ink)] text-[var(--canvas)]'
+                    : 'text-[var(--mute)] hover:text-[var(--ink)]'
+                }`}
+              >
+                <Sun className="h-4 w-4" />
+                Light
+              </button>
+              <button
+                type="button"
+                onClick={() => updateTheme('dark')}
+                aria-pressed={theme === 'dark'}
+                className={`flex h-11 items-center justify-center gap-2 rounded-full text-sm font-medium transition-colors ${
+                  theme === 'dark'
+                    ? 'bg-[var(--ink)] text-[var(--canvas)]'
+                    : 'text-[var(--mute)] hover:text-[var(--ink)]'
+                }`}
+              >
+                <Moon className="h-4 w-4" />
+                Dark
+              </button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

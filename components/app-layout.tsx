@@ -47,7 +47,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <div style={{
             width: '2.25rem', height: '2.25rem', borderRadius: '50%',
             border: '2px solid var(--border)',
-            borderTopColor: 'var(--terracotta)',
+            borderTopColor: 'var(--ink)',
             animation: 'spin 0.75s linear infinite',
             margin: '0 auto 1rem',
           }} />

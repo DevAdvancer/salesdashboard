@@ -18,7 +18,7 @@ const DialogOverlay = React.forwardRef<
     ref={ref}
     className={cn(
       "fixed inset-0 z-50",
-      "bg-[rgba(15,15,14,0.72)] backdrop-blur-[6px]",
+      "bg-[rgba(17,17,17,0.42)]",
       "data-[state=open]:animate-in data-[state=closed]:animate-out",
       "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className
@@ -42,12 +42,12 @@ const DialogContent = React.forwardRef<
         // Size
         "grid w-full max-w-lg gap-4",
         // Shape
-        "rounded-2xl",
+        "rounded-none",
         // Colors — fully CSS-variable driven
         "bg-[var(--card)] border border-[var(--border)]",
         "text-[var(--card-foreground)]",
         // Shadow — ring + whisper depth
-        "shadow-[0_0_0_1px_var(--border),0_16px_48px_rgba(0,0,0,0.32)]",
+        "shadow-none",
         // Padding
         "p-6",
         // Animation
@@ -65,12 +65,12 @@ const DialogContent = React.forwardRef<
       <DialogPrimitive.Close
         className={cn(
           "absolute right-4 top-4",
-          "flex h-7 w-7 items-center justify-center rounded-lg",
+          "flex h-10 w-10 items-center justify-center rounded-full",
           "text-[var(--muted-foreground)]",
           "border border-[var(--border)]",
           "bg-[var(--surface-2,var(--card))]",
           "opacity-80 transition-all hover:opacity-100 hover:bg-[var(--accent)]",
-          "focus:outline-none focus:ring-2 focus:ring-[#3898ec]",
+          "focus:outline-none focus:ring-2 focus:ring-[var(--ink)]",
           "cursor-pointer"
         )}
       >
@@ -113,7 +113,7 @@ const DialogTitle = React.forwardRef<
       "text-[var(--foreground)]",
       className
     )}
-    style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
+    style={{ fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif" }}
     {...props}
   />
 ))
