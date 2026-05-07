@@ -23,8 +23,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "SalesHub CRM",
-  description: "Manager-controlled customer relationship management system",
+  title: "SalesHub CRM | Silverspace Inc.",
+  description: "Manager-controlled customer relationship management system by Silverspace Inc.",
   icons: {
     icon: "/silverspace.png",
     apple: "/silverspace.png",
@@ -37,7 +37,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className="dark" suppressHydrationWarning>
       <body
         className={`${inter.variable} ${playfairDisplay.variable} antialiased`}
       >

@@ -1,6 +1,7 @@
 'use client';
 
 import { Navigation } from './navigation';
+import { NotificationBell } from './notification-bell';
 import { WhatsNewModal } from './whats-new-modal';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { useRouter, usePathname } from 'next/navigation';
@@ -16,8 +17,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user && !isPublicRoute) router.push('/login');
-  }, [user, loading, isPublicRoute, router]);
+    if (!loading && !user && !isPublicRoute) {
+      router.push('/login');
+    } else if (!loading && user && pathname === '/login') {
+      router.push('/dashboard');
+    }
+  }, [user, loading, isPublicRoute, pathname, router]);
 
   if (loading) {
     return (
@@ -44,6 +49,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         isCollapsed={isSidebarCollapsed}
         onCollapsedChange={setIsSidebarCollapsed}
       />
+      <NotificationBell />
       <main
         className={`flex-1 p-4 pt-16 transition-[margin] duration-300 sm:p-6 sm:pt-16 lg:p-8 lg:pt-8 ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}
         style={{ minWidth: 0 }}

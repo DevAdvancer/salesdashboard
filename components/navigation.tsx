@@ -22,7 +22,7 @@ export function Navigation({
   onCollapsedChange = () => {},
 }: NavigationProps = {}) {
   const { user, logout } = useAuth();
-  const { canAccess } = useAccess();
+  const { canAccess, isLoading: accessLoading } = useAccess();
   const router = useRouter();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -34,7 +34,9 @@ export function Navigation({
 
   if (!user) return null;
 
-  const visibleItems = NAV_ITEMS.filter(item => canAccess(item.key as ComponentKey));
+  const visibleItems = accessLoading
+    ? []
+    : NAV_ITEMS.filter(item => canAccess(item.key as ComponentKey));
 
   return (
     <>

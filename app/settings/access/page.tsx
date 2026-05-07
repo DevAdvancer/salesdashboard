@@ -1,12 +1,19 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { updateAccessRuleAction } from '@/app/actions/access-settings';
 import { databases } from '@/lib/appwrite';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { useAccess, ComponentKey } from '@/lib/contexts/access-control-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { ProtectedRoute } from '@/components/protected-route';
+import {
+  getDefaultComponentAccess,
+  isRoleEligibleForComponent,
+} from '@/lib/constants/component-access';
+import type { UserRole } from '@/lib/types';
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const ACCESS_CONFIG_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_ACCESS_CONFIG_COLLECTION_ID!;
@@ -27,6 +34,15 @@ const ALL_COMPONENTS: { key: ComponentKey; label: string; description: string }[
   { key: 'settings', label: 'Settings', description: 'System settings and configuration' },
   { key: 'branch-management', label: 'Branch Management', description: 'Manage organizational branches' },
   { key: 'audit-logs', label: 'Audit Logs', description: 'System activity and user actions' },
+  { key: 'mock', label: 'Mock Interview', description: 'Mock interview support workflow' },
+  { key: 'assessment-support', label: 'Assessment', description: 'Assessment support workflow' },
+  { key: 'interview-support', label: 'Interview Support', description: 'Interview support workflow' },
+  { key: 'hierarchy', label: 'Hierarchy', description: 'Organization reporting structure' },
+  { key: 'work-queue', label: 'Work Queue', description: 'Daily follow-up and stale lead queue' },
+  { key: 'reports', label: 'Reports', description: 'Role-based performance reports' },
+  { key: 'coaching-notes', label: 'Coaching Notes', description: 'Leadership notes for team coaching' },
+  { key: 'review-queue', label: 'Review Queue', description: 'Escalations, approvals, and review items' },
+  { key: 'notifications', label: 'Notifications', description: 'User alerts and reminders' },
 ];
 
 export default function AccessConfigPage() {
@@ -38,15 +54,23 @@ export default function AccessConfigPage() {
 }
 
 function AccessConfigContent() {
-  const { isAdmin, isManager } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { refreshRules } = useAccess();
+  const router = useRouter();
   const [rules, setRules] = useState<Map<string, AccessRule>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const isManagerRole = user?.role === 'manager';
+  const canManageAccess = user?.role === 'admin' || user?.role === 'manager';
 
   useEffect(() => {
+    if (user && !canManageAccess) {
+      router.push('/settings');
+      return;
+    }
+
     fetchRules();
-  }, []);
+  }, [canManageAccess, router, user]);
 
   const fetchRules = async () => {
     try {
@@ -57,13 +81,14 @@ function AccessConfigContent() {
       );
 
       const rulesMap = new Map<string, AccessRule>();
-      response.documents.forEach((doc: any) => {
-        const key = `${doc.componentKey}-${doc.role}`;
+      response.documents.forEach((doc) => {
+        const rule = doc as unknown as AccessRule;
+        const key = `${rule.componentKey}-${rule.role}`;
         rulesMap.set(key, {
-          $id: doc.$id,
-          componentKey: doc.componentKey,
-          role: doc.role,
-          allowed: doc.allowed,
+          $id: rule.$id,
+          componentKey: rule.componentKey,
+          role: rule.role,
+          allowed: rule.allowed,
         });
       });
 
@@ -75,7 +100,19 @@ function AccessConfigContent() {
     }
   };
 
-  const toggleAccess = async (componentKey: ComponentKey, role: 'manager' | 'assistant_manager' | 'team_lead' | 'agent') => {
+  const toggleAccess = async (componentKey: ComponentKey, role: Exclude<UserRole, 'admin'>) => {
+    if (!user) {
+      return;
+    }
+
+    if (componentKey === 'settings') {
+      return;
+    }
+
+    if (!isRoleEligibleForComponent(componentKey, role)) {
+      return;
+    }
+
     const key = `${componentKey}-${role}`;
     const existingRule = rules.get(key);
     // Calculate new allowed state based on CURRENT effective permission
@@ -84,36 +121,21 @@ function AccessConfigContent() {
 
     try {
       setIsSaving(true);
-
-      if (existingRule?.$id) {
-        await databases.updateDocument(
-          DATABASE_ID,
-          ACCESS_CONFIG_COLLECTION_ID,
-          existingRule.$id,
-          { allowed: newAllowed }
-        );
-      } else {
-        const newDoc = await databases.createDocument(
-          DATABASE_ID,
-          ACCESS_CONFIG_COLLECTION_ID,
-          'unique()',
-          { componentKey, role, allowed: newAllowed }
-        );
-
-        const updatedRules = new Map(rules);
-        updatedRules.set(key, {
-          $id: newDoc.$id,
-          componentKey,
-          role,
-          allowed: newAllowed,
-        });
-        setRules(updatedRules);
-        await refreshRules();
-        return;
-      }
+      const savedRule = await updateAccessRuleAction({
+        currentUserId: user.$id,
+        componentKey,
+        role,
+        allowed: newAllowed,
+        ruleId: existingRule?.$id,
+      });
 
       const updatedRules = new Map(rules);
-      updatedRules.set(key, { ...existingRule!, allowed: newAllowed });
+      updatedRules.set(key, {
+        $id: savedRule.$id,
+        componentKey: savedRule.componentKey,
+        role: savedRule.role,
+        allowed: savedRule.allowed,
+      });
       setRules(updatedRules);
       await refreshRules();
     } catch (error) {
@@ -123,20 +145,19 @@ function AccessConfigContent() {
     }
   };
 
-  const isAllowed = (componentKey: ComponentKey, role: 'manager' | 'assistant_manager' | 'team_lead' | 'agent'): boolean => {
+  const isAllowed = (componentKey: ComponentKey, role: Exclude<UserRole, 'admin'>): boolean => {
+    if (componentKey === 'settings') {
+      return isRoleEligibleForComponent(componentKey, role);
+    }
+
+    if (!isRoleEligibleForComponent(componentKey, role)) {
+      return false;
+    }
+
     const key = `${componentKey}-${role}`;
     const rule = rules.get(key);
     if (rule !== undefined) return rule.allowed;
-    // Defaults:
-    // - manager=true (except branch-management)
-    // - assistant_manager=true (except branch-management)
-    // - team_lead=true (dashboard, leads, history, user-management)
-    // - agent=false (except dashboard, leads)
-    if (role === 'manager') return componentKey !== 'branch-management';
-    if (role === 'assistant_manager') return componentKey !== 'branch-management' && componentKey !== 'settings';
-    if (role === 'team_lead') return ['dashboard', 'leads', 'history', 'user-management'].includes(componentKey);
-    if (role === 'agent') return componentKey === 'dashboard' || componentKey === 'leads';
-    return false;
+    return getDefaultComponentAccess(componentKey, role);
   };
 
   // Admin sees all components (including branch-management)
@@ -147,9 +168,12 @@ function AccessConfigContent() {
 
   // Admin can toggle: manager + team_lead + agent columns
   // Manager can toggle: team_lead + agent columns only
-  const canEditManager = isAdmin;
-  const canEditTeamLead = isAdmin || isManager;
-  const canEditAgent = isAdmin || isManager;
+  const canEditTeamLead = isAdmin || isManagerRole;
+  const canEditAgent = isAdmin || isManagerRole;
+
+  if (!canManageAccess) {
+    return null;
+  }
 
   if (isLoading) {
     return (
@@ -207,7 +231,7 @@ function AccessConfigContent() {
                       type="checkbox"
                       checked={isAllowed(component.key, 'manager')}
                       onChange={() => toggleAccess(component.key, 'manager')}
-                      disabled={isSaving}
+                      disabled={isSaving || component.key === 'settings' || !isRoleEligibleForComponent(component.key, 'manager')}
                       className="h-5 w-5 rounded border-input disabled:opacity-50 cursor-pointer"
                     />
                   </div>
@@ -221,7 +245,7 @@ function AccessConfigContent() {
                       type="checkbox"
                       checked={isAllowed(component.key, 'assistant_manager')}
                       onChange={() => toggleAccess(component.key, 'assistant_manager')}
-                      disabled={isSaving}
+                      disabled={isSaving || component.key === 'settings' || !isRoleEligibleForComponent(component.key, 'assistant_manager')}
                       className="h-5 w-5 rounded border-input disabled:opacity-50 cursor-pointer"
                     />
                   </div>
@@ -230,11 +254,11 @@ function AccessConfigContent() {
                 {/* Team Lead column */}
                 <div className="flex sm:justify-center items-center gap-2 sm:gap-0">
                   <span className="text-sm text-muted-foreground sm:hidden">Team Lead:</span>
-                  <input
-                    type="checkbox"
-                    checked={isAllowed(component.key, 'team_lead')}
-                    onChange={() => toggleAccess(component.key, 'team_lead')}
-                    disabled={isSaving || !canEditTeamLead}
+                    <input
+                      type="checkbox"
+                      checked={isAllowed(component.key, 'team_lead')}
+                      onChange={() => toggleAccess(component.key, 'team_lead')}
+                    disabled={isSaving || component.key === 'settings' || !canEditTeamLead || !isRoleEligibleForComponent(component.key, 'team_lead')}
                     className="h-5 w-5 rounded border-input disabled:opacity-50 cursor-pointer"
                   />
                 </div>
@@ -242,11 +266,11 @@ function AccessConfigContent() {
                 {/* Agent column */}
                 <div className="flex sm:justify-center items-center gap-2 sm:gap-0">
                   <span className="text-sm text-muted-foreground sm:hidden">Agent:</span>
-                  <input
-                    type="checkbox"
-                    checked={isAllowed(component.key, 'agent')}
-                    onChange={() => toggleAccess(component.key, 'agent')}
-                    disabled={isSaving || !canEditAgent}
+                    <input
+                      type="checkbox"
+                      checked={isAllowed(component.key, 'agent')}
+                      onChange={() => toggleAccess(component.key, 'agent')}
+                    disabled={isSaving || component.key === 'settings' || !canEditAgent || !isRoleEligibleForComponent(component.key, 'agent')}
                     className="h-5 w-5 rounded border-input disabled:opacity-50 cursor-pointer"
                   />
                 </div>

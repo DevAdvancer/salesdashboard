@@ -59,16 +59,16 @@ describe('Access Control System', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // Agents get default access to dashboard and leads only
+      // Agents get default access to work basics and their own settings
       expect(result.current.canAccess('dashboard')).toBe(true);
       expect(result.current.canAccess('leads')).toBe(true);
+      expect(result.current.canAccess('settings')).toBe(true);
 
       // Agents should be denied access to other components by default
       const deniedComponents: ComponentKey[] = [
         'history',
         'user-management',
         'field-management',
-        'settings',
       ];
 
       deniedComponents.forEach((component) => {
@@ -277,9 +277,9 @@ describe('Access Control System', () => {
       expect(result.current.canAccess('history')).toBe(false);
       expect(result.current.canAccess('user-management')).toBe(false);
 
-      // No rule - default to false for agents
+      // No rule - field management stays false, profile settings stay available
       expect(result.current.canAccess('field-management')).toBe(false);
-      expect(result.current.canAccess('settings')).toBe(false);
+      expect(result.current.canAccess('settings')).toBe(true);
     });
   });
 
@@ -449,7 +449,7 @@ describe('Access Control System', () => {
       // Agent should not have access to restricted components
       expect(result.current.canAccess('user-management')).toBe(false);
       expect(result.current.canAccess('field-management')).toBe(false);
-      expect(result.current.canAccess('settings')).toBe(false);
+      expect(result.current.canAccess('settings')).toBe(true);
     });
 
     it('should update agent access when rules change', async () => {
@@ -486,7 +486,7 @@ describe('Access Control System', () => {
       // history has no custom rule, defaults to false for agents
       expect(result.current.canAccess('history')).toBe(false);
 
-      // Update rules to add history access
+      // Update rules attempt to add history access, but central role eligibility blocks it.
       const updatedRules = [
         {
           $id: 'rule-1',
@@ -514,7 +514,7 @@ describe('Access Control System', () => {
 
       // Updated state
       expect(result.current.canAccess('dashboard')).toBe(true);
-      expect(result.current.canAccess('history')).toBe(true);
+      expect(result.current.canAccess('history')).toBe(false);
       expect(result.current.canAccess('leads')).toBe(true);
     });
 
@@ -578,7 +578,7 @@ describe('Access Control System', () => {
       // Sensitive components should be denied by default
       expect(result.current.canAccess('user-management')).toBe(false);
       expect(result.current.canAccess('field-management')).toBe(false);
-      expect(result.current.canAccess('settings')).toBe(false);
+      expect(result.current.canAccess('settings')).toBe(true);
     });
   });
 

@@ -15,6 +15,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { ProtectedRoute } from '@/components/protected-route';
+import { LeadActivityTimeline } from '@/components/leads/lead-activity-timeline';
+import { LeadNotesCard } from '@/components/leads/lead-notes-card';
 
 export default function HistoryDetailPage() {
   return (
@@ -310,6 +312,15 @@ function HistoryDetailContent() {
             </div>
           </CardContent>
         </Card>
+
+        {user && (
+          <LeadNotesCard
+            leadId={lead.$id}
+            user={user}
+          />
+        )}
+
+        <LeadActivityTimeline lead={lead} />
 
         {/* General Metadata */}
         <Card>

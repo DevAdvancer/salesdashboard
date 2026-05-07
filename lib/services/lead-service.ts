@@ -12,6 +12,35 @@ function isValidId(id: string | null | undefined): boolean {
     return validIdPattern.test(id);
 }
 
+function getLeadAuditName(data: LeadData): string {
+    const firstName = typeof data.firstName === 'string' ? data.firstName : '';
+    const lastName = typeof data.lastName === 'string' ? data.lastName : '';
+    const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+    const fallback = data.legalName || data.name || data.company || data.email || data.phone;
+    return fullName || (typeof fallback === 'string' ? fallback : '');
+}
+
+function buildAuditChanges(previousData: LeadData, nextData: LeadData, changedData: Partial<LeadData>) {
+    const changes: Record<string, { from: unknown; to: unknown }> = {};
+
+    Object.keys(changedData).forEach((key) => {
+        const previousValue = previousData[key];
+        const nextValue = nextData[key];
+        if (JSON.stringify(previousValue) !== JSON.stringify(nextValue)) {
+            changes[key] = {
+                from: previousValue ?? null,
+                to: nextValue ?? null,
+            };
+        }
+    });
+
+    return changes;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+    return error instanceof Error ? error.message : fallback;
+}
+
 // Helper to get permissions for supervisors up the chain
 async function getHierarchyPermissions(userId: string): Promise<string[]> {
     const permissions: string[] = [];
@@ -167,14 +196,14 @@ export async function createLead(
             actorName: creatingUserName || 'System',
             targetId: createdLead.$id,
             targetType: 'LEAD',
-            metadata: { ...input.data, branchId: input.branchId }
+            metadata: { leadName: getLeadAuditName(input.data), ...input.data, branchId: input.branchId }
         });
     }
 
     return createdLead;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error creating lead:', error);
-    throw new Error(error.message || 'Failed to create lead');
+    throw new Error(getErrorMessage(error, 'Failed to create lead'));
   }
 }
 
@@ -236,14 +265,18 @@ export async function updateLead(
             actorName: actorName,
             targetId: leadId,
             targetType: 'LEAD',
-            metadata: data
+            metadata: {
+              leadName: getLeadAuditName(updatedData),
+              changes: buildAuditChanges(currentData, updatedData, data),
+              ...data,
+            }
         });
     }
 
     return lead as unknown as Lead;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error updating lead:', error);
-    throw new Error(error.message || 'Failed to update lead');
+    throw new Error(getErrorMessage(error, 'Failed to update lead'));
   }
 }
 
@@ -259,6 +292,13 @@ export async function updateLead(
  */
 export async function deleteLead(leadId: string, actorId?: string, actorName?: string): Promise<void> {
   try {
+    let leadName = '';
+    try {
+      const currentLead = await getLead(leadId);
+      const currentData = JSON.parse(currentLead.data) as LeadData;
+      leadName = getLeadAuditName(currentData);
+    } catch {}
+
     await databases.deleteDocument(DATABASE_ID, COLLECTIONS.LEADS, leadId);
 
     // Log audit
@@ -268,12 +308,13 @@ export async function deleteLead(leadId: string, actorId?: string, actorName?: s
             actorId: actorId,
             actorName: actorName,
             targetId: leadId,
-            targetType: 'LEAD'
+            targetType: 'LEAD',
+            metadata: { leadName }
         });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error deleting lead:', error);
-    throw new Error(error.message || 'Failed to delete lead');
+    throw new Error(getErrorMessage(error, 'Failed to delete lead'));
   }
 }
 
@@ -290,9 +331,9 @@ export async function getLead(leadId: string): Promise<Lead> {
   try {
     const lead = await databases.getDocument(DATABASE_ID, COLLECTIONS.LEADS, leadId);
     return lead as unknown as Lead;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching lead:', error);
-    throw new Error(error.message || 'Failed to fetch lead');
+    throw new Error(getErrorMessage(error, 'Failed to fetch lead'));
   }
 }
 
@@ -356,7 +397,7 @@ export async function listLeads(
 
       try {
         // Fetch subordinates (TLs and Agents)
-        const { getSubordinates, getUserById } = await import('@/lib/services/user-service');
+        const { getSubordinates } = await import('@/lib/services/user-service');
         const subordinates = await getSubordinates(userId);
 
         if (subordinates.length > 0) {
@@ -475,9 +516,9 @@ export async function listLeads(
     }
 
     return leads;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error listing leads:', error);
-    throw new Error(error.message || 'Failed to list leads');
+    throw new Error(getErrorMessage(error, 'Failed to list leads'));
   }
 }
 
@@ -547,6 +588,7 @@ export async function closeLead(
               isClosed: true,
               status: closedStatus,
               leadId,
+              leadName: getLeadAuditName(leadData),
               candidateName: `${leadData.firstName || ''} ${leadData.lastName || ''}`.trim() || leadData.legalName || '',
               email: leadData.email || '',
               phone: leadData.phone || '',
@@ -556,14 +598,18 @@ export async function closeLead(
               assignedToId: currentLead.assignedToId,
               branchId: currentLead.branchId,
               closedAt: lead.closedAt,
+              changes: {
+                status: { from: currentLead.status, to: closedStatus },
+                isClosed: { from: false, to: true },
+              },
             }
         });
     }
 
     return lead as unknown as Lead;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error closing lead:', error);
-    throw new Error(error.message || 'Failed to close lead');
+    throw new Error(getErrorMessage(error, 'Failed to close lead'));
   }
 }
 
@@ -587,6 +633,10 @@ export async function reopenLead(
   try {
     // Get the current lead
     const currentLead = await getLead(leadId);
+    let leadName = '';
+    try {
+      leadName = getLeadAuditName(JSON.parse(currentLead.data) as LeadData);
+    } catch {}
 
     // Build permissions with update access restored
     const permissions: string[] = [
@@ -622,14 +672,20 @@ export async function reopenLead(
             actorName: actorName,
             targetId: leadId,
             targetType: 'LEAD',
-            metadata: { isClosed: false }
+            metadata: {
+              leadName,
+              isClosed: false,
+              changes: {
+                isClosed: { from: true, to: false },
+              },
+            }
         });
     }
 
     return lead as unknown as Lead;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error reopening lead:', error);
-    throw new Error(error.message || 'Failed to reopen lead');
+    throw new Error(getErrorMessage(error, 'Failed to reopen lead'));
   }
 }
 
@@ -654,6 +710,10 @@ export async function assignLead(
   try {
     // Get the current lead
     const currentLead = await getLead(leadId);
+    let leadName = '';
+    try {
+      leadName = getLeadAuditName(JSON.parse(currentLead.data) as LeadData);
+    } catch {}
 
     // Build new permissions
     const permissions: string[] = [
@@ -692,13 +752,19 @@ export async function assignLead(
             actorName: actorName,
             targetId: leadId,
             targetType: 'LEAD',
-            metadata: { assignedToId: agentId }
+            metadata: {
+              leadName,
+              assignedToId: agentId,
+              changes: {
+                assignedToId: { from: currentLead.assignedToId, to: agentId },
+              },
+            }
         });
     }
 
     return lead as unknown as Lead;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error assigning lead:', error);
-    throw new Error(error.message || 'Failed to assign lead');
+    throw new Error(getErrorMessage(error, 'Failed to assign lead'));
   }
 }

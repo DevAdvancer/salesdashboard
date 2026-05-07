@@ -1,8 +1,7 @@
-'use client';
+﻿'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { useAuth } from '@/lib/contexts/auth-context';
-import { useAccess } from '@/lib/contexts/access-control-context';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,10 +23,50 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import { getAuditLogs } from '@/lib/services/audit-service';
 import { AuditLog } from '@/lib/types';
-import { RefreshCw, FileText, User as UserIcon, Eye } from 'lucide-react';
+import { RefreshCw, User as UserIcon, Eye } from 'lucide-react';
 import { ProtectedRoute } from '@/components/protected-route';
 import { databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { listBranches } from '@/lib/services/branch-service';
+import { buildAuditLogDetailModel, type AuditLogDetailModel } from '@/lib/utils/audit-log-details';
+import { Query } from 'appwrite';
+
+type MetadataRecord = Record<string, unknown>;
+
+interface FormAuditField {
+  key: string;
+  label: string;
+  type?: string;
+}
+
+interface FormAuditChange {
+  from: unknown;
+  to: unknown;
+}
+
+interface FormAuditModifiedField {
+  key: string;
+  label: string;
+  changes: Record<string, FormAuditChange>;
+}
+
+function parseLeadNameFromData(data: unknown): string | null {
+  if (typeof data !== 'string') return null;
+
+  try {
+    const parsed = JSON.parse(data) as Record<string, unknown>;
+    const firstName = typeof parsed.firstName === 'string' ? parsed.firstName : '';
+    const lastName = typeof parsed.lastName === 'string' ? parsed.lastName : '';
+    const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+    const fallback = parsed.legalName || parsed.name || parsed.company || parsed.email || parsed.phone;
+    return fullName || (typeof fallback === 'string' ? fallback : null);
+  } catch {
+    return null;
+  }
+}
+
+function getString(value: unknown, fallback = 'N/A'): string {
+  return typeof value === 'string' && value.trim() ? value : fallback;
+}
 
 function AuditLogsContent() {
   const { user, isAdmin } = useAuth();
@@ -59,11 +98,29 @@ function AuditLogsContent() {
       const users = await databases.listDocuments(
         DATABASE_ID,
         COLLECTIONS.USERS,
-        [
-          // Query.limit(1000) // Default is usually smaller, maybe need pagination if many users
-        ]
+        [Query.limit(1000)]
       );
-      users.documents.forEach((u: any) => map.set(u.$id, u.name));
+      users.documents.forEach((doc) => {
+        const userDoc = doc as { $id: string; name?: unknown; email?: unknown };
+        map.set(userDoc.$id, getString(userDoc.name, getString(userDoc.email, userDoc.$id)));
+      });
+
+      try {
+        const leads = await databases.listDocuments(
+          DATABASE_ID,
+          COLLECTIONS.LEADS,
+          [Query.limit(1000)]
+        );
+        leads.documents.forEach((doc) => {
+          const leadDoc = doc as { $id: string; data?: unknown };
+          const leadName = parseLeadNameFromData(leadDoc.data);
+          if (leadName) {
+            map.set(leadDoc.$id, leadName);
+          }
+        });
+      } catch (leadError) {
+        console.warn('Could not load lead names for audit logs:', leadError);
+      }
 
       setIdToNameMap(map);
     } catch (err) {
@@ -105,21 +162,91 @@ function AuditLogsContent() {
     return idToNameMap.get(id) || id;
   };
 
+  const renderDetailModel = (model: AuditLogDetailModel) => {
+    const toneStyles = {
+      default: { background: 'var(--surface-2,#252422)', color: 'var(--muted-foreground)', border: '1px solid var(--border)' },
+      success: { background: 'rgba(74,222,128,0.15)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.30)' },
+      warning: { background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.30)' },
+      danger: { background: 'rgba(248,113,113,0.15)', color: '#f87171', border: '1px solid rgba(248,113,113,0.30)' },
+      info: { background: 'rgba(96,170,238,0.15)', color: '#60aaee', border: '1px solid rgba(96,170,238,0.30)' },
+      purple: { background: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.30)' },
+    } satisfies Record<AuditLogDetailModel['tone'], CSSProperties>;
+
+    return (
+      <div className="space-y-4">
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            padding: '0.125rem 0.625rem',
+            borderRadius: '999px',
+            fontSize: '0.6875rem',
+            fontWeight: 500,
+            ...toneStyles[model.tone],
+          }}
+        >
+          {model.badge}
+        </span>
+
+        {model.rows.length > 0 && (
+          <div className="space-y-1">
+            {model.rows.map((row) => (
+              <div key={`${row.label}-${row.value}`} className="grid grid-cols-3 gap-2 text-sm border-b py-2 last:border-0">
+                <span className="font-medium text-muted-foreground">{row.label}</span>
+                <span className="col-span-2 break-all">{row.value}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {model.changes.length > 0 && (
+          <div>
+            <h4 className="mb-2 text-sm font-semibold">Changes</h4>
+            <div className="space-y-2">
+              {model.changes.map((change) => (
+                <div key={`${change.label}-${change.from}-${change.to}`} className="rounded-md border border-border p-3 text-sm">
+                  <p className="font-medium">{change.label}</p>
+                  <p className="mt-1 text-muted-foreground">
+                    <span className="line-through">{change.from}</span>
+                    <span className="mx-2">-&gt;</span>
+                    <span className="font-semibold text-foreground">{change.to}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderDetails = (log: AuditLog) => {
     if (!log.metadata) return <p className="text-muted-foreground">No details available.</p>;
 
-    let metadata: any;
+    let metadata: MetadataRecord;
     try {
-      metadata = JSON.parse(log.metadata);
+      metadata = JSON.parse(log.metadata) as MetadataRecord;
     } catch {
       return <pre className="text-xs">{log.metadata}</pre>;
     }
 
+    if (
+      log.action === 'SETTINGS_UPDATE' ||
+      (log.action === 'USER_UPDATE' && metadata.profileSelfUpdate) ||
+      log.targetType.toUpperCase() === 'LEAD'
+    ) {
+      return renderDetailModel(buildAuditLogDetailModel(log, idToNameMap));
+    }
+
     if (log.action === 'FORM_CONFIG_UPDATE' && metadata.changes) {
-      const { added, removed, modified } = metadata.changes;
+      const { added, removed, modified } = metadata.changes as {
+        added?: FormAuditField[];
+        removed?: FormAuditField[];
+        modified?: FormAuditModifiedField[];
+      };
       return (
         <div className="space-y-4">
-          {metadata.isCreation && (
+          {metadata.isCreation === true && (
             <div style={{ padding: '0.5rem 0.75rem', background: 'rgba(56,152,236,0.12)', border: '1px solid rgba(56,152,236,0.25)', borderRadius: '0.5rem', color: '#60aaee', fontSize: '0.8125rem', marginBottom: '0.5rem' }}>
               Initial Form Configuration Created
             </div>
@@ -129,7 +256,7 @@ function AuditLogsContent() {
             <div>
               <h4 style={{ fontWeight: 600, color: '#4ade80', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Added Fields</h4>
               <ul className="list-disc pl-5 space-y-1 text-sm">
-                {added.map((f: any) => (
+                {added.map((f) => (
                   <li key={f.key}>
                     <span className="font-medium">{f.label}</span> ({f.type})
                   </li>
@@ -142,7 +269,7 @@ function AuditLogsContent() {
             <div>
               <h4 style={{ fontWeight: 600, color: '#f87171', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Removed Fields</h4>
               <ul className="list-disc pl-5 space-y-1 text-sm">
-                {removed.map((f: any) => (
+                {removed.map((f) => (
                   <li key={f.key}>
                     <span className="font-medium">{f.label}</span>
                   </li>
@@ -155,11 +282,11 @@ function AuditLogsContent() {
             <div>
               <h4 style={{ fontWeight: 600, color: '#fbbf24', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Modified Fields</h4>
               <div className="space-y-3">
-                {modified.map((m: any) => (
+                {modified.map((m) => (
                   <div key={m.key} style={{ fontSize: '0.875rem', borderLeft: '2px solid rgba(251,191,36,0.4)', paddingLeft: '0.75rem' }}>
                     <p className="font-medium">{m.label}</p>
                     <ul className="mt-1 space-y-1 text-muted-foreground">
-                      {Object.entries(m.changes).map(([prop, change]: [string, any]) => (
+                      {Object.entries(m.changes).map(([prop, change]) => (
                         <li key={prop}>
                           <span className="font-mono text-xs">{prop}</span>:
                           <span className="line-through mx-1">{String(change.from)}</span>
@@ -184,9 +311,9 @@ function AuditLogsContent() {
     // ── Mock Interview ──────────────────────────────────────────────────────────
     if (log.action === 'MOCK_EMAIL_SENT') {
       const rows: [string, string][] = [
-        ['Candidate Name', metadata.candidateName || '—'],
-        ['Lead ID', metadata.leadId || log.targetId || '—'],
-        ['Attempt #', String(metadata.attemptCount ?? '—')],
+        ['Candidate Name', getString(metadata.candidateName, '-')],
+        ['Lead', (metadata.leadId ? resolveName(getString(metadata.leadId, '')) : '-')],
+        ['Attempt #', getString(metadata.attemptCount, '-')],
       ];
       return (
         <div className="space-y-1">
@@ -208,17 +335,17 @@ function AuditLogsContent() {
     // ── Interview Support ───────────────────────────────────────────────────────
     if (log.action === 'INTERVIEW_EMAIL_SENT') {
       const rows: [string, string][] = [
-        ['Subject', metadata.subject || '—'],
-        ['Candidate Name', metadata.candidateName || '—'],
-        ['Technology', metadata.technology || '—'],
-        ['End Client', metadata.endClient || '—'],
-        ['Job Title', metadata.jobTitle || '—'],
-        ['Interview Round', metadata.interviewRound || '—'],
-        ['Date & Time (EST)', metadata.interviewDate || '—'],
-        ['Duration', metadata.duration || '—'],
-        ['Email ID', metadata.emailId || '—'],
-        ['Contact Number', metadata.contactNumber || '—'],
-        ['Attempt #', String(metadata.attemptCount ?? '—')],
+        ['Subject', getString(metadata.subject, '-')],
+        ['Candidate Name', getString(metadata.candidateName, '-')],
+        ['Technology', getString(metadata.technology, '-')],
+        ['End Client', getString(metadata.endClient, '-')],
+        ['Job Title', getString(metadata.jobTitle, '-')],
+        ['Interview Round', getString(metadata.interviewRound, '-')],
+        ['Date & Time (EST)', getString(metadata.interviewDate, '-')],
+        ['Duration', getString(metadata.duration, '-')],
+        ['Email ID', getString(metadata.emailId, '-')],
+        ['Contact Number', getString(metadata.contactNumber, '-')],
+        ['Attempt #', getString(metadata.attemptCount, '-')],
       ];
       return (
         <div className="space-y-1">
@@ -240,55 +367,23 @@ function AuditLogsContent() {
     // ── Assessment Support ──────────────────────────────────────────────────────
     if (log.action === 'ASSESSMENT_EMAIL_SENT') {
       const rows: [string, string][] = [
-        ['Subject', metadata.subject || '—'],
-        ['Candidate Name', metadata.candidateName || '—'],
-        ['Technology', metadata.technology || '—'],
-        ['End Client', metadata.endClient || '—'],
-        ['Job Title', metadata.jobTitle || '—'],
-        ['Interview Round', metadata.interviewRound || '—'],
-        ['Assessment Received (EST)', metadata.assessmentReceived || '—'],
-        ['Assessment Duration', metadata.assessmentDuration || '—'],
-        ['Email ID', metadata.emailId || '—'],
-        ['Contact Number', metadata.contactNumber || '—'],
-        ['Attempt #', String(metadata.attemptCount ?? '—')],
+        ['Subject', getString(metadata.subject, '-')],
+        ['Candidate Name', getString(metadata.candidateName, '-')],
+        ['Technology', getString(metadata.technology, '-')],
+        ['End Client', getString(metadata.endClient, '-')],
+        ['Job Title', getString(metadata.jobTitle, '-')],
+        ['Interview Round', getString(metadata.interviewRound, '-')],
+        ['Assessment Received (EST)', getString(metadata.assessmentReceived, '-')],
+        ['Assessment Duration', getString(metadata.assessmentDuration, '-')],
+        ['Email ID', getString(metadata.emailId, '-')],
+        ['Contact Number', getString(metadata.contactNumber, '-')],
+        ['Attempt #', getString(metadata.attemptCount, '-')],
       ];
       return (
         <div className="space-y-1">
           <div className="flex items-center gap-2 mb-3">
             <span style={{ display: 'inline-flex', alignItems: 'center', padding: '0.125rem 0.625rem', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: 500, background: 'rgba(52,211,153,0.15)', color: '#34d399', border: '1px solid rgba(52,211,153,0.30)' }}>
               Assessment Support Email
-            </span>
-          </div>
-          {rows.map(([label, value]) => (
-            <div key={label} className="grid grid-cols-3 gap-2 text-sm border-b py-2 last:border-0">
-              <span className="font-medium text-muted-foreground">{label}</span>
-              <span className="col-span-2 break-all">{value}</span>
-            </div>
-          ))}
-        </div>
-      );
-    }
-
-    if (log.action === 'LEAD_UPDATE' && metadata.isClosed === true) {
-      const rows: [string, string][] = [
-        ['Candidate Name', metadata.candidateName || metadata.legalName || 'N/A'],
-        ['Final Status', metadata.status || 'N/A'],
-        ['Lead ID', metadata.leadId || log.targetId || 'N/A'],
-        ['Email', metadata.email || 'N/A'],
-        ['Contact Number', metadata.phone || 'N/A'],
-        ['Company', metadata.company || 'N/A'],
-        ['Source', metadata.source || 'N/A'],
-        ['Assigned To', metadata.assignedToId ? resolveName(metadata.assignedToId) : 'N/A'],
-        ['Owner', metadata.ownerId ? resolveName(metadata.ownerId) : 'N/A'],
-        ['Branch', metadata.branchId ? resolveName(metadata.branchId) : 'N/A'],
-        ['Closed At', metadata.closedAt ? new Date(metadata.closedAt).toLocaleString() : 'N/A'],
-      ];
-
-      return (
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 mb-3">
-            <span style={{ display: 'inline-flex', alignItems: 'center', padding: '0.125rem 0.625rem', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: 500, background: 'rgba(248,113,113,0.15)', color: '#f87171', border: '1px solid rgba(248,113,113,0.30)' }}>
-              Lead Closed
             </span>
           </div>
           {rows.map(([label, value]) => (

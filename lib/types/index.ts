@@ -85,6 +85,10 @@ export interface Lead {
   branchId: string | null;
   isClosed: boolean;
   closedAt: string | null;
+  nextFollowUpAt?: string | null;
+  nextAction?: string | null;
+  lastContactedAt?: string | null;
+  followUpStatus?: 'pending' | 'completed' | 'overdue' | string | null;
   $createdAt?: string;
   $updatedAt?: string;
   $permissions?: string[];
@@ -177,7 +181,14 @@ export type ComponentKey =
   | 'branch-management'
   | 'audit-logs'
   | 'mock'
-  | 'hierarchy';
+  | 'assessment-support'
+  | 'interview-support'
+  | 'hierarchy'
+  | 'work-queue'
+  | 'reports'
+  | 'coaching-notes'
+  | 'review-queue'
+  | 'notifications';
 
 export interface AccessRule {
   $id?: string;
@@ -200,6 +211,7 @@ export type AuditLogAction =
   | 'LEAD_UPDATE'
   | 'LEAD_DELETE'
   | 'FORM_CONFIG_UPDATE'
+  | 'SETTINGS_UPDATE'
   | 'BRANCH_CREATE'
   | 'BRANCH_UPDATE'
   | 'LOGIN'
@@ -245,4 +257,60 @@ export interface HistoryFilters {
 export interface HistoryEntry extends Lead {
   isClosed: true;
   closedAt: string;
+}
+
+export type LeadNoteVisibility = 'team' | 'leadership' | 'manager_only';
+
+export interface LeadNote {
+  $id: string;
+  leadId: string;
+  authorId: string;
+  authorName: string;
+  body: string;
+  visibility: LeadNoteVisibility;
+  createdAt: string;
+  updatedAt?: string | null;
+}
+
+export type CoachingNoteVisibility = 'manager_only' | 'leadership';
+
+export interface CoachingNote {
+  $id: string;
+  targetUserId: string;
+  targetUserName?: string | null;
+  authorId: string;
+  authorName: string;
+  note: string;
+  visibility: CoachingNoteVisibility;
+  createdAt: string;
+  updatedAt?: string | null;
+}
+
+export type ReviewQueueStatus = 'open' | 'approved' | 'rejected' | 'resolved';
+
+export interface ReviewQueueItem {
+  $id: string;
+  type: string;
+  status: ReviewQueueStatus | string;
+  targetId: string;
+  targetType: string;
+  requestedById: string;
+  requestedByName: string;
+  assignedReviewerId?: string | null;
+  reason?: string | null;
+  metadata?: string | null;
+  createdAt: string;
+  resolvedAt?: string | null;
+}
+
+export interface NotificationRecord {
+  $id: string;
+  recipientId: string;
+  type: string;
+  title: string;
+  body: string;
+  targetId?: string | null;
+  targetType?: string | null;
+  readAt?: string | null;
+  createdAt: string;
 }

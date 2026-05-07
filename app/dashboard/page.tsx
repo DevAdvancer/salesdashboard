@@ -18,10 +18,17 @@ import { getInterviewAttempts } from '@/app/actions/interview';
 import { getAssessmentAttempts } from '@/app/actions/assessment';
 import { getBranchById } from '@/lib/services/branch-service';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { User } from '@/lib/types';
+import type { Branch, User } from '@/lib/types';
 import { DollarSign, TrendingUp } from 'lucide-react';
 import { appIcons } from '@/components/navigation-config';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { LeadershipDashboard } from '@/components/dashboard/leadership-dashboard';
+import { FollowUpQueueCard } from '@/components/dashboard/follow-up-queue';
+import { RoleWorkDashboard } from '@/components/dashboard/role-work-dashboard';
+import {
+  buildLeadershipDashboardInsights,
+  type LeadershipDashboardInsights,
+} from '@/lib/utils/dashboard-insights';
 
 type AmountChartDatum = {
   name: string;
@@ -82,7 +89,7 @@ function getMetricDate(lead: { isClosed: boolean; closedAt: string | null; $crea
 }
 
 function DashboardContent() {
-  const { user, isAdmin, isManager, isAgent, isTeamLead } = useAuth();
+  const { user, isAdmin, isManager, isAssistantManager, isAgent, isTeamLead } = useAuth();
   const router = useRouter();
   const [metrics, setMetrics] = useState({
     activeLeads: 0,
@@ -102,6 +109,8 @@ function DashboardContent() {
   const [isOutlookChecking, setIsOutlookChecking] = useState(true);
   const [financialView, setFinancialView] = useState<'total' | 'monthly'>('total');
   const [selectedMonth, setSelectedMonth] = useState('');
+  const [dashboardInsights, setDashboardInsights] = useState<LeadershipDashboardInsights | null>(null);
+  const [dashboardInsightsLoading, setDashboardInsightsLoading] = useState(false);
 
   // Check Outlook connection status
   useEffect(() => {
@@ -153,30 +162,68 @@ function DashboardContent() {
         console.log('[Dashboard] Active leads count:', activeLeads.length);
         console.log('[Dashboard] Closed leads count:', closedLeads.length);
 
-        // Fetch assigned agents for the team lead detail table.
-        if (userIsTeamLead) {
-            const { getAgentsByTeamLead } = await import('@/lib/services/user-service');
-            const agents = await getAgentsByTeamLead(user.$id);
+        setDashboardInsightsLoading(true);
+        try {
+          const [
+            userService,
+            branchService,
+          ] = await Promise.all([
+            import('@/lib/services/user-service'),
+            import('@/lib/services/branch-service'),
+          ]);
+          let usersForInsights: User[] = [user];
 
-            // Fetch branch names for each agent
+          if (isAdmin || isManager || isAssistantManager) {
+            const visibleUsers = await userService.getAssignableUsers(
+              user.role,
+              user.branchIds || [],
+              user.$id
+            );
+            usersForInsights = [
+              user,
+              ...visibleUsers.filter((visibleUser) => visibleUser.$id !== user.$id),
+            ];
+          } else if (userIsTeamLead) {
+            const agents = await userService.getAgentsByTeamLead(user.$id);
+            usersForInsights = [user, ...agents];
             const agentsWithBranches = await Promise.all(agents.map(async (agent) => {
               if (agent.branchIds && agent.branchIds.length > 0) {
-                // Assuming we want to show the first branch or join them
-                // For simplicity, let's fetch the first branch name
                 try {
-                    const branchNames = await Promise.all(agent.branchIds.map(async (bid) => {
-                        const branch = await getBranchById(bid);
-                        return branch.name;
-                    }));
-                    return { ...agent, branchNames: branchNames.join(', ') };
+                  const branchNames = await Promise.all(agent.branchIds.map(async (bid) => {
+                    const branch = await getBranchById(bid);
+                    return branch.name;
+                  }));
+                  return { ...agent, branchNames: branchNames.join(', ') };
                 } catch {
-                    return { ...agent, branchNames: 'Unknown' };
+                  return { ...agent, branchNames: 'Unknown' };
                 }
               }
               return { ...agent, branchNames: 'N/A' };
             }));
 
             setAssignedAgents(agentsWithBranches);
+          }
+
+          const allBranches = await branchService.listBranches();
+          const branchIdsInScope = new Set([
+            ...usersForInsights.flatMap((visibleUser) => visibleUser.branchIds || []),
+            ...activeLeads.map((lead) => lead.branchId).filter((branchId): branchId is string => Boolean(branchId)),
+            ...closedLeads.map((lead) => lead.branchId).filter((branchId): branchId is string => Boolean(branchId)),
+          ]);
+          const branchesForInsights: Branch[] = allBranches.filter((branch) => (
+            isAdmin || branchIdsInScope.has(branch.$id)
+          ));
+
+          setDashboardInsights(buildLeadershipDashboardInsights({
+            leads: [...activeLeads, ...closedLeads],
+            users: usersForInsights,
+            branches: branchesForInsights,
+          }));
+        } catch (error) {
+          console.error('Error fetching dashboard insights:', error);
+          setDashboardInsights(null);
+        } finally {
+          setDashboardInsightsLoading(false);
         }
 
         const visibleLeadIds = Array.from(
@@ -265,13 +312,15 @@ function DashboardContent() {
       } catch (error) {
         console.error('Error fetching metrics:', error);
         setMetrics((prev) => ({ ...prev, loading: false }));
+        setDashboardInsights(null);
+        setDashboardInsightsLoading(false);
       }
     }
 
     if (user) {
       fetchMetrics();
     }
-  }, [user]);
+  }, [user, isAdmin, isAssistantManager, isManager]);
 
   useEffect(() => {
     async function fetchUserNames() {
@@ -464,7 +513,7 @@ function DashboardContent() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {metrics.loading ? '...' : metrics.activeLeads}
+              {metrics.loading ? <Skeleton className="h-8 w-16" /> : metrics.activeLeads}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               {isAgent ? 'Assigned to you' : 'Total active leads'}
@@ -479,7 +528,7 @@ function DashboardContent() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {metrics.loading ? '...' : metrics.closedLeads}
+              {metrics.loading ? <Skeleton className="h-8 w-16" /> : metrics.closedLeads}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               In client records
@@ -494,7 +543,7 @@ function DashboardContent() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {metrics.loading ? '...' : metrics.createdMocks}
+              {metrics.loading ? <Skeleton className="h-8 w-16" /> : metrics.createdMocks}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Mock requests sent
@@ -509,7 +558,7 @@ function DashboardContent() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {metrics.loading ? '...' : metrics.createdInterviewSupport}
+              {metrics.loading ? <Skeleton className="h-8 w-16" /> : metrics.createdInterviewSupport}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Interview emails sent
@@ -524,7 +573,7 @@ function DashboardContent() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {metrics.loading ? '...' : metrics.createdAssessmentSupport}
+              {metrics.loading ? <Skeleton className="h-8 w-16" /> : metrics.createdAssessmentSupport}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Assessment emails sent
@@ -532,6 +581,27 @@ function DashboardContent() {
           </CardContent>
         </Card>
       </div>
+
+      {(isAdmin || isManager || isAssistantManager) && (
+        <LeadershipDashboard
+          role={user.role}
+          insights={dashboardInsights}
+          isLoading={dashboardInsightsLoading || metrics.loading}
+        />
+      )}
+
+      {(isTeamLead || isAgent) && (
+        <RoleWorkDashboard
+          role={user.role}
+          insights={dashboardInsights}
+          isLoading={dashboardInsightsLoading || metrics.loading}
+        />
+      )}
+
+      <FollowUpQueueCard
+        queue={dashboardInsights?.followUpQueue ?? null}
+        isLoading={dashboardInsightsLoading || metrics.loading}
+      />
 
       {/* Amount Insights Graph (Admin Only) */}
       {isAdmin && (

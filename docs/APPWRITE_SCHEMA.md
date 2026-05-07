@@ -165,3 +165,127 @@ To apply these changes in the Appwrite Console:
 
 4. **Update `.env.local`**:
    - Add `NEXT_PUBLIC_APPWRITE_BRANCHES_COLLECTION_ID=<your-collection-id>`
+
+---
+
+## SOP Upgrade Schema Additions
+
+These changes support the role-based productivity SOP: follow-ups, role dashboards, notes, coaching notes, review queues, notifications, and future reports.
+
+### Update Collection: `leads`
+
+Add these optional attributes:
+
+| Attribute        | Type     | Required | Size | Default | Description |
+|------------------|----------|----------|------|---------|-------------|
+| nextFollowUpAt   | datetime | No       | -    | null    | Date/time when the next lead action is due |
+| nextAction       | string   | No       | 100  | null    | Next action label, such as Call, Email, Meeting, Documents Pending |
+| lastContactedAt  | datetime | No       | -    | null    | Last successful contact timestamp |
+| followUpStatus   | string   | No       | 50   | pending | Follow-up state: pending, completed, overdue |
+
+Recommended indexes:
+
+- `next_follow_up_idx` - key on `[nextFollowUpAt]`
+- `follow_up_status_idx` - key on `[followUpStatus]`
+
+### New Collection: `lead_notes`
+
+Display Name: Lead Notes
+
+| Attribute  | Type     | Required | Size  | Description |
+|------------|----------|----------|-------|-------------|
+| leadId     | string   | Yes      | 255   | Lead/client document ID |
+| authorId   | string   | Yes      | 255   | User ID who wrote the note |
+| authorName | string   | Yes      | 255   | User display name |
+| body       | string   | Yes      | 10000 | Note content |
+| visibility | string   | Yes      | 50    | team, leadership, manager_only |
+| createdAt  | datetime | Yes      | -     | Created timestamp |
+| updatedAt  | datetime | No       | -     | Last edited timestamp |
+
+Recommended indexes:
+
+- `lead_idx` - key on `[leadId]`
+- `author_idx` - key on `[authorId]`
+- `created_idx` - key on `[createdAt]`
+- `visibility_idx` - key on `[visibility]`
+
+### New Collection: `coaching_notes`
+
+Display Name: Coaching Notes
+
+| Attribute      | Type     | Required | Size  | Description |
+|----------------|----------|----------|-------|-------------|
+| targetUserId   | string   | Yes      | 255   | User receiving the coaching note |
+| targetUserName | string   | No       | 255   | User display name |
+| authorId       | string   | Yes      | 255   | User ID who wrote the note |
+| authorName     | string   | Yes      | 255   | User display name |
+| note           | string   | Yes      | 10000 | Coaching note content |
+| visibility     | string   | Yes      | 50    | manager_only or leadership |
+| createdAt      | datetime | Yes      | -     | Created timestamp |
+| updatedAt      | datetime | No       | -     | Last edited timestamp |
+
+Recommended indexes:
+
+- `target_user_idx` - key on `[targetUserId]`
+- `author_idx` - key on `[authorId]`
+- `created_idx` - key on `[createdAt]`
+- `visibility_idx` - key on `[visibility]`
+
+### New Collection: `review_queue`
+
+Display Name: Review Queue
+
+| Attribute          | Type     | Required | Size  | Description |
+|--------------------|----------|----------|-------|-------------|
+| type               | string   | Yes      | 100   | Review type, such as lead_reopen, duplicate_warning, high_value_reassignment |
+| status             | string   | Yes      | 50    | open, approved, rejected, resolved |
+| targetId           | string   | Yes      | 255   | Related lead/user/field/document ID |
+| targetType         | string   | Yes      | 100   | LEAD, USER, FORM_FIELD, CLIENT |
+| requestedById      | string   | Yes      | 255   | Requesting user ID |
+| requestedByName    | string   | Yes      | 255   | Requesting user display name |
+| assignedReviewerId | string   | No       | 255   | Manager/Admin reviewer ID |
+| reason             | string   | No       | 5000  | Request reason |
+| metadata           | string   | No       | 20000 | JSON metadata for the review |
+| createdAt          | datetime | Yes      | -     | Created timestamp |
+| resolvedAt         | datetime | No       | -     | Resolution timestamp |
+
+Recommended indexes:
+
+- `status_idx` - key on `[status]`
+- `type_idx` - key on `[type]`
+- `target_idx` - key on `[targetId]`
+- `reviewer_idx` - key on `[assignedReviewerId]`
+- `created_idx` - key on `[createdAt]`
+
+### New Collection: `notifications`
+
+Display Name: Notifications
+
+| Attribute   | Type     | Required | Size | Description |
+|-------------|----------|----------|------|-------------|
+| recipientId | string   | Yes      | 255  | User ID who should see the notification |
+| type        | string   | Yes      | 100  | Notification type |
+| title       | string   | Yes      | 255  | Notification title |
+| body        | string   | Yes      | 2000 | Notification body |
+| targetId    | string   | No       | 255  | Related document ID |
+| targetType  | string   | No       | 100  | Related document type |
+| readAt      | datetime | No       | -    | Read timestamp |
+| createdAt   | datetime | Yes      | -    | Created timestamp |
+
+Recommended indexes:
+
+- `recipient_idx` - key on `[recipientId]`
+- `read_idx` - key on `[readAt]`
+- `created_idx` - key on `[createdAt]`
+- `type_idx` - key on `[type]`
+
+### Environment Variables
+
+Add these to `.env.local` after creating the collections:
+
+```env
+NEXT_PUBLIC_APPWRITE_LEAD_NOTES_COLLECTION_ID=lead_notes
+NEXT_PUBLIC_APPWRITE_COACHING_NOTES_COLLECTION_ID=coaching_notes
+NEXT_PUBLIC_APPWRITE_REVIEW_QUEUE_COLLECTION_ID=review_queue
+NEXT_PUBLIC_APPWRITE_NOTIFICATIONS_COLLECTION_ID=notifications
+```

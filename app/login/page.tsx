@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -20,14 +20,22 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, user, loading } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
+  // All hooks must be above any conditional returns
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
   });
+
+  // Redirect to dashboard if already authenticated
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace('/dashboard');
+    }
+  }, [user, loading, router]);
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true); setError(null);
@@ -38,6 +46,9 @@ export default function LoginPage() {
       setError(handleApiError(err, { title: 'Login Failed', showToast: true, retry: () => onSubmit(data) }));
     } finally { setIsLoading(false); }
   };
+
+  // Don't render the login form while checking session or redirecting
+  if (loading || user) return null;
 
   return (
     <div style={{
@@ -151,8 +162,8 @@ export default function LoginPage() {
 
         <p style={{ textAlign: 'center', marginTop: '1.25rem', fontSize: '0.8125rem', color: 'var(--muted-foreground)' }}>
           Contact support at{' '}
-          <a href="mailto:harsh.patel@silverspaceinc.com" style={{ color: '#d97757', fontWeight: 500 }}>
-            harsh.patel@silverspaceinc.com
+          <a href="mailto:abhirup.kumar@vizvainc.com" style={{ color: '#d97757', fontWeight: 500 }}>
+            abhirup.kumar@vizvainc.com
           </a>
         </p>
       </div>

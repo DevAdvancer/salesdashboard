@@ -3,6 +3,10 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { databases } from '@/lib/appwrite';
 import { useAuth } from './auth-context';
+import {
+  getDefaultComponentAccess,
+  isRoleEligibleForComponent,
+} from '@/lib/constants/component-access';
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const ACCESS_CONFIG_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_ACCESS_CONFIG_COLLECTION_ID!;
@@ -19,14 +23,12 @@ export type ComponentKey =
   | 'mock'
   | 'assessment-support'
   | 'interview-support'
-  | 'hierarchy';
-
-interface AccessRule {
-  $id: string;
-  componentKey: ComponentKey;
-  role: 'manager' | 'team_lead' | 'agent';
-  allowed: boolean;
-}
+  | 'hierarchy'
+  | 'work-queue'
+  | 'reports'
+  | 'coaching-notes'
+  | 'review-queue'
+  | 'notifications';
 
 interface AccessControlContextType {
   canAccess: (componentKey: ComponentKey) => boolean;
@@ -37,7 +39,7 @@ interface AccessControlContextType {
 const AccessControlContext = createContext<AccessControlContextType | undefined>(undefined);
 
 export function AccessControlProvider({ children }: { children: React.ReactNode }) {
-  const { user, isManager, isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [rules, setRules] = useState<Map<string, boolean>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
 
@@ -55,9 +57,10 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
       );
 
       const rulesMap = new Map<string, boolean>();
-      response.documents.forEach((doc: any) => {
-        const key = `${doc.componentKey}-${doc.role}`;
-        rulesMap.set(key, doc.allowed);
+      response.documents.forEach((doc) => {
+        const rule = doc as unknown as { componentKey: string; role: string; allowed: boolean };
+        const key = `${rule.componentKey}-${rule.role}`;
+        rulesMap.set(key, rule.allowed);
       });
 
       setRules(rulesMap);
@@ -75,13 +78,20 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
   }, [fetchRules]);
 
   const canAccess = useCallback((componentKey: ComponentKey): boolean => {
-    // Admins always have full access to everything
+    if (!user) {
+      return false;
+    }
+
+    if (!isRoleEligibleForComponent(componentKey, user.role)) {
+      return false;
+    }
+
     if (isAdmin) {
       return true;
     }
 
-    if (!user) {
-      return false;
+    if (componentKey === 'settings') {
+      return true;
     }
 
     // Check for custom rule from DB
@@ -92,61 +102,7 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
       return customRule;
     }
 
-    // Default rules when no DB rule exists:
-    // manager=true (except branch-management)
-    // team_lead=dashboard+leads+history+user-management only
-    // agent=dashboard+leads only
-    if (user.role === 'manager') {
-      return (
-        componentKey === 'dashboard' ||
-        componentKey === 'leads' ||
-        componentKey === 'history' ||
-        componentKey === 'user-management' ||
-        componentKey === 'field-management' ||
-        componentKey === 'settings' ||
-        componentKey === 'mock' ||
-        componentKey === 'assessment-support' ||
-        componentKey === 'interview-support' ||
-        componentKey === 'hierarchy'
-      );
-    }
-    if (user.role === 'team_lead') {
-      return (
-        componentKey === 'dashboard' ||
-        componentKey === 'leads' ||
-        componentKey === 'history' ||
-        componentKey === 'user-management' ||
-        componentKey === 'mock' ||
-        componentKey === 'assessment-support' ||
-        componentKey === 'interview-support'
-      );
-    }
-    if (user.role === 'agent') {
-      return (
-        componentKey === 'dashboard' ||
-        componentKey === 'leads' ||
-        componentKey === 'mock' ||
-        componentKey === 'assessment-support' ||
-        componentKey === 'interview-support'
-      );
-    }
-    // Assistant Manager: By default, minimal access (Dashboard only) to prevent login loops.
-    // All other access must be explicitly granted by Admin.
-    if (user.role === 'assistant_manager') {
-      return (
-        componentKey === 'dashboard' ||
-        componentKey === 'leads' ||
-        componentKey === 'history' ||
-        componentKey === 'user-management' ||
-        componentKey === 'field-management' ||
-        componentKey === 'mock' ||
-        componentKey === 'assessment-support' ||
-        componentKey === 'interview-support' ||
-        componentKey === 'hierarchy'
-      );
-    }
-
-    return false;
+    return getDefaultComponentAccess(componentKey, user.role);
   }, [user, isAdmin, rules]);
 
   const refreshRules = useCallback(async () => {

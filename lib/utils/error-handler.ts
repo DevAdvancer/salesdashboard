@@ -54,16 +54,23 @@ export function handleApiError(
   }
 
   // Handle specific error types
+  let isExpectedUserError = false;
+
   if (message.includes('Invalid credentials') || message.includes('user_invalid_credentials')) {
     message = 'Invalid email or password';
+    isExpectedUserError = true;
   } else if (message.includes('user_not_found')) {
     message = 'No account found with this email';
+    isExpectedUserError = true;
   } else if (message.includes('user_already_exists')) {
     message = 'A user with this email already exists';
+    isExpectedUserError = true;
   } else if (message.includes('document_not_found')) {
     message = 'The requested resource was not found';
+    isExpectedUserError = true;
   } else if (message.includes('unauthorized') || message.includes('403')) {
     message = 'You don\'t have permission to perform this action';
+    isExpectedUserError = true;
   }
 
   if (showToast) {
@@ -77,8 +84,13 @@ export function handleApiError(
     });
   }
 
-  console.error('API error:', error);
-  Sentry.captureException(error);
+  if (isExpectedUserError) {
+    console.warn('API warning (expected):', message);
+  } else {
+    console.error('API error:', error);
+    Sentry.captureException(error);
+  }
+  
   return message;
 }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { useRouter, useParams } from 'next/navigation';
 import { getLead, updateLead, closeLead } from '@/lib/services/lead-service';
@@ -15,6 +15,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { ProtectedRoute } from '@/components/protected-route';
+import { LeadActivityTimeline } from '@/components/leads/lead-activity-timeline';
+import { LeadFollowUpCard } from '@/components/leads/lead-follow-up-card';
+import { LeadNotesCard } from '@/components/leads/lead-notes-card';
 
 export default function LeadDetailPage() {
   return (
@@ -22,6 +25,10 @@ export default function LeadDetailPage() {
       <LeadDetailContent />
     </ProtectedRoute>
   );
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
 }
 
 function LeadDetailContent() {
@@ -42,6 +49,42 @@ function LeadDetailContent() {
   const [showCloseDialog, setShowCloseDialog] = useState(false);
   const [closeStatus, setCloseStatus] = useState('Closed');
 
+  const loadLead = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const fetchedLead = await getLead(leadId);
+      setLead(fetchedLead);
+      setLeadData(JSON.parse(fetchedLead.data));
+    } catch (err: unknown) {
+      console.error('Error loading lead:', err);
+      setError(getErrorMessage(err, 'Failed to load lead'));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [leadId]);
+
+  const loadFormConfig = useCallback(async () => {
+    try {
+      const config = await getFormConfig();
+      const fields = config.fields;
+      setFormFields(fields.sort((a, b) => a.order - b.order));
+    } catch (err: unknown) {
+      console.error('Error loading form config:', err);
+    }
+  }, []);
+
+  const loadAgents = useCallback(async () => {
+    if (!user || user.role !== 'manager') return;
+
+    try {
+      const fetchedAgents = await getAgentsByManager(user.$id);
+      setAgents(fetchedAgents);
+    } catch (err: unknown) {
+      console.error('Error loading agents:', err);
+    }
+  }, [user]);
+
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/login');
@@ -55,43 +98,7 @@ function LeadDetailContent() {
         loadAgents();
       }
     }
-  }, [user, authLoading, leadId, router]);
-
-  const loadLead = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const fetchedLead = await getLead(leadId);
-      setLead(fetchedLead);
-      setLeadData(JSON.parse(fetchedLead.data));
-    } catch (err: any) {
-      console.error('Error loading lead:', err);
-      setError(err.message || 'Failed to load lead');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const loadFormConfig = async () => {
-    try {
-      const config = await getFormConfig();
-      const fields = config.fields;
-      setFormFields(fields.sort((a, b) => a.order - b.order));
-    } catch (err: any) {
-      console.error('Error loading form config:', err);
-    }
-  };
-
-  const loadAgents = async () => {
-    if (!user || user.role !== 'manager') return;
-
-    try {
-      const fetchedAgents = await getAgentsByManager(user.$id);
-      setAgents(fetchedAgents);
-    } catch (err: any) {
-      console.error('Error loading agents:', err);
-    }
-  };
+  }, [user, authLoading, leadId, router, loadLead, loadFormConfig, loadAgents]);
 
   const handleSave = async () => {
     if (!lead || !user) return;
@@ -105,11 +112,11 @@ function LeadDetailContent() {
       });
       setIsEditing(false);
       await loadLead();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error saving lead:', err);
       toast({
         title: 'Error',
-        description: err.message || 'Failed to save lead',
+        description: getErrorMessage(err, 'Failed to save lead'),
         variant: 'destructive',
       });
     } finally {
@@ -129,11 +136,11 @@ function LeadDetailContent() {
       });
       setShowCloseDialog(false);
       router.push('/leads');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error closing lead:', err);
       toast({
         title: 'Error',
-        description: err.message || 'Failed to close lead',
+        description: getErrorMessage(err, 'Failed to close lead'),
         variant: 'destructive',
       });
     } finally {
@@ -152,11 +159,11 @@ function LeadDetailContent() {
         description: 'Lead reopened successfully',
       });
       await loadLead();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error reopening lead:', err);
       toast({
         title: 'Error',
-        description: err.message || 'Failed to reopen lead',
+        description: getErrorMessage(err, 'Failed to reopen lead'),
         variant: 'destructive',
       });
     } finally {
@@ -174,22 +181,22 @@ function LeadDetailContent() {
         description: 'Lead assigned successfully',
       });
       await loadLead();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error assigning lead:', err);
       toast({
         title: 'Error',
-        description: err.message || 'Failed to assign lead',
+        description: getErrorMessage(err, 'Failed to assign lead'),
         variant: 'destructive',
       });
     }
   };
 
-  const handleFieldChange = (key: string, value: any) => {
+  const handleFieldChange = (key: string, value: unknown) => {
     setLeadData((prev) => ({ ...prev, [key]: value }));
   };
 
   const renderField = (field: FormField) => {
-    const value = leadData[field.key] || '';
+    const value = String(leadData[field.key] ?? '');
     const isReadOnly = !isEditing || lead?.isClosed;
 
     switch (field.type) {
@@ -243,6 +250,10 @@ function LeadDetailContent() {
         <p className="text-lg">Loading lead...</p>
       </div>
     );
+  }
+
+  if (!user) {
+    return null;
   }
 
   if (error || !lead) {
@@ -370,6 +381,22 @@ function LeadDetailContent() {
             </CardContent>
           </Card>
         )}
+
+        <LeadFollowUpCard
+          lead={lead}
+          user={user}
+          disabled={lead.isClosed}
+          onUpdated={loadLead}
+        />
+
+        {user && (
+          <LeadNotesCard
+            leadId={lead.$id}
+            user={user}
+          />
+        )}
+
+        <LeadActivityTimeline lead={lead} />
 
         {/* Metadata */}
         <Card>
