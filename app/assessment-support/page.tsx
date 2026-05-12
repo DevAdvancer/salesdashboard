@@ -5,6 +5,10 @@ import { useAuth } from "@/lib/contexts/auth-context";
 import { getSupportRequestCcEmails } from "@/lib/services/user-service";
 import type { Lead } from "@/lib/types";
 import { readErrorResponseMessage } from "@/lib/utils/http-error-response";
+import {
+  getSupportEmailAttachmentLimitError,
+  prepareSupportEmailAttachment,
+} from "@/lib/utils/support-email-attachments";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -341,22 +345,36 @@ function AssessmentContent() {
     }
   };
 
-  const handleFileChange = (
+  const handleFileChange = async (
     e: React.ChangeEvent<HTMLInputElement>,
     field: "resume" | "additionalAttachment",
   ) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      if (file.size > 4 * 1024 * 1024) {
+      const existingAttachments = [
+        field === "resume" ? null : formData.resume,
+        field === "additionalAttachment" ? null : formData.additionalAttachment,
+      ].filter((attachment): attachment is File => Boolean(attachment));
+      const preparedAttachment = await prepareSupportEmailAttachment(file, existingAttachments);
+
+      if (!preparedAttachment.file) {
         toast({
           title: "File too large",
-          description: "File must be less than 4MB.",
+          description: preparedAttachment.error ?? "File is too large.",
           variant: "destructive",
         });
         e.target.value = "";
+        setFormData({ ...formData, [field]: null });
         return;
       }
-      setFormData({ ...formData, [field]: file });
+      setFormData({ ...formData, [field]: preparedAttachment.file });
+
+      if (preparedAttachment.compressed) {
+        toast({
+          title: "File compressed",
+          description: `${file.name} was compressed to ${preparedAttachment.file.name}.`,
+        });
+      }
     }
   };
 
@@ -442,6 +460,14 @@ function AssessmentContent() {
       };
 
       const attachments: GraphAttachment[] = [];
+      const attachmentSizeError = getSupportEmailAttachmentLimitError([
+        formData.resume,
+        formData.additionalAttachment,
+      ].filter((attachment): attachment is File => Boolean(attachment)));
+
+      if (attachmentSizeError) {
+        throw new Error(attachmentSizeError);
+      }
 
       if (formData.resume) {
         const base64Content = await fileToBase64(formData.resume);

@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getAuthenticatedAccount } from "@/lib/server/current-user";
 import { readErrorResponseMessage } from "@/lib/utils/http-error-response";
+import {
+  SUPPORT_EMAIL_MAX_JSON_PAYLOAD_BYTES,
+  SUPPORT_EMAIL_MAX_JSON_PAYLOAD_LABEL,
+} from "@/lib/utils/support-email-attachments";
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Internal Server Error';
@@ -15,6 +19,16 @@ export async function POST(request: NextRequest) {
 
     if (!token || !token.value) {
       return NextResponse.json({ error: "Not connected to Outlook" }, { status: 401 });
+    }
+
+    const contentLength = Number(request.headers.get("content-length") ?? "0");
+    if (contentLength > SUPPORT_EMAIL_MAX_JSON_PAYLOAD_BYTES) {
+      return NextResponse.json(
+        {
+          error: `Support email payload is too large. Keep combined attachments under ${SUPPORT_EMAIL_MAX_JSON_PAYLOAD_LABEL} after encoding.`,
+        },
+        { status: 413 },
+      );
     }
 
     const payload = await request.json();

@@ -5,6 +5,10 @@ import { useAuth } from "@/lib/contexts/auth-context";
 import { getSupportRequestCcEmails } from "@/lib/services/user-service";
 import type { Lead } from "@/lib/types";
 import { readErrorResponseMessage } from "@/lib/utils/http-error-response";
+import {
+  getSupportEmailAttachmentLimitError,
+  prepareSupportEmailAttachment,
+} from "@/lib/utils/support-email-attachments";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -356,20 +360,29 @@ function MockContent() {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      if (file.size > 4 * 1024 * 1024) {
-        // 4MB limit
+      const preparedAttachment = await prepareSupportEmailAttachment(file, []);
+
+      if (!preparedAttachment.file) {
         toast({
           title: "File too large",
-          description: "Resume must be less than 4MB.",
+          description: preparedAttachment.error ?? "File is too large.",
           variant: "destructive",
         });
         e.target.value = ""; // Reset input
+        setFormData({ ...formData, resume: null });
         return;
       }
-      setFormData({ ...formData, resume: file });
+      setFormData({ ...formData, resume: preparedAttachment.file });
+
+      if (preparedAttachment.compressed) {
+        toast({
+          title: "File compressed",
+          description: `${file.name} was compressed to ${preparedAttachment.file.name}.`,
+        });
+      }
     }
   };
 
@@ -401,6 +414,11 @@ function MockContent() {
       // Convert file to base64
       let attachment = null;
       if (formData.resume) {
+        const attachmentSizeError = getSupportEmailAttachmentLimitError([formData.resume]);
+        if (attachmentSizeError) {
+          throw new Error(attachmentSizeError);
+        }
+
         const reader = new FileReader();
         const base64Promise = new Promise<string>((resolve, reject) => {
           reader.onload = () => {
