@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, type ReactNode } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { getSupportRequestCcEmails } from "@/lib/services/user-service";
 import type { Lead } from "@/lib/types";
+import { readErrorResponseMessage } from "@/lib/utils/http-error-response";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -585,8 +586,7 @@ function AssessmentContent() {
         });
 
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || "Failed to send email");
+          throw new Error(await readErrorResponseMessage(response, "Failed to send email"));
         }
       } catch (sendError) {
         await rollbackAssessmentAttempt(user.$id, reservedAttempt.reservation);
