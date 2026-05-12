@@ -4,6 +4,7 @@ import { Lead, CreateLeadInput, LeadData, LeadListFilters, UserRole } from '@/li
 import { validateLeadUniqueness } from '@/lib/services/lead-validator';
 import { logAction } from './audit-service';
 import { getUserById } from '@/lib/services/user-service';
+import { getSpecialBranchLeadAccess, hasSpecialAllLeadsAccess } from '@/lib/constants/special-lead-access';
 
 // Helper to validate Appwrite ID format
 function isValidId(id: string | null | undefined): boolean {
@@ -363,16 +364,19 @@ export async function listLeads(
 
     // Check for special user access
     const currentUser = await getUserById(userId);
-    if (currentUser.email === 'shashi.pathak@silverspaceinc.com') {
+    const specialBranchId = getSpecialBranchLeadAccess(currentUser.email);
+    if (hasSpecialAllLeadsAccess(currentUser.email)) {
         // Special user sees all leads - no filters applied
     } else if (userRole === 'agent') {
       // Agents see leads assigned to them OR leads they created
-      queries.push(
-        Query.or([
+      const orConditions = [
           Query.equal('assignedToId', userId),
           Query.equal('ownerId', userId),
-        ])
-      );
+      ];
+      if (specialBranchId) {
+        orConditions.push(Query.equal('branchId', specialBranchId));
+      }
+      queries.push(Query.or(orConditions));
     } else if (userRole === 'admin' || userRole === 'manager') {
       // Admins and Managers see all leads across all branches — no branch/owner filter
     } else if (userRole === 'assistant_manager') {
@@ -393,6 +397,9 @@ export async function listLeads(
 
       if (shouldSeeAllBranchLeads && branchIds && branchIds.length > 0) {
         orConditions.push(Query.equal('branchId', branchIds));
+      }
+      if (specialBranchId) {
+        orConditions.push(Query.equal('branchId', specialBranchId));
       }
 
       try {
@@ -457,6 +464,9 @@ export async function listLeads(
           Query.equal('ownerId', teamIds),
           Query.equal('assignedToId', teamIds),
         ];
+        if (specialBranchId) {
+          orConditions.push(Query.equal('branchId', specialBranchId));
+        }
 
         queries.push(Query.or(orConditions));
       } catch (err) {

@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/server/appwrite";
 import { Lead, LeadData, LeadListFilters, UserRole, CreateLeadInput } from "@/lib/types";
 import { Query, ID, Permission, Role } from "node-appwrite";
 import { COLLECTIONS } from "@/lib/constants/appwrite";
+import { getSpecialBranchLeadAccess, hasSpecialAllLeadsAccess } from "@/lib/constants/special-lead-access";
 import { logAction } from "@/lib/services/audit-service";
 import { assertAuthenticatedUserId } from "@/lib/server/current-user";
 
@@ -293,18 +294,22 @@ export async function listLeadsAction(
     // Role-based filtering
     const userDoc = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, userId);
 
+    const specialBranchId = getSpecialBranchLeadAccess(userDoc.email as string | undefined);
+
     // Special access for Shashi Pathak - View ALL leads
-    if (userDoc.email === 'shashi.pathak@silverspaceinc.com') {
+    if (hasSpecialAllLeadsAccess(userDoc.email as string | undefined)) {
          // No filters applied - sees all leads (same as admin)
          // We explicitly don't push any owner/branch filters
     } else if (userRole === 'agent') {
       // Agents see leads assigned to them OR leads they created
-      queries.push(
-        Query.or([
+      const orConditions = [
           Query.equal('assignedToId', userId),
           Query.equal('ownerId', userId),
-        ])
-      );
+      ];
+      if (specialBranchId) {
+        orConditions.push(Query.equal('branchId', specialBranchId));
+      }
+      queries.push(Query.or(orConditions));
     } else if (userRole === 'admin' || userRole === 'manager') {
       // Admins and Managers see all leads across all branches — no branch/owner filter
     } else if (userRole === 'assistant_manager') {
@@ -326,6 +331,9 @@ export async function listLeadsAction(
 
       if (shouldSeeAllBranchLeads && branchIds && branchIds.length > 0) {
         orConditions.push(Query.equal('branchId', branchIds));
+      }
+      if (specialBranchId) {
+        orConditions.push(Query.equal('branchId', specialBranchId));
       }
 
       // Also include leads from subordinates AND managers (as requested)
@@ -411,6 +419,9 @@ export async function listLeadsAction(
         Query.equal('ownerId', teamIds),
         Query.equal('assignedToId', teamIds),
       ];
+      if (specialBranchId) {
+        orConditions.push(Query.equal('branchId', specialBranchId));
+      }
 
       queries.push(Query.or(orConditions));
     }
