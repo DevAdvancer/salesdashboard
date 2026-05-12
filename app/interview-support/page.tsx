@@ -541,6 +541,10 @@ function InterviewContent() {
 
       const reservedAttempt = await reserveInterviewAttempt(user.$id, selectedLead.$id, subject);
 
+      if ('error' in reservedAttempt) {
+        throw new Error(reservedAttempt.error);
+      }
+
       try {
         const response = await fetch("/api/interview/send-email", {
           method: "POST",

@@ -230,10 +230,10 @@ export async function checkDuplicateInterviewSubject(leadId: string, subject: st
  * attemptCount is stored as a string to match Appwrite String attribute type.
  */
 export async function reserveInterviewAttempt(userId: string, leadId: string, subject: string) {
-    if (!userId || !leadId || !subject?.trim()) throw new Error('Invalid input');
-    await assertAuthenticatedUserId(userId);
+    if (!userId || !leadId || !subject?.trim()) return { error: 'Invalid input' };
 
     try {
+        await assertAuthenticatedUserId(userId);
         const { databases } = await createAdminClient();
         const user = await databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, userId) as unknown as UserDocument;
         const isAdmin = user.role === 'admin';
@@ -264,11 +264,11 @@ export async function reserveInterviewAttempt(userId: string, leadId: string, su
             const globalAttemptCount = getGlobalAttemptCount(allAttempts);
 
             if (hasDuplicateSubject(allAttempts, subject)) {
-                throw new Error('An interview with this exact subject has already been sent for this candidate. Please change the details to avoid a duplicate.');
+                return { error: 'An interview with this exact subject has already been sent for this candidate. Please change the details to avoid a duplicate.' };
             }
 
             if (globalAttemptCount >= MAX_SUPPORT_ATTEMPTS) {
-                throw new Error('Maximum of 2 interview support emails reached for this candidate.');
+                return { error: 'Maximum of 2 interview support emails reached for this candidate.' };
             }
 
             try {
@@ -305,10 +305,10 @@ export async function reserveInterviewAttempt(userId: string, leadId: string, su
             }
         }
 
-        throw new Error('Maximum of 2 interview support emails reached for this candidate.');
+        return { error: 'Maximum of 2 interview support emails reached for this candidate.' };
     } catch (error: unknown) {
         console.error('Error reserving interview attempt:', error);
-        throw error;
+        return { error: error instanceof Error ? error.message : 'Failed to reserve interview attempt' };
     }
 }
 
@@ -372,6 +372,9 @@ export async function completeInterviewAttempt(
 export async function recordInterviewAttempt(userId: string, leadId: string, subject: string, auditMetadata?: Record<string, unknown>) {
     await assertAuthenticatedUserId(userId);
     const attempt = await reserveInterviewAttempt(userId, leadId, subject);
+    if ('error' in attempt) {
+        throw new Error(attempt.error);
+    }
     await completeInterviewAttempt(userId, leadId, subject, attempt.attemptCount, auditMetadata);
     return attempt;
 }
