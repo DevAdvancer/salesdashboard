@@ -56,8 +56,8 @@ interface InterviewFormData {
 }
 
 const INITIAL_FORM_DATA: InterviewFormData = {
-  to: "tech.leaders@silverspaceinc.com",
-  // to: "prateek.narvariya@silverspaceinc.com",
+  to: "rgahlot@silverspaceinc.com",
+  // to: "harsh.patel@silverspaceinc.com",
   cc: "",
   interviewDate: "",
   candidateName: "",
@@ -76,6 +76,8 @@ const INITIAL_FORM_DATA: InterviewFormData = {
   yourPhone: "",
   company: "Silverspace Inc.",
 };
+
+const INTERVIEW_SUPPORT_CC_EMAILS = ["tech.leaders@silverspaceinc.com"];
 
 interface InterviewAttempt {
   $id: string;
@@ -286,7 +288,7 @@ function InterviewContent() {
 
       try {
         const ccEmails = await getSupportRequestCcEmails(currentUser);
-        const uniqueCC = Array.from(new Set(ccEmails));
+        const uniqueCC = Array.from(new Set([...INTERVIEW_SUPPORT_CC_EMAILS, ...ccEmails]));
 
         setFormData((prev) => ({ ...prev, cc: uniqueCC.join(", ") }));
       } catch (err) {
@@ -354,8 +356,8 @@ function InterviewContent() {
     return `${datePart} at ${timePart} EST`;
   };
 
-  // Live subject preview: Sales Interview Support - Candidate Name - Technology - Date at Time EST
-  const liveSubject = `Sales Interview Support - ${formData.candidateName || "..."} - ${formData.technology || "..."} - ${formData.interviewDate ? formatDateEST(formData.interviewDate) : "..."}`;
+  // Live subject preview: [Sales] Interview Support - Candidate Name - Technology - Date at Time EST
+  const liveSubject = `[Sales] Interview Support - ${formData.candidateName || "..."} - ${formData.technology || "..."} - ${formData.interviewDate ? formatDateEST(formData.interviewDate) : "..."}`;
 
   const sendEmail = async () => {
     if (!isOutlookConnected) {
@@ -443,7 +445,7 @@ function InterviewContent() {
       }
 
       const formattedDate = formatDateEST(formData.interviewDate);
-      const subject = `Sales Interview Support - ${formData.candidateName} - ${formData.technology} - ${formattedDate}`;
+      const subject = `[Sales] Interview Support - ${formData.candidateName} - ${formData.technology} - ${formattedDate}`;
 
       let logoUrl =
         "https://egvjgtfjstxgszpzvvbx.supabase.co/storage/v1/object/public/images//20250610_1111_3D%20Gradient%20Logo_remix_01jxd69dc9ex29jbj9r701yjkf%20(2).png";
@@ -463,10 +465,13 @@ function InterviewContent() {
         : `<p style="margin-top: 20px;"><strong style="font-size: 14px;">Job Description</strong></p>
            <p style="color: #888;">JD Not Available</p>`;
 
-      // Interview email table: colored left header, plain white right column
       const emailBody = `
         <html>
           <body style="font-family: Arial, sans-serif; color: #333; margin: 0; padding: 0;">
+            <p style="margin: 0 0 18px 0;">Hi <strong>@Ronak Gahlot</strong>,</p>
+            <p style="margin: 0 0 18px 0;">We require confirmation from your end regarding this task, in line with the recent compliance update. This will enable us to proceed further with the interview.</p>
+            <p style="margin: 0 0 18px 0;">Kindly do the needful at your earliest convenience.</p>
+
             <p style="margin: 0 0 6px 0;">Interview support request details:</p>
 
             <table cellpadding="0" cellspacing="0" border="0" style="width: 100%; max-width: 560px; margin-top: 6px; border-collapse: collapse; border: 1px solid #ccc;">

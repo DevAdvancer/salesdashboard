@@ -57,7 +57,7 @@ interface AssessmentFormData {
 }
 
 const INITIAL_FORM_DATA: AssessmentFormData = {
-  to: "tech.leaders@silverspaceinc.com",
+  to: "rgahlot@silverspaceinc.com",
   // to: "prateek.narvariya@silverspaceinc.com",
   cc: "",
   assessmentReceived: "",
@@ -77,6 +77,8 @@ const INITIAL_FORM_DATA: AssessmentFormData = {
   yourPhone: "",
   company: "Silverspace Inc.",
 };
+
+const ASSESSMENT_SUPPORT_CC_EMAILS = ["tech.leaders@silverspaceinc.com"];
 
 interface AssessmentAttempt {
   $id: string;
@@ -322,7 +324,7 @@ function AssessmentContent() {
 
       try {
         const ccEmails = await getSupportRequestCcEmails(currentUser);
-        const uniqueCC = Array.from(new Set(ccEmails));
+        const uniqueCC = Array.from(new Set([...ASSESSMENT_SUPPORT_CC_EMAILS, ...ccEmails]));
 
         setFormData((prev) => ({
           ...prev,
@@ -395,7 +397,7 @@ function AssessmentContent() {
   };
 
   // Build the live subject line for real-time preview
-  const liveSubject = `Sales Assessment Support - ${formData.candidateName || '...'} - ${formData.jobTitle || '...'} - ${formData.assessmentReceived ? formatScheduleEST(formData.assessmentReceived) : '...'}`;
+  const liveSubject = `[Sales] Assessment Support - ${formData.candidateName || '...'} - ${formData.jobTitle || '...'} - ${formData.assessmentReceived ? formatScheduleEST(formData.assessmentReceived) : '...'}`;
 
   const sendEmail = async () => {
     if (!isOutlookConnected) {
@@ -493,7 +495,7 @@ function AssessmentContent() {
       const formattedReceived = formatScheduleEST(formData.assessmentReceived);
 
       // Subject line
-      const subject = `Sales Assessment Support - ${formData.candidateName} - ${formData.jobTitle} - ${formattedReceived}`;
+      const subject = `[Sales] Assessment Support - ${formData.candidateName} - ${formData.jobTitle} - ${formattedReceived}`;
 
       // Determine logo URL and website based on company
       let logoUrl =
@@ -508,18 +510,19 @@ function AssessmentContent() {
         websiteLink = "https://vizvaconsultancyservices.com/";
       }
 
-      // Job Description section
       const jdSection = formData.jobDescription.trim()
         ? `<p style="margin-top: 20px;"><strong style="font-size: 14px;">Job Description</strong></p>
            <p style="white-space: pre-wrap;">${formData.jobDescription.replace(/\n/g, "<br/>")}</p>`
         : `<p style="margin-top: 20px;"><strong style="font-size: 14px;">Job Description</strong></p>
            <p style="color: #888;">JD Not Available</p>`;
 
-      // Construct email body - table format matching the screenshot
       const emailBody = `
         <html>
           <body style="font-family: Arial, sans-serif; color: #333;">
-            <p>Requested by <strong>${formData.yourName || "Team"}</strong></p>
+            <p>Hi <strong>@Ronak Gahlot</strong>,</p>
+            <p>We require confirmation from your end regarding this task, in line with the recent compliance update. This will enable us to proceed further with the assessment.</p>
+            <p>Kindly do the needful at your earliest convenience.</p>
+
             <p>Assessment support request details:</p>
 
             <table cellpadding="8" cellspacing="0" border="0" style="width: 100%; max-width: 600px; margin-top: 10px; border-collapse: collapse;">
