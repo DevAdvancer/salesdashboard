@@ -8,6 +8,7 @@ jest.mock('@/lib/appwrite', () => ({
   account: {
     create: jest.fn(),
     createEmailPasswordSession: jest.fn(),
+    createJWT: jest.fn(),
     get: jest.fn(),
     deleteSession: jest.fn(),
   },
@@ -28,8 +29,13 @@ const mockAccount = account as jest.Mocked<typeof account>;
 const mockDatabases = databases as jest.Mocked<typeof databases>;
 
 describe('AuthContext', () => {
+  const mockFetch = jest.fn();
+
   beforeEach(() => {
     jest.clearAllMocks();
+    mockFetch.mockResolvedValue({ ok: true });
+    global.fetch = mockFetch as unknown as typeof fetch;
+    mockAccount.createJWT.mockResolvedValue({ jwt: 'jwt-token' } as any);
   });
 
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -125,7 +131,7 @@ describe('AuthContext', () => {
         'password123'
       );
 
-      expect(result.current.user).toEqual(mockUserDoc);
+      expect(result.current.user).toMatchObject(mockUserDoc);
       expect(result.current.isManager).toBe(true);
       expect(result.current.isAgent).toBe(false);
     });
@@ -172,9 +178,63 @@ describe('AuthContext', () => {
         'password123'
       );
 
-      expect(result.current.user).toEqual(mockUserDoc);
+      expect(result.current.user).toMatchObject(mockUserDoc);
       expect(result.current.isAgent).toBe(true);
       expect(result.current.isManager).toBe(false);
+    });
+
+    it('should not resync the server session again on immediate window focus', async () => {
+      const mockAccountData = {
+        $id: 'user-focus',
+        email: 'focus@test.com',
+        name: 'Focus User',
+      };
+
+      const mockUserDoc = {
+        $id: 'user-focus',
+        name: 'Focus User',
+        email: 'focus@test.com',
+        role: 'agent',
+        managerId: null,
+        teamLeadId: null,
+        branchIds: [],
+        branchId: null,
+        $createdAt: '2024-01-01T00:00:00.000Z',
+        $updatedAt: '2024-01-01T00:00:00.000Z',
+      };
+
+      mockAccount.get.mockRejectedValueOnce(new Error('No session'));
+      mockAccount.createEmailPasswordSession.mockResolvedValue({} as any);
+      mockAccount.get.mockResolvedValueOnce(mockAccountData as any);
+      mockDatabases.getDocument.mockResolvedValue(mockUserDoc as any);
+
+      const { result } = renderHook(() => useAuth(), { wrapper });
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      await act(async () => {
+        await result.current.login('focus@test.com', 'password123');
+      });
+
+      const postCallsAfterLogin = mockFetch.mock.calls.filter(
+        ([url, options]) => url === '/api/auth/appwrite-session' && options?.method === 'POST'
+      );
+      expect(postCallsAfterLogin).toHaveLength(1);
+
+      await waitFor(() => {
+        expect(result.current.user?.$id).toBe('user-focus');
+      });
+
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'));
+      });
+
+      const postCallsAfterFocus = mockFetch.mock.calls.filter(
+        ([url, options]) => url === '/api/auth/appwrite-session' && options?.method === 'POST'
+      );
+      expect(postCallsAfterFocus).toHaveLength(1);
     });
   });
 
@@ -199,7 +259,7 @@ describe('AuthContext', () => {
       const { result } = renderHook(() => useAuth(), { wrapper });
 
       await waitFor(() => {
-        expect(result.current.user).toEqual(mockUserDoc);
+        expect(result.current.user).toMatchObject(mockUserDoc);
       });
 
       mockAccount.deleteSession.mockResolvedValue({} as any);
@@ -236,7 +296,7 @@ describe('AuthContext', () => {
       const { result } = renderHook(() => useAuth(), { wrapper });
 
       await waitFor(() => {
-        expect(result.current.user).toEqual(mockUserDoc);
+        expect(result.current.user).toMatchObject(mockUserDoc);
       });
 
       expect(result.current.isManager).toBe(true);
@@ -263,7 +323,7 @@ describe('AuthContext', () => {
       const { result } = renderHook(() => useAuth(), { wrapper });
 
       await waitFor(() => {
-        expect(result.current.user).toEqual(mockUserDoc);
+        expect(result.current.user).toMatchObject(mockUserDoc);
       });
 
       expect(result.current.isAgent).toBe(true);
