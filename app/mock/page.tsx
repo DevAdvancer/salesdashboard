@@ -49,7 +49,6 @@ interface MockFormData {
   contactNumber: string;
   resume: File | null;
   role: string;
-  mode: string;
   schedule: string; // ISO string from datetime-local input
   emailBody: string; // "part 1"
   // Signature fields
@@ -69,7 +68,6 @@ const INITIAL_FORM_DATA: MockFormData = {
   contactNumber: "",
   resume: null,
   role: "",
-  mode: "Evaluation",
   schedule: "",
   emailBody: "Hi Team,\n\nThe candidate is available for the whole day.",
   yourName: "",
@@ -483,7 +481,6 @@ function MockContent() {
               <tr><td style="font-weight: bold; width: 150px; padding: 5px;">Candidate Name</td><td style="padding: 5px;">${formData.candidateName}</td></tr>
               <tr><td style="font-weight: bold; padding: 5px;">End Client</td><td style="padding: 5px;">${formData.endClient}</td></tr>
               <tr><td style="font-weight: bold; padding: 5px;">Role</td><td style="padding: 5px;">${formData.role}</td></tr>
-              <tr><td style="font-weight: bold; padding: 5px;">Mode</td><td style="padding: 5px;">${formData.mode}</td></tr>
               <tr><td style="font-weight: bold; padding: 5px;">Schedule</td><td style="padding: 5px;">${formattedSchedule}</td></tr>
               <tr><td style="font-weight: bold; padding: 5px;">Email ID</td><td style="padding: 5px;">${formData.emailId}</td></tr>
               <tr><td style="font-weight: bold; padding: 5px;">Contact Number</td><td style="padding: 5px;">${formData.contactNumber}</td></tr>
@@ -929,18 +926,6 @@ function MockContent() {
                     setFormData({ ...formData, role: e.target.value })
                   }
                   placeholder="e.g. Data Analyst"
-                />
-              </div>
-
-              <div className="col-span-2 md:col-span-1">
-                <Label htmlFor="mode">Mode</Label>
-                <Input
-                  id="mode"
-                  value={formData.mode}
-                  onChange={(e) =>
-                    setFormData({ ...formData, mode: e.target.value })
-                  }
-                  placeholder="Evaluation"
                 />
               </div>
 

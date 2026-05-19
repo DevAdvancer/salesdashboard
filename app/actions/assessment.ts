@@ -3,13 +3,11 @@
 import { ID, Query } from 'node-appwrite';
 import { createAdminClient } from '@/lib/server/appwrite';
 import { assertAuthenticatedUserId } from '@/lib/server/current-user';
-import { createHash } from 'crypto';
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const ASSESSMENT_ATTEMPTS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_ASSESSMENT_ATTEMPTS_COLLECTION_ID || 'assessment_attempts';
 const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID || 'users';
 const AUDIT_LOGS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_AUDIT_LOGS_COLLECTION_ID!;
-const MAX_SUPPORT_ATTEMPTS = 2;
 
 type DatabasesClient = Awaited<ReturnType<typeof createAdminClient>>['databases'];
 
@@ -108,18 +106,6 @@ async function listAttemptsForLead(databases: DatabasesClient, leadId: string): 
         ]
     );
     return response.documents as unknown as AssessmentAttemptDocument[];
-}
-
-function getAttemptSlotDocumentId(leadId: string, slot: number): string {
-    const hash = createHash('sha1').update(`assessment:${leadId}:${slot}`).digest('hex').slice(0, 30);
-    return `a_${hash}`;
-}
-
-function isConflictError(error: unknown): boolean {
-    return typeof error === 'object'
-        && error !== null
-        && 'code' in error
-        && (error as { code?: unknown }).code === 409;
 }
 
 async function createAssessmentAttemptDocument(
@@ -231,7 +217,7 @@ export async function reserveAssessmentAttempt(userId: string, leadId: string, s
         const { databases } = await createAdminClient();
         const user = await databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, userId) as unknown as UserDocument;
         const isAdmin = user.role === 'admin';
-        let allAttempts = await listAttemptsForLead(databases, leadId);
+        const allAttempts = await listAttemptsForLead(databases, leadId);
 
         if (isAdmin) {
             const newAttempt = await createAssessmentAttemptDocument(databases, userId, leadId, subject, ID.unique());
@@ -253,52 +239,35 @@ export async function reserveAssessmentAttempt(userId: string, leadId: string, s
             };
         }
 
-        for (let slot = 1; slot <= MAX_SUPPORT_ATTEMPTS; slot += 1) {
-            const globalAttemptCount = getGlobalAttemptCount(allAttempts);
-
-            if (hasDuplicateSubject(allAttempts, subject)) {
-                throw new Error('An assessment with this exact subject has already been sent for this candidate. Please change the details to avoid a duplicate.');
-            }
-
-            if (globalAttemptCount >= MAX_SUPPORT_ATTEMPTS) {
-                throw new Error('Maximum of 2 assessment support emails reached for this candidate.');
-            }
-
-            try {
-                const newAttempt = await createAssessmentAttemptDocument(
-                    databases,
-                    userId,
-                    leadId,
-                    subject,
-                    getAttemptSlotDocumentId(leadId, slot)
-                );
-
-                return {
-                    $id: newAttempt.$id,
-                    leadId: newAttempt.leadId,
-                    userId: newAttempt.userId,
-                    attemptCount: globalAttemptCount + 1,
-                    lastAttemptAt: newAttempt.lastAttemptAt,
-                    sentSubjects: [...getGlobalSubjects(allAttempts), subject],
-                    reservation: {
-                        documentId: newAttempt.$id,
-                        created: true,
-                        subject,
-                        previousAttemptCount: 0,
-                        previousLastAttemptAt: null,
-                        previousSentSubjects: [],
-                    },
-                };
-            } catch (error: unknown) {
-                if (!isConflictError(error)) {
-                    throw error;
-                }
-
-                allAttempts = await listAttemptsForLead(databases, leadId);
-            }
+        if (hasDuplicateSubject(allAttempts, subject)) {
+            throw new Error('An assessment with this exact subject has already been sent for this candidate. Please change the details to avoid a duplicate.');
         }
 
-        throw new Error('Maximum of 2 assessment support emails reached for this candidate.');
+        const globalAttemptCount = getGlobalAttemptCount(allAttempts);
+        const newAttempt = await createAssessmentAttemptDocument(
+            databases,
+            userId,
+            leadId,
+            subject,
+            ID.unique()
+        );
+
+        return {
+            $id: newAttempt.$id,
+            leadId: newAttempt.leadId,
+            userId: newAttempt.userId,
+            attemptCount: globalAttemptCount + 1,
+            lastAttemptAt: newAttempt.lastAttemptAt,
+            sentSubjects: [...getGlobalSubjects(allAttempts), subject],
+            reservation: {
+                documentId: newAttempt.$id,
+                created: true,
+                subject,
+                previousAttemptCount: 0,
+                previousLastAttemptAt: null,
+                previousSentSubjects: [],
+            },
+        };
     } catch (error: unknown) {
         console.error('Error reserving assessment attempt:', error);
         throw error;
