@@ -4,21 +4,27 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { listLeadsAction } from "@/app/actions/lead";
-import { Lead, LeadData, HistoryFilters, AuditLog } from "@/lib/types";
+import { Branch, Lead, LeadData, HistoryFilters, AuditLog } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ProtectedRoute } from "@/components/protected-route";
 import { getAuditLogs } from "@/lib/services/audit-service";
+import { DateRangePicker } from "@/components/ui/date-picker";
+import { listBranches } from "@/lib/services/branch-service";
 
 function HistoryContent() {
   const router = useRouter();
   const { user } = useAuth();
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<HistoryFilters>({});
+  const [dateRange, setDateRange] = useState<{
+    from?: string;
+    to?: string;
+  }>({});
   const [closedByMap, setClosedByMap] = useState<Record<string, string>>({});
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
@@ -27,6 +33,7 @@ function HistoryContent() {
     currentPage * ITEMS_PER_PAGE,
   );
   const totalPages = Math.ceil(leads.length / ITEMS_PER_PAGE);
+  const canFilterByBranch = user?.role === "admin" || user?.role === "manager";
 
   useEffect(() => {
     if (!user) {
@@ -36,6 +43,12 @@ function HistoryContent() {
 
     loadClosedLeads();
   }, [user, filters, router]);
+
+  useEffect(() => {
+    if (user?.role === "admin" || user?.role === "manager") {
+      loadBranches();
+    }
+  }, [user]);
 
   useEffect(() => {
     const visibleLeads = leads.slice(
@@ -62,6 +75,7 @@ function HistoryContent() {
         {
           isClosed: true,
           assignedToId: filters.agentId,
+          branchId: filters.branchId,
           dateFrom: filters.dateFrom,
           dateTo: filters.dateTo,
         },
@@ -120,16 +134,25 @@ function HistoryContent() {
     }
   };
 
-  const handleFilterChange = (key: keyof HistoryFilters, value: string) => {
-    setFilters((prev) => ({
-      ...prev,
-      [key]: value || undefined,
-    }));
-  };
-
   const clearFilters = () => {
+    setDateRange({});
     setFilters({});
     setCurrentPage(1);
+  };
+
+  const loadBranches = async () => {
+    if (!user || (user.role !== "admin" && user.role !== "manager")) return;
+
+    try {
+      const branchList = await listBranches();
+      const visibleBranches = branchList.filter((branch) => {
+        if (!branch.isActive) return false;
+        return user.role === "admin" || (user.branchIds ?? []).includes(branch.$id);
+      });
+      setBranches(visibleBranches);
+    } catch (error) {
+      console.error("Error loading branches:", error);
+    }
   };
 
   const formatDate = (dateString: string | null | undefined) => {
@@ -171,24 +194,59 @@ function HistoryContent() {
       <Card id="tour-clients-filters" className="p-4 mb-6">
         <h2 className="text-lg font-semibold mb-4">Filters</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <Label htmlFor="dateFrom">From Date</Label>
-            <Input
-              id="dateFrom"
-              type="date"
-              value={filters.dateFrom || ""}
-              onChange={(e) => handleFilterChange("dateFrom", e.target.value)}
+          <div className="sm:col-span-2">
+            <Label htmlFor="clientDateRange">Date Range</Label>
+            <DateRangePicker
+              id="clientDateRange"
+              value={dateRange}
+              onChange={(range) => {
+                setDateRange(range);
+
+                if (!range.from && !range.to) {
+                  setFilters((prev) => ({
+                    ...prev,
+                    dateFrom: undefined,
+                    dateTo: undefined,
+                  }));
+                  setCurrentPage(1);
+                  return;
+                }
+
+                if (range.from && range.to) {
+                  setFilters((prev) => ({
+                    ...prev,
+                    dateFrom: range.from,
+                    dateTo: range.to,
+                  }));
+                  setCurrentPage(1);
+                }
+              }}
             />
           </div>
-          <div>
-            <Label htmlFor="dateTo">To Date</Label>
-            <Input
-              id="dateTo"
-              type="date"
-              value={filters.dateTo || ""}
-              onChange={(e) => handleFilterChange("dateTo", e.target.value)}
-            />
-          </div>
+          {canFilterByBranch && (
+            <div>
+              <Label htmlFor="clientBranchFilter">Branch</Label>
+              <select
+                id="clientBranchFilter"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                value={filters.branchId ?? ""}
+                onChange={(event) => {
+                  setFilters((prev) => ({
+                    ...prev,
+                    branchId: event.target.value || undefined,
+                  }));
+                  setCurrentPage(1);
+                }}
+              >
+                <option value="">All Branches</option>
+                {branches.map((branch) => (
+                  <option key={branch.$id} value={branch.$id}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="flex items-end">
             <Button onClick={clearFilters} variant="outline" className="w-full">
               Clear Filters

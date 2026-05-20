@@ -9,12 +9,14 @@ import {
   getAssignableUsers,
   getUserById as getUserByIdService,
 } from "@/lib/services/user-service";
-import { Lead, User, LeadListFilters, LeadData } from "@/lib/types";
+import { listBranches } from "@/lib/services/branch-service";
+import { Branch, Lead, User, LeadListFilters, LeadData } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TableSkeleton } from "@/components/ui/skeleton";
+import { DateRangePicker } from "@/components/ui/date-picker";
 import { handleError } from "@/lib/utils/error-handler";
 import { ProtectedRoute } from "@/components/protected-route";
 import { canExportLeadsByEmail } from "@/lib/constants/lead-export-access";
@@ -35,6 +37,7 @@ function LeadsContent() {
   const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [agents, setAgents] = useState<User[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [owners, setOwners] = useState<Map<string, User>>(new Map());
   const [assignedUsers, setAssignedUsers] = useState<Map<string, User>>(
     new Map(),
@@ -46,6 +49,7 @@ function LeadsContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [assignedToFilter, setAssignedToFilter] = useState("");
+  const [branchFilter, setBranchFilter] = useState("");
   const [dateFromFilter, setDateFromFilter] = useState("");
   const [dateToFilter, setDateToFilter] = useState("");
   const [isExporting, setIsExporting] = useState(false);
@@ -53,6 +57,7 @@ function LeadsContent() {
   const ITEMS_PER_PAGE = 10;
 
   const canExportLeads = canExportLeadsByEmail(user?.email);
+  const canFilterByBranch = user?.role === "admin" || user?.role === "manager";
   const isSpecialUser =
     user?.email?.toLowerCase() === "shashi.pathak@silverspaceinc.com";
 
@@ -182,6 +187,9 @@ function LeadsContent() {
       ) {
         loadAgents();
       }
+      if (user.role === "admin" || user.role === "manager") {
+        loadBranches();
+      }
     }
   }, [user, loading, router]);
 
@@ -290,6 +298,21 @@ function LeadsContent() {
     }
   };
 
+  const loadBranches = async () => {
+    if (!user || (user.role !== "admin" && user.role !== "manager")) return;
+
+    try {
+      const branchList = await listBranches();
+      const visibleBranches = branchList.filter((branch) => {
+        if (!branch.isActive) return false;
+        return user.role === "admin" || (user.branchIds ?? []).includes(branch.$id);
+      });
+      setBranches(visibleBranches);
+    } catch (err) {
+      console.error("Error loading branches:", err);
+    }
+  };
+
   const loadOwnerNames = async () => {
     if (!user || leads.length === 0) return;
 
@@ -366,6 +389,7 @@ function LeadsContent() {
     if (searchQuery) newFilters.searchQuery = searchQuery;
     if (statusFilter) newFilters.status = statusFilter;
     if (assignedToFilter) newFilters.assignedToId = assignedToFilter;
+    if (branchFilter) newFilters.branchId = branchFilter;
     if (dateFromFilter) {
       // Set to start of day
       const date = new Date(dateFromFilter);
@@ -386,6 +410,7 @@ function LeadsContent() {
     setSearchQuery("");
     setStatusFilter("");
     setAssignedToFilter("");
+    setBranchFilter("");
     setDateFromFilter("");
     setDateToFilter("");
     // Explicitly set empty object to reset everything, including hidden isClosed logic
@@ -509,23 +534,33 @@ function LeadsContent() {
               </div>
             )}
 
-            <div>
-              <Label htmlFor="dateFrom">Date From</Label>
-              <Input
-                id="dateFrom"
-                type="date"
-                value={dateFromFilter}
-                onChange={(e) => setDateFromFilter(e.target.value)}
-              />
-            </div>
+            {canFilterByBranch && (
+              <div>
+                <Label htmlFor="branchFilter">Branch</Label>
+                <select
+                  id="branchFilter"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  value={branchFilter}
+                  onChange={(e) => setBranchFilter(e.target.value)}>
+                  <option value="">All Branches</option>
+                  {branches.map((branch) => (
+                    <option key={branch.$id} value={branch.$id}>
+                      {branch.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div>
-              <Label htmlFor="dateTo">Date To</Label>
-              <Input
-                id="dateTo"
-                type="date"
-                value={dateToFilter}
-                onChange={(e) => setDateToFilter(e.target.value)}
+              <Label htmlFor="leadDateRange">Date Range</Label>
+              <DateRangePicker
+                id="leadDateRange"
+                value={{ from: dateFromFilter || undefined, to: dateToFilter || undefined }}
+                onChange={(range) => {
+                  setDateFromFilter(range.from ?? "");
+                  setDateToFilter(range.to ?? "");
+                }}
               />
             </div>
           </div>

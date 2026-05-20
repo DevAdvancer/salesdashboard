@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { CalendarClock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { DateTimePicker } from '@/components/ui/date-picker';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { updateLeadFollowUp } from '@/lib/services/sop-service';
@@ -74,11 +74,10 @@ export function LeadFollowUpCard({ lead, user, disabled = false, onUpdated }: Le
         <div className="grid gap-4 md:grid-cols-2">
           <div>
             <Label htmlFor="nextFollowUpAt">Next Follow-Up</Label>
-            <Input
+            <DateTimePicker
               id="nextFollowUpAt"
-              type="datetime-local"
               value={nextFollowUpAt}
-              onChange={(event) => setNextFollowUpAt(event.target.value)}
+              onChange={setNextFollowUpAt}
               disabled={disabled || saving}
             />
           </div>
@@ -115,11 +114,10 @@ export function LeadFollowUpCard({ lead, user, disabled = false, onUpdated }: Le
           </div>
           <div>
             <Label htmlFor="lastContactedAt">Last Contacted</Label>
-            <Input
+            <DateTimePicker
               id="lastContactedAt"
-              type="datetime-local"
               value={lastContactedAt}
-              onChange={(event) => setLastContactedAt(event.target.value)}
+              onChange={setLastContactedAt}
               disabled={disabled || saving}
             />
           </div>

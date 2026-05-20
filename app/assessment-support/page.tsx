@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DateTimePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
@@ -904,13 +905,12 @@ function AssessmentContent() {
                     <RequiredText>Assessment Received (EST)</RequiredText>
                   </div>
                   <div className="p-2 border-b">
-                    <Input
+                    <DateTimePicker
                       id="assessmentReceived"
-                      type="datetime-local"
                       min={minDateTime}
                       value={formData.assessmentReceived}
-                      onChange={(e) =>
-                        setFormData({ ...formData, assessmentReceived: e.target.value })
+                      onChange={(value) =>
+                        setFormData({ ...formData, assessmentReceived: value })
                       }
                       className="h-8"
                       required

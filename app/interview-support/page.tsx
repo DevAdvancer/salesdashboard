@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DateTimePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
@@ -873,12 +874,11 @@ function InterviewContent() {
                     <RequiredText>Date &amp; Time (EST)</RequiredText>
                   </div>
                   <div className="p-2 border-b">
-                    <Input
+                    <DateTimePicker
                       id="interviewDate"
-                      type="datetime-local"
                       min={minDateTime}
                       value={formData.interviewDate}
-                      onChange={(e) => setFormData({ ...formData, interviewDate: e.target.value })}
+                      onChange={(value) => setFormData({ ...formData, interviewDate: value })}
                       className="h-8"
                       required
                       aria-required="true"

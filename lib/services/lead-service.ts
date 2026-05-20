@@ -495,6 +495,11 @@ export async function listLeads(
       queries.push(Query.equal('assignedToId', filters.assignedToId));
     }
 
+    // Apply branch filter
+    if (filters.branchId) {
+      queries.push(Query.equal('branchId', filters.branchId));
+    }
+
     // Apply date range filters
     if (filters.dateFrom) {
       queries.push(Query.greaterThanEqual('$createdAt', filters.dateFrom));

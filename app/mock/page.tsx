@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DateTimePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
@@ -931,13 +932,12 @@ function MockContent() {
 
               <div className="col-span-2 md:col-span-1">
                 <Label htmlFor="schedule">Schedule</Label>
-                <Input
+                <DateTimePicker
                   id="schedule"
-                  type="datetime-local"
                   min={minDateTime}
                   value={formData.schedule}
-                  onChange={(e) =>
-                    setFormData({ ...formData, schedule: e.target.value })
+                  onChange={(value) =>
+                    setFormData({ ...formData, schedule: value })
                   }
                 />
               </div>

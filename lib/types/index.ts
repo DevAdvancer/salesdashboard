@@ -135,6 +135,7 @@ export interface LeadListFilters {
   status?: string;
   assignedToId?: string;
   ownerId?: string;
+  branchId?: string;
   dateFrom?: string;
   dateTo?: string;
   searchQuery?: string;
@@ -249,6 +250,7 @@ export interface AuthContext {
 export interface HistoryFilters {
   dateFrom?: string;
   dateTo?: string;
+  branchId?: string;
   agentId?: string;
   status?: string;
   closedBy?: string;
