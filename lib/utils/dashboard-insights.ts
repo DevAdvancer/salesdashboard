@@ -81,6 +81,54 @@ interface BuildLeadershipDashboardInsightsInput {
   now?: Date;
 }
 
+interface ResolveLeadUsersForInsightsInput {
+  leads: Lead[];
+  users: User[];
+  getUserById: (userId: string) => Promise<User>;
+}
+
+export async function resolveLeadUsersForInsights({
+  leads,
+  users,
+  getUserById,
+}: ResolveLeadUsersForInsightsInput): Promise<User[]> {
+  const userMap = new Map(users.map((currentUser) => [currentUser.$id, currentUser]));
+  const missingUserIds = new Set<string>();
+
+  for (const lead of leads) {
+    if (lead.ownerId && !userMap.has(lead.ownerId)) {
+      missingUserIds.add(lead.ownerId);
+    }
+
+    if (lead.assignedToId && !userMap.has(lead.assignedToId)) {
+      missingUserIds.add(lead.assignedToId);
+    }
+  }
+
+  if (missingUserIds.size === 0) {
+    return users;
+  }
+
+  const resolvedUsers = await Promise.all(
+    Array.from(missingUserIds).map(async (userId) => {
+      try {
+        return await getUserById(userId);
+      } catch (error) {
+        console.warn(`Could not resolve dashboard user ${userId}`, error);
+        return null;
+      }
+    })
+  );
+
+  for (const resolvedUser of resolvedUsers) {
+    if (resolvedUser) {
+      userMap.set(resolvedUser.$id, resolvedUser);
+    }
+  }
+
+  return Array.from(userMap.values());
+}
+
 function parseCurrencyAmount(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;

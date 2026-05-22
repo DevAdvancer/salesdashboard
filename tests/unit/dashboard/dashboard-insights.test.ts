@@ -1,5 +1,6 @@
 import {
   buildLeadershipDashboardInsights,
+  resolveLeadUsersForInsights,
   STALE_LEAD_DAYS,
 } from '@/lib/utils/dashboard-insights';
 import type { Branch, Lead, User } from '@/lib/types';
@@ -45,6 +46,60 @@ const branches: Branch[] = [
 ];
 
 describe('buildLeadershipDashboardInsights', () => {
+  it('supplements users with missing lead owners and assignees before building follow-up names', async () => {
+    const baseUsers = [
+      user({ $id: 'manager-1', name: 'Mina Manager', role: 'manager', branchIds: ['branch-1'] }),
+    ];
+    const referencedUsers = new Map([
+      ['manager-2', user({ $id: 'manager-2', name: 'Morgan Owner', role: 'manager', branchIds: ['branch-1'] })],
+      ['agent-2', user({ $id: 'agent-2', name: 'Casey Assignee', role: 'agent', branchIds: ['branch-1'] })],
+    ]);
+    const fetchedIds: string[] = [];
+
+    const usersForInsights = await resolveLeadUsersForInsights({
+      leads: [
+        lead({
+          $id: 'lead-with-missing-users',
+          ownerId: 'manager-2',
+          assignedToId: 'agent-2',
+          branchId: 'branch-1',
+          nextFollowUpAt: '2026-05-06T18:00:00.000Z',
+        }),
+      ],
+      users: baseUsers,
+      getUserById: async (userId) => {
+        fetchedIds.push(userId);
+        const foundUser = referencedUsers.get(userId);
+        if (!foundUser) {
+          throw new Error(`Missing fixture for ${userId}`);
+        }
+        return foundUser;
+      },
+    });
+
+    expect(fetchedIds.sort()).toEqual(['agent-2', 'manager-2']);
+
+    const insights = buildLeadershipDashboardInsights({
+      leads: [
+        lead({
+          $id: 'lead-with-missing-users',
+          ownerId: 'manager-2',
+          assignedToId: 'agent-2',
+          branchId: 'branch-1',
+          nextFollowUpAt: '2026-05-06T18:00:00.000Z',
+        }),
+      ],
+      users: usersForInsights,
+      branches,
+      now,
+    });
+
+    expect(insights.followUpQueue.dueToday[0]).toMatchObject({
+      assignedToName: 'Casey Assignee',
+      ownerName: 'Morgan Owner',
+    });
+  });
+
   it('summarizes role counts, branch health, workload, and stale leads', () => {
     const users = [
       user({ $id: 'manager-1', name: 'Mina Manager', role: 'manager', branchIds: ['branch-1'] }),

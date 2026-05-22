@@ -9,9 +9,13 @@ import { ProtectedRoute } from '@/components/protected-route';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/contexts/auth-context';
-import { buildLeadershipDashboardInsights, type LeadershipDashboardInsights } from '@/lib/utils/dashboard-insights';
+import {
+  buildLeadershipDashboardInsights,
+  resolveLeadUsersForInsights,
+  type LeadershipDashboardInsights,
+} from '@/lib/utils/dashboard-insights';
 import { listBranches } from '@/lib/services/branch-service';
-import { getAgentsByTeamLead, getAssignableUsers } from '@/lib/services/user-service';
+import { getAgentsByTeamLead, getAssignableUsers, getUserById } from '@/lib/services/user-service';
 import type { Branch, User } from '@/lib/types';
 
 export default function WorkQueuePage() {
@@ -46,6 +50,11 @@ function WorkQueueContent() {
         } else if (isTeamLead) {
           usersForInsights = [user, ...(await getAgentsByTeamLead(user.$id))];
         }
+        usersForInsights = await resolveLeadUsersForInsights({
+          leads: [...activeLeads, ...closedLeads],
+          users: usersForInsights,
+          getUserById,
+        });
         const allBranches = await listBranches();
         const branchIds = new Set([
           ...usersForInsights.flatMap((visibleUser) => visibleUser.branchIds || []),

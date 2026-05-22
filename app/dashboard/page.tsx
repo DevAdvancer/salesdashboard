@@ -27,6 +27,7 @@ import { FollowUpQueueCard } from '@/components/dashboard/follow-up-queue';
 import { RoleWorkDashboard } from '@/components/dashboard/role-work-dashboard';
 import {
   buildLeadershipDashboardInsights,
+  resolveLeadUsersForInsights,
   type LeadershipDashboardInsights,
 } from '@/lib/utils/dashboard-insights';
 
@@ -203,6 +204,12 @@ function DashboardContent() {
 
             setAssignedAgents(agentsWithBranches);
           }
+
+          usersForInsights = await resolveLeadUsersForInsights({
+            leads: [...activeLeads, ...closedLeads],
+            users: usersForInsights,
+            getUserById: userService.getUserById,
+          });
 
           const allBranches = await branchService.listBranches();
           const branchIdsInScope = new Set([
