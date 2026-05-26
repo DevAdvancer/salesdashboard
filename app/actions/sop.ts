@@ -3,6 +3,7 @@
 import { ID, Query } from "node-appwrite";
 import { listLeadsAction } from "@/app/actions/lead";
 import { createAdminClient } from "@/lib/server/appwrite";
+import { createNotificationsForRecipients } from "@/lib/server/notifications";
 import { assertAuthenticatedUserId } from "@/lib/server/current-user";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { isRoleEligibleForComponent } from "@/lib/constants/component-access";
@@ -57,6 +58,19 @@ function ensureComponentAccess(role: UserRole, componentKey: Parameters<typeof i
 function ensureLeadership(role: UserRole) {
   if (!["admin", "manager", "assistant_manager", "team_lead"].includes(role)) {
     throw new Error("Not authorized");
+  }
+}
+
+function getLeadDisplayName(lead: Lead): string {
+  try {
+    const data = JSON.parse(lead.data) as Record<string, unknown>;
+    const firstName = String(data.firstName ?? "").trim();
+    const lastName = String(data.lastName ?? "").trim();
+    const company = String(data.company ?? "").trim();
+    const email = String(data.email ?? "").trim();
+    return [firstName, lastName].filter(Boolean).join(" ") || company || email || "Lead";
+  } catch {
+    return "Lead";
   }
 }
 
@@ -148,6 +162,7 @@ export async function updateLeadFollowUpAction(input: {
   ensureComponentAccess(actor.role, "leads");
 
   const { databases } = await createAdminClient();
+  const currentLead = await databases.getDocument(DATABASE_ID, COLLECTIONS.LEADS, input.leadId);
   const doc = await databases.updateDocument(
     DATABASE_ID,
     COLLECTIONS.LEADS,
@@ -159,6 +174,34 @@ export async function updateLeadFollowUpAction(input: {
       followUpStatus: input.followUpStatus ?? "pending",
     }
   );
+
+  const updatedLead = doc as unknown as Lead;
+  if (updatedLead.nextFollowUpAt && updatedLead.followUpStatus !== "completed") {
+    await createNotificationsForRecipients(
+      databases,
+      [updatedLead.assignedToId, updatedLead.ownerId],
+      {
+        type: "follow_up",
+        title: "Follow-up scheduled",
+        body: `${actor.name} scheduled ${updatedLead.nextAction || "a follow-up"} for ${getLeadDisplayName(updatedLead)}.`,
+        targetId: updatedLead.$id,
+        targetType: "LEAD",
+      }
+    );
+  } else if (currentLead.nextFollowUpAt && updatedLead.followUpStatus === "completed") {
+    await createNotificationsForRecipients(
+      databases,
+      [updatedLead.assignedToId, updatedLead.ownerId],
+      {
+        type: "follow_up_completed",
+        title: "Follow-up completed",
+        body: `${actor.name} marked the follow-up for ${getLeadDisplayName(updatedLead)} complete.`,
+        targetId: updatedLead.$id,
+        targetType: "LEAD",
+      }
+    );
+  }
+
   return doc as unknown as Lead;
 }
 
@@ -319,6 +362,21 @@ export async function createReviewQueueItemAction(input: {
       resolvedAt: null,
     }
   );
+
+  if (input.assignedReviewerId) {
+    await createNotificationsForRecipients(
+      databases,
+      [input.assignedReviewerId],
+      {
+        type: "review_queue",
+        title: "Review assigned",
+        body: `${actor.name} assigned a ${input.targetType.toLowerCase()} review to you.`,
+        targetId: doc.$id,
+        targetType: "REVIEW_QUEUE",
+      }
+    );
+  }
+
   return doc as unknown as ReviewQueueItem;
 }
 

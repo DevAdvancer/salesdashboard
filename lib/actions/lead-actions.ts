@@ -1,14 +1,17 @@
 'use server';
 
 import { createAdminClient } from '@/lib/server/appwrite';
+import { createNotificationsForRecipients } from '@/lib/server/notifications';
 import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { Permission, Role, ID } from 'node-appwrite';
 import { Lead, User } from '@/lib/types';
 
+type AdminDatabases = Awaited<ReturnType<typeof createAdminClient>>['databases'];
+
 /**
  * Helper to get permissions for supervisors up the chain (Server Side)
  */
-async function getHierarchyPermissionsServer(userId: string, databases: any): Promise<string[]> {
+async function getHierarchyPermissionsServer(userId: string, databases: AdminDatabases): Promise<string[]> {
     const permissions: string[] = [];
     try {
         let currentId = userId;
@@ -62,6 +65,19 @@ async function getHierarchyPermissionsServer(userId: string, databases: any): Pr
         console.error(`Error fetching hierarchy permissions for user ${userId}:`, e);
     }
     return permissions;
+}
+
+function getLeadDisplayName(lead: Lead): string {
+    try {
+        const data = JSON.parse(lead.data) as Record<string, unknown>;
+        const firstName = String(data.firstName ?? '').trim();
+        const lastName = String(data.lastName ?? '').trim();
+        const company = String(data.company ?? '').trim();
+        const email = String(data.email ?? '').trim();
+        return [firstName, lastName].filter(Boolean).join(' ') || company || email || 'Lead';
+    } catch {
+        return 'Lead';
+    }
 }
 
 /**
@@ -143,9 +159,21 @@ export async function assignLeadAction(
             // Non-blocking error
         }
 
+        await createNotificationsForRecipients(
+            databases,
+            [agentId],
+            {
+                type: 'lead_assignment',
+                title: 'Lead assigned',
+                body: `${actorName} assigned ${getLeadDisplayName(currentLead)} to you.`,
+                targetId: leadId,
+                targetType: 'LEAD',
+            }
+        );
+
         return { success: true, lead: lead as unknown as Lead };
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Error assigning lead (server action):', error);
-        throw new Error(error.message || 'Failed to assign lead');
+        throw new Error(error instanceof Error ? error.message : 'Failed to assign lead');
     }
 }

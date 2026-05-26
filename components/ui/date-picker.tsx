@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Calendar, ChevronLeft, ChevronRight, Clock } from "lucide-react"
+import { Calendar, ChevronLeft, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type DateRange = {
@@ -86,6 +86,25 @@ function splitDateTime(value?: string) {
 
 function joinDateTime(date: string, hour: string, minute: string) {
   return `${date}T${hour.padStart(2, "0")}:${minute.padStart(2, "0")}`
+}
+
+function toDisplayHour(hour: string) {
+  const parsedHour = Number(hour)
+  const normalizedHour = Number.isFinite(parsedHour) ? parsedHour : 9
+  const displayHour = normalizedHour % 12 || 12
+  return String(displayHour).padStart(2, "0")
+}
+
+function toPeriod(hour: string) {
+  const parsedHour = Number(hour)
+  return Number.isFinite(parsedHour) && parsedHour >= 12 ? "PM" : "AM"
+}
+
+function toTwentyFourHour(displayHour: string, period: string) {
+  const parsedHour = Number(displayHour)
+  const normalizedHour = Number.isFinite(parsedHour) ? parsedHour : 9
+  const twelveHour = normalizedHour === 12 ? 0 : normalizedHour
+  return String(period === "PM" ? twelveHour + 12 : twelveHour).padStart(2, "0")
 }
 
 function minuteOptions(currentMinute: string) {
@@ -311,111 +330,92 @@ export function DateTimePicker({
   disabled?: boolean
   "aria-required"?: boolean | "true" | "false"
 }) {
-  const { open, setOpen, ref } = usePopover()
   const parts = splitDateTime(value)
   const minParts = splitDateTime(min)
-  const [visibleMonth, setVisibleMonth] = React.useState(() => getMonthStart(parts.date || minParts.date))
-
-  React.useEffect(() => {
-    if (open) setVisibleMonth(getMonthStart(parts.date || minParts.date))
-  }, [open, parts.date, minParts.date])
-
-  const selectDate = (date: string) => {
-    onChange(joinDateTime(date, parts.hour, parts.minute))
-  }
 
   const setTime = (nextHour: string, nextMinute: string) => {
     const date = parts.date || toDateValue(new Date())
     onChange(joinDateTime(date, nextHour, nextMinute))
   }
 
+  const setDisplayTime = (nextDisplayHour: string, nextMinute: string, nextPeriod: string) => {
+    setTime(toTwentyFourHour(nextDisplayHour, nextPeriod), nextMinute)
+  }
+
   const displayValue = parts.date
-    ? `${formatDisplayDate(parts.date)} ${parts.hour}:${parts.minute}`
+    ? `${formatDisplayDate(parts.date)} ${toDisplayHour(parts.hour)}:${parts.minute} ${toPeriod(parts.hour)}`
     : "Select date and time"
 
   return (
-    <div ref={ref} className={cn("relative", className)}>
-      <button
-        id={id}
-        type="button"
-        disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
-        aria-required={ariaRequired ?? required}
-        className={cn(
-          "flex h-10 w-full items-center justify-between gap-3 rounded-[1.5rem]",
-          "bg-[var(--input)] px-3 py-2 text-left text-sm text-foreground",
-          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ink)]",
-          "disabled:cursor-not-allowed disabled:opacity-40",
-          className?.includes("h-8") && "h-8",
-        )}
-      >
-        <span className={cn(!parts.date && "text-muted-foreground")}>{displayValue}</span>
-        <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />
-      </button>
-
-      {open && (
-        <div className="absolute left-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-border bg-popover p-4 text-popover-foreground shadow-xl">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <button
-              type="button"
-              onClick={() => setVisibleMonth((current) => addMonths(current, -1))}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full hover:bg-[var(--accent)]"
-              aria-label="Previous month"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setVisibleMonth((current) => addMonths(current, 1))}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full hover:bg-[var(--accent)]"
-              aria-label="Next month"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-          <CalendarMonth
-            month={visibleMonth}
-            selected={parts.date}
-            minDate={minParts.date}
-            onSelect={selectDate}
-          />
-          <div className="mt-4 flex items-center gap-2 border-t border-border pt-4">
-            <Clock className="h-4 w-4 text-muted-foreground" />
-            <select
-              value={parts.hour}
-              onChange={(event) => setTime(event.target.value, parts.minute)}
-              className="h-9 rounded-full border border-border bg-[var(--input)] px-3 text-sm"
-              aria-label="Hour"
-            >
-              {Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, "0")).map((hour) => (
-                <option key={hour} value={hour}>
-                  {hour}
-                </option>
-              ))}
-            </select>
-            <span className="text-muted-foreground">:</span>
-            <select
-              value={parts.minute}
-              onChange={(event) => setTime(parts.hour, event.target.value)}
-              className="h-9 rounded-full border border-border bg-[var(--input)] px-3 text-sm"
-              aria-label="Minute"
-            >
-              {minuteOptions(parts.minute).map((minute) => (
-                <option key={minute} value={minute}>
-                  {minute}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="ml-auto rounded-full bg-[var(--ink)] px-4 py-2 text-sm font-medium text-[var(--canvas)]"
-            >
-              Done
-            </button>
-          </div>
-        </div>
+    <div
+      id={id}
+      aria-label={displayValue}
+      data-required={ariaRequired ?? required ? true : undefined}
+      className={cn(
+        "grid w-full grid-cols-[minmax(6.75rem,1fr)_auto_auto_auto_auto] items-center gap-0.5",
+        "rounded-[1.5rem] bg-[var(--input)] px-2 py-1 text-sm text-foreground",
+        "focus-within:ring-1 focus-within:ring-[var(--ink)]",
+        disabled && "cursor-not-allowed opacity-40",
+        className,
       )}
+    >
+      <input
+        type="date"
+        value={parts.date}
+        min={minParts.date}
+        disabled={disabled}
+        required={required}
+        aria-label="Date"
+        onChange={(event) => onChange(joinDateTime(event.target.value, parts.hour, parts.minute))}
+        className={cn(
+          "min-w-0 bg-transparent px-2 text-sm font-medium outline-none",
+          "disabled:cursor-not-allowed",
+          !parts.date && "text-muted-foreground",
+        )}
+      />
+      <select
+        value={toDisplayHour(parts.hour)}
+        disabled={disabled}
+        onChange={(event) =>
+          setDisplayTime(event.target.value, parts.minute, toPeriod(parts.hour))
+        }
+        className="h-7 w-[2.25rem] bg-transparent px-0 text-center text-sm font-medium outline-none disabled:cursor-not-allowed"
+        aria-label="Hour"
+      >
+        {Array.from({ length: 12 }, (_, hour) => String(hour + 1).padStart(2, "0")).map((hour) => (
+          <option key={hour} value={hour}>
+            {hour}
+          </option>
+        ))}
+      </select>
+      <span className="px-0.5 text-muted-foreground">:</span>
+      <select
+        value={parts.minute}
+        disabled={disabled}
+        onChange={(event) =>
+          setDisplayTime(toDisplayHour(parts.hour), event.target.value, toPeriod(parts.hour))
+        }
+        className="h-7 w-[2.25rem] bg-transparent px-0 text-center text-sm font-medium outline-none disabled:cursor-not-allowed"
+        aria-label="Minute"
+      >
+        {minuteOptions(parts.minute).map((minute) => (
+          <option key={minute} value={minute}>
+            {minute}
+          </option>
+        ))}
+      </select>
+      <select
+        value={toPeriod(parts.hour)}
+        disabled={disabled}
+        onChange={(event) =>
+          setDisplayTime(toDisplayHour(parts.hour), parts.minute, event.target.value)
+        }
+        className="h-7 w-[2.75rem] bg-transparent px-0 text-center text-sm font-medium outline-none disabled:cursor-not-allowed"
+        aria-label="AM/PM"
+      >
+        <option value="AM">AM</option>
+        <option value="PM">PM</option>
+      </select>
     </div>
   )
 }

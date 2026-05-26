@@ -33,6 +33,43 @@ describe("Appwrite read cache", () => {
     expect(source.listDocuments).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps identical reads cached beyond short polling intervals", async () => {
+    jest.useFakeTimers();
+    const source = {
+      getDocument: jest.fn(),
+      listDocuments: jest.fn().mockResolvedValue({ documents: [{ $id: "notification-1" }] }),
+      updateDocument: jest.fn(),
+    };
+    const databases = createReadThroughDatabases(source as any);
+
+    await databases.listDocuments("db", "notifications", ["recipient=user-1"]);
+    jest.advanceTimersByTime(31_000);
+    await databases.listDocuments("db", "notifications", ["recipient=user-1"]);
+
+    expect(source.listDocuments).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
+  });
+
+  it("shares read cache across database wrappers when stores are shared", async () => {
+    const stores = {
+      cache: new Map(),
+      inFlight: new Map(),
+    };
+    const source = {
+      getDocument: jest.fn().mockResolvedValue({ $id: "user-1", name: "A" }),
+      listDocuments: jest.fn(),
+      updateDocument: jest.fn(),
+    };
+
+    const first = createReadThroughDatabases(source as any, { namespace: "admin", stores });
+    const second = createReadThroughDatabases(source as any, { namespace: "admin", stores });
+
+    await first.getDocument("db", "users", "user-1");
+    await second.getDocument("db", "users", "user-1");
+
+    expect(source.getDocument).toHaveBeenCalledTimes(1);
+  });
+
   it("clears cached reads after a write", async () => {
     const source = {
       getDocument: jest

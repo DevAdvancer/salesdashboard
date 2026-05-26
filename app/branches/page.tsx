@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
 import {
   listBranches,
@@ -44,7 +43,6 @@ export default function BranchManagementPage() {
 }
 
 function BranchManagementContent() {
-  const router = useRouter();
   const { user, isAdmin } = useAuth();
   const [branches, setBranches] = useState<BranchWithStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -183,11 +181,6 @@ function BranchManagementContent() {
 
   return (
     <div className="container mx-auto">
-      <div className="mb-4">
-        <Button variant="outline" onClick={() => router.push('/dashboard')} className="mb-4">
-          ← Back to Dashboard
-        </Button>
-      </div>
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">

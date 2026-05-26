@@ -16,9 +16,7 @@ import {
   Trash2,
   Plus,
   Save,
-  Asterisk,
-  Edit2,
-  ArrowLeft
+  Asterisk
 } from 'lucide-react';
 import { ProtectedRoute } from '@/components/protected-route';
 
@@ -217,17 +215,6 @@ function FieldManagementContent() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-8">
-        {/* Back Button */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => window.history.back()}
-          className="mb-8"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Dashboard
-        </Button>
-
         {/* Header Card */}
         <Card className="mb-6 md:mb-8">
           <div className="p-4 sm:p-6 md:p-8">

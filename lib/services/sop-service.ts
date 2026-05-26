@@ -11,6 +11,7 @@ import {
   updateLeadFollowUpAction,
   updateReviewQueueStatusAction,
 } from '@/app/actions/sop';
+import { cacheClientRead, clearClientReadCache } from '@/lib/utils/client-read-cache';
 import type { ReviewTargetOption, ReviewTargetType } from '@/lib/utils/review-target-options';
 import type {
   CoachingNote,
@@ -32,11 +33,13 @@ export interface UpdateLeadFollowUpInput {
 }
 
 export function updateLeadFollowUp(input: UpdateLeadFollowUpInput): Promise<Lead> {
-  return updateLeadFollowUpAction(input);
+  return updateLeadFollowUpAction(input).finally(clearClientReadCache);
 }
 
 export function listLeadNotes(actorId: string, leadId: string): Promise<LeadNote[]> {
-  return listLeadNotesAction(actorId, leadId);
+  return cacheClientRead('sop:listLeadNotes', [actorId, leadId], () =>
+    listLeadNotesAction(actorId, leadId)
+  );
 }
 
 export function createLeadNote(input: {
@@ -45,11 +48,13 @@ export function createLeadNote(input: {
   body: string;
   visibility: LeadNoteVisibility;
 }): Promise<LeadNote> {
-  return createLeadNoteAction(input);
+  return createLeadNoteAction(input).finally(clearClientReadCache);
 }
 
 export function listCoachingNotes(actorId: string, targetUserId?: string): Promise<CoachingNote[]> {
-  return listCoachingNotesAction(actorId, targetUserId);
+  return cacheClientRead('sop:listCoachingNotes', [actorId, targetUserId], () =>
+    listCoachingNotesAction(actorId, targetUserId)
+  );
 }
 
 export function createCoachingNote(input: {
@@ -59,11 +64,13 @@ export function createCoachingNote(input: {
   note: string;
   visibility: CoachingNoteVisibility;
 }): Promise<CoachingNote> {
-  return createCoachingNoteAction(input);
+  return createCoachingNoteAction(input).finally(clearClientReadCache);
 }
 
 export function listReviewQueue(actorId: string, status?: string): Promise<ReviewQueueItem[]> {
-  return listReviewQueueAction(actorId, status);
+  return cacheClientRead('sop:listReviewQueue', [actorId, status], () =>
+    listReviewQueueAction(actorId, status)
+  );
 }
 
 export function listReviewTargetOptions(input: {
@@ -71,7 +78,9 @@ export function listReviewTargetOptions(input: {
   targetType: ReviewTargetType;
   searchQuery?: string;
 }): Promise<ReviewTargetOption[]> {
-  return listReviewTargetOptionsAction(input);
+  return cacheClientRead('sop:listReviewTargetOptions', [input], () =>
+    listReviewTargetOptionsAction(input)
+  );
 }
 
 export function createReviewQueueItem(input: {
@@ -83,7 +92,7 @@ export function createReviewQueueItem(input: {
   reason?: string | null;
   metadata?: string | null;
 }): Promise<ReviewQueueItem> {
-  return createReviewQueueItemAction(input);
+  return createReviewQueueItemAction(input).finally(clearClientReadCache);
 }
 
 export function updateReviewQueueStatus(
@@ -91,16 +100,18 @@ export function updateReviewQueueStatus(
   itemId: string,
   status: string
 ): Promise<ReviewQueueItem> {
-  return updateReviewQueueStatusAction(actorId, itemId, status);
+  return updateReviewQueueStatusAction(actorId, itemId, status).finally(clearClientReadCache);
 }
 
 export function listNotifications(actorId: string): Promise<NotificationRecord[]> {
-  return listNotificationsAction(actorId);
+  return cacheClientRead('sop:listNotifications', [actorId], () =>
+    listNotificationsAction(actorId)
+  );
 }
 
 export function markNotificationRead(
   actorId: string,
   notificationId: string
 ): Promise<NotificationRecord> {
-  return markNotificationReadAction(actorId, notificationId);
+  return markNotificationReadAction(actorId, notificationId).finally(clearClientReadCache);
 }

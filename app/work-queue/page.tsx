@@ -1,13 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { listLeadsAction } from '@/app/actions/lead';
 import { FollowUpQueueCard } from '@/components/dashboard/follow-up-queue';
 import { RoleWorkDashboard } from '@/components/dashboard/role-work-dashboard';
 import { ProtectedRoute } from '@/components/protected-route';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/contexts/auth-context';
 import {
   buildLeadershipDashboardInsights,
@@ -28,7 +26,6 @@ export default function WorkQueuePage() {
 
 function WorkQueueContent() {
   const { user, isAdmin, isManager, isAssistantManager, isTeamLead } = useAuth();
-  const router = useRouter();
   const [insights, setInsights] = useState<LeadershipDashboardInsights | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +83,6 @@ function WorkQueueContent() {
           <h1 className="text-2xl md:text-3xl font-bold">Work Queue</h1>
           <p className="text-muted-foreground">Daily follow-ups, overdue work, and active lead pressure.</p>
         </div>
-        <Button variant="outline" onClick={() => router.push('/dashboard')}>Back to Dashboard</Button>
       </div>
 
       {error && (

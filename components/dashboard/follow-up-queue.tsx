@@ -1,6 +1,7 @@
 'use client';
 
 import { CalendarClock } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import {
   Card,
   CardContent,
@@ -37,6 +38,8 @@ function QueueList({
   title: string;
   items: NonNullable<FollowUpQueueCardProps['queue']>['overdue'];
 }) {
+  const router = useRouter();
+
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
@@ -50,7 +53,12 @@ function QueueList({
       ) : (
         <div className="space-y-2">
           {items.slice(0, 5).map((item) => (
-            <div key={`${title}-${item.leadId}`} className="border border-border bg-[var(--soft-cloud)] p-3">
+            <button
+              key={`${title}-${item.leadId}`}
+              type="button"
+              onClick={() => router.push(`/leads/${item.leadId}`)}
+              className="block w-full border border-border bg-[var(--soft-cloud)] p-3 text-left transition-colors hover:border-foreground/40 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ink)]"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium">{item.leadName}</p>
@@ -68,7 +76,7 @@ function QueueList({
               <p className="mt-2 text-xs text-muted-foreground">
                 {item.status} / {item.branchName}
               </p>
-            </div>
+            </button>
           ))}
         </div>
       )}

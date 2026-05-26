@@ -58,6 +58,16 @@ export function NotificationBell() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (!canSeeNotifications) return;
+
+    const intervalId = window.setInterval(() => {
+      void load();
+    }, 30000);
+
+    return () => window.clearInterval(intervalId);
+  }, [canSeeNotifications, load]);
+
   if (!canSeeNotifications) {
     return null;
   }
@@ -79,7 +89,10 @@ export function NotificationBell() {
         aria-label="Notifications"
         aria-expanded={open}
         title="Notifications"
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          setOpen((value) => !value);
+          void load();
+        }}
         className="relative flex size-10 items-center justify-center rounded-full border border-border bg-[var(--soft-cloud)] text-foreground shadow-none transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ink)]"
       >
         <Bell className="h-4 w-4" />

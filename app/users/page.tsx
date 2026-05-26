@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { createManagerAction, createTeamLeadAction, createAgentAction, createAssistantManagerAction } from '@/app/actions/user';
 import {
@@ -26,7 +26,6 @@ export default function UserManagementPage() {
 }
 
 function UserManagementContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isManager, isAdmin, isTeamLead, isAssistantManager } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
@@ -539,15 +538,6 @@ function UserManagementContent() {
 
   return (
     <div className="container mx-auto">
-      <div className="mb-4">
-        <Button
-          variant="outline"
-          onClick={() => router.push('/dashboard')}
-          className="mb-4"
-        >
-          ← Back to Dashboard
-        </Button>
-      </div>
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">

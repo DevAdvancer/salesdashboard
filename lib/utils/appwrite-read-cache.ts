@@ -1,19 +1,41 @@
 type Callable = (...args: unknown[]) => unknown;
 
-const DEFAULT_TTL_MS = 30_000;
+const DEFAULT_TTL_MS = 5 * 60 * 1000;
 const READ_METHODS = new Set(["getDocument", "listDocuments"]);
 const WRITE_PREFIXES = ["create", "update", "delete"];
 
-function stableKey(method: string, args: unknown[]) {
-  return `${method}:${JSON.stringify(args)}`;
+export interface AppwriteReadCacheStores {
+  cache: Map<string, { expiresAt: number; value: unknown }>;
+  inFlight: Map<string, Promise<unknown>>;
+}
+
+interface AppwriteReadCacheOptions {
+  ttlMs?: number;
+  namespace?: string;
+  stores?: AppwriteReadCacheStores;
+}
+
+export function createAppwriteReadCacheStores(): AppwriteReadCacheStores {
+  return {
+    cache: new Map(),
+    inFlight: new Map(),
+  };
+}
+
+function stableKey(namespace: string, method: string, args: unknown[]) {
+  return `${namespace}:${method}:${JSON.stringify(args)}`;
 }
 
 export function createReadThroughDatabases<T extends object>(
   source: T,
-  ttlMs = DEFAULT_TTL_MS
+  options: number | AppwriteReadCacheOptions = DEFAULT_TTL_MS
 ): T & { clearReadCache: () => void } {
-  const cache = new Map<string, { expiresAt: number; value: unknown }>();
-  const inFlight = new Map<string, Promise<unknown>>();
+  const resolvedOptions =
+    typeof options === "number" ? { ttlMs: options } : options;
+  const ttlMs = resolvedOptions.ttlMs ?? DEFAULT_TTL_MS;
+  const namespace = resolvedOptions.namespace ?? "default";
+  const stores = resolvedOptions.stores ?? createAppwriteReadCacheStores();
+  const { cache, inFlight } = stores;
 
   const clearReadCache = () => {
     cache.clear();
@@ -35,7 +57,7 @@ export function createReadThroughDatabases<T extends object>(
 
       if (READ_METHODS.has(prop)) {
         return (...args: unknown[]) => {
-          const key = stableKey(prop, args);
+          const key = stableKey(namespace, prop, args);
           const now = Date.now();
           const cached = cache.get(key);
 

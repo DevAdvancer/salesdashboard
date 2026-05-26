@@ -1,5 +1,17 @@
 import { Client, Account, Databases, Users } from "node-appwrite";
 import { cookies } from "next/headers";
+import { createHash } from "node:crypto";
+import {
+  createAppwriteReadCacheStores,
+  createReadThroughDatabases,
+} from "@/lib/utils/appwrite-read-cache";
+
+const adminDatabaseCacheStores = createAppwriteReadCacheStores();
+const sessionDatabaseCacheStores = createAppwriteReadCacheStores();
+
+function namespaceForSecret(prefix: string, value: string) {
+  return `${prefix}:${createHash("sha256").update(value).digest("hex").slice(0, 24)}`;
+}
 
 export async function createSessionClient() {
   const cookieStore = await cookies();
@@ -17,7 +29,10 @@ export async function createSessionClient() {
         return new Account(client);
       },
       get databases() {
-        return new Databases(client);
+        return createReadThroughDatabases(new Databases(client), {
+          namespace: namespaceForSecret("session-jwt", appJwt.value),
+          stores: sessionDatabaseCacheStores,
+        });
       },
     };
   }
@@ -58,7 +73,10 @@ export async function createSessionClient() {
           return new Account(client);
         },
         get databases() {
-          return new Databases(client);
+          return createReadThroughDatabases(new Databases(client), {
+            namespace: namespaceForSecret("session-cookie", session.value),
+            stores: sessionDatabaseCacheStores,
+          });
         },
       };
     } catch {
@@ -80,7 +98,10 @@ export async function createAdminClient() {
       return new Account(client);
     },
     get databases() {
-      return new Databases(client);
+      return createReadThroughDatabases(new Databases(client), {
+        namespace: "admin",
+        stores: adminDatabaseCacheStores,
+      });
     },
     get users() {
       return new Users(client);
