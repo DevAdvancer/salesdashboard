@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/server/appwrite";
 import { Lead, LeadData, LeadListFilters, UserRole, CreateLeadInput } from "@/lib/types";
 import { Query, ID, Permission, Role } from "node-appwrite";
 import { COLLECTIONS } from "@/lib/constants/appwrite";
-import { getSpecialBranchLeadAccess, hasSpecialAllLeadsAccess } from "@/lib/constants/special-lead-access";
+import { getSpecialBranchLeadAccess } from '@/lib/constants/special-lead-access';
 import { logAction } from "@/lib/services/audit-service";
 import { assertAuthenticatedUserId } from "@/lib/server/current-user";
 
@@ -368,11 +368,7 @@ export async function listLeadsAction(
 
     const specialBranchId = getSpecialBranchLeadAccess(userDoc.email as string | undefined);
 
-    // Special access for Shashi Pathak - View ALL leads
-    if (hasSpecialAllLeadsAccess(userDoc.email as string | undefined)) {
-         // No filters applied - sees all leads (same as admin)
-         // We explicitly don't push any owner/branch filters
-    } else if (userRole === 'agent') {
+    if (userRole === 'agent') {
       // Agents see leads assigned to them OR leads they created
       const orConditions = [
           Query.equal('assignedToId', userId),

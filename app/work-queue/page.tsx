@@ -1,20 +1,24 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { listLeadsAction } from '@/app/actions/lead';
-import { FollowUpQueueCard } from '@/components/dashboard/follow-up-queue';
-import { RoleWorkDashboard } from '@/components/dashboard/role-work-dashboard';
-import { ProtectedRoute } from '@/components/protected-route';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useAuth } from '@/lib/contexts/auth-context';
+import { useEffect, useState } from "react";
+import { listLeadsAction } from "@/app/actions/lead";
+import { FollowUpQueueCard } from "@/components/dashboard/follow-up-queue";
+import { RoleWorkDashboard } from "@/components/dashboard/role-work-dashboard";
+import { ProtectedRoute } from "@/components/protected-route";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/lib/contexts/auth-context";
 import {
   buildLeadershipDashboardInsights,
   resolveLeadUsersForInsights,
   type LeadershipDashboardInsights,
-} from '@/lib/utils/dashboard-insights';
-import { listBranches } from '@/lib/services/branch-service';
-import { getAgentsByTeamLead, getAssignableUsers, getUserById } from '@/lib/services/user-service';
-import type { Branch, User } from '@/lib/types';
+} from "@/lib/utils/dashboard-insights";
+import { listBranches } from "@/lib/services/branch-service";
+import {
+  getAgentsByTeamLead,
+  getAssignableUsers,
+  getUserById,
+} from "@/lib/services/user-service";
+import type { Branch, User } from "@/lib/types";
 
 export default function WorkQueuePage() {
   return (
@@ -25,8 +29,11 @@ export default function WorkQueuePage() {
 }
 
 function WorkQueueContent() {
-  const { user, isAdmin, isManager, isAssistantManager, isTeamLead } = useAuth();
-  const [insights, setInsights] = useState<LeadershipDashboardInsights | null>(null);
+  const { user, isAdmin, isManager, isAssistantManager, isTeamLead } =
+    useAuth();
+  const [insights, setInsights] = useState<LeadershipDashboardInsights | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,13 +44,32 @@ function WorkQueueContent() {
         setLoading(true);
         setError(null);
         const [activeLeads, closedLeads] = await Promise.all([
-          listLeadsAction({ isClosed: false }, user.$id, user.role, user.branchIds),
-          listLeadsAction({ isClosed: true }, user.$id, user.role, user.branchIds),
+          listLeadsAction(
+            { isClosed: false },
+            user.$id,
+            user.role,
+            user.branchIds,
+          ),
+          listLeadsAction(
+            { isClosed: true },
+            user.$id,
+            user.role,
+            user.branchIds,
+          ),
         ]);
         let usersForInsights: User[] = [user];
         if (isAdmin || isManager || isAssistantManager) {
-          const visibleUsers = await getAssignableUsers(user.role, user.branchIds || [], user.$id);
-          usersForInsights = [user, ...visibleUsers.filter((visibleUser) => visibleUser.$id !== user.$id)];
+          const visibleUsers = await getAssignableUsers(
+            user.role,
+            user.branchIds || [],
+            user.$id,
+          );
+          usersForInsights = [
+            user,
+            ...visibleUsers.filter(
+              (visibleUser) => visibleUser.$id !== user.$id,
+            ),
+          ];
         } else if (isTeamLead) {
           usersForInsights = [user, ...(await getAgentsByTeamLead(user.$id))];
         }
@@ -54,20 +80,30 @@ function WorkQueueContent() {
         });
         const allBranches = await listBranches();
         const branchIds = new Set([
-          ...usersForInsights.flatMap((visibleUser) => visibleUser.branchIds || []),
-          ...activeLeads.map((lead) => lead.branchId).filter((branchId): branchId is string => Boolean(branchId)),
-          ...closedLeads.map((lead) => lead.branchId).filter((branchId): branchId is string => Boolean(branchId)),
+          ...usersForInsights.flatMap(
+            (visibleUser) => visibleUser.branchIds || [],
+          ),
+          ...activeLeads
+            .map((lead) => lead.branchId)
+            .filter((branchId): branchId is string => Boolean(branchId)),
+          ...closedLeads
+            .map((lead) => lead.branchId)
+            .filter((branchId): branchId is string => Boolean(branchId)),
         ]);
-        const branches: Branch[] = allBranches.filter((branch) => isAdmin || branchIds.has(branch.$id));
-        setInsights(buildLeadershipDashboardInsights({
-          leads: [...activeLeads, ...closedLeads],
-          users: usersForInsights,
-          branches,
-        }));
+        const branches: Branch[] = allBranches.filter(
+          (branch) => isAdmin || branchIds.has(branch.$id),
+        );
+        setInsights(
+          buildLeadershipDashboardInsights({
+            leads: [...activeLeads, ...closedLeads],
+            users: usersForInsights,
+            branches,
+          }),
+        );
       } catch (error) {
-        console.error('Failed to load work queue:', error);
+        console.error("Failed to load work queue:", error);
         setInsights(null);
-        setError('Work queue is not available for your current permissions.');
+        setError("Work queue is not available for your current permissions.");
       } finally {
         setLoading(false);
       }
@@ -81,7 +117,9 @@ function WorkQueueContent() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Work Queue</h1>
-          <p className="text-muted-foreground">Daily follow-ups, overdue work, and active lead pressure.</p>
+          <p className="text-muted-foreground">
+            Daily follow-ups, overdue work, and active lead pressure.
+          </p>
         </div>
       </div>
 
@@ -103,7 +141,10 @@ function WorkQueueContent() {
         </div>
       )}
       <div id="tour-work-queue-actions">
-        <FollowUpQueueCard queue={insights?.followUpQueue ?? null} isLoading={loading} />
+        <FollowUpQueueCard
+          queue={insights?.followUpQueue ?? null}
+          isLoading={loading}
+        />
       </div>
 
       <Card>
@@ -112,7 +153,8 @@ function WorkQueueContent() {
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            Open a lead from the normal Leads page, set its next follow-up and next action, then it will appear here when due.
+            Open a lead from the normal Leads page, set its next follow-up and
+            next action, then it will appear here when due.
           </p>
         </CardContent>
       </Card>

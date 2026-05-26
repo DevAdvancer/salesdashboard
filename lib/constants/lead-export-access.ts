@@ -1,5 +1,4 @@
 export const LEAD_EXPORT_ACCESS_EMAILS = [
-  "shashi.pathak@silverspaceinc.com",
   "alisha.dsouza@silverspaceinc.com",
 ];
 

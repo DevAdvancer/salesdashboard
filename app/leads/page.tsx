@@ -73,8 +73,6 @@ function LeadsContent() {
 
   const canExportLeads = canExportLeadsByEmail(user?.email);
   const canFilterByBranch = user?.role === "admin" || user?.role === "manager";
-  const isSpecialUser =
-    user?.email?.toLowerCase() === "shashi.pathak@silverspaceinc.com";
 
   const handleExport = () => {
     if (!leads.length) return;
@@ -617,11 +615,6 @@ function LeadsContent() {
                       <th className="p-3 md:p-4 font-semibold hidden lg:table-cell">
                         Source
                       </th>
-                      {isSpecialUser && (
-                        <th className="p-3 md:p-4 font-semibold hidden lg:table-cell">
-                          Referral
-                        </th>
-                      )}
                       {[
                         "admin",
                         "manager",
@@ -669,14 +662,6 @@ function LeadsContent() {
                           <td className="p-3 md:p-4 text-muted-foreground hidden lg:table-cell">
                             {leadData.sourceName || leadData.source || "-"}
                           </td>
-                          {isSpecialUser && (
-                            <td className="p-3 md:p-4 text-muted-foreground hidden lg:table-cell">
-                              {leadData.referralName ||
-                                leadData.referral ||
-                                leadData["Referral Name"] ||
-                                "-"}
-                            </td>
-                          )}
                           {[
                             "admin",
                             "manager",

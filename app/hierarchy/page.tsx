@@ -234,7 +234,6 @@ function HierarchyContent() {
         setIsLoading(true);
         const { databases } = await import('@/lib/appwrite');
         const { Query } = await import('appwrite');
-
         let allUsers: unknown[] = [];
 
         if (isAdmin) {

@@ -4,7 +4,7 @@ import { Lead, CreateLeadInput, LeadData, LeadListFilters, UserRole } from '@/li
 import { validateLeadUniqueness } from '@/lib/services/lead-validator';
 import { logAction } from './audit-service';
 import { getUserById } from '@/lib/services/user-service';
-import { getSpecialBranchLeadAccess, hasSpecialAllLeadsAccess } from '@/lib/constants/special-lead-access';
+import { getSpecialBranchLeadAccess } from '@/lib/constants/special-lead-access';
 
 // Helper to validate Appwrite ID format
 function isValidId(id: string | null | undefined): boolean {
@@ -436,9 +436,7 @@ export async function listLeads(
     // Check for special user access
     const currentUser = await getUserById(userId);
     const specialBranchId = getSpecialBranchLeadAccess(currentUser.email);
-    if (hasSpecialAllLeadsAccess(currentUser.email)) {
-        // Special user sees all leads - no filters applied
-    } else if (userRole === 'agent') {
+    if (userRole === 'agent') {
       // Agents see leads assigned to them OR leads they created
       const orConditions = [
           Query.equal('assignedToId', userId),
