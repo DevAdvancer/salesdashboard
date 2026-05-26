@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { account, databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { User, UserRole, AuthContext as AuthContextType } from '@/lib/types';
+import { getSignupRoleForEmail } from '@/lib/utils/user-hierarchy';
 import { ID } from 'appwrite';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -84,7 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         userId
       );
 
-      return {
+      const userData = {
         $id: userDoc.$id,
         name: userDoc.name as string,
         email: userDoc.email as string,
@@ -97,10 +98,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           : [],
         teamLeadId: (userDoc.teamLeadId as string) || null,
         branchIds: Array.isArray(userDoc.branchIds) ? (userDoc.branchIds as string[]) : [],
+        isActive: userDoc.isActive !== false,
         branchId: (userDoc.branchId as string) || null,
         $createdAt: userDoc.$createdAt,
         $updatedAt: userDoc.$updatedAt,
       };
+
+      return userData;
     } catch (error) {
       console.error('Error fetching user document:', error);
       return null;
@@ -115,6 +119,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (session) {
           await syncServerSession({ force: true });
           const userDoc = await fetchUserDocument(session.$id);
+          if (userDoc?.isActive === false) {
+            await account.deleteSession('current').catch(() => {});
+            await clearServerSession();
+            setUser(null);
+            return;
+          }
           setUser(userDoc);
         }
       } catch {
@@ -164,6 +174,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error('User document not found');
       }
 
+      if (userDoc.isActive === false) {
+        await account.deleteSession('current').catch(() => {});
+        await clearServerSession();
+        throw new Error('This account is inactive. Please contact an administrator.');
+      }
+
       setUser(userDoc);
     } catch (error) {
       console.error('Login error:', error);
@@ -201,7 +217,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       );
       console.log('Account created successfully:', newAccount.$id);
 
-      // Create user document with manager role using the account ID
+      const signupRole = getSignupRoleForEmail(email);
+
+      // Create user document using the account ID
       console.log('Creating user document with ID:', newAccount.$id);
       const userDoc = await databases.createDocument(
         DATABASE_ID,
@@ -210,8 +228,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         {
           name,
           email,
-          role: 'manager',
+          role: signupRole,
           managerId: null,
+          managerIds: [],
+          assistantManagerIds: [],
+          teamLeadId: null,
+          isActive: true,
+          branchIds: [],
         }
       );
       console.log('User document created successfully:', userDoc.$id);
@@ -250,6 +273,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           : [],
         teamLeadId: (userDoc.teamLeadId as string) || null,
         branchIds: Array.isArray(userDoc.branchIds) ? (userDoc.branchIds as string[]) : [],
+        isActive: userDoc.isActive !== false,
         branchId: (userDoc.branchId as string) || null,
         $createdAt: userDoc.$createdAt,
         $updatedAt: userDoc.$updatedAt,

@@ -18,6 +18,7 @@ function mapDocToUser(doc: any): User {
     managerIds: Array.isArray(doc.managerIds) ? doc.managerIds : [], // Add managerIds
     teamLeadId: (doc.teamLeadId as string) || null,
     branchIds: Array.isArray(doc.branchIds) ? doc.branchIds : [],
+    isActive: doc.isActive !== false,
     branchId: (doc.branchId as string) || null,
     $createdAt: doc.$createdAt,
     $updatedAt: doc.$updatedAt,
@@ -595,8 +596,41 @@ export async function getUserById(userId: string): Promise<User> {
     );
     return mapDocToUser(userDoc);
   } catch (error: any) {
+    const code = typeof error?.code === 'number' ? error.code : null;
+    const message = typeof error?.message === 'string' ? error.message : String(error);
+
+    if (code === 404 || message.toLowerCase().includes('could not be found') || message.toLowerCase().includes('not found')) {
+      throw new Error(`User not found: ${userId}`);
+    }
+
     console.error('Error fetching user:', error);
-    throw new Error(error.message || 'Failed to fetch user');
+    throw new Error(message || 'Failed to fetch user');
+  }
+}
+
+export async function getUserByIdOrNull(userId: string): Promise<User | null> {
+  const validIdPattern = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,35}$/;
+
+  if (!userId || !validIdPattern.test(userId)) {
+    return null;
+  }
+
+  try {
+    const userDoc = await databases.getDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      userId
+    );
+    return mapDocToUser(userDoc);
+  } catch (error: any) {
+    const code = typeof error?.code === 'number' ? error.code : null;
+    const message = typeof error?.message === 'string' ? error.message : String(error);
+    const normalizedMessage = message.toLowerCase();
+
+    if (code === 404 || normalizedMessage.includes('could not be found') || normalizedMessage.includes('not found')) {
+      return null;
+    }
+    throw error;
   }
 }
 

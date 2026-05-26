@@ -5,9 +5,9 @@ import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter } from "next/navigation";
 import { listLeadsAction } from "@/app/actions/lead";
 import {
-  getAgentsByManager,
+  getAgentsByTeamLead,
   getAssignableUsers,
-  getUserById as getUserByIdService,
+  getUserByIdOrNull,
 } from "@/lib/services/user-service";
 import { listBranches } from "@/lib/services/branch-service";
 import { Branch, Lead, User, LeadListFilters, LeadData } from "@/lib/types";
@@ -30,6 +30,21 @@ function parseLeadData(lead: Lead): LeadData {
     console.error("Failed to parse lead data", error);
     return {};
   }
+}
+
+function deletedUserPlaceholder(userId: string): User {
+  return {
+    $id: userId,
+    name: 'Deleted user',
+    email: '',
+    role: 'agent',
+    managerId: null,
+    managerIds: [],
+    assistantManagerIds: [],
+    teamLeadId: null,
+    branchIds: [],
+    isActive: false,
+  };
 }
 
 function LeadsContent() {
@@ -233,11 +248,11 @@ function LeadsContent() {
       const fetchedUsers = await Promise.all(
         missingAssignedIds.map(async (id) => {
           try {
-            const fetchedUser = await getUserByIdService(id);
-            return [id, fetchedUser] as const;
+            const fetchedUser = await getUserByIdOrNull(id);
+            return [id, fetchedUser ?? deletedUserPlaceholder(id)] as const;
           } catch (err) {
             console.error(`Error loading assigned user ${id}:`, err);
-            return null;
+            return [id, deletedUserPlaceholder(id)] as const;
           }
         }),
       );
@@ -289,7 +304,7 @@ function LeadsContent() {
         );
       } else {
         // Team leads can only see agents assigned to them
-        fetchedUsers = await getAgentsByManager(user.$id);
+        fetchedUsers = await getAgentsByTeamLead(user.$id);
       }
 
       setAgents(fetchedUsers);
@@ -324,11 +339,11 @@ function LeadsContent() {
       const fetchedOwners = await Promise.all(
         missingOwnerIds.map(async (ownerId) => {
           try {
-            const owner = await getUserByIdService(ownerId);
-            return [ownerId, owner] as const;
+            const owner = await getUserByIdOrNull(ownerId);
+            return [ownerId, owner ?? deletedUserPlaceholder(ownerId)] as const;
           } catch (err) {
             console.error(`Error loading owner ${ownerId}:`, err);
-            return null;
+            return [ownerId, deletedUserPlaceholder(ownerId)] as const;
           }
         }),
       );

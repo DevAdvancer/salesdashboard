@@ -18,6 +18,7 @@ export interface User {
   assistantManagerIds?: string[]; // New field for multiple assistant managers
   teamLeadId: string | null;
   branchIds: string[];
+  isActive?: boolean;
   /** @deprecated Use branchIds instead */
   branchId?: string | null;
   $createdAt?: string;

@@ -56,7 +56,7 @@ export default function SignupPage() {
     try {
       console.log('Submitting signup form...');
       // Call signup function from auth context
-      // This creates a manager account by default
+      // This creates a manager account by default. The bootstrap admin email creates an admin.
       await signup(data.name, data.email, data.password);
       console.log('Signup successful, redirecting to dashboard...');
 
@@ -88,7 +88,7 @@ export default function SignupPage() {
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold">Create an account</CardTitle>
           <CardDescription>
-            Sign up to get started with SalesHub CRM as a manager
+            Sign up to get started with SalesHub CRM
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit(onSubmit)}>

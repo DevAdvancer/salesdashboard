@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { ProtectedRoute } from '@/components/protected-route';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { User } from '@/lib/types';
-import { Network, User as UserIcon, Users, GitGraph } from 'lucide-react';
+import { Branch, User } from '@/lib/types';
+import { User as UserIcon, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { listBranches } from '@/lib/services/branch-service';
 
@@ -17,14 +17,110 @@ export default function HierarchyPage() {
   );
 }
 
-function TreeNode({ user, allUsers, level = 0 }: { user: User; allUsers: User[]; level?: number }) {
+function getRoleWeight(role: User['role']) {
+  const rolePriority = { admin: -1, manager: 0, assistant_manager: 1, team_lead: 2, agent: 3 };
+  return rolePriority[role] ?? 99;
+}
+
+function sortUsersForHierarchy(users: User[]) {
+  return [...users].sort((a, b) => {
+    const roleDiff = getRoleWeight(a.role) - getRoleWeight(b.role);
+    if (roleDiff !== 0) return roleDiff;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+function hasUser(allUsers: User[], userId: string | null | undefined) {
+  return Boolean(userId && allUsers.some((u) => u.$id === userId));
+}
+
+function findUserById(allUsers: User[], userId: string | null | undefined) {
+  return userId ? allUsers.find((u) => u.$id === userId) : undefined;
+}
+
+function getValidManagerIds(target: User, allUsers: User[]) {
+  const ids = new Set<string>();
+  const primaryManager = findUserById(allUsers, target.managerId);
+  if (primaryManager?.role === 'manager') ids.add(primaryManager.$id);
+  target.managerIds?.forEach((managerId) => {
+    const manager = findUserById(allUsers, managerId);
+    if (manager?.role === 'manager') ids.add(managerId);
+  });
+  return Array.from(ids);
+}
+
+function getValidAssistantManagerIds(target: User, allUsers: User[]) {
+  const ids = new Set<string>();
+  const primaryAssistantManager = findUserById(allUsers, target.assistantManagerId);
+  if (primaryAssistantManager?.role === 'assistant_manager') ids.add(primaryAssistantManager.$id);
+  target.assistantManagerIds?.forEach((assistantManagerId) => {
+    const assistantManager = findUserById(allUsers, assistantManagerId);
+    if (assistantManager?.role === 'assistant_manager') ids.add(assistantManagerId);
+  });
+  target.managerIds?.forEach((managerId) => {
+    const assistantManager = findUserById(allUsers, managerId);
+    if (assistantManager?.role === 'assistant_manager') ids.add(managerId);
+  });
+  const managerIdUser = findUserById(allUsers, target.managerId);
+  if (managerIdUser?.role === 'assistant_manager') ids.add(managerIdUser.$id);
+  return Array.from(ids);
+}
+
+function hasExistingParent(target: User, allUsers: User[]) {
+  if (target.role === 'manager') return false;
+  if (target.role === 'assistant_manager') return getValidManagerIds(target, allUsers).length > 0;
+  if (target.role === 'team_lead') {
+    return getValidAssistantManagerIds(target, allUsers).length > 0 || getValidManagerIds(target, allUsers).length > 0;
+  }
+  if (target.role === 'agent') {
+    return hasUser(allUsers, target.teamLeadId) || getValidManagerIds(target, allUsers).length > 0;
+  }
+  return false;
+}
+
+function formatBranches(user: User, branchMap: Map<string, string>) {
+  if (!user.branchIds?.length) return 'No branches';
+  return user.branchIds.map((branchId) => branchMap.get(branchId) || branchId).join(', ');
+}
+
+function BranchBadges({ branchIds, branchMap }: { branchIds: string[]; branchMap: Map<string, string> }) {
+  if (!branchIds.length) {
+    return <span className="text-[11px] text-muted-foreground">No branches</span>;
+  }
+
+  return (
+    <div className="mt-2 flex max-w-[360px] flex-wrap gap-1">
+      {branchIds.map((branchId) => (
+        <span
+          key={branchId}
+          className="rounded border border-border bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
+          title={branchId}
+        >
+          {branchMap.get(branchId) || branchId}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function TreeNode({
+  user,
+  allUsers,
+  branchMap,
+  level = 0,
+}: {
+  user: User;
+  allUsers: User[];
+  branchMap: Map<string, string>;
+  level?: number;
+}) {
   const [isExpanded, setIsExpanded] = useState(true);
 
   // Find children for this node
   const directReports = allUsers.filter((u) => {
     // Manager sees Assistant Managers, Team Leads AND direct-report Agents
     if (user.role === 'manager') {
-        const isAssigned = (u.managerIds && u.managerIds.includes(user.$id)) || u.managerId === user.$id;
+        const isAssigned = getValidManagerIds(u, allUsers).includes(user.$id);
         
         if (!isAssigned) return false;
 
@@ -32,13 +128,13 @@ function TreeNode({ user, allUsers, level = 0 }: { user: User; allUsers: User[];
 
         if (u.role === 'team_lead') {
             // If Team Lead has an Assistant Manager who is also under this Manager, hide them from direct view
-            const amIds = u.assistantManagerIds || (u.assistantManagerId ? [u.assistantManagerId] : []);
+            const amIds = getValidAssistantManagerIds(u, allUsers);
             if (amIds.length > 0) {
                 const hasReportingAM = amIds.some(amId => {
                     const am = allUsers.find(au => au.$id === amId);
                     // Check if this AM reports to the current manager
                     return am && am.role === 'assistant_manager' && 
-                           ((am.managerIds && am.managerIds.includes(user.$id)) || am.managerId === user.$id);
+                           getValidManagerIds(am, allUsers).includes(user.$id);
                 });
                 if (hasReportingAM) return false;
             }
@@ -49,10 +145,8 @@ function TreeNode({ user, allUsers, level = 0 }: { user: User; allUsers: User[];
     }
     // Assistant Manager sees Team Leads AND direct-report Agents assigned to them
     if (user.role === 'assistant_manager') {
-        const isAssigned = (u.managerIds && u.managerIds.includes(user.$id)) || 
-                           u.managerId === user.$id ||
-                           (u.assistantManagerIds && u.assistantManagerIds.includes(user.$id)) ||
-                           u.assistantManagerId === user.$id;
+        const isAssigned = getValidManagerIds(u, allUsers).includes(user.$id) ||
+                           getValidAssistantManagerIds(u, allUsers).includes(user.$id);
 
         return (isAssigned && u.role === 'team_lead') ||
                (isAssigned && u.role === 'agent' && !u.teamLeadId);
@@ -63,16 +157,7 @@ function TreeNode({ user, allUsers, level = 0 }: { user: User; allUsers: User[];
   });
 
   // Sort children: Assistant Managers < Team Leads < Agents
-  const sortedReports = directReports.sort((a, b) => {
-    const rolePriority = { 'assistant_manager': 0, 'team_lead': 1, 'agent': 2 };
-    const priorityA = rolePriority[a.role as keyof typeof rolePriority] ?? 99;
-    const priorityB = rolePriority[b.role as keyof typeof rolePriority] ?? 99;
-    
-    if (priorityA !== priorityB) return priorityA - priorityB;
-
-    // Secondary: Alphabetical by Name
-    return a.name.localeCompare(b.name);
-  });
+  const sortedReports = sortUsersForHierarchy(directReports);
 
   const hasChildren = sortedReports.length > 0;
 
@@ -113,6 +198,7 @@ function TreeNode({ user, allUsers, level = 0 }: { user: User; allUsers: User[];
             <p className="text-xs text-muted-foreground capitalize">
               {user.role.replace('_', ' ')}
             </p>
+            <BranchBadges branchIds={user.branchIds || []} branchMap={branchMap} />
           </div>
         </div>
       </div>
@@ -120,7 +206,13 @@ function TreeNode({ user, allUsers, level = 0 }: { user: User; allUsers: User[];
       {isExpanded && hasChildren && (
         <div className="relative border-l border-border ml-6 pl-6">
           {sortedReports.map((child) => (
-            <TreeNode key={child.$id} user={child} allUsers={allUsers} level={level + 1} />
+            <TreeNode
+              key={child.$id}
+              user={child}
+              allUsers={allUsers}
+              branchMap={branchMap}
+              level={level + 1}
+            />
           ))}
         </div>
       )}
@@ -131,6 +223,7 @@ function TreeNode({ user, allUsers, level = 0 }: { user: User; allUsers: User[];
 function HierarchyContent() {
   const { user, isAdmin, isManager } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -142,14 +235,14 @@ function HierarchyContent() {
         const { databases } = await import('@/lib/appwrite');
         const { Query } = await import('appwrite');
 
-        let allUsers: any[] = [];
+        let allUsers: unknown[] = [];
 
         if (isAdmin) {
           // Admin fetches ALL users
           const response = await databases.listDocuments(
             process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
             process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
-            [Query.limit(100)]
+            [Query.limit(5000)]
           );
           allUsers = response.documents;
         } else if (isManager && user.branchIds && user.branchIds.length > 0) {
@@ -158,23 +251,33 @@ function HierarchyContent() {
           allUsers = await getUsersByBranches(user.branchIds);
         }
 
-        const mappedUsers = allUsers.map((doc: any) => ({
-          $id: doc.$id,
-          name: doc.name,
-          email: doc.email,
-          role: doc.role,
-          managerId: doc.managerId || null,
-          managerIds: doc.managerIds || [],
-          assistantManagerId: doc.assistantManagerId || null,
-          assistantManagerIds: doc.assistantManagerIds || [],
-          teamLeadId: doc.teamLeadId || null,
-          branchIds: doc.branchIds || [],
-          branchId: doc.branchId || null,
-          $createdAt: doc.$createdAt,
-          $updatedAt: doc.$updatedAt,
-        })) as User[];
+        const branchList = await listBranches();
+        setBranches(
+          branchList.filter((branch) => isAdmin || (user.branchIds || []).includes(branch.$id))
+        );
 
-        setUsers(mappedUsers);
+        const mappedUsers = allUsers.map((rawDoc) => {
+          const doc = rawDoc as Record<string, unknown>;
+
+          return {
+          $id: String(doc.$id),
+          name: String(doc.name ?? ''),
+          email: String(doc.email ?? ''),
+          role: doc.role as User['role'],
+          managerId: (doc.managerId as string) || null,
+          managerIds: Array.isArray(doc.managerIds) ? doc.managerIds as string[] : [],
+          assistantManagerId: (doc.assistantManagerId as string) || null,
+          assistantManagerIds: Array.isArray(doc.assistantManagerIds) ? doc.assistantManagerIds as string[] : [],
+          teamLeadId: (doc.teamLeadId as string) || null,
+          branchIds: Array.isArray(doc.branchIds) ? doc.branchIds as string[] : [],
+          isActive: doc.isActive !== false,
+          branchId: (doc.branchId as string) || null,
+          $createdAt: doc.$createdAt as string | undefined,
+          $updatedAt: doc.$updatedAt as string | undefined,
+          };
+        }) as User[];
+
+        setUsers(mappedUsers.filter((mappedUser) => mappedUser.isActive !== false));
       } catch (error) {
         console.error('Error loading hierarchy:', error);
       } finally {
@@ -196,21 +299,22 @@ function HierarchyContent() {
   // Determine root nodes for the tree
   let rootUsers: User[] = [];
 
-  // Determine unassigned agents (no manager or no team lead but not manager-assigned)
-  // Actually per requirement: "if a agent is not assigned to any tl then it will always show under the manager. directly."
-  // This is handled in TreeNode above.
-  // But what if an agent has NO manager? (Orphaned)
-  const unassignedAgents = users.filter(u => u.role === 'agent' && !u.managerId && !u.teamLeadId);
-
   if (isAdmin) {
-    // For Admin: Roots are Managers
-    rootUsers = users.filter((u) => u.role === 'manager');
+    rootUsers = sortUsersForHierarchy(
+      users.filter((u) => u.role !== 'admin' && !hasExistingParent(u, users))
+    );
   } else if (isManager && user) {
     // For Manager: Root is the current manager
     // IMPORTANT: If a manager has multiple branches, they are still one user node.
     // The previous logic filtered by ID so it's fine.
     rootUsers = users.filter((u) => u.$id === user.$id);
   }
+
+  const unassignedUsers = sortUsersForHierarchy(
+    users.filter((u) => u.role !== 'admin' && u.role !== 'manager' && !hasExistingParent(u, users))
+  );
+  const unassignedAgents = unassignedUsers.filter((u) => u.role === 'agent');
+  const branchMap = new Map(branches.map((branch) => [branch.$id, branch.name]));
 
   return (
     <div className="container mx-auto space-y-6">
@@ -238,7 +342,7 @@ function HierarchyContent() {
               <div className="space-y-8">
                 {rootUsers.map((root) => (
                   <div key={root.$id} className="border-l-2 border-primary/20 pl-4">
-                    <TreeNode user={root} allUsers={users} />
+                    <TreeNode user={root} allUsers={users} branchMap={branchMap} />
                   </div>
                 ))}
               </div>
@@ -247,32 +351,68 @@ function HierarchyContent() {
         </CardContent>
       </Card>
 
-      {/* Unassigned Agents Section (Admin Only or if visible to Manager but orphaned) */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Branches</CardTitle>
+          <CardDescription>
+            {isAdmin ? 'All active and inactive branches in the hierarchy view' : 'Branches assigned to you'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {branches.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No branches found.</div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {branches.map((branch) => (
+                <div key={branch.$id} className="rounded-lg border bg-card p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium text-sm">{branch.name}</p>
+                    <span
+                      className={cn(
+                        'rounded border px-2 py-0.5 text-xs',
+                        branch.isActive
+                          ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900 dark:bg-green-950/30 dark:text-green-300'
+                          : 'border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-800 dark:bg-gray-950/30 dark:text-gray-400'
+                      )}
+                    >
+                      {branch.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{branch.$id}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {unassignedAgents.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Unassigned Agents</CardTitle>
+            <CardTitle>Agents Not Under Anyone</CardTitle>
             <CardDescription>
-              Agents not currently assigned to any Manager or Team Lead
+              Agents with no existing Manager, Assistant Manager, or Team Lead assignment
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {unassignedAgents.map(agent => (
-                <div key={agent.$id} className="flex items-center gap-3 p-3 rounded-lg border bg-card text-card-foreground shadow-sm">
-                   <div className="p-2 rounded-full bg-yellow-100 text-yellow-600 dark:bg-yellow-900/20">
-                      <UserIcon className="h-4 w-4" />
-                   </div>
-                   <div>
-                      <p className="font-medium text-sm">{agent.name}</p>
-                      <p className="text-xs text-muted-foreground">{agent.email}</p>
-                   </div>
+              {unassignedAgents.map((agent) => (
+                <div key={agent.$id} className="flex items-start gap-3 p-3 rounded-lg border bg-card text-card-foreground shadow-sm">
+                  <div className="p-2 rounded-full bg-yellow-100 text-yellow-600 dark:bg-yellow-900/20">
+                    <UserIcon className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">{agent.name}</p>
+                    <p className="text-xs text-muted-foreground">{agent.email}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{formatBranches(agent, branchMap)}</p>
+                  </div>
                 </div>
               ))}
             </div>
           </CardContent>
         </Card>
       )}
+
     </div>
   );
 }

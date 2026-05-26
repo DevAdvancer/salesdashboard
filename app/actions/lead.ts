@@ -112,6 +112,78 @@ async function getHierarchyPermissions(userId: string): Promise<string[]> {
     return permissions;
 }
 
+type HierarchyUserDocument = {
+  $id: string;
+  managerId?: string | null;
+  managerIds?: string[];
+  teamLeadId?: string | null;
+};
+
+function getVisibleHierarchyUserIds(viewerId: string, viewerRole: UserRole, users: HierarchyUserDocument[]): string[] {
+  if (viewerRole === 'agent') return [viewerId];
+
+  const visibleIds = new Set<string>([viewerId]);
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+    users.forEach((candidate) => {
+      if (visibleIds.has(candidate.$id)) return;
+
+      const managerIds = Array.isArray(candidate.managerIds) ? candidate.managerIds : [];
+      const reportsToVisibleManager =
+        Boolean(candidate.managerId && visibleIds.has(candidate.managerId)) ||
+        managerIds.some((managerId) => visibleIds.has(managerId));
+      const reportsToVisibleTeamLead = Boolean(candidate.teamLeadId && visibleIds.has(candidate.teamLeadId));
+
+      if (reportsToVisibleManager || reportsToVisibleTeamLead) {
+        visibleIds.add(candidate.$id);
+        changed = true;
+      }
+    });
+  }
+
+  return Array.from(visibleIds);
+}
+
+async function getLeadVisibilityUserIds(databases: any, viewerId: string, viewerRole: UserRole): Promise<string[]> {
+  if (viewerRole === 'agent') return [viewerId];
+
+  if (viewerRole === 'team_lead') {
+    const agents = await databases.listDocuments(
+      DATABASE_ID,
+      COLLECTIONS.USERS,
+      [
+        Query.equal('teamLeadId', viewerId),
+        Query.equal('role', 'agent'),
+      ]
+    );
+
+    return [viewerId, ...agents.documents.map((agent: { $id: string }) => agent.$id)];
+  }
+
+  const response = await databases.listDocuments(
+    DATABASE_ID,
+    COLLECTIONS.USERS,
+    [Query.limit(5000)]
+  );
+
+  return getVisibleHierarchyUserIds(viewerId, viewerRole, response.documents as HierarchyUserDocument[]);
+}
+
+function appendHierarchyLeadVisibilityQuery(queries: string[], visibleUserIds: string[], specialBranchId?: string | null) {
+  const orConditions = [
+    Query.equal('ownerId', visibleUserIds),
+    Query.equal('assignedToId', visibleUserIds),
+  ];
+
+  if (specialBranchId) {
+    orConditions.push(Query.equal('branchId', specialBranchId));
+  }
+
+  queries.push(Query.or(orConditions));
+}
+
 export async function createLeadAction(
     ownerId: string,
     input: CreateLeadInput,
@@ -310,9 +382,20 @@ export async function listLeadsAction(
         orConditions.push(Query.equal('branchId', specialBranchId));
       }
       queries.push(Query.or(orConditions));
-    } else if (userRole === 'admin' || userRole === 'manager') {
+    } else if (userRole === 'admin') {
       // Admins and Managers see all leads across all branches — no branch/owner filter
+    } else if (userRole === 'manager') {
+      const visibleUserIds = await getLeadVisibilityUserIds(databases, userId, userRole);
+      appendHierarchyLeadVisibilityQuery(queries, visibleUserIds, specialBranchId);
     } else if (userRole === 'assistant_manager') {
+      const visibleUserIds = await getLeadVisibilityUserIds(databases, userId, userRole);
+      appendHierarchyLeadVisibilityQuery(queries, visibleUserIds, specialBranchId);
+    } else if (userRole === 'team_lead') {
+      const visibleUserIds = await getLeadVisibilityUserIds(databases, userId, userRole);
+      appendHierarchyLeadVisibilityQuery(queries, visibleUserIds, specialBranchId);
+    }
+
+    /*
       // Assistant Managers see:
       // 1. Leads in their assigned branches
       // 2. OR Leads they own (even if branch not assigned, though rare)
@@ -425,6 +508,7 @@ export async function listLeadsAction(
 
       queries.push(Query.or(orConditions));
     }
+    */
 
     // Filter by closed status (default to active leads)
     if (filters.isClosed !== undefined) {

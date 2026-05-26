@@ -63,8 +63,16 @@ export async function getBranch(branchId: string): Promise<Branch> {
     );
     return branch as unknown as Branch;
   } catch (error: any) {
+    const code = typeof error?.code === 'number' ? error.code : null;
+    const message = typeof error?.message === 'string' ? error.message : String(error);
+    const normalizedMessage = message.toLowerCase();
+
+    if (code === 404 || normalizedMessage.includes('could not be found') || normalizedMessage.includes('not found')) {
+      throw new Error(`Branch not found: ${branchId}`);
+    }
+
     console.error('Error fetching branch:', error);
-    throw new Error(error.message || 'Failed to fetch branch');
+    throw new Error(message || 'Failed to fetch branch');
   }
 }
 

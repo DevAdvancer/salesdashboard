@@ -1,15 +1,153 @@
 'use server';
 
-import { ID, Permission, Role } from 'node-appwrite';
+import { ID, Permission, Query, Role } from 'node-appwrite';
 import { createAdminClient, createSessionClient } from '@/lib/server/appwrite';
 import { assertAuthenticatedUserId } from '@/lib/server/current-user';
 import { CreateManagerInput, CreateTeamLeadInput, CreateAgentInput, UserRole, CreateAssistantManagerInput } from '@/lib/types';
 import { COLLECTIONS } from '@/lib/constants/appwrite';
+import { buildTeamLeadHierarchy, normalizeEmail } from '@/lib/utils/user-hierarchy';
 
 // Constants
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
 const AUDIT_LOGS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_AUDIT_LOGS_COLLECTION_ID!;
+
+type CreateAdminInput = {
+    name: string;
+    email: string;
+    password: string;
+};
+
+function getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
+function getErrorCode(error: unknown): number | undefined {
+    return typeof error === 'object' && error !== null && 'code' in error
+        ? Number((error as { code: unknown }).code)
+        : undefined;
+}
+
+function removeDeletedUserReferences(doc: Record<string, unknown>, deletedUserId: string) {
+    const updates: Record<string, unknown> = {};
+    let changed = false;
+
+    if (doc.managerId === deletedUserId) {
+        updates.managerId = null;
+        changed = true;
+    }
+
+    if (Array.isArray(doc.managerIds)) {
+        const nextManagerIds = doc.managerIds.filter((managerId) => managerId !== deletedUserId);
+        if (nextManagerIds.length !== doc.managerIds.length) {
+            updates.managerIds = nextManagerIds;
+            if (updates.managerId === undefined && doc.managerId === undefined && nextManagerIds.length === 0) {
+                updates.managerId = null;
+            }
+            changed = true;
+        }
+    }
+
+    if (doc.assistantManagerId === deletedUserId) {
+        updates.assistantManagerId = null;
+        changed = true;
+    }
+
+    if (Array.isArray(doc.assistantManagerIds)) {
+        const nextAssistantManagerIds = doc.assistantManagerIds.filter((assistantManagerId) => assistantManagerId !== deletedUserId);
+        if (nextAssistantManagerIds.length !== doc.assistantManagerIds.length) {
+            updates.assistantManagerIds = nextAssistantManagerIds;
+            changed = true;
+        }
+    }
+
+    if (doc.teamLeadId === deletedUserId) {
+        updates.teamLeadId = null;
+        changed = true;
+    }
+
+    return changed ? updates : null;
+}
+
+function isUnknownAttributeError(error: unknown, attribute: string) {
+    const message = getErrorMessage(error);
+    return message.includes('Unknown attribute') && message.includes(attribute);
+}
+
+async function ensureUserIsActiveAttribute(databases: any) {
+    try {
+        await databases.getAttribute(DATABASE_ID, USERS_COLLECTION_ID, 'isActive');
+        return;
+    } catch (error: unknown) {
+        const code = getErrorCode(error);
+        if (code !== 404) {
+            const message = getErrorMessage(error);
+            if (!message.includes('Attribute not found') && !message.includes('not found')) {
+                throw error;
+            }
+        }
+    }
+
+    try {
+        await databases.createBooleanAttribute(
+            DATABASE_ID,
+            USERS_COLLECTION_ID,
+            'isActive',
+            false,
+            true,
+            false
+        );
+    } catch (error: unknown) {
+        const code = getErrorCode(error);
+        const message = getErrorMessage(error);
+        if (code !== 409 && !message.includes('already exists')) {
+            throw error;
+        }
+    }
+
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline) {
+        const attribute = await databases.getAttribute(DATABASE_ID, USERS_COLLECTION_ID, 'isActive');
+        const status = typeof attribute === 'object' && attribute !== null && 'status' in attribute
+            ? String((attribute as { status: unknown }).status)
+            : '';
+
+        if (status === 'available' || status === '') return;
+        if (status === 'failed') throw new Error('Failed to create users.isActive attribute');
+
+        await new Promise((resolve) => setTimeout(resolve, 750));
+    }
+
+    throw new Error('Timed out waiting for users.isActive attribute to become available');
+}
+
+async function filterUpdatesToExistingUserAttributes(
+    databases: any,
+    updates: Record<string, unknown>
+) {
+    const entries = await Promise.all(
+        Object.entries(updates).map(async ([key, value]) => {
+            if (key === 'isActive') {
+                await ensureUserIsActiveAttribute(databases);
+                return [key, value] as const;
+            }
+
+            try {
+                await databases.getAttribute(DATABASE_ID, USERS_COLLECTION_ID, key);
+                return [key, value] as const;
+            } catch (error: unknown) {
+                const code = getErrorCode(error);
+                const message = getErrorMessage(error);
+                if (code === 404 || message.includes('Attribute not found') || message.includes('not found')) {
+                    return null;
+                }
+                throw error;
+            }
+        })
+    );
+
+    return Object.fromEntries(entries.filter((entry): entry is readonly [string, unknown] => Boolean(entry)));
+}
 
 async function getCurrentUser() {
   try {
@@ -137,6 +275,7 @@ export async function createAssistantManagerAction(input: CreateAssistantManager
                 managerId: managerIds.length > 0 ? managerIds[0] : null,
                 managerIds: managerIds,
                 teamLeadId: null,
+                isActive: true,
                 branchIds,
             },
             [
@@ -211,6 +350,7 @@ export async function createManagerAction(input: CreateManagerInput & { currentU
                 role: 'manager',
                 managerId: null,
                 teamLeadId: null,
+                isActive: true,
                 branchIds
             },
             [
@@ -236,6 +376,70 @@ export async function createManagerAction(input: CreateManagerInput & { currentU
         console.error("DB Creation failed, rolling back Auth User", error);
         await users.delete(userId);
         throw new Error("Failed to create user profile: " + error.message);
+    }
+}
+
+export async function createAdminAction(input: CreateAdminInput & { currentUserId: string }) {
+    const { currentUserId, name, email, password } = input;
+
+    await assertAuthenticatedUserId(currentUserId);
+
+    const callerDoc = await getUserDoc(currentUserId);
+    if (!callerDoc || callerDoc.role !== 'admin') {
+        throw new Error("Permission denied: Only admins can create admins");
+    }
+
+    const { users, databases } = await createAdminClient();
+    const userId = ID.unique();
+    const normalizedEmail = normalizeEmail(email);
+
+    try {
+        await users.create(userId, normalizedEmail, undefined, password, name);
+    } catch (e: unknown) {
+        if (getErrorCode(e) === 409) throw new Error("A user with this email already exists");
+        throw e;
+    }
+
+    try {
+        await databases.createDocument(
+            DATABASE_ID,
+            USERS_COLLECTION_ID,
+            userId,
+            {
+                name,
+                email: normalizedEmail,
+                role: 'admin',
+                managerId: null,
+                managerIds: [],
+                assistantManagerIds: [],
+                teamLeadId: null,
+                isActive: true,
+                branchIds: [],
+            },
+            [
+                Permission.read(Role.user(userId)),
+                Permission.read(Role.label('admin')),
+                Permission.update(Role.user(userId)),
+                Permission.update(Role.label('admin')),
+                Permission.delete(Role.label('admin')),
+            ]
+        );
+
+        await logAuditAction(
+            databases,
+            'USER_CREATE',
+            callerDoc.$id,
+            callerDoc.name,
+            userId,
+            'admin',
+            { role: 'admin', email: normalizedEmail, name }
+        );
+
+        return { success: true, userId };
+    } catch (error: unknown) {
+        console.error("DB Creation failed, rolling back Auth User", error);
+        await users.delete(userId);
+        throw new Error("Failed to create user profile: " + getErrorMessage(error));
     }
 }
 
@@ -271,37 +475,19 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
         throw e;
     }
 
-    // Determine managerIds
-    let managerIds: string[] = [];
-    const assistantManagerIds: string[] = inputAssistantManagerIds || [];
-
-    // If using legacy single ID but not array, sync them
-    if (inputAssistantManagerId && !assistantManagerIds.includes(inputAssistantManagerId)) {
-        assistantManagerIds.push(inputAssistantManagerId);
-    }
-
-    if (callerDoc.role === 'manager') {
-        managerIds = [callerDoc.$id];
-    } else if (callerDoc.role === 'assistant_manager') {
-        // If created by AM, managerIds should include AM's managers + AM
-        const callerManagerIds = callerDoc.managerIds || (callerDoc.managerId ? [callerDoc.managerId] : []);
-        managerIds = [...callerManagerIds, callerDoc.$id];
-        // And this AM is one of the assistant managers
-        if (!assistantManagerIds.includes(callerDoc.$id)) {
-            assistantManagerIds.push(callerDoc.$id);
-        }
-    } else if (inputManagerIds && Array.isArray(inputManagerIds)) {
-        managerIds = inputManagerIds;
-    }
-
-    // Ensure all assistant managers are in managerIds
-    if (assistantManagerIds.length > 0) {
-        assistantManagerIds.forEach(amId => {
-            if (!managerIds.includes(amId)) {
-                managerIds.push(amId);
-            }
-        });
-    }
+    const {
+        managerIds,
+        managerId: primaryManagerId,
+        assistantManagerIds,
+    } = buildTeamLeadHierarchy({
+        callerRole: callerDoc.role as UserRole,
+        callerId: callerDoc.$id,
+        callerManagerId: callerDoc.managerId,
+        callerManagerIds: callerDoc.managerIds,
+        inputManagerIds,
+        inputAssistantManagerId,
+        inputAssistantManagerIds,
+    });
 
     // Generate permissions for all managers
     const managerPermissions = managerIds.flatMap(mid => [
@@ -309,9 +495,6 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
         Permission.update(Role.user(mid)),
         Permission.delete(Role.user(mid))
     ]);
-
-    // Use managerIds[0] as legacy managerId for now if available, or current user if manager
-    const primaryManagerId = managerIds.length > 0 ? managerIds[0] : (callerDoc.role === 'manager' ? callerDoc.$id : null);
 
     try {
         await databases.createDocument(
@@ -326,6 +509,7 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
                 managerId: primaryManagerId,
                 assistantManagerIds,
                 teamLeadId: null,
+                isActive: true,
                 branchIds
             },
             [
@@ -377,6 +561,18 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
     const { name, email, password, branchIds } = agentInput;
     const { users, databases } = await createAdminClient();
     const userId = ID.unique();
+
+    if (callerDoc.role === 'admin' && !agentInput.managerId && !agentInput.teamLeadId) {
+        const managersResponse = await databases.listDocuments(
+            DATABASE_ID,
+            USERS_COLLECTION_ID,
+            [Query.equal('role', 'manager'), Query.limit(1)]
+        );
+
+        if (managersResponse.documents.length === 0) {
+            throw new Error("Agents must be assigned to a Team Lead when no Managers exist");
+        }
+    }
 
     const isTeamLead = callerDoc.role === 'team_lead';
     const isManager = callerDoc.role === 'manager';
@@ -523,6 +719,7 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
                 managerIds, // Save the chain
                 assistantManagerIds, // Save AM IDs
                 teamLeadId,
+                isActive: true,
                 branchIds
             },
             permissions
@@ -811,5 +1008,147 @@ export async function updateUserAction(input: {
         console.error("Update failed", error);
         const errorMessage = error?.message || String(error);
         throw new Error("Failed to update user: " + errorMessage);
+    }
+}
+
+export async function deleteUserAction(input: {
+    userId: string;
+    currentUserId: string;
+}) {
+    const { userId, currentUserId } = input;
+
+    await assertAuthenticatedUserId(currentUserId);
+
+    if (userId === currentUserId) {
+        throw new Error("Admins cannot delete their own account from user management");
+    }
+
+    const callerDoc = await getUserDoc(currentUserId);
+    if (!callerDoc || callerDoc.role !== 'admin') {
+        throw new Error("Permission denied: Only admins can delete users");
+    }
+
+    const targetUserDoc = await getUserDoc(userId);
+    if (!targetUserDoc) throw new Error("Target user not found");
+
+    const { users, databases } = await createAdminClient();
+
+    try {
+        const relatedUsers = await databases.listDocuments(
+            DATABASE_ID,
+            USERS_COLLECTION_ID,
+            [Query.limit(5000)]
+        );
+
+        await Promise.all(
+            relatedUsers.documents
+                .filter((doc: Record<string, unknown>) => doc.$id !== userId)
+                .map(async (doc: Record<string, unknown>) => {
+                    const updates = removeDeletedUserReferences(doc, userId);
+                    if (!updates) return;
+
+                    await databases.updateDocument(
+                        DATABASE_ID,
+                        USERS_COLLECTION_ID,
+                        String(doc.$id),
+                        updates
+                    );
+                })
+        );
+
+        await databases.deleteDocument(DATABASE_ID, USERS_COLLECTION_ID, userId);
+        await users.delete(userId);
+
+        await logAuditAction(
+            databases,
+            'USER_DELETE',
+            callerDoc.$id,
+            callerDoc.name,
+            userId,
+            'user',
+            { role: targetUserDoc.role, email: targetUserDoc.email, name: targetUserDoc.name }
+        );
+
+        return { success: true };
+    } catch (error: unknown) {
+        console.error("Delete failed", error);
+        const errorMessage = getErrorMessage(error);
+        throw new Error("Failed to delete user: " + errorMessage);
+    }
+}
+
+export async function setAgentActiveAction(input: {
+    userId: string;
+    isActive: boolean;
+    currentUserId: string;
+}) {
+    const { userId, isActive, currentUserId } = input;
+
+    await assertAuthenticatedUserId(currentUserId);
+
+    const callerDoc = await getUserDoc(currentUserId);
+    if (!callerDoc || callerDoc.role !== 'admin') {
+        throw new Error("Permission denied: Only admins can update agent active status");
+    }
+
+    const targetUserDoc = await getUserDoc(userId);
+    if (!targetUserDoc) throw new Error("Target user not found");
+    if (targetUserDoc.role !== 'agent') {
+        throw new Error("Only agents can be inactivated from this action");
+    }
+
+    const { users, databases } = await createAdminClient();
+
+    try {
+        await users.updateStatus(userId, isActive);
+
+        const updates = isActive
+            ? { isActive: true }
+            : {
+                isActive: false,
+                managerId: null,
+                managerIds: [],
+                assistantManagerId: null,
+                assistantManagerIds: [],
+                teamLeadId: null,
+            };
+
+        const schemaSafeUpdates = await filterUpdatesToExistingUserAttributes(databases, updates);
+
+        try {
+            await databases.updateDocument(
+                DATABASE_ID,
+                USERS_COLLECTION_ID,
+                userId,
+                schemaSafeUpdates
+            );
+        } catch (error: unknown) {
+            if (!isUnknownAttributeError(error, 'isActive')) {
+                throw error;
+            }
+
+            await ensureUserIsActiveAttribute(databases);
+            await databases.updateDocument(
+                DATABASE_ID,
+                USERS_COLLECTION_ID,
+                userId,
+                schemaSafeUpdates
+            );
+        }
+
+        await logAuditAction(
+            databases,
+            'USER_UPDATE',
+            callerDoc.$id,
+            callerDoc.name,
+            userId,
+            'agent',
+            { isActive }
+        );
+
+        return { success: true };
+    } catch (error: unknown) {
+        console.error("Agent active status update failed", error);
+        throw new Error("Failed to update agent active status: " + getErrorMessage(error));
     }
 }

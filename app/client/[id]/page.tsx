@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/contexts/auth-context';
 import { useRouter, useParams } from 'next/navigation';
 import { getLead } from '@/lib/services/lead-service';
 import { reopenLeadAction } from '@/app/actions/lead';
-import { getUserById } from '@/lib/services/user-service';
+import { getUserByIdOrNull } from '@/lib/services/user-service';
 import { User } from '@/lib/types';
 import { getFormConfig } from '@/lib/services/form-config-service';
 import { Lead, FormField, LeadData } from '@/lib/types';
@@ -72,8 +72,8 @@ function HistoryDetailContent() {
 
       try {
         const [ownerUser, assignedUser] = await Promise.all([
-          getUserById(fetchedLead.ownerId),
-          fetchedLead.assignedToId ? getUserById(fetchedLead.assignedToId) : Promise.resolve(null),
+          getUserByIdOrNull(fetchedLead.ownerId),
+          fetchedLead.assignedToId ? getUserByIdOrNull(fetchedLead.assignedToId) : Promise.resolve(null),
         ]);
 
         setOwner(ownerUser);
