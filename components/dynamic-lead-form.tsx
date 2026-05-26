@@ -55,7 +55,7 @@ export function DynamicLeadForm({
 
   // If lastName is not in the config (removed by user), inject it manually just under firstName (or at start if firstName missing)
   const hasLastName = filteredConfig.some(f => f.key === 'lastName');
-  let effectiveConfig = [...filteredConfig];
+  const effectiveConfig = [...filteredConfig];
 
   if (!hasLastName) {
     const firstNameIndex = effectiveConfig.findIndex(f => f.key === 'firstName');

@@ -273,7 +273,7 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
 
     // Determine managerIds
     let managerIds: string[] = [];
-    let assistantManagerIds: string[] = inputAssistantManagerIds || [];
+    const assistantManagerIds: string[] = inputAssistantManagerIds || [];
 
     // If using legacy single ID but not array, sync them
     if (inputAssistantManagerId && !assistantManagerIds.includes(inputAssistantManagerId)) {
@@ -386,7 +386,7 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
     // For manager, allow assigning to another manager (e.g. Assistant Manager) if specified, otherwise default to self
     let managerId = agentInput.managerId || null;
     let managerIds: string[] = [];
-    let assistantManagerId: string | null = null;
+    const assistantManagerId: string | null = null;
     let assistantManagerIds: string[] = agentInput.assistantManagerIds || [];
 
     // Calculate managerIds logic

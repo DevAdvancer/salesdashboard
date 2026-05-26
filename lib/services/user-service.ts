@@ -145,7 +145,7 @@ export async function createTeamLead(input: CreateTeamLeadInput, currentUser?: U
   }
 
   try {
-    let managerBranchIds: string[] = [];
+    const managerBranchIds: string[] = [];
     // Validate against first manager if available (simplification for now, or check all?)
     // Actually we just need to ensure branch validity.
     // If managerIds are provided, check their branches? Or just trust admin/manager caller?
