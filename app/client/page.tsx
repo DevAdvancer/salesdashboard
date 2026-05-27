@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { listLeadsAction } from "@/app/actions/lead";
@@ -8,6 +8,7 @@ import { Branch, Lead, LeadData, HistoryFilters, AuditLog } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ProtectedRoute } from "@/components/protected-route";
 import { getAuditLogs } from "@/lib/services/audit-service";
@@ -25,14 +26,42 @@ function HistoryContent() {
     from?: string;
     to?: string;
   }>({});
+  const [search, setSearch] = useState("");
   const [closedByMap, setClosedByMap] = useState<Record<string, string>>({});
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
-  const paginatedLeads = leads.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE,
-  );
-  const totalPages = Math.ceil(leads.length / ITEMS_PER_PAGE);
+  const getLeadData = (lead: Lead): LeadData => {
+    try {
+      return JSON.parse(lead.data);
+    } catch {
+      return {};
+    }
+  };
+  const filteredLeads = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return leads;
+
+    return leads.filter((lead) => {
+      const data = getLeadData(lead);
+      const name = `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim();
+      const email = `${data.email ?? ""}`.trim();
+      const source = `${data.sourceName ?? data.source ?? ""}`.trim();
+      const status = `${lead.status ?? ""}`.trim();
+
+      return (
+        name.toLowerCase().includes(query) ||
+        email.toLowerCase().includes(query) ||
+        source.toLowerCase().includes(query) ||
+        status.toLowerCase().includes(query)
+      );
+    });
+  }, [leads, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredLeads.length / ITEMS_PER_PAGE));
+  const paginatedLeads = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredLeads.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [currentPage, filteredLeads]);
   const canFilterByBranch = user?.role === "admin" || user?.role === "manager";
 
   useEffect(() => {
@@ -51,7 +80,7 @@ function HistoryContent() {
   }, [user]);
 
   useEffect(() => {
-    const visibleLeads = leads.slice(
+    const visibleLeads = filteredLeads.slice(
       (currentPage - 1) * ITEMS_PER_PAGE,
       currentPage * ITEMS_PER_PAGE,
     );
@@ -64,7 +93,7 @@ function HistoryContent() {
     }
 
     void loadClosedBy(leadsMissingClosedBy);
-  }, [leads, currentPage, closedByMap]);
+  }, [filteredLeads, currentPage, closedByMap]);
 
   const loadClosedLeads = async () => {
     if (!user) return;
@@ -137,6 +166,7 @@ function HistoryContent() {
   const clearFilters = () => {
     setDateRange({});
     setFilters({});
+    setSearch("");
     setCurrentPage(1);
   };
 
@@ -158,14 +188,6 @@ function HistoryContent() {
   const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return "N/A";
     return new Date(dateString).toLocaleDateString();
-  };
-
-  const getLeadData = (lead: Lead): LeadData => {
-    try {
-      return JSON.parse(lead.data);
-    } catch {
-      return {};
-    }
   };
 
   if (loading) {
@@ -194,6 +216,18 @@ function HistoryContent() {
       <Card id="tour-clients-filters" className="p-4 mb-6">
         <h2 className="text-lg font-semibold mb-4">Filters</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="sm:col-span-2 md:col-span-1">
+            <Label htmlFor="clientSearch">Search</Label>
+            <Input
+              id="clientSearch"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Name, email, status, source..."
+            />
+          </div>
           <div className="sm:col-span-2">
             <Label htmlFor="clientDateRange">Date Range</Label>
             <DateRangePicker
@@ -337,7 +371,7 @@ function HistoryContent() {
       </Card>
 
       {/* Pagination Controls */}
-      {leads.length > 0 && (
+      {filteredLeads.length > 0 && (
         <div className="flex justify-between items-center mt-4">
           <Button
             onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
@@ -359,8 +393,8 @@ function HistoryContent() {
 
       {/* Summary */}
       <div className="mt-4 text-muted-foreground text-sm">
-        Showing {paginatedLeads.length} of {leads.length} client record
-        {leads.length !== 1 ? "s" : ""}
+        Showing {paginatedLeads.length} of {filteredLeads.length} client record
+        {filteredLeads.length !== 1 ? "s" : ""}
       </div>
     </div>
   );

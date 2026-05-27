@@ -28,7 +28,7 @@ describe('Form Configuration Properties', () => {
     );
 
     // Arbitrary for form field
-    const formFieldArb = fc.record({
+    const formFieldArb: fc.Arbitrary<FormField> = fc.record({
       id: fc.uuid(),
       type: fieldTypeArb,
       label: fc.string({ minLength: 1, maxLength: 100 }),

@@ -45,6 +45,7 @@ export function Navigation({
   const router = useRouter();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [linkedinOpen, setLinkedinOpen] = useState(false);
   const [technicalOpen, setTechnicalOpen] = useState(false);
 
   const handleLogout = async () => {
@@ -62,22 +63,97 @@ export function Navigation({
     ? []
     : NAV_ITEMS.filter((item) => canAccess(item.key as ComponentKey));
 
+  const linkedinItemKeys = new Set([
+    "linkedin-requests",
+    "linkedin-account-management",
+    "linkedin-reports",
+  ]);
   const technicalItemKeys = new Set([
     "mock",
     "interview-support",
     "assessment-support",
   ]);
+  const linkedinItems = visibleItems.filter((item) =>
+    linkedinItemKeys.has(item.key),
+  );
   const technicalItems = visibleItems.filter((item) =>
     technicalItemKeys.has(item.key),
   );
   const mainItems = visibleItems.filter(
-    (item) => !technicalItemKeys.has(item.key),
+    (item) =>
+      !technicalItemKeys.has(item.key) && !linkedinItemKeys.has(item.key),
   );
   const technicalInsertBeforeKey = mainItems.some(
     (item) => item.key === "audit-logs",
   )
     ? "audit-logs"
     : "settings";
+
+  const linkedinSection =
+    linkedinItems.length > 0 ? (
+      <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
+        <button
+          type="button"
+          onClick={() => setLinkedinOpen((v) => !v)}
+          className="nav-item"
+          aria-expanded={linkedinOpen}
+          title="Linkedin Leads"
+          style={{
+            justifyContent: isCollapsed ? "center" : "flex-start",
+          }}>
+          <Map size={16} />
+          <span className={isCollapsed ? "lg:sr-only" : ""} style={{ flex: 1 }}>
+            Linkedin Leads
+          </span>
+          {!isCollapsed && (
+            <ChevronDown
+              size={16}
+              style={{
+                transform: linkedinOpen ? "rotate(180deg)" : "rotate(0deg)",
+                transition: "transform 0.12s ease",
+              }}
+            />
+          )}
+        </button>
+
+        {linkedinOpen && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "1px",
+              paddingLeft: isCollapsed ? 0 : "0.75rem",
+            }}>
+            {linkedinItems.map((item) => {
+              const Icon = item.icon;
+              const isActive =
+                pathname === item.href ||
+                (pathname?.startsWith(item.href) &&
+                  pathname.charAt(item.href.length) === "/");
+              return (
+                <button
+                  key={item.key}
+                  id={`nav-${item.key}`}
+                  onClick={() => {
+                    router.push(item.href);
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`nav-item${isActive ? " active" : ""}`}
+                  title={item.label}
+                  style={{
+                    paddingLeft: isCollapsed ? undefined : "1.25rem",
+                  }}>
+                  <Icon size={16} />
+                  <span className={isCollapsed ? "lg:sr-only" : ""}>
+                    {item.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    ) : null;
 
   const technicalSection =
     technicalItems.length > 0 ? (
@@ -147,6 +223,9 @@ export function Navigation({
 
   const renderedItems = mainItems.reduce<ReactNode[]>((acc, item) => {
     if (technicalSection && item.key === technicalInsertBeforeKey) {
+      if (linkedinSection) {
+        acc.push(<div key="nav-linkedin-section">{linkedinSection}</div>);
+      }
       acc.push(<div key="nav-technical-section">{technicalSection}</div>);
     }
 
@@ -175,12 +254,19 @@ export function Navigation({
   }, []);
 
   if (
-    technicalSection &&
+    (linkedinSection || technicalSection) &&
     !mainItems.some((item) => item.key === technicalInsertBeforeKey)
   ) {
-    renderedItems.push(
-      <div key="nav-technical-section">{technicalSection}</div>,
-    );
+    if (linkedinSection) {
+      renderedItems.push(
+        <div key="nav-linkedin-section">{linkedinSection}</div>,
+      );
+    }
+    if (technicalSection) {
+      renderedItems.push(
+        <div key="nav-technical-section">{technicalSection}</div>,
+      );
+    }
   }
 
   return (

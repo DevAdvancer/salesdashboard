@@ -337,7 +337,10 @@ function LeadDetailContent() {
               )}
             </>
           )}
-          {lead.isClosed && (user?.role === 'manager' || user?.role === 'admin') && (
+          {lead.isClosed &&
+            (user?.role === 'manager' ||
+              user?.role === 'admin' ||
+              user?.role === 'team_lead') && (
             <Button onClick={handleReopenLead} disabled={isSaving}>
               {isSaving ? 'Reopening...' : 'Reopen Lead'}
             </Button>

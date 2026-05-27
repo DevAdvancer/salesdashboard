@@ -8,7 +8,7 @@ jest.mock('@/lib/contexts/auth-context', () => ({
   useAuth: jest.fn(),
 }));
 
-const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
+const mockUseAuth = useAuth as jest.Mock;
 
 describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
   const mockOnSubmit = jest.fn();
@@ -337,7 +337,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
       });
 
       // Mock onSubmit to be async and take some time
-      const slowOnSubmit = jest.fn(() => new Promise(resolve => setTimeout(resolve, 100)));
+      const slowOnSubmit = jest.fn(() => new Promise<void>(resolve => setTimeout(resolve, 100)));
 
       render(<DynamicLeadForm formConfig={sampleFormConfig} onSubmit={slowOnSubmit} />);
 

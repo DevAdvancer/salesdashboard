@@ -67,13 +67,10 @@ describe('buildLeadershipDashboardInsights', () => {
         }),
       ],
       users: baseUsers,
-      getUserById: async (userId) => {
+      getUserByIdOrNull: async (userId) => {
         fetchedIds.push(userId);
         const foundUser = referencedUsers.get(userId);
-        if (!foundUser) {
-          throw new Error(`Missing fixture for ${userId}`);
-        }
-        return foundUser;
+        return foundUser ?? null;
       },
     });
 

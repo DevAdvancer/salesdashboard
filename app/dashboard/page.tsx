@@ -236,7 +236,7 @@ function LegacyDashboardContent() {
           usersForInsights = await resolveLeadUsersForInsights({
             leads: [...activeLeads, ...closedLeads],
             users: usersForInsights,
-            getUserById: userService.getUserById,
+            getUserByIdOrNull: userService.getUserByIdOrNull,
           });
 
           const allBranches = await branchService.listBranches();

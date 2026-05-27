@@ -17,7 +17,7 @@ jest.mock('next/navigation', () => ({
   useParams: () => ({ id: 'test-lead-id' }),
 }));
 
-const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
+const mockUseAuth = useAuth as jest.Mock;
 const mockListLeads = listLeads as jest.MockedFunction<typeof listLeads>;
 const mockGetAgentsByManager = getAgentsByManager as jest.MockedFunction<typeof getAgentsByManager>;
 

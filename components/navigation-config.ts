@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 import {
   Briefcase,
   Building2,
+  ChartColumn,
   ClipboardCheck,
   ClipboardList,
   Bell,
@@ -9,12 +10,14 @@ import {
   FileText,
   FormInput,
   LayoutDashboard,
+  Link2,
   Mail,
   Network,
   NotebookTabs,
   ShieldCheck,
   Settings,
   TrendingUp,
+  UserCog,
   Users,
   Video,
 } from 'lucide-react';
@@ -46,6 +49,9 @@ export const appIcons = {
   reviewQueue: ShieldCheck,
   notifications: Bell,
   settings: Settings,
+  linkedinRequests: Link2,
+  linkedinAccounts: UserCog,
+  linkedinReports: ChartColumn,
 } satisfies Record<string, AppIcon>;
 
 export const NAV_ITEMS: NavItem[] = [
@@ -57,6 +63,9 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'reports', label: 'Reports', href: '/reports', icon: appIcons.reports },
   { key: 'coaching-notes', label: 'Coaching Notes', href: '/coaching-notes', icon: appIcons.coachingNotes },
   { key: 'review-queue', label: 'Review Queue', href: '/review-queue', icon: appIcons.reviewQueue },
+  { key: 'linkedin-requests', label: 'Linkedin Request', href: '/linkedin-requests', icon: appIcons.linkedinRequests },
+  { key: 'linkedin-account-management', label: 'Manage Linkedin IDs', href: '/linkedin-accounts', icon: appIcons.linkedinAccounts },
+  { key: 'linkedin-reports', label: 'Linkedin Reports', href: '/linkedin-reports', icon: appIcons.linkedinReports },
   { key: 'mock', label: 'Mock Interview', href: '/mock', icon: appIcons.mock },
   { key: 'assessment-support', label: 'Assessment Support', href: '/assessment-support', icon: appIcons.assessmentSupport },
   { key: 'interview-support', label: 'Interview Support', href: '/interview-support', icon: appIcons.interviewSupport },

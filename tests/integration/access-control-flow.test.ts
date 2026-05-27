@@ -50,8 +50,8 @@ function canAccess(
     return customRule;
   }
 
-  // Default: manager=true, agent=false
-  return userRole === 'manager';
+  // Default: agents are denied when no explicit rule exists.
+  return false;
 }
 
 function buildRulesMap(rules: AccessRule[]): Map<string, boolean> {

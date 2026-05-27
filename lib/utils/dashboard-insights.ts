@@ -84,13 +84,13 @@ interface BuildLeadershipDashboardInsightsInput {
 interface ResolveLeadUsersForInsightsInput {
   leads: Lead[];
   users: User[];
-  getUserById: (userId: string) => Promise<User>;
+  getUserByIdOrNull: (userId: string) => Promise<User | null>;
 }
 
 export async function resolveLeadUsersForInsights({
   leads,
   users,
-  getUserById,
+  getUserByIdOrNull,
 }: ResolveLeadUsersForInsightsInput): Promise<User[]> {
   const userMap = new Map(users.map((currentUser) => [currentUser.$id, currentUser]));
   const missingUserIds = new Set<string>();
@@ -110,14 +110,7 @@ export async function resolveLeadUsersForInsights({
   }
 
   const resolvedUsers = await Promise.all(
-    Array.from(missingUserIds).map(async (userId) => {
-      try {
-        return await getUserById(userId);
-      } catch (error) {
-        console.warn(`Could not resolve dashboard user ${userId}`, error);
-        return null;
-      }
-    })
+    Array.from(missingUserIds).map((userId) => getUserByIdOrNull(userId))
   );
 
   for (const resolvedUser of resolvedUsers) {

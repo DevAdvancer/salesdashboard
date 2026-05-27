@@ -136,6 +136,7 @@ describe('Integration: User Management Flow', () => {
       status: 'New',
       ownerId: managerId,
       assignedToId: agentId,
+      branchId: 'branch-1',
       isClosed: false,
       closedAt: null,
     };

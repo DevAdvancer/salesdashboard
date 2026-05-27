@@ -14,7 +14,7 @@ jest.mock('@/lib/contexts/auth-context', () => ({
 }));
 
 const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>;
-const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
+const mockUseAuth = useAuth as jest.Mock;
 
 describe('LoginPage - Task 2.5: Login Flow with Session Management', () => {
   const mockPush = jest.fn();

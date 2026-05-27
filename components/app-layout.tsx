@@ -6,6 +6,7 @@ import { WhatsNewModal } from './whats-new-modal';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
+import { useToast } from '@/components/ui/use-toast';
 
 const PUBLIC_ROUTES = ['/login'];
 
@@ -13,9 +14,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const { toast } = useToast();
   const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const lastRedirectPath = useRef<string | null>(null);
+  const lastUnderConstructionPath = useRef<string | null>(null);
 
   useEffect(() => {
     // Reset redirect tracking if we've successfully navigated
@@ -39,6 +42,26 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       router.replace('/dashboard');
     }
   }, [user, loading, isPublicRoute, pathname, router]);
+
+  useEffect(() => {
+    if (!user || isPublicRoute) return;
+
+    const isUnderConstructionPage =
+      (user.role === 'team_lead' &&
+        (pathname === '/linkedin-requests' || pathname === '/linkedin-reports')) ||
+      (user.role === 'agent' && pathname === '/linkedin-requests');
+    const previousPathname = lastUnderConstructionPath.current;
+    lastUnderConstructionPath.current = pathname;
+
+    if (!isUnderConstructionPage) return;
+    if (previousPathname === pathname) return;
+
+    toast({
+      title: 'Under Construction',
+      description: "This page is under construction. Please don't use it yet.",
+      variant: 'destructive',
+    });
+  }, [isPublicRoute, pathname, toast, user]);
 
   if (loading) {
     return (

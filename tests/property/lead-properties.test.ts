@@ -1,4 +1,4 @@
-﻿import fc from 'fast-check';
+import fc from 'fast-check';
 import { Lead } from '@/lib/types';
 import { Permission, Role } from 'appwrite';
 
@@ -16,6 +16,7 @@ describe('Lead Properties', () => {
           status: fc.constantFrom('New', 'Contacted', 'Qualified', 'Proposal'),
           ownerId: fc.uuid(),
           assignedToId: fc.option(fc.uuid(), { nil: null }),
+          branchId: fc.constant(null),
           isClosed: fc.constant(false),
           closedAt: fc.constant(null),
         }),
@@ -43,6 +44,7 @@ describe('Lead Properties', () => {
           status: fc.constantFrom('New', 'Contacted', 'Qualified', 'Proposal'),
           ownerId: fc.uuid(),
           assignedToId: fc.option(fc.uuid(), { nil: null }),
+          branchId: fc.constant(null),
           isClosed: fc.constant(false),
           closedAt: fc.constant(null),
         }),
@@ -71,6 +73,7 @@ describe('Lead Properties', () => {
           status: fc.constantFrom('New', 'Contacted', 'Qualified', 'Proposal'),
           ownerId: fc.uuid(),
           assignedToId: fc.option(fc.uuid(), { nil: null }),
+          branchId: fc.constant(null),
           isClosed: fc.constant(false),
           closedAt: fc.constant(null),
         }),
@@ -104,6 +107,7 @@ describe('Lead Properties', () => {
           status: fc.constantFrom('New', 'Contacted', 'Qualified', 'Proposal'),
           ownerId: fc.uuid(),
           assignedToId: fc.option(fc.uuid(), { nil: null }),
+          branchId: fc.constant(null),
           isClosed: fc.constant(false),
           closedAt: fc.constant(null),
         }),
@@ -131,6 +135,7 @@ describe('Lead Properties', () => {
           status: fc.constantFrom('New', 'Contacted', 'Qualified', 'Proposal'),
           ownerId: fc.uuid(),
           assignedToId: fc.option(fc.uuid(), { nil: null }),
+          branchId: fc.constant(null),
           isClosed: fc.constant(false),
           closedAt: fc.constant(null),
         }),
@@ -158,6 +163,7 @@ describe('Lead Properties', () => {
           status: fc.constantFrom('New', 'Contacted', 'Qualified', 'Proposal'),
           ownerId: fc.uuid(),
           assignedToId: fc.option(fc.uuid(), { nil: null }),
+          branchId: fc.constant(null),
           isClosed: fc.constant(false),
           closedAt: fc.constant(null),
         }),
@@ -187,6 +193,7 @@ describe('Lead Properties', () => {
           status: fc.constantFrom('New', 'Contacted', 'Qualified', 'Proposal'),
           ownerId: fc.uuid(),
           assignedToId: fc.option(fc.uuid(), { nil: null }),
+          branchId: fc.constant(null),
           isClosed: fc.constant(false),
           closedAt: fc.constant(null),
         }),
@@ -217,6 +224,7 @@ describe('Lead Properties', () => {
         status: fc.constantFrom('New', 'Contacted', 'Qualified', 'Proposal'),
         ownerId: fc.uuid(),
         assignedToId: fc.option(fc.uuid(), { nil: null }),
+        branchId: fc.constant(null),
         isClosed: fc.constant(false),
         closedAt: fc.constant(null),
       });
@@ -244,6 +252,7 @@ describe('Lead Properties', () => {
         status: fc.string(),
         ownerId: fc.uuid(),
         assignedToId: fc.uuid(),
+        branchId: fc.constant(null),
         isClosed: fc.constant(true),
         closedAt: dateArb(),
       });
@@ -274,6 +283,7 @@ describe('Lead Properties', () => {
         status: fc.string(),
         ownerId: fc.uuid(),
         assignedToId: fc.option(fc.uuid(), { nil: null }),
+        branchId: fc.constant(null),
         isClosed: fc.constant(true),
         closedAt: dateArb(),
       });
@@ -294,6 +304,7 @@ describe('Lead Properties', () => {
         status: fc.string(),
         ownerId: fc.uuid(),
         assignedToId: fc.option(fc.uuid(), { nil: null }),
+        branchId: fc.constant(null),
         isClosed: fc.constant(true),
         closedAt: dateArb(),
       });
@@ -318,6 +329,7 @@ describe('Lead Properties', () => {
           status: fc.string(),
           ownerId: fc.uuid(),
           assignedToId: fc.uuid(),
+          branchId: fc.constant(null),
           isClosed: fc.constant(false),
           closedAt: fc.constant(null),
         }),
@@ -350,6 +362,7 @@ describe('Lead Properties', () => {
           status: fc.string(),
           ownerId: fc.uuid(),
           assignedToId: fc.uuid(),
+          branchId: fc.constant(null),
           isClosed: fc.constant(false),
           closedAt: fc.constant(null),
         }),
@@ -390,6 +403,7 @@ describe('Lead Properties', () => {
           status: fc.constantFrom('New', 'Contacted', 'Qualified', 'Proposal', 'Won', 'Lost', 'Closed', 'Rejected'),
           ownerId: fc.uuid(),
           assignedToId: fc.option(fc.uuid(), { nil: null }),
+          branchId: fc.constant(null),
           isClosed: fc.boolean(),
           closedAt: fc.option(dateArb(), { nil: null }),
           $createdAt: dateArb(),
@@ -470,6 +484,7 @@ describe('Lead Properties', () => {
           status: fc.string(),
           ownerId: fc.uuid(),
           assignedToId: fc.option(fc.uuid(), { nil: null }),
+          branchId: fc.constant(null),
           isClosed: fc.boolean(),
           closedAt: fc.option(dateArb(), { nil: null }),
           $createdAt: dateArb(),
@@ -496,6 +511,7 @@ describe('Lead Properties', () => {
           status: fc.constantFrom('New', 'Contacted', 'Qualified'),
           ownerId: fc.uuid(),
           assignedToId: fc.option(fc.uuid(), { nil: null }),
+          branchId: fc.constant(null),
           isClosed: fc.constant(false),
           closedAt: fc.constant(null),
           $createdAt: dateArb(),
@@ -505,10 +521,7 @@ describe('Lead Properties', () => {
 
       fc.assert(
         fc.property(leadsArb, (allLeads) => {
-          const historyLeads = allLeads.filter(lead => lead.isClosed === true);
-
-          // Property: When all leads are active, history should be empty
-          return historyLeads.length === 0;
+          return allLeads.every(lead => lead.isClosed === false);
         }),
         { numRuns: 100 }
       );

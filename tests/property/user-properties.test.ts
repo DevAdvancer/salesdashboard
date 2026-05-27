@@ -26,6 +26,8 @@ describe('User Properties', () => {
         email: fc.emailAddress(),
         role: fc.constantFrom<UserRole>('manager', 'agent'),
         managerId: fc.option(fc.uuid(), { nil: null }),
+        teamLeadId: fc.constant(null),
+        branchIds: fc.constant<string[]>([]),
         $createdAt: fc.integer({ min: 1577836800000, max: 1924905600000 }).map(ts => new Date(ts).toISOString()),
         $updatedAt: fc.integer({ min: 1577836800000, max: 1924905600000 }).map(ts => new Date(ts).toISOString()),
       });
@@ -118,6 +120,8 @@ describe('User Properties', () => {
         email: fc.emailAddress(),
         role: fc.constant<UserRole>('manager'),
         managerId: fc.constant(null), // Managers have no manager
+        teamLeadId: fc.constant(null),
+        branchIds: fc.constant<string[]>([]),
       });
 
       fc.assert(
@@ -138,6 +142,8 @@ describe('User Properties', () => {
         email: fc.emailAddress(),
         role: fc.constant<UserRole>('agent'),
         managerId: fc.uuid(), // Agents must have a manager
+        teamLeadId: fc.constant(null),
+        branchIds: fc.constant<string[]>([]),
       });
 
       fc.assert(
@@ -178,6 +184,8 @@ describe('User Properties', () => {
             email: signupData.email,
             role: 'manager', // Default role for signup
             managerId: null, // No manager for default users
+            teamLeadId: null,
+            branchIds: [],
           };
 
           // Property: Users created through signup must be managers with no managerId
@@ -206,6 +214,8 @@ describe('User Properties', () => {
             email: userData.email,
             role: 'manager', // Default role for direct creation
             managerId: null, // No manager for direct creation
+            teamLeadId: null,
+            branchIds: [],
           };
 
           // Property: Direct user creation must result in manager role with null managerId
@@ -251,6 +261,8 @@ describe('User Properties', () => {
         email: fc.emailAddress(),
         role: fc.constant<UserRole>('manager'),
         managerId: fc.constant(null),
+        teamLeadId: fc.constant(null),
+        branchIds: fc.constant<string[]>([]),
       });
 
       fc.assert(
@@ -320,6 +332,8 @@ describe('User Properties', () => {
         email: fc.emailAddress(),
         role: fc.constant<UserRole>('manager'),
         managerId: fc.constant(null),
+        teamLeadId: fc.constant(null),
+        branchIds: fc.constant<string[]>([]),
       });
 
       fc.assert(
@@ -361,6 +375,8 @@ describe('User Properties', () => {
             email: signupData.email,
             role: 'manager',
             managerId: null,
+            teamLeadId: null,
+            branchIds: [],
           };
 
           // Property: Signup must create a valid manager user
@@ -406,6 +422,8 @@ describe('User Properties', () => {
             email: input.email,
             role: 'agent', // Must be agent when created through User Management
             managerId: input.managerId, // Must link to creating manager
+            teamLeadId: null,
+            branchIds: [],
           };
 
           // Property: Agent creation must set role='agent' and managerId
@@ -437,6 +455,8 @@ describe('User Properties', () => {
             email: data.agentEmail,
             role: 'agent',
             managerId: data.managerId,
+            teamLeadId: null,
+            branchIds: [],
           };
 
           // Property: Agent's managerId must match the creating manager's ID
@@ -479,6 +499,8 @@ describe('User Properties', () => {
         email: fc.emailAddress(),
         role: fc.constant<UserRole>('agent'),
         managerId: fc.uuid(), // Must be present for agents
+        teamLeadId: fc.constant(null),
+        branchIds: fc.constant<string[]>([]),
       });
 
       fc.assert(
@@ -515,6 +537,8 @@ describe('User Properties', () => {
             email: data.email,
             role: 'agent',
             managerId: data.managerId,
+            teamLeadId: null,
+            branchIds: [],
           };
 
           // Simulate agent update (e.g., name change)
@@ -557,6 +581,8 @@ describe('User Properties', () => {
             email: input.email,
             role: 'agent',
             managerId: input.managerId,
+            teamLeadId: null,
+            branchIds: [],
           };
 
           // Property: Agent creation must produce a valid agent user

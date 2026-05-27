@@ -16,7 +16,7 @@ import { listBranches } from "@/lib/services/branch-service";
 import {
   getAgentsByTeamLead,
   getAssignableUsers,
-  getUserById,
+  getUserByIdOrNull,
 } from "@/lib/services/user-service";
 import type { Branch, User } from "@/lib/types";
 
@@ -76,7 +76,7 @@ function WorkQueueContent() {
         usersForInsights = await resolveLeadUsersForInsights({
           leads: [...activeLeads, ...closedLeads],
           users: usersForInsights,
-          getUserById,
+          getUserByIdOrNull,
         });
         const allBranches = await listBranches();
         const branchIds = new Set([

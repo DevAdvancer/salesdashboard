@@ -128,12 +128,14 @@ function CalendarMonth({
   selected,
   range,
   minDate,
+  maxDate,
   onSelect,
 }: {
   month: Date
   selected?: string
   range?: DateRange
   minDate?: string
+  maxDate?: string
   onSelect: (value: string) => void
 }) {
   const days = buildMonthDays(month)
@@ -150,7 +152,9 @@ function CalendarMonth({
       </div>
       <div className="mt-1 grid grid-cols-7 gap-1">
         {days.map((day) => {
-          const disabled = Boolean(minDate && day.value < minDate)
+          const disabled = Boolean(
+            (minDate && day.value < minDate) || (maxDate && day.value > maxDate),
+          )
           const active = selected === day.value || Boolean(range && isRangeEdge(day.value, range))
           const insideRange = Boolean(range && isInRange(day.value, range))
 
@@ -206,6 +210,108 @@ function usePopover() {
   }, [open])
 
   return { open, setOpen, ref }
+}
+
+export function DatePicker({
+  id,
+  value,
+  onChange,
+  minDate,
+  maxDate,
+  className,
+  disabled,
+  placeholder = "Select date",
+}: {
+  id?: string
+  value: string
+  onChange: (value: string) => void
+  minDate?: string
+  maxDate?: string
+  className?: string
+  disabled?: boolean
+  placeholder?: string
+}) {
+  const { open, setOpen, ref } = usePopover()
+  const [visibleMonth, setVisibleMonth] = React.useState(() => getMonthStart(value))
+
+  React.useEffect(() => {
+    if (open) setVisibleMonth(getMonthStart(value))
+  }, [open, value])
+
+  const label = value ? formatDisplayDate(value) : placeholder
+
+  return (
+    <div ref={ref} className={cn("relative", className)}>
+      <button
+        id={id}
+        type="button"
+        onClick={() => {
+          if (disabled) return
+          setOpen((current) => !current)
+        }}
+        className={cn(
+          "flex h-10 w-full items-center justify-between gap-3 rounded-[1.5rem]",
+          "bg-[var(--input)] px-3 py-2 text-left text-sm text-foreground",
+          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ink)]",
+          disabled && "cursor-not-allowed opacity-40",
+        )}
+      >
+        <span className={cn(!value && "text-muted-foreground")}>{label}</span>
+        <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 z-50 mt-2 w-[18rem] rounded-2xl border border-border bg-popover p-4 text-popover-foreground shadow-xl">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setVisibleMonth((current) => addMonths(current, -1))}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full hover:bg-[var(--accent)]"
+              aria-label="Previous month"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setVisibleMonth(new Date())}
+              className="rounded-full px-3 py-2 text-xs text-muted-foreground hover:bg-[var(--accent)] hover:text-foreground"
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => setVisibleMonth((current) => addMonths(current, 1))}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full hover:bg-[var(--accent)]"
+              aria-label="Next month"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+
+          <CalendarMonth
+            month={visibleMonth}
+            selected={value || undefined}
+            minDate={minDate}
+            maxDate={maxDate}
+            onSelect={(nextValue) => {
+              onChange(nextValue)
+              setOpen(false)
+            }}
+          />
+
+          <div className="mt-4 flex items-center justify-end">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-full bg-[var(--ink)] px-4 py-2 text-sm font-medium text-[var(--canvas)]"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function DateRangePicker({

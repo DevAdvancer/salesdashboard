@@ -28,7 +28,10 @@ export type ComponentKey =
   | 'reports'
   | 'coaching-notes'
   | 'review-queue'
-  | 'notifications';
+  | 'notifications'
+  | 'linkedin-requests'
+  | 'linkedin-account-management'
+  | 'linkedin-reports';
 
 interface AccessControlContextType {
   canAccess: (componentKey: ComponentKey) => boolean;

@@ -206,7 +206,7 @@ async function assertLeadReopenAllowed(
 ) {
   if (actorDoc.role === 'admin') return;
 
-  if (actorDoc.role !== 'manager') {
+  if (actorDoc.role !== 'manager' && actorDoc.role !== 'team_lead') {
     throw new Error('Permission denied');
   }
 

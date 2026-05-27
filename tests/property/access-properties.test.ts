@@ -36,7 +36,7 @@ describe('Access Control Properties', () => {
       fc.assert(
         fc.property(accessRulesArb, (rules) => {
           // Create a map of component visibility for agents
-          const visibilityMap = new Map<ComponentKey, boolean>();
+          const visibilityMap = new Map<string, boolean>();
 
           // Process rules - later rules override earlier ones
           rules.forEach(rule => {
@@ -84,7 +84,7 @@ describe('Access Control Properties', () => {
     it('should deny access to components where allowed=false for agent role', () => {
       fc.assert(
         fc.property(accessRulesArb, (rules) => {
-          const visibilityMap = new Map<ComponentKey, boolean>();
+          const visibilityMap = new Map<string, boolean>();
 
           rules.forEach(rule => {
             if (rule.role === 'agent') {
@@ -124,7 +124,7 @@ describe('Access Control Properties', () => {
     it('should use default deny for components without explicit rules', () => {
       fc.assert(
         fc.property(accessRulesArb, (rules) => {
-          const visibilityMap = new Map<ComponentKey, boolean>();
+          const visibilityMap = new Map<string, boolean>();
 
           rules.forEach(rule => {
             if (rule.role === 'agent') {
@@ -249,7 +249,7 @@ describe('Access Control Properties', () => {
       fc.assert(
         fc.property(accessRulesArb, componentKeyArb, (rules, componentKey) => {
           // Even if there's a rule denying access, managers should still have access
-          const visibilityMap = new Map<ComponentKey, boolean>();
+          const visibilityMap = new Map<string, boolean>();
 
           rules.forEach(rule => {
             if (rule.role === 'manager') {
@@ -298,7 +298,7 @@ describe('Access Control Properties', () => {
     it('should differentiate manager access from agent access', () => {
       fc.assert(
         fc.property(accessRulesArb, componentKeyArb, (rules, componentKey) => {
-          const visibilityMap = new Map<ComponentKey, boolean>();
+          const visibilityMap = new Map<string, boolean>();
 
           rules.forEach(rule => {
             visibilityMap.set(`${rule.componentKey}-${rule.role}`, rule.allowed);

@@ -191,7 +191,10 @@ export type ComponentKey =
   | 'reports'
   | 'coaching-notes'
   | 'review-queue'
-  | 'notifications';
+  | 'notifications'
+  | 'linkedin-requests'
+  | 'linkedin-account-management'
+  | 'linkedin-reports';
 
 export interface AccessRule {
   $id?: string;
@@ -203,6 +206,43 @@ export interface AccessRule {
 export interface AccessConfig {
   rules: AccessRule[];
   canAccess: (componentKey: ComponentKey, role: UserRole) => boolean;
+}
+
+export type LinkedinAccountType = 'main' | 'sudo';
+
+export interface LinkedinAccount {
+  $id: string;
+  assignedUserId: string;
+  teamLeadId: string | null;
+  company: string;
+  idName: string;
+  accountType: LinkedinAccountType;
+  mainAccountId: string | null;
+  isActive: boolean;
+  licenseType?: string;
+  connectionLimit?: number;
+  createdBy?: string;
+  updatedBy?: string;
+  $createdAt?: string;
+  $updatedAt?: string;
+}
+
+export type LinkedinRequestStatus = 'sent' | 'accepted' | 'withdrawn';
+
+export interface LinkedinRequest {
+  $id: string;
+  accountId: string;
+  agentId: string;
+  teamLeadId: string | null;
+  company: string;
+  targetUrl: string;
+  dateSent: string;
+  status: LinkedinRequestStatus;
+  acceptedAt: string | null;
+  withdrawnAt?: string | null;
+  isActive?: boolean;
+  $createdAt?: string;
+  $updatedAt?: string;
 }
 
 // Audit Log types

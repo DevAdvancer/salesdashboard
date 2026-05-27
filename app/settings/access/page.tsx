@@ -61,6 +61,21 @@ const ALL_COMPONENTS: {
     description: "Configure lead form fields",
   },
   {
+    key: "linkedin-requests",
+    label: "Linkedin Request",
+    description: "Send and track Linkedin connection requests",
+  },
+  {
+    key: "linkedin-account-management",
+    label: "Linkedin Account Management",
+    description: "Assign Linkedin IDs (Main + Sudo) to agents",
+  },
+  {
+    key: "linkedin-reports",
+    label: "Linkedin Reports",
+    description: "Weekly team reports for Linkedin outreach",
+  },
+  {
     key: "settings",
     label: "Settings",
     description: "System settings and configuration",

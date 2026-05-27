@@ -116,6 +116,38 @@ describe('lead server action authorization', () => {
     expect(mockUpdateDocument).not.toHaveBeenCalled();
   });
 
+  it('allows team lead to reopen a closed lead for their team', async () => {
+    mockGetDocument
+      .mockResolvedValueOnce({
+        $id: 'tl-1',
+        email: 'tl@example.com',
+        role: 'team_lead',
+        branchIds: ['branch-1'],
+      })
+      .mockResolvedValueOnce({
+        $id: 'lead-1',
+        data: '{}',
+        ownerId: 'leadgen-1',
+        assignedToId: 'agent-1',
+        branchId: 'branch-1',
+        isClosed: true,
+        closedAt: '2024-01-15T10:00:00.000Z',
+        status: 'Closed',
+      });
+
+    mockListDocuments.mockResolvedValueOnce({
+      documents: [
+        { $id: 'agent-1' },
+        { $id: 'leadgen-1' },
+      ],
+    });
+
+    const { reopenLeadAction } = await import('@/app/actions/lead');
+
+    await expect(reopenLeadAction('lead-1', 'tl-1', 'TL')).resolves.toBeTruthy();
+    expect(mockUpdateDocument).toHaveBeenCalled();
+  });
+
   it('rejects manager lead assignment to agents outside their branch scope', async () => {
     mockGetDocument
       .mockResolvedValueOnce({

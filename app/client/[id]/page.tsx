@@ -27,7 +27,7 @@ export default function HistoryDetailPage() {
 }
 
 function HistoryDetailContent() {
-  const { user, loading: authLoading, isManager } = useAuth();
+  const { user, loading: authLoading, isManager, isTeamLead } = useAuth();
   const router = useRouter();
   const params = useParams();
   const { toast } = useToast();
@@ -98,8 +98,10 @@ function HistoryDetailContent() {
     }
   };
 
+  const canReopen = Boolean(isManager || isTeamLead);
+
   const handleReopenLead = async () => {
-    if (!lead || !isManager || !user) return;
+    if (!lead || !canReopen || !user) return;
 
     try {
       setIsReopening(true);
@@ -220,7 +222,7 @@ function HistoryDetailContent() {
           <p className="text-muted-foreground mt-1">Read-only view of client record</p>
         </div>
         <div className="flex gap-2">
-          {isManager && (
+          {canReopen && (
             <Button
               onClick={() => setShowReopenDialog(true)}
               variant="default"
