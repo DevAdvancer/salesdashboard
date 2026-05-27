@@ -117,6 +117,8 @@ type HierarchyUserDocument = {
   $id: string;
   managerId?: string | null;
   managerIds?: string[];
+  assistantManagerId?: string | null;
+  assistantManagerIds?: string[];
   teamLeadId?: string | null;
 };
 
@@ -132,12 +134,16 @@ function getVisibleHierarchyUserIds(viewerId: string, viewerRole: UserRole, user
       if (visibleIds.has(candidate.$id)) return;
 
       const managerIds = Array.isArray(candidate.managerIds) ? candidate.managerIds : [];
+      const assistantManagerIds = Array.isArray(candidate.assistantManagerIds) ? candidate.assistantManagerIds : [];
       const reportsToVisibleManager =
         Boolean(candidate.managerId && visibleIds.has(candidate.managerId)) ||
         managerIds.some((managerId) => visibleIds.has(managerId));
+      const reportsToVisibleAssistantManager =
+        Boolean(candidate.assistantManagerId && visibleIds.has(candidate.assistantManagerId)) ||
+        assistantManagerIds.some((assistantManagerId) => visibleIds.has(assistantManagerId));
       const reportsToVisibleTeamLead = Boolean(candidate.teamLeadId && visibleIds.has(candidate.teamLeadId));
 
-      if (reportsToVisibleManager || reportsToVisibleTeamLead) {
+      if (reportsToVisibleManager || reportsToVisibleAssistantManager || reportsToVisibleTeamLead) {
         visibleIds.add(candidate.$id);
         changed = true;
       }
@@ -183,6 +189,39 @@ function appendHierarchyLeadVisibilityQuery(queries: string[], visibleUserIds: s
   }
 
   queries.push(Query.or(orConditions));
+}
+
+type UserDocument = {
+  $id: string;
+  email?: string;
+  role: UserRole;
+  branchIds?: string[];
+  branchId?: string | null;
+};
+
+async function assertLeadReopenAllowed(
+  databases: Awaited<ReturnType<typeof createAdminClient>>['databases'],
+  actorDoc: UserDocument,
+  lead: Lead
+) {
+  if (actorDoc.role === 'admin') return;
+
+  if (actorDoc.role !== 'manager') {
+    throw new Error('Permission denied');
+  }
+
+  const specialBranchId = getSpecialBranchLeadAccess(actorDoc.email);
+  if (specialBranchId && lead.branchId === specialBranchId) return;
+
+  const visibleUserIds = await getLeadVisibilityUserIds(databases, actorDoc.$id, actorDoc.role);
+  if (
+    visibleUserIds.includes(lead.ownerId) ||
+    (lead.assignedToId ? visibleUserIds.includes(lead.assignedToId) : false)
+  ) {
+    return;
+  }
+
+  throw new Error('Permission denied');
 }
 
 export async function createLeadAction(
@@ -343,25 +382,17 @@ export async function reopenLeadAction(
     }
     const { databases } = await createAdminClient();
     try {
+        const actorDoc = await databases.getDocument(
+            DATABASE_ID,
+            COLLECTIONS.USERS,
+            actorId
+        ) as unknown as UserDocument;
+
         // Get the current lead
         const currentLead = await databases.getDocument(DATABASE_ID, LEADS_COLLECTION_ID, leadId) as unknown as Lead;
+        await assertLeadReopenAllowed(databases, actorDoc, currentLead);
 
         // Build permissions with update access restored
-        const permissions: string[] = [
-            // Permission.read(Role.user(currentLead.ownerId)),
-            // Permission.update(Role.user(currentLead.ownerId)),
-            // Permission.delete(Role.user(currentLead.ownerId)),
-            // We use Admin client, so we might need to be careful about resetting permissions if they were customized.
-            // But let's assume standard logic: Owner gets full access.
-        ];
-        // Note: In server action, we don't necessarily need to reconstruct permissions if we just update the field.
-        // However, standard reopenLead logic in lead-service.ts DOES update permissions to restore Agent access.
-        // Let's replicate that logic here using the proper node-appwrite Permission/Role helpers if needed,
-        // or just update the document data if permissions are not wiped on update.
-        // Wait, appwrite updateDocument doesn't wipe permissions unless we pass them.
-        // BUT, closeLead probably restricted them. So we DO need to restore them.
-
-        // Import Permission/Role from node-appwrite
         const { Permission, Role } = await import("node-appwrite");
 
         const newPermissions = [
@@ -396,17 +427,17 @@ export async function reopenLeadAction(
 export async function listLeadsAction(
   filters: LeadListFilters,
   userId: string,
-  userRole: UserRole,
-  branchIds?: string[]
+  _userRole: UserRole,
+  _branchIds?: string[]
 ): Promise<Lead[]> {
   try {
     await assertAuthenticatedUserId(userId);
-    console.log('[listLeadsAction] Called with:', { userId, userRole, branchIds, filters });
     const { databases } = await createAdminClient();
     const queries: string[] = [];
 
     // Role-based filtering
-    const userDoc = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, userId);
+    const userDoc = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, userId) as unknown as UserDocument;
+    const userRole = userDoc.role;
 
     const specialBranchId = getSpecialBranchLeadAccess(userDoc.email as string | undefined);
 
@@ -421,12 +452,7 @@ export async function listLeadsAction(
       }
       queries.push(Query.or(orConditions));
     } else if (userRole === 'lead_generation') {
-      queries.push(
-        Query.or([
-          Query.equal('ownerId', userId),
-          Query.contains('data', [userId]),
-        ])
-      );
+      queries.push(Query.equal('ownerId', userId));
     } else if (userRole === 'admin') {
       // Admins and Managers see all leads across all branches — no branch/owner filter
     } else if (userRole === 'manager') {

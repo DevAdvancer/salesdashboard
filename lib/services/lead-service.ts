@@ -46,6 +46,8 @@ type HierarchyUserDocument = {
   $id: string;
   managerId?: string | null;
   managerIds?: string[];
+  assistantManagerId?: string | null;
+  assistantManagerIds?: string[];
   teamLeadId?: string | null;
 };
 
@@ -61,12 +63,16 @@ function getVisibleHierarchyUserIds(viewerId: string, viewerRole: UserRole, user
       if (visibleIds.has(candidate.$id)) return;
 
       const managerIds = Array.isArray(candidate.managerIds) ? candidate.managerIds : [];
+      const assistantManagerIds = Array.isArray(candidate.assistantManagerIds) ? candidate.assistantManagerIds : [];
       const reportsToVisibleManager =
         Boolean(candidate.managerId && visibleIds.has(candidate.managerId)) ||
         managerIds.some((managerId) => visibleIds.has(managerId));
+      const reportsToVisibleAssistantManager =
+        Boolean(candidate.assistantManagerId && visibleIds.has(candidate.assistantManagerId)) ||
+        assistantManagerIds.some((assistantManagerId) => visibleIds.has(assistantManagerId));
       const reportsToVisibleTeamLead = Boolean(candidate.teamLeadId && visibleIds.has(candidate.teamLeadId));
 
-      if (reportsToVisibleManager || reportsToVisibleTeamLead) {
+      if (reportsToVisibleManager || reportsToVisibleAssistantManager || reportsToVisibleTeamLead) {
         visibleIds.add(candidate.$id);
         changed = true;
       }
@@ -447,12 +453,7 @@ export async function listLeads(
       }
       queries.push(Query.or(orConditions));
     } else if (userRole === 'lead_generation') {
-      queries.push(
-        Query.or([
-          Query.equal('ownerId', userId),
-          Query.contains('data', [userId]),
-        ])
-      );
+      queries.push(Query.equal('ownerId', userId));
     } else if (userRole === 'admin') {
       // Admins and Managers see all leads across all branches — no branch/owner filter
     } else if (userRole === 'manager') {

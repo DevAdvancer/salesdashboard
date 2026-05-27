@@ -7,7 +7,7 @@ import { createLeadAction } from "@/app/actions/lead";
 import { validateLeadUniqueness } from "@/lib/services/lead-validator";
 import { listBranches } from "@/lib/services/branch-service";
 import { getFormConfig } from "@/lib/services/form-config-service";
-import { FormField, Branch } from "@/lib/types";
+import { FormField, Branch, User } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -54,6 +54,21 @@ function LeadGenerationNewLeadContent() {
   const [resumeFileName, setResumeFileName] = useState<string | null>(null);
   const [isUploadingResume, setIsUploadingResume] = useState(false);
 
+  const buildResumePermissions = (currentUser: User) => {
+    const readUserIds = new Set<string>([currentUser.$id]);
+    if (currentUser.teamLeadId) readUserIds.add(currentUser.teamLeadId);
+    if (currentUser.managerId) readUserIds.add(currentUser.managerId);
+    currentUser.managerIds?.forEach((managerId) => readUserIds.add(managerId));
+    if (currentUser.assistantManagerId) readUserIds.add(currentUser.assistantManagerId);
+    currentUser.assistantManagerIds?.forEach((assistantManagerId) => readUserIds.add(assistantManagerId));
+
+    return [
+      ...Array.from(readUserIds).map((userId) => Permission.read(Role.user(userId))),
+      Permission.update(Role.user(currentUser.$id)),
+      Permission.delete(Role.user(currentUser.$id)),
+    ];
+  };
+
   useEffect(() => {
     if (!authLoading && !user) {
       router.push("/login");
@@ -76,11 +91,7 @@ function LeadGenerationNewLeadContent() {
         BUCKETS.RESUMES,
         ID.unique(),
         file,
-        [
-          Permission.read(Role.users()),
-          Permission.update(Role.user(user.$id)),
-          Permission.delete(Role.user(user.$id)),
-        ],
+        buildResumePermissions(user),
       );
 
       setResumeFileId(uploaded.$id);

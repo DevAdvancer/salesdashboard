@@ -2,7 +2,7 @@
 
 import { createAdminClient } from '@/lib/server/appwrite';
 import { createNotificationsForRecipients } from '@/lib/server/notifications';
-import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
+import { BUCKETS, COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { Permission, Role, ID, Query } from 'node-appwrite';
 import { Lead, User } from '@/lib/types';
 import { assertAuthenticatedUserId } from '@/lib/server/current-user';
@@ -81,6 +81,149 @@ function getLeadDisplayName(lead: Lead): string {
     }
 }
 
+function getUserBranchIds(user: User): string[] {
+    const branchIds = Array.isArray(user.branchIds) ? user.branchIds : [];
+    return user.branchId && !branchIds.includes(user.branchId)
+        ? [...branchIds, user.branchId]
+        : branchIds;
+}
+
+function hasBranchOverlap(left: User, right: User): boolean {
+    const leftBranchIds = new Set(getUserBranchIds(left));
+    return getUserBranchIds(right).some((branchId) => leftBranchIds.has(branchId));
+}
+
+type HierarchyUserDocument = {
+    $id: string;
+    managerId?: string | null;
+    managerIds?: string[];
+    assistantManagerId?: string | null;
+    assistantManagerIds?: string[];
+    teamLeadId?: string | null;
+};
+
+function getVisibleHierarchyUserIds(viewerId: string, users: HierarchyUserDocument[]): string[] {
+    const visibleIds = new Set<string>([viewerId]);
+    let changed = true;
+
+    while (changed) {
+        changed = false;
+        users.forEach((candidate) => {
+            if (visibleIds.has(candidate.$id)) return;
+
+            const managerIds = Array.isArray(candidate.managerIds) ? candidate.managerIds : [];
+            const assistantManagerIds = Array.isArray(candidate.assistantManagerIds) ? candidate.assistantManagerIds : [];
+            const reportsToVisibleManager =
+                Boolean(candidate.managerId && visibleIds.has(candidate.managerId)) ||
+                managerIds.some((managerId) => visibleIds.has(managerId));
+            const reportsToVisibleAssistantManager =
+                Boolean(candidate.assistantManagerId && visibleIds.has(candidate.assistantManagerId)) ||
+                assistantManagerIds.some((assistantManagerId) => visibleIds.has(assistantManagerId));
+            const reportsToVisibleTeamLead = Boolean(candidate.teamLeadId && visibleIds.has(candidate.teamLeadId));
+
+            if (reportsToVisibleManager || reportsToVisibleAssistantManager || reportsToVisibleTeamLead) {
+                visibleIds.add(candidate.$id);
+                changed = true;
+            }
+        });
+    }
+
+    return Array.from(visibleIds);
+}
+
+async function getVisibleUserIdsForActor(actor: User, databases: AdminDatabases): Promise<string[]> {
+    if (actor.role === 'admin') return [];
+
+    if (actor.role === 'team_lead') {
+        const subordinates = await databases.listDocuments(
+            DATABASE_ID,
+            COLLECTIONS.USERS,
+            [
+                Query.equal('teamLeadId', actor.$id),
+                Query.or([Query.equal('role', 'agent'), Query.equal('role', 'lead_generation')]),
+                Query.limit(5000),
+            ]
+        );
+
+        return [actor.$id, ...subordinates.documents.map((doc) => String(doc.$id))];
+    }
+
+    const users = await databases.listDocuments(
+        DATABASE_ID,
+        COLLECTIONS.USERS,
+        [Query.limit(5000)]
+    );
+
+    return getVisibleHierarchyUserIds(actor.$id, users.documents as unknown as HierarchyUserDocument[]);
+}
+
+async function assertAssignmentAllowed(actor: User, agent: User, lead: Lead, databases: AdminDatabases) {
+    if (agent.role !== 'agent') {
+        throw new Error('Leads can only be assigned to agents.');
+    }
+
+    if (actor.role === 'admin') {
+        return;
+    }
+
+    if (actor.role === 'team_lead') {
+        if (agent.teamLeadId !== actor.$id) {
+            throw new Error('Team leads can only assign agents under them.');
+        }
+    } else if ((actor.role === 'manager' || actor.role === 'assistant_manager') && !hasBranchOverlap(actor, agent)) {
+        throw new Error('Permission denied');
+    }
+
+    const visibleUserIds = await getVisibleUserIdsForActor(actor, databases);
+    const leadInScope =
+        visibleUserIds.includes(lead.ownerId) ||
+        (lead.assignedToId ? visibleUserIds.includes(lead.assignedToId) : false) ||
+        Boolean(lead.branchId && getUserBranchIds(actor).includes(lead.branchId));
+
+    if (!leadInScope) {
+        throw new Error('Permission denied');
+    }
+}
+
+function getLeadResumeFileId(lead: Lead): string | null {
+    try {
+        const data = JSON.parse(lead.data) as { resumeFileId?: unknown };
+        return typeof data.resumeFileId === 'string' && data.resumeFileId ? data.resumeFileId : null;
+    } catch {
+        return null;
+    }
+}
+
+async function syncResumePermissionsForAssignment(
+    lead: Lead,
+    agentId: string,
+    databases: AdminDatabases,
+    storage: Awaited<ReturnType<typeof createAdminClient>>['storage']
+) {
+    const resumeFileId = getLeadResumeFileId(lead);
+    if (!resumeFileId) return;
+
+    const permissions = [
+        Permission.read(Role.user(lead.ownerId)),
+        Permission.update(Role.user(lead.ownerId)),
+        Permission.delete(Role.user(lead.ownerId)),
+        Permission.read(Role.user(agentId)),
+        ...(await getHierarchyPermissionsServer(lead.ownerId, databases)),
+        ...(await getHierarchyPermissionsServer(agentId, databases)),
+    ];
+
+    try {
+        await storage.updateFile(
+            BUCKETS.RESUMES,
+            resumeFileId,
+            undefined,
+            [...new Set(permissions)]
+        );
+    } catch (error) {
+        console.error('Failed to update resume permissions for lead assignment:', error);
+    }
+}
+
 /**
  * Assign a lead to an agent using server-side admin client
  * This bypasses user-level permissions to ensure managers can always reassign leads.
@@ -92,7 +235,7 @@ export async function assignLeadAction(
     actorName: string
 ) {
     await assertAuthenticatedUserId(actorId);
-    const { databases } = await createAdminClient();
+    const { databases, storage } = await createAdminClient();
 
     try {
         const actorDoc = await databases.getDocument(
@@ -105,53 +248,20 @@ export async function assignLeadAction(
             throw new Error('Permission denied');
         }
 
-        if (actorDoc.role === 'team_lead') {
-            const agentDoc = await databases.getDocument(
-                DATABASE_ID,
-                COLLECTIONS.USERS,
-                agentId
-            ) as unknown as User;
-
-            if (agentDoc.role !== 'agent') {
-                throw new Error('Team leads can only assign leads to agents.');
-            }
-
-            if (agentDoc.teamLeadId !== actorId) {
-                throw new Error('Team leads can only assign agents under them.');
-            }
-
-            const subordinatesResponse = await databases.listDocuments(
-                DATABASE_ID,
-                COLLECTIONS.USERS,
-                [
-                    Query.equal('teamLeadId', actorId),
-                    Query.or([Query.equal('role', 'agent'), Query.equal('role', 'lead_generation')]),
-                    Query.limit(5000),
-                ]
-            );
-            const visibleUserIds = [actorId, ...subordinatesResponse.documents.map((doc: any) => String(doc.$id))];
-
-            const currentLeadForVisibility = await databases.getDocument(
-                DATABASE_ID,
-                COLLECTIONS.LEADS,
-                leadId
-            ) as unknown as Lead;
-
-            const withinScope =
-                visibleUserIds.includes(currentLeadForVisibility.ownerId) ||
-                (currentLeadForVisibility.assignedToId ? visibleUserIds.includes(currentLeadForVisibility.assignedToId) : false);
-
-            if (!withinScope) {
-                throw new Error('Permission denied');
-            }
-        }
-
         // Get the current lead to check owner and status
         const currentLead = await databases.getDocument(
             DATABASE_ID,
             COLLECTIONS.LEADS,
             leadId
         ) as unknown as Lead;
+
+        const agentDoc = await databases.getDocument(
+            DATABASE_ID,
+            COLLECTIONS.USERS,
+            agentId
+        ) as unknown as User;
+
+        await assertAssignmentAllowed(actorDoc, agentDoc, currentLead, databases);
 
         // Build new permissions
         // Always include the owner
@@ -190,6 +300,8 @@ export async function assignLeadAction(
             },
             permissions
         );
+
+        await syncResumePermissionsForAssignment(currentLead, agentId, databases, storage);
 
         // Log audit action
         try {

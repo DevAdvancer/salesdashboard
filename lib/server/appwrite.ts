@@ -1,4 +1,4 @@
-import { Client, Account, Databases, Users } from "node-appwrite";
+import { Client, Account, Databases, Storage, Users } from "node-appwrite";
 import { cookies } from "next/headers";
 import { createHash } from "node:crypto";
 import {
@@ -102,6 +102,9 @@ export async function createAdminClient() {
         namespace: "admin",
         stores: adminDatabaseCacheStores,
       });
+    },
+    get storage() {
+      return new Storage(client);
     },
     get users() {
       return new Users(client);
