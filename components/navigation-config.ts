@@ -58,7 +58,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'coaching-notes', label: 'Coaching Notes', href: '/coaching-notes', icon: appIcons.coachingNotes },
   { key: 'review-queue', label: 'Review Queue', href: '/review-queue', icon: appIcons.reviewQueue },
   { key: 'mock', label: 'Mock Interview', href: '/mock', icon: appIcons.mock },
-  { key: 'assessment-support', label: 'Assessment', href: '/assessment-support', icon: appIcons.assessmentSupport },
+  { key: 'assessment-support', label: 'Assessment Support', href: '/assessment-support', icon: appIcons.assessmentSupport },
   { key: 'interview-support', label: 'Interview Support', href: '/interview-support', icon: appIcons.interviewSupport },
   { key: 'hierarchy', label: 'Hierarchy', href: '/hierarchy', icon: appIcons.hierarchy },
   { key: 'user-management', label: 'Users', href: '/users', icon: appIcons.users },

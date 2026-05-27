@@ -433,5 +433,56 @@ export async function markNotificationReadAction(
     notificationId,
     { readAt: new Date().toISOString() }
   );
+
+  try {
+    if (
+      actor.role === "team_lead" &&
+      existing.type === "lead_unassigned" &&
+      typeof existing.targetId === "string" &&
+      existing.targetId
+    ) {
+      const leadId = existing.targetId;
+
+      const lead = await databases.getDocument(
+        DATABASE_ID,
+        COLLECTIONS.LEADS,
+        leadId
+      ) as unknown as Lead;
+
+      if (!lead.isClosed && !lead.assignedToId) {
+        const alreadyEscalated = await databases.listDocuments(
+          DATABASE_ID,
+          COLLECTIONS.NOTIFICATIONS,
+          [
+            Query.equal("type", "lead_unassigned_escalation"),
+            Query.equal("targetId", leadId),
+            Query.limit(1),
+          ]
+        );
+
+        if (alreadyEscalated.documents.length === 0) {
+          const admins = await databases.listDocuments(
+            DATABASE_ID,
+            COLLECTIONS.USERS,
+            [Query.equal("role", "admin"), Query.limit(5000)]
+          );
+
+          const adminIds = admins.documents.map((adminDoc: any) => String(adminDoc.$id));
+          const leadName = getLeadDisplayName(lead);
+
+          await createNotificationsForRecipients(databases, adminIds, {
+            type: "lead_unassigned_escalation",
+            title: "Lead not assigned by Team Lead",
+            body: `${actor.name} has viewed an unassigned lead (${leadName}) but it is still not assigned to any agent.`,
+            targetId: leadId,
+            targetType: "LEAD",
+          });
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Failed to escalate lead assignment notification:", error);
+  }
+
   return doc as unknown as NotificationRecord;
 }
