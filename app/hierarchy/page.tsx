@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { ProtectedRoute } from "@/components/protected-route";
 import {
@@ -14,6 +14,7 @@ import { Branch, User } from "@/lib/types";
 import { User as UserIcon, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { listBranches } from "@/lib/services/branch-service";
+import { client, databases } from "@/lib/appwrite";
 
 export default function HierarchyPage() {
   return (
@@ -292,77 +293,90 @@ function HierarchyContent() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    async function loadData() {
-      if (!user) return;
+  const loadData = useCallback(async () => {
+    if (!user) return;
 
-      try {
-        setIsLoading(true);
-        const { databases } = await import("@/lib/appwrite");
-        const { Query } = await import("appwrite");
-        let allUsers: unknown[] = [];
+    try {
+      setIsLoading(true);
+      const { Query } = await import("appwrite");
+      let allUsers: unknown[] = [];
 
-        if (isAdmin) {
-          // Admin fetches ALL users
-          const response = await databases.listDocuments(
-            process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
-            process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
-            [Query.limit(5000)],
-          );
-          allUsers = response.documents;
-        } else if (isManager && user.branchIds && user.branchIds.length > 0) {
-          // Manager fetches users in their branches
-          const { getUsersByBranches } =
-            await import("@/lib/services/user-service");
-          allUsers = await getUsersByBranches(user.branchIds);
-        }
-
-        const branchList = await listBranches();
-        setBranches(
-          branchList.filter(
-            (branch) => isAdmin || (user.branchIds || []).includes(branch.$id),
-          ),
+      if (isAdmin) {
+        const response = await databases.listDocuments(
+          process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+          process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
+          [Query.limit(5000)],
         );
-
-        const mappedUsers = allUsers.map((rawDoc) => {
-          const doc = rawDoc as Record<string, unknown>;
-
-          return {
-            $id: String(doc.$id),
-            name: String(doc.name ?? ""),
-            email: String(doc.email ?? ""),
-            role: doc.role as User["role"],
-            managerId: (doc.managerId as string) || null,
-            managerIds: Array.isArray(doc.managerIds)
-              ? (doc.managerIds as string[])
-              : [],
-            assistantManagerId: (doc.assistantManagerId as string) || null,
-            assistantManagerIds: Array.isArray(doc.assistantManagerIds)
-              ? (doc.assistantManagerIds as string[])
-              : [],
-            teamLeadId: (doc.teamLeadId as string) || null,
-            branchIds: Array.isArray(doc.branchIds)
-              ? (doc.branchIds as string[])
-              : [],
-            isActive: doc.isActive !== false,
-            branchId: (doc.branchId as string) || null,
-            $createdAt: doc.$createdAt as string | undefined,
-            $updatedAt: doc.$updatedAt as string | undefined,
-          };
-        }) as User[];
-
-        setUsers(
-          mappedUsers.filter((mappedUser) => mappedUser.isActive !== false),
-        );
-      } catch (error) {
-        console.error("Error loading hierarchy:", error);
-      } finally {
-        setIsLoading(false);
+        allUsers = response.documents;
+      } else if (isManager && user.branchIds && user.branchIds.length > 0) {
+        const { getUsersByBranches } = await import("@/lib/services/user-service");
+        allUsers = await getUsersByBranches(user.branchIds);
       }
-    }
 
-    loadData();
+      const branchList = await listBranches();
+      setBranches(
+        branchList.filter(
+          (branch) => isAdmin || (user.branchIds || []).includes(branch.$id),
+        ),
+      );
+
+      const mappedUsers = allUsers.map((rawDoc) => {
+        const doc = rawDoc as Record<string, unknown>;
+
+        return {
+          $id: String(doc.$id),
+          name: String(doc.name ?? ""),
+          email: String(doc.email ?? ""),
+          role: doc.role as User["role"],
+          managerId: (doc.managerId as string) || null,
+          managerIds: Array.isArray(doc.managerIds)
+            ? (doc.managerIds as string[])
+            : [],
+          assistantManagerId: (doc.assistantManagerId as string) || null,
+          assistantManagerIds: Array.isArray(doc.assistantManagerIds)
+            ? (doc.assistantManagerIds as string[])
+            : [],
+          teamLeadId: (doc.teamLeadId as string) || null,
+          branchIds: Array.isArray(doc.branchIds) ? (doc.branchIds as string[]) : [],
+          isActive: doc.isActive !== false,
+          branchId: (doc.branchId as string) || null,
+          $createdAt: doc.$createdAt as string | undefined,
+          $updatedAt: doc.$updatedAt as string | undefined,
+        };
+      }) as User[];
+
+      setUsers(mappedUsers.filter((mappedUser) => mappedUser.isActive !== false));
+    } catch (error) {
+      console.error("Error loading hierarchy:", error);
+    } finally {
+      setIsLoading(false);
+    }
   }, [user, isAdmin, isManager]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const databaseId = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
+    const collectionId = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
+
+    const unsubscribe = client.subscribe(
+      `databases.${databaseId}.collections.${collectionId}.documents`,
+      () => {
+        try {
+          databases.clearReadCache();
+        } catch {}
+        void loadData();
+      },
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [user, loadData]);
 
   if (isLoading) {
     return (

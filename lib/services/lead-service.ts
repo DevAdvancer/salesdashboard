@@ -447,11 +447,12 @@ export async function listLeads(
       }
       queries.push(Query.or(orConditions));
     } else if (userRole === 'lead_generation') {
-      const orConditions = [Query.equal('ownerId', userId)];
-      if (specialBranchId) {
-        orConditions.push(Query.equal('branchId', specialBranchId));
-      }
-      queries.push(Query.or(orConditions));
+      queries.push(
+        Query.or([
+          Query.equal('ownerId', userId),
+          Query.contains('data', [userId]),
+        ])
+      );
     } else if (userRole === 'admin') {
       // Admins and Managers see all leads across all branches — no branch/owner filter
     } else if (userRole === 'manager') {

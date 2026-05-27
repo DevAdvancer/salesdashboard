@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Check, ExternalLink } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -8,8 +8,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAccess } from '@/lib/contexts/access-control-context';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { listNotifications, markNotificationRead } from '@/lib/services/sop-service';
+import { client, COLLECTIONS, DATABASE_ID } from '@/lib/appwrite';
 import type { NotificationRecord } from '@/lib/types';
 import { getLatestNotifications } from '@/lib/utils/notifications';
+import { useToast } from '@/components/ui/use-toast';
 
 function formatNotificationTime(value: string) {
   const date = new Date(value);
@@ -27,9 +29,11 @@ export function NotificationBell() {
   const router = useRouter();
   const { user } = useAuth();
   const { canAccess, isLoading: accessLoading } = useAccess();
+  const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  const toastedIdsRef = useRef<Set<string>>(new Set());
 
   const canSeeNotifications = Boolean(user) && !accessLoading && canAccess('notifications');
   const unreadCount = useMemo(
@@ -45,14 +49,30 @@ export function NotificationBell() {
     if (!user || !canSeeNotifications) return;
     try {
       setLoading(true);
-      setNotifications(await listNotifications(user.$id));
+      const next = await listNotifications(user.$id);
+      setNotifications(next);
+
+      const unassigned = next.filter(
+        (notification) =>
+          !notification.readAt &&
+          notification.type === 'lead_unassigned' &&
+          !toastedIdsRef.current.has(notification.$id)
+      );
+
+      unassigned.forEach((notification) => {
+        toastedIdsRef.current.add(notification.$id);
+        toast({
+          title: notification.title || 'Unassigned lead generated',
+          description: notification.body,
+        });
+      });
     } catch (error) {
       console.error('Failed to load notification bell:', error);
       setNotifications([]);
     } finally {
       setLoading(false);
     }
-  }, [canSeeNotifications, user]);
+  }, [canSeeNotifications, toast, user]);
 
   useEffect(() => {
     void load();
@@ -67,6 +87,21 @@ export function NotificationBell() {
 
     return () => window.clearInterval(intervalId);
   }, [canSeeNotifications, load]);
+
+  useEffect(() => {
+    if (!user || !canSeeNotifications) return;
+
+    const unsubscribe = client.subscribe(
+      `databases.${DATABASE_ID}.collections.${COLLECTIONS.NOTIFICATIONS}.documents`,
+      () => {
+        void load();
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [canSeeNotifications, load, user]);
 
   if (!canSeeNotifications) {
     return null;

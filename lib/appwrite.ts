@@ -1,4 +1,4 @@
-import { Client, Account, Databases } from 'appwrite';
+import { Client, Account, Databases, Storage } from 'appwrite';
 import { createReadThroughDatabases } from './utils/appwrite-read-cache';
 export { DATABASE_ID, COLLECTIONS } from './constants/appwrite';
 
@@ -10,5 +10,6 @@ const client = new Client()
 // Export services
 export const account = new Account(client);
 export const databases = createReadThroughDatabases(new Databases(client));
+export const storage = new Storage(client);
 
 export { client };

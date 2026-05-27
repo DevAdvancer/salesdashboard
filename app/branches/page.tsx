@@ -1,30 +1,47 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/lib/contexts/auth-context';
+import { useRef, useState, useEffect, useCallback } from "react";
+import { useAuth } from "@/lib/contexts/auth-context";
 import {
   listBranches,
   createBranch,
   updateBranch,
   deleteBranch,
   getBranchStats,
-} from '@/lib/services/branch-service';
+} from "@/lib/services/branch-service";
 import {
   getUsersByBranch,
   removeManagerFromBranch,
-} from '@/lib/services/user-service';
-import { Branch, User } from '@/lib/types';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { ProtectedRoute } from '@/components/protected-route';
+} from "@/lib/services/user-service";
+import { Branch, User } from "@/lib/types";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { ProtectedRoute } from "@/components/protected-route";
 
 const branchNameSchema = z.object({
-  name: z.string().min(1, 'Branch name is required').max(128, 'Branch name is too long'),
+  name: z
+    .string()
+    .min(1, "Branch name is required")
+    .max(128, "Branch name is too long"),
 });
 
 type BranchNameForm = z.infer<typeof branchNameSchema>;
@@ -50,9 +67,12 @@ function BranchManagementContent() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { confirm, ConfirmDialog } = useConfirmDialog();
 
   // Manager state
-  const [branchManagers, setBranchManagers] = useState<Record<string, User[]>>({});
+  const [branchManagers, setBranchManagers] = useState<Record<string, User[]>>(
+    {},
+  );
 
   const createForm = useForm<BranchNameForm>({
     resolver: zodResolver(branchNameSchema),
@@ -71,40 +91,49 @@ function BranchManagementContent() {
         branchList.map(async (branch) => {
           try {
             const stats = await getBranchStats(branch.$id);
-            return { ...branch, managerCount: stats.managerCount, leadCount: stats.leadCount };
+            return {
+              ...branch,
+              managerCount: stats.managerCount,
+              leadCount: stats.leadCount,
+            };
           } catch {
             return { ...branch, managerCount: 0, leadCount: 0 };
           }
-        })
+        }),
       );
 
       setBranches(branchesWithStats);
     } catch (err: any) {
-      console.error('Error fetching branches:', err);
-      setError(err.message || 'Failed to fetch branches');
+      console.error("Error fetching branches:", err);
+      setError(err.message || "Failed to fetch branches");
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  const fetchManagerData = useCallback(async (branchList: BranchWithStats[]) => {
-    try {
-      const managersMap: Record<string, User[]> = {};
-      await Promise.all(
-        branchList.map(async (branch) => {
-          try {
-            const users = await getUsersByBranch(branch.$id);
-            managersMap[branch.$id] = users.filter((u) => u.role === 'manager');
-          } catch {
-            managersMap[branch.$id] = [];
-          }
-        })
-      );
-      setBranchManagers(managersMap);
-    } catch (err: any) {
-      console.error('Error fetching manager data:', err);
-    }
-  }, []);
+  const fetchManagerData = useCallback(
+    async (branchList: BranchWithStats[]) => {
+      try {
+        const managersMap: Record<string, User[]> = {};
+        await Promise.all(
+          branchList.map(async (branch) => {
+            try {
+              const users = await getUsersByBranch(branch.$id);
+              managersMap[branch.$id] = users.filter(
+                (u) => u.role === "manager",
+              );
+            } catch {
+              managersMap[branch.$id] = [];
+            }
+          }),
+        );
+        setBranchManagers(managersMap);
+      } catch (err: any) {
+        console.error("Error fetching manager data:", err);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (user) {
@@ -127,8 +156,8 @@ function BranchManagementContent() {
       setShowCreateDialog(false);
       await fetchBranches();
     } catch (err: any) {
-      console.error('Error creating branch:', err);
-      setError(err.message || 'Failed to create branch');
+      console.error("Error creating branch:", err);
+      setError(err.message || "Failed to create branch");
     } finally {
       setIsSubmitting(false);
     }
@@ -144,22 +173,29 @@ function BranchManagementContent() {
       setEditingBranch(null);
       await fetchBranches();
     } catch (err: any) {
-      console.error('Error updating branch:', err);
-      setError(err.message || 'Failed to update branch');
+      console.error("Error updating branch:", err);
+      setError(err.message || "Failed to update branch");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDelete = async (branchId: string) => {
-    if (!confirm('Are you sure you want to delete this branch?')) return;
+    const confirmed = await confirm({
+      title: "Delete branch?",
+      description: "This will permanently delete the branch.",
+      confirmText: "Delete",
+      cancelText: "Cancel",
+      destructive: true,
+    });
+    if (!confirmed) return;
     try {
       setError(null);
       await deleteBranch(branchId);
       await fetchBranches();
     } catch (err: any) {
-      console.error('Error deleting branch:', err);
-      setError(err.message || 'Failed to delete branch');
+      console.error("Error deleting branch:", err);
+      setError(err.message || "Failed to delete branch");
     }
   };
 
@@ -169,8 +205,8 @@ function BranchManagementContent() {
       await updateBranch(branch.$id, { isActive: !branch.isActive });
       await fetchBranches();
     } catch (err: any) {
-      console.error('Error toggling branch status:', err);
-      setError(err.message || 'Failed to update branch status');
+      console.error("Error toggling branch status:", err);
+      setError(err.message || "Failed to update branch status");
     }
   };
 
@@ -186,7 +222,9 @@ function BranchManagementContent() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <CardTitle>Branch Management</CardTitle>
-              <CardDescription>Create and manage organizational branches</CardDescription>
+              <CardDescription>
+                Create and manage organizational branches
+              </CardDescription>
             </div>
             <Button
               onClick={() => {
@@ -194,8 +232,7 @@ function BranchManagementContent() {
                 setError(null);
               }}
               type="button"
-              className="cursor-pointer"
-            >
+              className="cursor-pointer">
               Create Branch
             </Button>
           </div>
@@ -223,77 +260,92 @@ function BranchManagementContent() {
                 <thead>
                   <tr className="border-b border-gray-200 dark:border-gray-700">
                     <th className="text-left py-3 px-4 font-semibold">Name</th>
-                    <th className="text-left py-3 px-4 font-semibold">Status</th>
-                    <th className="text-left py-3 px-4 font-semibold">Managers</th>
+                    <th className="text-left py-3 px-4 font-semibold">
+                      Status
+                    </th>
+                    <th className="text-left py-3 px-4 font-semibold">
+                      Managers
+                    </th>
                     <th className="text-left py-3 px-4 font-semibold">Leads</th>
-                    <th className="text-left py-3 px-4 font-semibold">Actions</th>
+                    <th className="text-left py-3 px-4 font-semibold">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {branches.map((branch) => (
-                      <tr
-                        key={branch.$id}
-                        className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                      >
-                        <td className="py-3 px-4">{branch.name}</td>
-                        <td className="py-3 px-4">
-                          <button
-                            onClick={() => handleToggleStatus(branch)}
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer ${
-                              branch.isActive
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                                : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                            }`}
-                          >
-                            {branch.isActive ? 'Active' : 'Inactive'}
-                          </button>
-                        </td>
-                        <td className="py-3 px-4">
-                          {branchManagers[branch.$id]?.length > 0 ? (
-                            <div className="space-y-1">
-                              {branchManagers[branch.$id].map((manager) => (
-                                <div key={manager.$id} className="flex items-center gap-2 text-sm">
-                                  <span>{manager.name}</span>
-                                  {isAdmin && (
-                                    <button
-                                      onClick={async () => {
-                                        try {
-                                          await removeManagerFromBranch(manager.$id, branch.$id);
-                                          await fetchBranches();
-                                        } catch (err: any) {
-                                          setError(err.message || 'Failed to remove manager');
-                                        }
-                                      }}
-                                      className="text-red-500 hover:text-red-700 text-xs"
-                                      title="Remove from this branch"
-                                    >
-                                      ✕
-                                    </button>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-gray-400 text-sm">No managers</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4">{branch.leadCount}</td>
-                        <td className="py-3 px-4">
-                          <div className="flex gap-2">
-                            <Button variant="outline" size="sm" onClick={() => openEditDialog(branch)}>
-                              Edit
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDelete(branch.$id)}
-                              className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                            >
-                              Delete
-                            </Button>
+                    <tr
+                      key={branch.$id}
+                      className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                      <td className="py-3 px-4">{branch.name}</td>
+                      <td className="py-3 px-4">
+                        <button
+                          onClick={() => handleToggleStatus(branch)}
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer ${
+                            branch.isActive
+                              ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                              : "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
+                          }`}>
+                          {branch.isActive ? "Active" : "Inactive"}
+                        </button>
+                      </td>
+                      <td className="py-3 px-4">
+                        {branchManagers[branch.$id]?.length > 0 ? (
+                          <div className="space-y-1">
+                            {branchManagers[branch.$id].map((manager) => (
+                              <div
+                                key={manager.$id}
+                                className="flex items-center gap-2 text-sm">
+                                <span>{manager.name}</span>
+                                {isAdmin && (
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        await removeManagerFromBranch(
+                                          manager.$id,
+                                          branch.$id,
+                                        );
+                                        await fetchBranches();
+                                      } catch (err: any) {
+                                        setError(
+                                          err.message ||
+                                            "Failed to remove manager",
+                                        );
+                                      }
+                                    }}
+                                    className="text-red-500 hover:text-red-700 text-xs"
+                                    title="Remove from this branch">
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+                            ))}
                           </div>
-                        </td>
-                      </tr>
+                        ) : (
+                          <span className="text-gray-400 text-sm">
+                            No managers
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">{branch.leadCount}</td>
+                      <td className="py-3 px-4">
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openEditDialog(branch)}>
+                            Edit
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDelete(branch.$id)}
+                            className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+                            Delete
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
                   ))}
                 </tbody>
               </table>
@@ -311,12 +363,14 @@ function BranchManagementContent() {
               <CardDescription>Add a new organizational branch</CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={createForm.handleSubmit(onCreateSubmit)} className="space-y-4">
+              <form
+                onSubmit={createForm.handleSubmit(onCreateSubmit)}
+                className="space-y-4">
                 <div>
                   <Label htmlFor="create-branch-name">Branch Name</Label>
                   <Input
                     id="create-branch-name"
-                    {...createForm.register('name')}
+                    {...createForm.register("name")}
                     placeholder="e.g. Downtown Office"
                     className="mt-1"
                   />
@@ -336,12 +390,14 @@ function BranchManagementContent() {
                       setError(null);
                     }}
                     disabled={isSubmitting}
-                    className="w-full sm:w-auto"
-                  >
+                    className="w-full sm:w-auto">
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
-                    {isSubmitting ? 'Creating...' : 'Create Branch'}
+                  <Button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full sm:w-auto">
+                    {isSubmitting ? "Creating..." : "Create Branch"}
                   </Button>
                 </div>
               </form>
@@ -359,12 +415,14 @@ function BranchManagementContent() {
               <CardDescription>Modify branch details</CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4">
+              <form
+                onSubmit={editForm.handleSubmit(onEditSubmit)}
+                className="space-y-4">
                 <div>
                   <Label htmlFor="edit-branch-name">Branch Name</Label>
                   <Input
                     id="edit-branch-name"
-                    {...editForm.register('name')}
+                    {...editForm.register("name")}
                     placeholder="e.g. Downtown Office"
                     className="mt-1"
                   />
@@ -384,12 +442,14 @@ function BranchManagementContent() {
                       setError(null);
                     }}
                     disabled={isSubmitting}
-                    className="w-full sm:w-auto"
-                  >
+                    className="w-full sm:w-auto">
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
-                    {isSubmitting ? 'Saving...' : 'Save Changes'}
+                  <Button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full sm:w-auto">
+                    {isSubmitting ? "Saving..." : "Save Changes"}
                   </Button>
                 </div>
               </form>
@@ -397,6 +457,72 @@ function BranchManagementContent() {
           </Card>
         </div>
       )}
+
+      <ConfirmDialog />
     </div>
   );
+}
+
+function useConfirmDialog() {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState<string | null>(null);
+  const [confirmText, setConfirmText] = useState("Confirm");
+  const [cancelText, setCancelText] = useState("Cancel");
+  const [destructive, setDestructive] = useState(false);
+  const resolverRef = useRef<((value: boolean) => void) | null>(null);
+
+  const close = (value: boolean) => {
+    const resolver = resolverRef.current;
+    resolverRef.current = null;
+    setOpen(false);
+    resolver?.(value);
+  };
+
+  const confirm = (options: {
+    title: string;
+    description?: string;
+    confirmText?: string;
+    cancelText?: string;
+    destructive?: boolean;
+  }) => {
+    setTitle(options.title);
+    setDescription(options.description ?? null);
+    setConfirmText(options.confirmText ?? "Confirm");
+    setCancelText(options.cancelText ?? "Cancel");
+    setDestructive(Boolean(options.destructive));
+    setOpen(true);
+
+    return new Promise<boolean>((resolve) => {
+      resolverRef.current = resolve;
+    });
+  };
+
+  const ConfirmDialog = () => (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && open) close(false);
+      }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          {description && <DialogDescription>{description}</DialogDescription>}
+        </DialogHeader>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => close(false)}>
+            {cancelText}
+          </Button>
+          <Button
+            type="button"
+            variant={destructive ? "destructive" : "default"}
+            onClick={() => close(true)}>
+            {confirmText}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
+  return { confirm, ConfirmDialog };
 }

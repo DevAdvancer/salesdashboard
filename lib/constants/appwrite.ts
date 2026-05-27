@@ -15,3 +15,7 @@ export const COLLECTIONS = {
   REVIEW_QUEUE: process.env.NEXT_PUBLIC_APPWRITE_REVIEW_QUEUE_COLLECTION_ID ?? 'review_queue',
   NOTIFICATIONS: process.env.NEXT_PUBLIC_APPWRITE_NOTIFICATIONS_COLLECTION_ID ?? 'notifications',
 };
+
+export const BUCKETS = {
+  RESUMES: process.env.NEXT_PUBLIC_APPWRITE_RESUMES_BUCKET_ID ?? 'resumes',
+};

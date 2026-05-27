@@ -7,6 +7,7 @@ import { COLLECTIONS } from "@/lib/constants/appwrite";
 import { getSpecialBranchLeadAccess } from '@/lib/constants/special-lead-access';
 import { logAction } from "@/lib/services/audit-service";
 import { assertAuthenticatedUserId } from "@/lib/server/current-user";
+import { createNotificationsForRecipients } from "@/lib/server/notifications";
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const LEADS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_LEADS_COLLECTION_ID!;
@@ -282,6 +283,47 @@ export async function createLeadAction(
             console.error("Failed to log audit action", e);
         }
 
+        try {
+            if (creatingUserId && !input.assignedToId) {
+                const creator = await databases.getDocument(
+                    DATABASE_ID,
+                    COLLECTIONS.USERS,
+                    creatingUserId
+                ) as any;
+
+                if (creator?.role === 'lead_generation') {
+                    const recipientIds: Array<string | null | undefined> = creator.teamLeadId
+                      ? [creator.teamLeadId]
+                      : [
+                          creator.managerId || null,
+                          Array.isArray(creator.managerIds) ? creator.managerIds[0] : null,
+                        ];
+
+                    let leadName = '';
+                    try {
+                        const payload = input.data as any;
+                        const firstName = String(payload?.firstName ?? '').trim();
+                        const lastName = String(payload?.lastName ?? '').trim();
+                        leadName = [firstName, lastName].filter(Boolean).join(' ').trim();
+                    } catch {}
+
+                    await createNotificationsForRecipients(
+                        databases,
+                        recipientIds,
+                        {
+                            type: 'lead_unassigned',
+                            title: 'Unassigned lead generated',
+                            body: `${creatingUserName || 'Lead generation'} generated ${leadName || 'a lead'} but it is not assigned to any agent.`,
+                            targetId: lead.$id,
+                            targetType: 'LEAD',
+                        }
+                    );
+                }
+            }
+        } catch (e) {
+            console.error("Failed to create unassigned lead notification", e);
+        }
+
         return lead as unknown as Lead;
     } catch (error: any) {
         console.error('Error creating lead (action):', error);
@@ -379,11 +421,12 @@ export async function listLeadsAction(
       }
       queries.push(Query.or(orConditions));
     } else if (userRole === 'lead_generation') {
-      const orConditions = [Query.equal('ownerId', userId)];
-      if (specialBranchId) {
-        orConditions.push(Query.equal('branchId', specialBranchId));
-      }
-      queries.push(Query.or(orConditions));
+      queries.push(
+        Query.or([
+          Query.equal('ownerId', userId),
+          Query.contains('data', [userId]),
+        ])
+      );
     } else if (userRole === 'admin') {
       // Admins and Managers see all leads across all branches — no branch/owner filter
     } else if (userRole === 'manager') {

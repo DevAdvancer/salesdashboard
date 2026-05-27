@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/contexts/auth-context";
 import {
@@ -28,6 +28,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ProtectedRoute } from "@/components/protected-route";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { client, databases } from "@/lib/appwrite";
 
 export default function UserManagementPage() {
   return (
@@ -54,6 +63,7 @@ function UserManagementContent() {
     null,
   );
   const [error, setError] = useState<string | null>(null);
+  const { confirm, ConfirmDialog } = useConfirmDialog();
 
   // Form state
   const [formName, setFormName] = useState("");
@@ -142,20 +152,12 @@ function UserManagementContent() {
     (b) => b.isActive && (isAdmin || (user?.branchIds ?? []).includes(b.$id)),
   );
 
-  useEffect(() => {
-    if (user) {
-      fetchUsers();
-      fetchBranches();
-    }
-  }, [user]);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     if (!user) return;
     try {
       setIsLoading(true);
       if (isAdmin) {
         // Admin sees all users regardless of branches
-        const { databases } = await import("@/lib/appwrite");
         const { Query } = await import("appwrite");
         const response = await databases.listDocuments(
           process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
@@ -256,7 +258,35 @@ function UserManagementContent() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user, isAdmin]);
+
+  useEffect(() => {
+    if (user) {
+      void fetchUsers();
+      void fetchBranches();
+    }
+  }, [user, fetchUsers]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const databaseId = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
+    const collectionId = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
+
+    const unsubscribe = client.subscribe(
+      `databases.${databaseId}.collections.${collectionId}.documents`,
+      () => {
+        try {
+          databases.clearReadCache();
+        } catch {}
+        void fetchUsers();
+      },
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [user, fetchUsers]);
 
   const fetchBranches = async () => {
     try {
@@ -515,9 +545,13 @@ function UserManagementContent() {
   const handleDeleteUser = async (userToDelete: User) => {
     if (!user || !isAdmin || userToDelete.$id === user.$id) return;
 
-    const confirmed = window.confirm(
-      `Delete ${userToDelete.name}? This removes their login and user profile.`,
-    );
+    const confirmed = await confirm({
+      title: `Delete ${userToDelete.name}?`,
+      description: "This removes their login and user profile.",
+      confirmText: "Delete",
+      cancelText: "Cancel",
+      destructive: true,
+    });
     if (!confirmed) return;
 
     try {
@@ -547,11 +581,17 @@ function UserManagementContent() {
     )
       return;
 
-    const confirmed = window.confirm(
-      isActive
-        ? `Reactivate ${agent.name}? They will be able to log in again.`
-        : `Inactivate ${agent.name}? They will be removed from their team, hidden from hierarchy, and blocked from logging in.`,
-    );
+    const confirmed = await confirm({
+      title: isActive
+        ? `Reactivate ${agent.name}?`
+        : `Inactivate ${agent.name}?`,
+      description: isActive
+        ? "They will be able to log in again."
+        : "They will be removed from their team, hidden from hierarchy, and blocked from logging in.",
+      confirmText: isActive ? "Reactivate" : "Inactivate",
+      cancelText: "Cancel",
+      destructive: !isActive,
+    });
     if (!confirmed) return;
 
     try {
@@ -864,11 +904,12 @@ function UserManagementContent() {
                       {(isAdmin || isManager) && (
                         <td className="py-3 px-4">
                           <div className="flex flex-wrap gap-2">
-                            {(u.role === "team_lead" ||
+                            {(isAdmin ||
+                              u.role === "team_lead" ||
                               u.role === "agent" ||
-                              ((isAdmin || user?.role === "manager") &&
-                                u.role === "assistant_manager") ||
-                              (isAdmin && u.role === "manager")) && (
+                              u.role === "lead_generation" ||
+                              (user?.role === "manager" &&
+                                u.role === "assistant_manager")) && (
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -878,7 +919,8 @@ function UserManagementContent() {
                             )}
                             {isAdmin && u.$id !== user?.$id && (
                               <>
-                                {u.role === "agent" && (
+                                {(u.role === "agent" ||
+                                  u.role === "lead_generation") && (
                                   <Button
                                     variant="outline"
                                     size="sm"
@@ -1713,6 +1755,72 @@ function UserManagementContent() {
           </Card>
         </div>
       )}
+
+      <ConfirmDialog />
     </div>
   );
+}
+
+function useConfirmDialog() {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState<string | null>(null);
+  const [confirmText, setConfirmText] = useState("Confirm");
+  const [cancelText, setCancelText] = useState("Cancel");
+  const [destructive, setDestructive] = useState(false);
+  const resolverRef = useRef<((value: boolean) => void) | null>(null);
+
+  const close = (value: boolean) => {
+    const resolver = resolverRef.current;
+    resolverRef.current = null;
+    setOpen(false);
+    resolver?.(value);
+  };
+
+  const confirm = (options: {
+    title: string;
+    description?: string;
+    confirmText?: string;
+    cancelText?: string;
+    destructive?: boolean;
+  }) => {
+    setTitle(options.title);
+    setDescription(options.description ?? null);
+    setConfirmText(options.confirmText ?? "Confirm");
+    setCancelText(options.cancelText ?? "Cancel");
+    setDestructive(Boolean(options.destructive));
+    setOpen(true);
+
+    return new Promise<boolean>((resolve) => {
+      resolverRef.current = resolve;
+    });
+  };
+
+  const ConfirmDialog = () => (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && open) close(false);
+      }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          {description && <DialogDescription>{description}</DialogDescription>}
+        </DialogHeader>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => close(false)}>
+            {cancelText}
+          </Button>
+          <Button
+            type="button"
+            variant={destructive ? "destructive" : "default"}
+            onClick={() => close(true)}>
+            {confirmText}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
+  return { confirm, ConfirmDialog };
 }

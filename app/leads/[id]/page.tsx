@@ -6,7 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { getLead, updateLead, closeLead } from '@/lib/services/lead-service';
 import { reopenLeadAction } from '@/app/actions/lead';
 import { assignLeadAction } from '@/lib/actions/lead-actions';
-import { getAgentsByManager } from '@/lib/services/user-service';
+import { getAgentsByManager, getAgentsByTeamLead } from '@/lib/services/user-service';
 import { getFormConfig } from '@/lib/services/form-config-service';
 import { Lead, User, FormField, LeadData } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,6 +18,8 @@ import { ProtectedRoute } from '@/components/protected-route';
 import { LeadActivityTimeline } from '@/components/leads/lead-activity-timeline';
 import { LeadFollowUpCard } from '@/components/leads/lead-follow-up-card';
 import { LeadNotesCard } from '@/components/leads/lead-notes-card';
+import { storage } from '@/lib/appwrite';
+import { BUCKETS } from '@/lib/constants/appwrite';
 
 export default function LeadDetailPage() {
   return (
@@ -75,10 +77,15 @@ function LeadDetailContent() {
   }, []);
 
   const loadAgents = useCallback(async () => {
-    if (!user || user.role !== 'manager') return;
+    if (!user) return;
 
     try {
-      const fetchedAgents = await getAgentsByManager(user.$id);
+      if (user.role !== 'manager' && user.role !== 'team_lead') return;
+
+      const fetchedAgents =
+        user.role === 'manager'
+          ? await getAgentsByManager(user.$id)
+          : await getAgentsByTeamLead(user.$id);
       setAgents(fetchedAgents);
     } catch (err: unknown) {
       console.error('Error loading agents:', err);
@@ -94,7 +101,7 @@ function LeadDetailContent() {
     if (user && leadId) {
       loadLead();
       loadFormConfig();
-      if (user.role === 'manager') {
+      if (user.role === 'manager' || user.role === 'team_lead') {
         loadAgents();
       }
     }
@@ -274,6 +281,18 @@ function LeadDetailContent() {
     );
   }
 
+  const leadGenerationVisibleKeys = new Set([
+    'firstName',
+    'middleName',
+    'lastName',
+    'email',
+    'phone',
+    'visaStatus',
+    'linkedinId',
+  ]);
+
+  const isLeadGeneration = user.role === 'lead_generation';
+
   return (
     <div className="container mx-auto">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
@@ -294,9 +313,14 @@ function LeadDetailContent() {
               {!isEditing ? (
                 <>
                   <Button onClick={() => setIsEditing(true)}>Edit</Button>
-                  <Button variant="destructive" onClick={() => setShowCloseDialog(true)}>
-                    Close Lead
-                  </Button>
+                  {!isLeadGeneration && (
+                    <Button
+                      variant="destructive"
+                      onClick={() => setShowCloseDialog(true)}
+                    >
+                      Close Lead
+                    </Button>
+                  )}
                 </>
               ) : (
                 <>
@@ -328,9 +352,52 @@ function LeadDetailContent() {
             <CardTitle>Lead Information</CardTitle>
           </CardHeader>
           <CardContent>
+            {isLeadGeneration && (
+              <div className="mb-4 flex flex-col gap-1 rounded-md border border-border bg-muted/20 p-3">
+                <Label>Source</Label>
+                <p className="text-sm text-muted-foreground">LinkedIN/Lead</p>
+              </div>
+            )}
+            {leadData?.resumeFileId && (
+              <div className="mb-4 flex flex-col gap-1 rounded-md border border-border bg-muted/20 p-3">
+                <Label>Resume</Label>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-sm text-muted-foreground">
+                    {leadData?.resumeFileName || 'Resume'}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <a
+                      className="text-sm text-primary hover:underline"
+                      href={storage
+                        .getFileView(BUCKETS.RESUMES, leadData.resumeFileId)
+                        .toString()}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      View
+                    </a>
+                    <a
+                      className="text-sm text-primary hover:underline"
+                      href={storage
+                        .getFileDownload(BUCKETS.RESUMES, leadData.resumeFileId)
+                        .toString()}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Download
+                    </a>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {formFields
-                .filter((field) => user?.role === 'manager' || field.visible)
+                .filter((field) => {
+                  if (isLeadGeneration) {
+                    return leadGenerationVisibleKeys.has(field.key);
+                  }
+                  return user?.role === 'manager' || field.visible;
+                })
                 .map((field) => (
                   <div key={field.id}>
                     <Label htmlFor={field.key}>
@@ -345,7 +412,7 @@ function LeadDetailContent() {
         </Card>
 
         {/* Assignment Section (Manager Only) */}
-        {user?.role === 'manager' && (
+        {(user?.role === 'manager' || user?.role === 'team_lead') && (
           <Card id="tour-lead-assignment">
             <CardHeader>
               <CardTitle>Assignment</CardTitle>
@@ -382,14 +449,16 @@ function LeadDetailContent() {
           </Card>
         )}
 
-        <div id="tour-lead-followup">
-          <LeadFollowUpCard
-            lead={lead}
-            user={user}
-            disabled={lead.isClosed}
-            onUpdated={loadLead}
-          />
-        </div>
+        {!isLeadGeneration && (
+          <div id="tour-lead-followup">
+            <LeadFollowUpCard
+              lead={lead}
+              user={user}
+              disabled={lead.isClosed}
+              onUpdated={loadLead}
+            />
+          </div>
+        )}
 
         {user && (
           <div id="tour-lead-notes">

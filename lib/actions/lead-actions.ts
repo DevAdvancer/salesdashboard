@@ -3,8 +3,9 @@
 import { createAdminClient } from '@/lib/server/appwrite';
 import { createNotificationsForRecipients } from '@/lib/server/notifications';
 import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
-import { Permission, Role, ID } from 'node-appwrite';
+import { Permission, Role, ID, Query } from 'node-appwrite';
 import { Lead, User } from '@/lib/types';
+import { assertAuthenticatedUserId } from '@/lib/server/current-user';
 
 type AdminDatabases = Awaited<ReturnType<typeof createAdminClient>>['databases'];
 
@@ -90,9 +91,61 @@ export async function assignLeadAction(
     actorId: string,
     actorName: string
 ) {
+    await assertAuthenticatedUserId(actorId);
     const { databases } = await createAdminClient();
 
     try {
+        const actorDoc = await databases.getDocument(
+            DATABASE_ID,
+            COLLECTIONS.USERS,
+            actorId
+        ) as unknown as User;
+
+        if (!['admin', 'manager', 'assistant_manager', 'team_lead'].includes(actorDoc.role)) {
+            throw new Error('Permission denied');
+        }
+
+        if (actorDoc.role === 'team_lead') {
+            const agentDoc = await databases.getDocument(
+                DATABASE_ID,
+                COLLECTIONS.USERS,
+                agentId
+            ) as unknown as User;
+
+            if (agentDoc.role !== 'agent') {
+                throw new Error('Team leads can only assign leads to agents.');
+            }
+
+            if (agentDoc.teamLeadId !== actorId) {
+                throw new Error('Team leads can only assign agents under them.');
+            }
+
+            const subordinatesResponse = await databases.listDocuments(
+                DATABASE_ID,
+                COLLECTIONS.USERS,
+                [
+                    Query.equal('teamLeadId', actorId),
+                    Query.or([Query.equal('role', 'agent'), Query.equal('role', 'lead_generation')]),
+                    Query.limit(5000),
+                ]
+            );
+            const visibleUserIds = [actorId, ...subordinatesResponse.documents.map((doc: any) => String(doc.$id))];
+
+            const currentLeadForVisibility = await databases.getDocument(
+                DATABASE_ID,
+                COLLECTIONS.LEADS,
+                leadId
+            ) as unknown as Lead;
+
+            const withinScope =
+                visibleUserIds.includes(currentLeadForVisibility.ownerId) ||
+                (currentLeadForVisibility.assignedToId ? visibleUserIds.includes(currentLeadForVisibility.assignedToId) : false);
+
+            if (!withinScope) {
+                throw new Error('Permission denied');
+            }
+        }
+
         // Get the current lead to check owner and status
         const currentLead = await databases.getDocument(
             DATABASE_ID,
