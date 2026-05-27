@@ -476,7 +476,7 @@ export async function getAssignableUsers(
   creatorBranchIds: string[],
   creatorId?: string
 ): Promise<User[]> {
-  if (creatorRole === 'agent') return [];
+  if (creatorRole === 'agent' || creatorRole === 'lead_generation') return [];
   if (creatorRole !== 'admin' && !creatorBranchIds.length) return [];
 
   try {

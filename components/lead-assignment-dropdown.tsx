@@ -37,7 +37,7 @@ export function LeadAssignmentDropdown({
 
   useEffect(() => {
     // Agents don't see the dropdown (Requirement 4.4)
-    if (creatorRole === 'agent') return;
+    if (creatorRole === 'agent' || creatorRole === 'lead_generation') return;
     if (!creatorBranchIds.length) return;
 
     let cancelled = false;
@@ -80,8 +80,7 @@ export function LeadAssignmentDropdown({
     };
   }, [creatorRole, creatorBranchIds, creatorId]);
 
-  // Hidden for agents (Requirement 4.4)
-  if (creatorRole === 'agent') {
+  if (creatorRole === 'agent' || creatorRole === 'lead_generation') {
     return null;
   }
 

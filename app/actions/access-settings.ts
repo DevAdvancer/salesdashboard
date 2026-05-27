@@ -69,7 +69,7 @@ export async function updateAccessRuleAction(input: {
   const actor = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, input.currentUserId);
   const actorRole = actor.role as UserRole;
   const canEditRole = actorRole === "admin" || (
-    actorRole === "manager" && (input.role === "team_lead" || input.role === "agent")
+    actorRole === "manager" && (input.role === "team_lead" || input.role === "agent" || input.role === "lead_generation")
   );
 
   if (!canEditRole) {

@@ -73,6 +73,8 @@ function LeadsContent() {
 
   const canExportLeads = canExportLeadsByEmail(user?.email);
   const canFilterByBranch = user?.role === "admin" || user?.role === "manager";
+  const isLeadGeneration = user?.role === "lead_generation";
+  const pageTitle = isLeadGeneration ? "Generated Leads" : "Active Leads";
 
   const handleExport = () => {
     if (!leads.length) return;
@@ -441,7 +443,7 @@ function LeadsContent() {
     return (
       <div className="container mx-auto">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl md:text-3xl font-bold">Active Leads</h1>
+          <h1 className="text-2xl md:text-3xl font-bold">{pageTitle}</h1>
         </div>
         <Card>
           <CardContent className="p-4 md:p-6">
@@ -473,7 +475,7 @@ function LeadsContent() {
   return (
     <div className="container mx-auto">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold">Active Leads</h1>
+        <h1 className="text-2xl md:text-3xl font-bold">{pageTitle}</h1>
         <div id="tour-leads-actions" className="flex items-center gap-2">
           {canExportLeads && (
             <Button
@@ -485,7 +487,7 @@ function LeadsContent() {
               {isExporting ? "Exporting..." : "Export CSV"}
             </Button>
           )}
-          <Button onClick={() => router.push("/leads/new")}>Create Lead</Button>
+          <Button onClick={() => router.push("/leads/new")}>{isLeadGeneration ? "Generate Lead" : "Create Lead"}</Button>
         </div>
       </div>
 
@@ -519,6 +521,7 @@ function LeadsContent() {
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}>
                 <option value="">All Statuses</option>
+                <option value="Generated">Generated</option>
                 <option value="Interested">Interested</option>
                 <option value="Not-Interested">Not-Interested</option>
                 <option value="Pipeline">Pipeline</option>

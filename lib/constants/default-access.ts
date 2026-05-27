@@ -17,7 +17,7 @@ export type ComponentKey =
   | 'review-queue'
   | 'notifications';
 
-export type UserRole = 'admin' | 'manager' | 'assistant_manager' | 'team_lead' | 'agent';
+export type UserRole = 'admin' | 'manager' | 'assistant_manager' | 'team_lead' | 'agent' | 'lead_generation';
 
 export interface AccessRule {
   componentKey: ComponentKey;
@@ -116,4 +116,22 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'coaching-notes', role: 'agent', allowed: false },
   { componentKey: 'review-queue', role: 'agent', allowed: false },
   { componentKey: 'notifications', role: 'agent', allowed: true },
+  // Lead Generation rules
+  { componentKey: 'dashboard', role: 'lead_generation', allowed: true },
+  { componentKey: 'leads', role: 'lead_generation', allowed: true },
+  { componentKey: 'history', role: 'lead_generation', allowed: false },
+  { componentKey: 'user-management', role: 'lead_generation', allowed: false },
+  { componentKey: 'field-management', role: 'lead_generation', allowed: false },
+  { componentKey: 'settings', role: 'lead_generation', allowed: true },
+  { componentKey: 'branch-management', role: 'lead_generation', allowed: false },
+  { componentKey: 'audit-logs', role: 'lead_generation', allowed: false },
+  { componentKey: 'mock', role: 'lead_generation', allowed: false },
+  { componentKey: 'assessment-support', role: 'lead_generation', allowed: false },
+  { componentKey: 'interview-support', role: 'lead_generation', allowed: false },
+  { componentKey: 'hierarchy', role: 'lead_generation', allowed: false },
+  { componentKey: 'work-queue', role: 'lead_generation', allowed: false },
+  { componentKey: 'reports', role: 'lead_generation', allowed: false },
+  { componentKey: 'coaching-notes', role: 'lead_generation', allowed: false },
+  { componentKey: 'review-queue', role: 'lead_generation', allowed: false },
+  { componentKey: 'notifications', role: 'lead_generation', allowed: true },
 ];

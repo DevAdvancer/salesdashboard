@@ -35,6 +35,9 @@ function filterLeadsByVisibility(
   if (user.role === 'agent') {
     return allLeads.filter((l) => l.assignedToId === user.$id);
   }
+  if (user.role === 'lead_generation') {
+    return allLeads.filter((l) => l.ownerId === user.$id);
+  }
   // Team_Lead: filter by branchIds overlap
   if (user.branchIds.length > 0) {
     return allLeads.filter((l) => l.branchId !== null && user.branchIds.includes(l.branchId));

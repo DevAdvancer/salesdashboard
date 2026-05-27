@@ -22,7 +22,7 @@ function filterAssignableUsers(
   creatorBranchIds: string[],
   allUsers: User[]
 ): User[] {
-  if (creatorRole === 'agent' || !creatorBranchIds.length) return [];
+  if (creatorRole === 'agent' || creatorRole === 'lead_generation' || !creatorBranchIds.length) return [];
 
   const allowedRoles: UserRole[] =
     creatorRole === 'manager' ? ['team_lead', 'agent'] :
@@ -43,7 +43,7 @@ const userArb = (branchPool: string[]) =>
     $id: fc.uuid(),
     name: fc.string({ minLength: 1, maxLength: 64 }),
     email: fc.emailAddress(),
-    role: fc.constantFrom<UserRole>('admin', 'manager', 'team_lead', 'agent'),
+    role: fc.constantFrom<UserRole>('admin', 'manager', 'team_lead', 'agent', 'lead_generation'),
     managerId: fc.option(fc.uuid(), { nil: null }),
     teamLeadId: fc.option(fc.uuid(), { nil: null }),
     branchIds: fc.subarray(branchPool, { minLength: 1 }),
@@ -117,6 +117,24 @@ describe('Assignable Users Filtering Properties', () => {
           ),
           ({ creatorBranchIds, users }) => {
             const result = filterAssignableUsers('agent', creatorBranchIds, users);
+            expect(result).toHaveLength(0);
+          }
+        ),
+        { numRuns: 100 }
+      );
+    });
+
+    it('lead generation should always get an empty array', () => {
+      fc.assert(
+        fc.property(
+          fc.uniqueArray(branchIdArb, { minLength: 1, maxLength: 4 }).chain((pool) =>
+            fc.record({
+              creatorBranchIds: fc.subarray(pool, { minLength: 1 }),
+              users: fc.array(userArb(pool), { minLength: 0, maxLength: 10 }),
+            })
+          ),
+          ({ creatorBranchIds, users }) => {
+            const result = filterAssignableUsers('lead_generation', creatorBranchIds, users);
             expect(result).toHaveLength(0);
           }
         ),

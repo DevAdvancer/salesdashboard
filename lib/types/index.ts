@@ -1,7 +1,7 @@
 // User types
-export type UserRole = 'admin' | 'manager' | 'assistant_manager' | 'team_lead' | 'agent';
+export type UserRole = 'admin' | 'manager' | 'assistant_manager' | 'team_lead' | 'agent' | 'lead_generation';
 
-export const VALID_ROLES: UserRole[] = ['admin', 'manager', 'assistant_manager', 'team_lead', 'agent'];
+export const VALID_ROLES: UserRole[] = ['admin', 'manager', 'assistant_manager', 'team_lead', 'agent', 'lead_generation'];
 
 export function isValidRole(value: string): value is UserRole {
   return VALID_ROLES.includes(value as UserRole);
@@ -68,6 +68,7 @@ export interface CreateAgentInput {
   name: string;
   email: string;
   password: string;
+  role?: Extract<UserRole, 'agent' | 'lead_generation'>;
   teamLeadId?: string;
   managerId?: string;
   managerIds?: string[]; // Added managerIds
@@ -241,6 +242,7 @@ export interface AuthContext {
   isAssistantManager: boolean;
   isTeamLead: boolean;
   isAgent: boolean;
+  isLeadGeneration: boolean;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;

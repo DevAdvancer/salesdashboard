@@ -24,6 +24,233 @@ export default function NewLeadPage() {
 }
 
 function NewLeadContent() {
+  const { user } = useAuth();
+
+  if (user?.role === 'lead_generation') {
+    return <LeadGenerationNewLeadContent />;
+  }
+
+  return <LegacyNewLeadContent />;
+}
+
+function LeadGenerationNewLeadContent() {
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const { toast } = useToast();
+  const [isSaving, setIsSaving] = useState(false);
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
+
+  const [firstName, setFirstName] = useState('');
+  const [middleName, setMiddleName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [visaStatus, setVisaStatus] = useState('');
+  const [linkedinId, setLinkedinId] = useState('');
+  const [resumeUrl, setResumeUrl] = useState('');
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/login');
+    }
+  }, [authLoading, router, user]);
+
+  const handleSubmit = async () => {
+    if (!user) return;
+
+    const trimmedFirstName = firstName.trim();
+    const trimmedLastName = lastName.trim();
+    const trimmedPhone = phone.trim();
+    const trimmedVisaStatus = visaStatus.trim();
+
+    if (!trimmedFirstName || !trimmedLastName || !trimmedPhone || !trimmedVisaStatus) {
+      toast({
+        title: 'Missing required fields',
+        description: 'First Name, Last Name, Phone No., and Visa Status are required.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setDuplicateError(null);
+
+      const leadData = {
+        firstName: trimmedFirstName,
+        middleName: middleName.trim() || undefined,
+        lastName: trimmedLastName,
+        phone: trimmedPhone,
+        visaStatus: trimmedVisaStatus,
+        linkedinId: linkedinId.trim() || undefined,
+        resumeUrl: resumeUrl.trim() || undefined,
+      };
+
+      const validation = await validateLeadUniqueness(leadData);
+      if (!validation.isValid) {
+        setDuplicateError('A lead with this phone number already exists.');
+        setIsSaving(false);
+        return;
+      }
+
+      const branchId =
+        user.branchId || (user.branchIds && user.branchIds.length > 0 ? user.branchIds[0] : undefined);
+
+      await createLeadAction(
+        user.$id,
+        {
+          data: leadData,
+          status: 'Generated',
+          branchId,
+        },
+        user.$id,
+        user.name,
+      );
+
+      toast({
+        title: 'Success',
+        description: 'Lead generated successfully.',
+      });
+
+      router.push('/leads');
+    } catch (err: any) {
+      console.error('Error generating lead:', err);
+      toast({
+        title: 'Error',
+        description: err.message || 'Failed to generate lead',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-lg">Loading...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto max-w-2xl">
+      <div className="mb-6">
+        <Button variant="outline" onClick={() => router.push('/leads')} className="mb-2">
+          ← Back to Leads
+        </Button>
+        <h1 className="text-2xl md:text-3xl font-bold">Generate Lead</h1>
+        <p className="text-muted-foreground">Add the basic details. Your Team Lead will assign an agent to complete the rest.</p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Basic Lead Details</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {duplicateError && (
+            <div className="p-3 text-sm text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-md">
+              {duplicateError}
+            </div>
+          )}
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="firstName">First Name *</Label>
+              <input
+                id="firstName"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="middleName">Middle Name</Label>
+              <input
+                id="middleName"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                value={middleName}
+                onChange={(e) => setMiddleName(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="lastName">Last Name *</Label>
+              <input
+                id="lastName"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone No. *</Label>
+              <input
+                id="phone"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="visaStatus">Visa Status *</Label>
+            <select
+              id="visaStatus"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              value={visaStatus}
+              onChange={(e) => setVisaStatus(e.target.value)}
+            >
+              <option value="">Select visa status</option>
+              <option value="Citizen">Citizen</option>
+              <option value="GC">GC</option>
+              <option value="H1B">H1B</option>
+              <option value="OPT">OPT</option>
+              <option value="CPT">CPT</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="linkedinId">LinkedIn ID</Label>
+              <input
+                id="linkedinId"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                value={linkedinId}
+                onChange={(e) => setLinkedinId(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="resumeUrl">Resume (Optional)</Label>
+              <input
+                id="resumeUrl"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                value={resumeUrl}
+                onChange={(e) => setResumeUrl(e.target.value)}
+                placeholder="Paste a link (optional)"
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <Button onClick={handleSubmit} loading={isSaving}>
+              Generate Lead
+            </Button>
+            <Button variant="outline" onClick={() => router.push('/settings')}>
+              Profile Settings
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function LegacyNewLeadContent() {
   const { user, isAdmin, loading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();

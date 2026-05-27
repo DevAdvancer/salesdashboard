@@ -10,6 +10,8 @@ import { startDashboardTour, startLeadsTour, startClientsTour, startWorkQueueTou
 
 function formatRoleLabel(role: string): string {
   if (role === 'team_lead') return 'Team Lead';
+  if (role === 'assistant_manager') return 'Assistant Manager';
+  if (role === 'lead_generation') return 'Lead Generation';
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 

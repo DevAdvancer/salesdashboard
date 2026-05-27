@@ -21,6 +21,7 @@ interface RoleWorkDashboardProps {
 function roleLabel(role: UserRole) {
   if (role === 'team_lead') return 'Team Lead';
   if (role === 'assistant_manager') return 'Assistant Manager';
+  if (role === 'lead_generation') return 'Lead Generation';
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 

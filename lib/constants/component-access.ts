@@ -3,12 +3,12 @@ import type { ComponentKey, UserRole } from '@/lib/types';
 type RoleAccessMap = Record<ComponentKey, readonly UserRole[]>;
 
 export const COMPONENT_ACCESS: RoleAccessMap = {
-  dashboard: ['admin', 'manager', 'assistant_manager', 'team_lead', 'agent'],
-  leads: ['admin', 'manager', 'assistant_manager', 'team_lead', 'agent'],
+  dashboard: ['admin', 'manager', 'assistant_manager', 'team_lead', 'agent', 'lead_generation'],
+  leads: ['admin', 'manager', 'assistant_manager', 'team_lead', 'agent', 'lead_generation'],
   history: ['admin', 'manager', 'assistant_manager', 'team_lead'],
   'user-management': ['admin', 'manager', 'assistant_manager', 'team_lead'],
   'field-management': ['admin', 'manager', 'assistant_manager'],
-  settings: ['admin', 'manager', 'assistant_manager', 'team_lead', 'agent'],
+  settings: ['admin', 'manager', 'assistant_manager', 'team_lead', 'agent', 'lead_generation'],
   'branch-management': ['admin'],
   'audit-logs': ['admin'],
   mock: ['admin', 'manager', 'assistant_manager', 'team_lead', 'agent'],
@@ -19,7 +19,7 @@ export const COMPONENT_ACCESS: RoleAccessMap = {
   reports: ['admin', 'manager', 'assistant_manager'],
   'coaching-notes': ['admin', 'manager', 'assistant_manager', 'team_lead'],
   'review-queue': ['admin', 'manager', 'assistant_manager', 'team_lead'],
-  notifications: ['admin', 'manager', 'assistant_manager', 'team_lead', 'agent'],
+  notifications: ['admin', 'manager', 'assistant_manager', 'team_lead', 'agent', 'lead_generation'],
 };
 
 export function isRoleEligibleForComponent(

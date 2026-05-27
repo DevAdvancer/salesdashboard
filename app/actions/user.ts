@@ -558,6 +558,11 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
         }
     }
 
+    const role: UserRole = agentInput.role ?? 'agent';
+    if (role !== 'agent' && role !== 'lead_generation') {
+        throw new Error('Invalid role for createAgentAction');
+    }
+
     const { name, email, password, branchIds } = agentInput;
     const { users, databases } = await createAdminClient();
     const userId = ID.unique();
@@ -570,7 +575,7 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
         );
 
         if (managersResponse.documents.length === 0) {
-            throw new Error("Agents must be assigned to a Team Lead when no Managers exist");
+            throw new Error("Users must be assigned to a Team Lead when no Managers exist");
         }
     }
 
@@ -714,7 +719,7 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
             {
                 name,
                 email,
-                role: 'agent',
+                role,
                 managerId,
                 managerIds, // Save the chain
                 assistantManagerIds, // Save AM IDs
@@ -732,8 +737,8 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
             callerDoc.$id,
             callerDoc.name,
             userId,
-            'agent',
-            { role: 'agent', email, name, branchIds, managerId, managerIds, assistantManagerId, teamLeadId }
+            role,
+            { role, email, name, branchIds, managerId, managerIds, assistantManagerId, teamLeadId }
         );
 
         return { success: true };
@@ -789,11 +794,11 @@ export async function updateUserAction(input: {
              // Manager can promote Agent -> Team Lead or demote Team Lead -> Agent
              // Manager can also manage Assistant Managers (Agent/TL -> AM, AM -> Agent/TL)
              else if (isCallerManager) {
-                 const allowedRoles = ['agent', 'team_lead', 'assistant_manager'];
+                 const allowedRoles = ['agent', 'lead_generation', 'team_lead', 'assistant_manager'];
                  if (allowedRoles.includes(targetUserDoc.role) && allowedRoles.includes(role)) {
                      updates.role = role;
                  } else {
-                     throw new Error("Managers can only manage Agents, Team Leads, and Assistant Managers.");
+                     throw new Error("Managers can only manage Agents, Lead Generation users, Team Leads, and Assistant Managers.");
                  }
              }
              else {
@@ -1093,8 +1098,8 @@ export async function setAgentActiveAction(input: {
 
     const targetUserDoc = await getUserDoc(userId);
     if (!targetUserDoc) throw new Error("Target user not found");
-    if (targetUserDoc.role !== 'agent') {
-        throw new Error("Only agents can be inactivated from this action");
+    if (targetUserDoc.role !== 'agent' && targetUserDoc.role !== 'lead_generation') {
+        throw new Error("Only agents and lead generation users can be inactivated from this action");
     }
 
     const { users, databases } = await createAdminClient();
@@ -1142,7 +1147,7 @@ export async function setAgentActiveAction(input: {
             callerDoc.$id,
             callerDoc.name,
             userId,
-            'agent',
+            targetUserDoc.role,
             { isActive }
         );
 

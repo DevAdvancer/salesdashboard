@@ -103,7 +103,7 @@ function getMetricDate(lead: {
   return new Date();
 }
 
-function DashboardContent() {
+function LegacyDashboardContent() {
   const { user, isAdmin, isManager, isAssistantManager, isAgent, isTeamLead } =
     useAuth();
   const router = useRouter();
@@ -1090,6 +1090,95 @@ function DashboardContent() {
       )}
     </div>
   );
+}
+
+function LeadGenerationDashboardContent() {
+  const { user } = useAuth();
+  const router = useRouter();
+  const [stats, setStats] = useState<{ total: number; unassigned: number; loading: boolean }>({
+    total: 0,
+    unassigned: 0,
+    loading: true,
+  });
+
+  useEffect(() => {
+    if (!user) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const leads = await listLeadsAction({ isClosed: false }, user.$id, user.role, user.branchIds);
+        const unassigned = leads.filter((lead) => !lead.assignedToId).length;
+        if (!cancelled) {
+          setStats({ total: leads.length, unassigned, loading: false });
+        }
+      } catch {
+        if (!cancelled) {
+          setStats((prev) => ({ ...prev, loading: false }));
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  if (!user) {
+    return (
+      <div className="container mx-auto space-y-6">
+        <Skeleton className="h-10 w-56" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto space-y-6">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold md:text-3xl">Lead Generation</h1>
+          <p className="text-muted-foreground">Create new leads with the basic details and hand them off for assignment.</p>
+        </div>
+        <div className="flex gap-2">
+          <Button onClick={() => router.push('/leads/new')}>Generate Lead</Button>
+          <Button variant="outline" onClick={() => router.push('/settings')}>Profile Settings</Button>
+        </div>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>My Generated Leads</CardTitle>
+            <CardDescription>Leads created by you (active only).</CardDescription>
+          </CardHeader>
+          <CardContent className="flex items-center justify-between">
+            <div className="text-3xl font-semibold">{stats.loading ? '—' : stats.total}</div>
+            <Button variant="outline" onClick={() => router.push('/leads')}>View Leads</Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Awaiting Assignment</CardTitle>
+            <CardDescription>Leads not yet assigned to an agent.</CardDescription>
+          </CardHeader>
+          <CardContent className="text-3xl font-semibold">{stats.loading ? '—' : stats.unassigned}</CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function DashboardContent() {
+  const { user } = useAuth();
+
+  if (user?.role === 'lead_generation') {
+    return <LeadGenerationDashboardContent />;
+  }
+
+  return <LegacyDashboardContent />;
 }
 
 export default function DashboardPage() {

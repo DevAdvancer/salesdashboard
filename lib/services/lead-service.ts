@@ -85,7 +85,7 @@ async function getLeadVisibilityUserIds(viewerId: string, viewerRole: UserRole):
       COLLECTIONS.USERS,
       [
         Query.equal('teamLeadId', viewerId),
-        Query.equal('role', 'agent'),
+        Query.or([Query.equal('role', 'agent'), Query.equal('role', 'lead_generation')]),
       ]
     );
 
@@ -442,6 +442,12 @@ export async function listLeads(
           Query.equal('assignedToId', userId),
           Query.equal('ownerId', userId),
       ];
+      if (specialBranchId) {
+        orConditions.push(Query.equal('branchId', specialBranchId));
+      }
+      queries.push(Query.or(orConditions));
+    } else if (userRole === 'lead_generation') {
+      const orConditions = [Query.equal('ownerId', userId)];
       if (specialBranchId) {
         orConditions.push(Query.equal('branchId', specialBranchId));
       }
