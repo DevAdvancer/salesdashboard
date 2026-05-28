@@ -324,16 +324,24 @@ function HistoryContent() {
               ) : (
                 paginatedLeads.map((lead) => {
                   const data = getLeadData(lead);
+                  const firstName =
+                    typeof data.firstName === "string" ? data.firstName : "";
+                  const lastName =
+                    typeof data.lastName === "string" ? data.lastName : "";
+                  const email = typeof data.email === "string" ? data.email : "";
+                  const sourceName =
+                    typeof data.sourceName === "string" ? data.sourceName : "";
+                  const source = typeof data.source === "string" ? data.source : "";
                   return (
                     <tr
                       key={lead.$id}
                       className="border-b border-border hover:bg-accent/50 cursor-pointer transition-colors"
                       onClick={() => router.push(`/client/${lead.$id}`)}>
                       <td className="p-3 md:p-4">
-                        {data.firstName} {data.lastName || ""}
+                        {firstName} {lastName}
                       </td>
                       <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">
-                        {data.email || "N/A"}
+                        {email || "N/A"}
                       </td>
                       <td className="p-3 md:p-4">
                         <span className="px-2 py-1 rounded-full text-xs bg-secondary text-secondary-foreground">
@@ -341,7 +349,7 @@ function HistoryContent() {
                         </span>
                       </td>
                       <td className="p-3 md:p-4 text-muted-foreground hidden lg:table-cell">
-                        {data.sourceName || data.source || "-"}
+                        {sourceName || source || "-"}
                       </td>
                       <td className="p-3 md:p-4 text-muted-foreground hidden md:table-cell">
                         {closedByMap[lead.$id] || "N/A"}

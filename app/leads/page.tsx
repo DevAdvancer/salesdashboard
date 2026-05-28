@@ -647,15 +647,33 @@ function LeadsContent() {
                   <tbody>
                     {paginatedLeads.map((lead) => {
                       const leadData = parseLeadData(lead);
+                      const firstName =
+                        typeof leadData.firstName === "string"
+                          ? leadData.firstName
+                          : "";
+                      const lastName =
+                        typeof leadData.lastName === "string"
+                          ? leadData.lastName
+                          : "";
+                      const email =
+                        typeof leadData.email === "string" ? leadData.email : "";
+                      const sourceName =
+                        typeof leadData.sourceName === "string"
+                          ? leadData.sourceName
+                          : "";
+                      const source =
+                        typeof leadData.source === "string"
+                          ? leadData.source
+                          : "";
                       return (
                         <tr
                           key={lead.$id}
                           className="border-b hover:bg-accent/50 transition-colors">
                           <td className="p-3 md:p-4">
-                            {leadData.firstName} {leadData.lastName || ""}
+                            {firstName} {lastName}
                           </td>
                           <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">
-                            {leadData.email}
+                            {email}
                           </td>
                           <td className="p-3 md:p-4">
                             <span className="inline-block px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-primary/10 text-primary">
@@ -663,7 +681,7 @@ function LeadsContent() {
                             </span>
                           </td>
                           <td className="p-3 md:p-4 text-muted-foreground hidden lg:table-cell">
-                            {leadData.sourceName || leadData.source || "-"}
+                            {sourceName || source || "-"}
                           </td>
                           {[
                             "admin",

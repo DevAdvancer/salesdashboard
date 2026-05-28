@@ -29,6 +29,7 @@ export type ComponentKey =
   | 'coaching-notes'
   | 'review-queue'
   | 'notifications'
+  | 'attendance'
   | 'linkedin-requests'
   | 'linkedin-account-management'
   | 'linkedin-reports';

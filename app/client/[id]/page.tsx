@@ -1,22 +1,22 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useAuth } from '@/lib/contexts/auth-context';
-import { useRouter, useParams } from 'next/navigation';
-import { getLead } from '@/lib/services/lead-service';
-import { reopenLeadAction } from '@/app/actions/lead';
-import { getUserByIdOrNull } from '@/lib/services/user-service';
-import { User } from '@/lib/types';
-import { getFormConfig } from '@/lib/services/form-config-service';
-import { Lead, FormField, LeadData } from '@/lib/types';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { useToast } from '@/components/ui/use-toast';
-import { ProtectedRoute } from '@/components/protected-route';
-import { LeadActivityTimeline } from '@/components/leads/lead-activity-timeline';
-import { LeadNotesCard } from '@/components/leads/lead-notes-card';
+import { useEffect, useState } from "react";
+import { useAuth } from "@/lib/contexts/auth-context";
+import { useRouter, useParams } from "next/navigation";
+import { getLead } from "@/lib/services/lead-service";
+import { reopenLeadAction } from "@/app/actions/lead";
+import { getUserByIdOrNull } from "@/lib/services/user-service";
+import { User } from "@/lib/types";
+import { getFormConfig } from "@/lib/services/form-config-service";
+import { Lead, FormField, LeadData } from "@/lib/types";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/components/ui/use-toast";
+import { ProtectedRoute } from "@/components/protected-route";
+import { LeadActivityTimeline } from "@/components/leads/lead-activity-timeline";
+import { LeadNotesCard } from "@/components/leads/lead-notes-card";
 
 export default function HistoryDetailPage() {
   return (
@@ -45,7 +45,7 @@ function HistoryDetailContent() {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      router.push('/login');
+      router.push("/login");
       return;
     }
 
@@ -73,17 +73,19 @@ function HistoryDetailContent() {
       try {
         const [ownerUser, assignedUser] = await Promise.all([
           getUserByIdOrNull(fetchedLead.ownerId),
-          fetchedLead.assignedToId ? getUserByIdOrNull(fetchedLead.assignedToId) : Promise.resolve(null),
+          fetchedLead.assignedToId
+            ? getUserByIdOrNull(fetchedLead.assignedToId)
+            : Promise.resolve(null),
         ]);
 
         setOwner(ownerUser);
         setAssignedTo(assignedUser);
       } catch (err: unknown) {
-        console.error('Error loading related users:', err);
+        console.error("Error loading related users:", err);
       }
     } catch (err: unknown) {
-      console.error('Error loading lead:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load lead');
+      console.error("Error loading lead:", err);
+      setError(err instanceof Error ? err.message : "Failed to load lead");
     } finally {
       setIsLoading(false);
     }
@@ -94,7 +96,7 @@ function HistoryDetailContent() {
       const config = await getFormConfig();
       setFormFields(config.fields.sort((a, b) => a.order - b.order));
     } catch (err: unknown) {
-      console.error('Error loading form config:', err);
+      console.error("Error loading form config:", err);
     }
   };
 
@@ -107,17 +109,18 @@ function HistoryDetailContent() {
       setIsReopening(true);
       await reopenLeadAction(leadId, user.$id, user.name);
       toast({
-        title: 'Success',
-        description: 'Lead reopened successfully',
+        title: "Success",
+        description: "Lead reopened successfully",
       });
       setShowReopenDialog(false);
       router.push(`/leads/${leadId}`);
     } catch (err: unknown) {
-      console.error('Error reopening lead:', err);
+      console.error("Error reopening lead:", err);
       toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to reopen lead',
-        variant: 'destructive',
+        title: "Error",
+        description:
+          err instanceof Error ? err.message : "Failed to reopen lead",
+        variant: "destructive",
       });
     } finally {
       setIsReopening(false);
@@ -125,10 +128,23 @@ function HistoryDetailContent() {
   };
 
   const renderField = (field: FormField) => {
-    const value = leadData[field.key] || '';
+    const rawValue = leadData[field.key];
+    const value =
+      rawValue === null || rawValue === undefined
+        ? ""
+        : typeof rawValue === "string" ||
+            typeof rawValue === "number" ||
+            typeof rawValue === "boolean"
+          ? String(rawValue)
+          : Array.isArray(rawValue)
+            ? rawValue.map((v) => String(v)).join(", ")
+            : JSON.stringify(rawValue);
+    const checkedValues = Array.isArray(rawValue)
+      ? rawValue.map((v) => String(v))
+      : [];
 
     switch (field.type) {
-      case 'textarea':
+      case "textarea":
         return (
           <textarea
             id={field.key}
@@ -139,25 +155,19 @@ function HistoryDetailContent() {
           />
         );
 
-      case 'dropdown':
+      case "dropdown":
         return (
-          <Input
-            id={field.key}
-            type="text"
-            value={value}
-            disabled
-            readOnly
-          />
+          <Input id={field.key} type="text" value={value} disabled readOnly />
         );
 
-      case 'checklist':
+      case "checklist":
         return (
           <div className="space-y-2">
             {field.options?.map((option) => (
               <div key={option} className="flex items-center">
                 <input
                   type="checkbox"
-                  checked={Array.isArray(value) && value.includes(option)}
+                  checked={checkedValues.includes(option)}
                   disabled
                   readOnly
                   className="mr-2"
@@ -184,7 +194,9 @@ function HistoryDetailContent() {
   if (authLoading || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <p className="text-lg text-muted-foreground">Loading client details...</p>
+        <p className="text-lg text-muted-foreground">
+          Loading client details...
+        </p>
       </div>
     );
   }
@@ -197,8 +209,10 @@ function HistoryDetailContent() {
             <CardTitle className="text-destructive">Error</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">{error || 'Client record not found'}</p>
-            <Button onClick={() => router.push('/client')} className="mt-4">
+            <p className="text-muted-foreground">
+              {error || "Client record not found"}
+            </p>
+            <Button onClick={() => router.push("/client")} className="mt-4">
               Back to Clients
             </Button>
           </CardContent>
@@ -213,20 +227,18 @@ function HistoryDetailContent() {
         <div>
           <Button
             variant="outline"
-            onClick={() => router.push('/client')}
-            className="mb-2"
-          >
+            onClick={() => router.push("/client")}
+            className="mb-2">
             ← Back to Clients
           </Button>
           <h1 className="text-2xl md:text-3xl font-bold">Client Detail</h1>
-          <p className="text-muted-foreground mt-1">Read-only view of client record</p>
+          <p className="text-muted-foreground mt-1">
+            Read-only view of client record
+          </p>
         </div>
         <div className="flex gap-2">
           {canReopen && (
-            <Button
-              onClick={() => setShowReopenDialog(true)}
-              variant="default"
-            >
+            <Button onClick={() => setShowReopenDialog(true)} variant="default">
               Reopen Lead
             </Button>
           )}
@@ -241,8 +253,7 @@ function HistoryDetailContent() {
               className="w-5 h-5 text-yellow-500"
               fill="none"
               stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
+              viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -251,10 +262,18 @@ function HistoryDetailContent() {
               />
             </svg>
             <div>
-              <p className="text-yellow-500 font-semibold">This lead is closed</p>
+              <p className="text-yellow-500 font-semibold">
+                This lead is closed
+              </p>
               <p className="text-muted-foreground text-sm">
-                Closed on {lead.closedAt ? new Date(lead.closedAt).toLocaleString() : 'N/A'} with
-                status: <span className="font-semibold text-foreground">{lead.status}</span>
+                Closed on{" "}
+                {lead.closedAt
+                  ? new Date(lead.closedAt).toLocaleString()
+                  : "N/A"}{" "}
+                with status:{" "}
+                <span className="font-semibold text-foreground">
+                  {lead.status}
+                </span>
               </p>
             </div>
           </div>
@@ -266,7 +285,9 @@ function HistoryDetailContent() {
         <Card>
           <CardHeader>
             <CardTitle>Lead Information</CardTitle>
-            <p className="text-sm text-muted-foreground">All fields are read-only</p>
+            <p className="text-sm text-muted-foreground">
+              All fields are read-only
+            </p>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -274,9 +295,13 @@ function HistoryDetailContent() {
                 <div key={field.id}>
                   <Label htmlFor={field.key}>
                     {field.label}
-                    {field.required && <span className="text-red-500 ml-1">*</span>}
+                    {field.required && (
+                      <span className="text-red-500 ml-1">*</span>
+                    )}
                     {!field.visible && (
-                      <span className="ml-2 text-xs text-muted-foreground">(Hidden field)</span>
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        (Hidden field)
+                      </span>
                     )}
                   </Label>
                   {renderField(field)}
@@ -304,23 +329,22 @@ function HistoryDetailContent() {
               <div>
                 <Label>Closed At</Label>
                 <p className="text-muted-foreground mt-2">
-                  {lead.closedAt ? new Date(lead.closedAt).toLocaleString() : 'N/A'}
+                  {lead.closedAt
+                    ? new Date(lead.closedAt).toLocaleString()
+                    : "N/A"}
                 </p>
               </div>
               <div>
                 <Label>Is Closed</Label>
-                <p className="text-muted-foreground mt-2">{lead.isClosed ? 'Yes' : 'No'}</p>
+                <p className="text-muted-foreground mt-2">
+                  {lead.isClosed ? "Yes" : "No"}
+                </p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {user && (
-          <LeadNotesCard
-            leadId={lead.$id}
-            user={user}
-          />
-        )}
+        {user && <LeadNotesCard leadId={lead.$id} user={user} />}
 
         <LeadActivityTimeline lead={lead} />
 
@@ -334,25 +358,31 @@ function HistoryDetailContent() {
               <div>
                 <Label>Created</Label>
                 <p className="text-muted-foreground mt-2">
-                  {lead.$createdAt ? new Date(lead.$createdAt).toLocaleString() : 'N/A'}
+                  {lead.$createdAt
+                    ? new Date(lead.$createdAt).toLocaleString()
+                    : "N/A"}
                 </p>
               </div>
               <div>
                 <Label>Last Updated</Label>
                 <p className="text-muted-foreground mt-2">
-                  {lead.$updatedAt ? new Date(lead.$updatedAt).toLocaleString() : 'N/A'}
+                  {lead.$updatedAt
+                    ? new Date(lead.$updatedAt).toLocaleString()
+                    : "N/A"}
                 </p>
               </div>
               <div>
                 <Label>Owner</Label>
                 <p className="text-muted-foreground mt-2">
-                  {owner?.name || 'Unknown'}
+                  {owner?.name || "Unknown"}
                 </p>
               </div>
               <div>
                 <Label>Assigned To</Label>
                 <p className="text-muted-foreground mt-2">
-                  {lead.assignedToId ? assignedTo?.name || 'Unknown' : 'Unassigned'}
+                  {lead.assignedToId
+                    ? assignedTo?.name || "Unknown"
+                    : "Unassigned"}
                 </p>
               </div>
             </div>
@@ -369,26 +399,25 @@ function HistoryDetailContent() {
             </CardHeader>
             <CardContent>
               <p className="mb-4 text-muted-foreground">
-                Are you sure you want to reopen this lead? It will be moved back to active leads
-                and can be edited again.
+                Are you sure you want to reopen this lead? It will be moved back
+                to active leads and can be edited again.
               </p>
               <p className="mb-4 text-sm text-muted-foreground">
-                Note: The closure timestamp will be preserved for audit purposes.
+                Note: The closure timestamp will be preserved for audit
+                purposes.
               </p>
               <div className="flex flex-col-reverse sm:flex-row gap-2">
                 <Button
                   variant="outline"
                   onClick={() => setShowReopenDialog(false)}
-                  className="w-full sm:w-auto"
-                >
+                  className="w-full sm:w-auto">
                   Cancel
                 </Button>
                 <Button
                   onClick={handleReopenLead}
                   disabled={isReopening}
-                  className="w-full sm:w-auto"
-                >
-                  {isReopening ? 'Reopening...' : 'Reopen Lead'}
+                  className="w-full sm:w-auto">
+                  {isReopening ? "Reopening..." : "Reopen Lead"}
                 </Button>
               </div>
             </CardContent>

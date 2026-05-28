@@ -7,6 +7,7 @@ import {
   listNotificationsAction,
   listReviewQueueAction,
   listReviewTargetOptionsAction,
+  markAllNotificationsReadAction,
   markNotificationReadAction,
   updateLeadFollowUpAction,
   updateReviewQueueStatusAction,
@@ -114,4 +115,8 @@ export function markNotificationRead(
   notificationId: string
 ): Promise<NotificationRecord> {
   return markNotificationReadAction(actorId, notificationId).finally(clearClientReadCache);
+}
+
+export function markAllNotificationsRead(actorId: string): Promise<{ updatedCount: number }> {
+  return markAllNotificationsReadAction(actorId).finally(clearClientReadCache);
 }

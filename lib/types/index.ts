@@ -96,9 +96,18 @@ export interface Lead {
   $permissions?: string[];
 }
 
-export interface LeadData {
-  [key: string]: any;
-}
+export type LeadDataValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | string[]
+  | number[]
+  | Record<string, unknown>
+  | unknown[];
+
+export type LeadData = Record<string, LeadDataValue>;
 
 // Branch types
 export interface Branch {
@@ -192,6 +201,7 @@ export type ComponentKey =
   | 'coaching-notes'
   | 'review-queue'
   | 'notifications'
+  | 'attendance'
   | 'linkedin-requests'
   | 'linkedin-account-management'
   | 'linkedin-reports';
@@ -241,6 +251,26 @@ export interface LinkedinRequest {
   acceptedAt: string | null;
   withdrawnAt?: string | null;
   isActive?: boolean;
+  $createdAt?: string;
+  $updatedAt?: string;
+}
+
+export interface AttendanceRecord {
+  $id: string;
+  dateKey: string;
+  userId: string;
+  teamLeadId: string | null;
+  present: boolean;
+  presentAt: string | null;
+  outlookConnected: boolean;
+  lastSeenAt: string | null;
+  lastSeenPath: string | null;
+  absentNotifiedAt: string | null;
+  adminEscalatedAt: string | null;
+  delegateUserId: string | null;
+  assignedById: string | null;
+  assignedAt: string | null;
+  presentWithDelegateFlag?: boolean;
   $createdAt?: string;
   $updatedAt?: string;
 }

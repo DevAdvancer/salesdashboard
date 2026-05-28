@@ -7,6 +7,9 @@ import { useAuth } from '@/lib/contexts/auth-context';
 import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import { useToast } from '@/components/ui/use-toast';
+import {
+  checkAndNotifyAdminAttendanceEscalationsAction,
+} from '@/app/actions/attendance';
 
 const PUBLIC_ROUTES = ['/login'];
 
@@ -19,6 +22,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const lastRedirectPath = useRef<string | null>(null);
   const lastUnderConstructionPath = useRef<string | null>(null);
+  const lastAttendancePingAt = useRef(0);
 
   useEffect(() => {
     // Reset redirect tracking if we've successfully navigated
@@ -62,6 +66,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       variant: 'destructive',
     });
   }, [isPublicRoute, pathname, toast, user]);
+
+  useEffect(() => {
+    if (!user || isPublicRoute) return;
+
+    const now = Date.now();
+    if (now - lastAttendancePingAt.current < 60_000) return;
+    lastAttendancePingAt.current = now;
+
+    if (user.role === 'admin') {
+      checkAndNotifyAdminAttendanceEscalationsAction({ currentUserId: user.$id }).catch(() => {});
+    }
+  }, [isPublicRoute, pathname, user]);
 
   if (loading) {
     return (

@@ -72,6 +72,32 @@ function assertDateIso(value: string) {
   return date.toISOString();
 }
 
+async function logAuditAction(
+  databases: Awaited<ReturnType<typeof createAdminClient>>["databases"],
+  input: {
+    action: string;
+    actorId: string;
+    actorName: string;
+    targetType: string;
+    targetId?: string | null;
+    metadata?: Record<string, unknown>;
+  },
+) {
+  try {
+    await databases.createDocument(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, ID.unique(), {
+      action: input.action,
+      actorId: input.actorId,
+      actorName: input.actorName,
+      targetId: input.targetId ?? null,
+      targetType: input.targetType,
+      metadata: input.metadata ? JSON.stringify(input.metadata) : null,
+      performedAt: new Date().toISOString(),
+    });
+  } catch {
+    return;
+  }
+}
+
 function canManageLinkedinAccounts(user: User) {
   return user.role === "admin" || user.role === "team_lead";
 }
@@ -105,8 +131,19 @@ async function assertAgentIsInTeam(teamLeadId: string, agentId: string) {
   return agent;
 }
 
-async function getLinkedinAccountDoc(accountId: string) {
-  const { databases } = await createAdminClient();
+function getEtDateKey(now: Date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
+async function getLinkedinAccountDoc(
+  databases: Awaited<ReturnType<typeof createAdminClient>>["databases"],
+  accountId: string,
+) {
   return (await databases.getDocument(
     DATABASE_ID,
     COLLECTIONS.LINKEDIN_ACCOUNTS,
@@ -114,12 +151,43 @@ async function getLinkedinAccountDoc(accountId: string) {
   )) as unknown as LinkedinAccount;
 }
 
-async function assertOwnLinkedinAccount(userId: string, accountId: string) {
-  const account = await getLinkedinAccountDoc(accountId);
-  if (account.assignedUserId !== userId) {
-    throw new Error("Unauthorized");
+async function listDelegatedSourceUserIdsForToday(
+  databases: Awaited<ReturnType<typeof createAdminClient>>["databases"],
+  delegateUserId: string,
+) {
+  try {
+    const dateKey = getEtDateKey(new Date());
+    const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
+      Query.equal("dateKey", dateKey),
+      Query.equal("delegateUserId", delegateUserId),
+      Query.limit(2000),
+    ]);
+
+    const userIds = (response.documents as Array<{ userId?: unknown }>).map((doc) =>
+      typeof doc.userId === "string" ? doc.userId : "",
+    );
+    return Array.from(new Set(userIds.filter(Boolean)));
+  } catch {
+    return [];
   }
-  return account;
+}
+
+async function assertAccessibleLinkedinAccount(
+  databases: Awaited<ReturnType<typeof createAdminClient>>["databases"],
+  userId: string,
+  accountId: string,
+) {
+  const account = await getLinkedinAccountDoc(databases, accountId);
+  if (account.assignedUserId === userId) {
+    return account;
+  }
+
+  const delegatedUserIds = await listDelegatedSourceUserIdsForToday(databases, userId);
+  if (delegatedUserIds.includes(account.assignedUserId)) {
+    return account;
+  }
+
+  throw new Error("Unauthorized");
 }
 
 export async function listMyLinkedinAccountsAction(input: {
@@ -129,11 +197,15 @@ export async function listMyLinkedinAccountsAction(input: {
   const user = await getAuthenticatedUserDoc();
   const { databases } = await createAdminClient();
 
+  const delegatedUserIds = await listDelegatedSourceUserIdsForToday(databases, user.$id);
+  const assignedUserIds =
+    delegatedUserIds.length > 0 ? [user.$id, ...delegatedUserIds] : [user.$id];
+
   const response = await databases.listDocuments(
     DATABASE_ID,
     COLLECTIONS.LINKEDIN_ACCOUNTS,
     [
-      Query.equal("assignedUserId", user.$id),
+      Query.equal("assignedUserId", assignedUserIds),
       Query.equal("isActive", true),
       Query.orderAsc("accountType"),
       Query.orderAsc("idName"),
@@ -200,7 +272,8 @@ export async function createLinkedinRequestAction(input: {
   }
 
   const dateSent = assertDateIso(input.dateSent);
-  const account = await assertOwnLinkedinAccount(user.$id, input.accountId);
+  const { databases } = await createAdminClient();
+  const account = await assertAccessibleLinkedinAccount(databases, user.$id, input.accountId);
   const company = normalizeCompany(account.company);
   const connectionLimitRaw = (account as unknown as { connectionLimit?: unknown })
     .connectionLimit;
@@ -219,8 +292,6 @@ export async function createLinkedinRequestAction(input: {
       "This Linkedin account has 0 connection limit. Please ask Team Lead/Admin to update it.",
     );
   }
-
-  const { databases } = await createAdminClient();
 
   const alreadySentResponse = await databases.listDocuments(
     DATABASE_ID,
@@ -271,6 +342,22 @@ export async function createLinkedinRequestAction(input: {
       ],
     );
 
+    await logAuditAction(databases, {
+      action: "LINKEDIN_REQUEST_CREATE",
+      actorId: user.$id,
+      actorName: user.name,
+      targetType: "linkedin_request",
+      targetId: doc.$id,
+      metadata: {
+        accountId: account.$id,
+        company,
+        targetUrl,
+        dateSent,
+        agentId: user.$id,
+        teamLeadId: user.teamLeadId || null,
+      },
+    });
+
     return doc as unknown as LinkedinRequest;
   } catch (error: unknown) {
     const details =
@@ -293,9 +380,9 @@ export async function listMyLinkedinRequestsForAccountAction(input: {
 }) {
   await assertAuthenticatedUserId(input.currentUserId);
   const user = await getAuthenticatedUserDoc();
-  await assertOwnLinkedinAccount(user.$id, input.accountId);
-
   const { databases } = await createAdminClient();
+  await assertAccessibleLinkedinAccount(databases, user.$id, input.accountId);
+
   const response = await databases.listDocuments(
     DATABASE_ID,
     COLLECTIONS.LINKEDIN_REQUESTS,
@@ -344,6 +431,21 @@ export async function markLinkedinRequestAcceptedAction(input: {
     },
   );
 
+  await logAuditAction(databases, {
+    action: "LINKEDIN_REQUEST_ACCEPT",
+    actorId: user.$id,
+    actorName: user.name,
+    targetType: "linkedin_request",
+    targetId: input.requestId,
+    metadata: {
+      accountId: existing.accountId,
+      agentId: existing.agentId,
+      company: existing.company,
+      targetUrl: existing.targetUrl,
+      dateSent: existing.dateSent,
+    },
+  });
+
   return updated as unknown as LinkedinRequest;
 }
 
@@ -386,6 +488,22 @@ export async function withdrawLinkedinRequestAction(input: {
       withdrawnAt: nowIso,
     },
   );
+
+  await logAuditAction(databases, {
+    action: "LINKEDIN_REQUEST_WITHDRAW",
+    actorId: user.$id,
+    actorName: user.name,
+    targetType: "linkedin_request",
+    targetId: input.requestId,
+    metadata: {
+      accountId: existing.accountId,
+      agentId: existing.agentId,
+      company: existing.company,
+      targetUrl: existing.targetUrl,
+      dateSent: existing.dateSent,
+      withdrawnAt: nowIso,
+    },
+  });
 
   return updated as unknown as LinkedinRequest;
 }
@@ -511,7 +629,7 @@ export async function upsertLinkedinAccountAction(input: {
     if (!mainAccountId) {
       throw new Error("Main Account is required for Sudo IDs");
     }
-    const main = await getLinkedinAccountDoc(mainAccountId);
+    const main = await getLinkedinAccountDoc(databases, mainAccountId);
     if (main.assignedUserId !== input.assignedUserId || main.accountType !== "main") {
       throw new Error("Invalid Main Account");
     }
@@ -572,6 +690,14 @@ export async function upsertLinkedinAccountAction(input: {
       payload,
       [Permission.read(Role.label("admin")), Permission.update(Role.label("admin"))],
     );
+    await logAuditAction(databases, {
+      action: "LINKEDIN_ACCOUNT_CREATE",
+      actorId: user.$id,
+      actorName: user.name,
+      targetType: "linkedin_account",
+      targetId: doc.$id,
+      metadata: payload,
+    });
     return doc as unknown as LinkedinAccount;
   }
 
@@ -581,6 +707,14 @@ export async function upsertLinkedinAccountAction(input: {
     input.accountId!,
     payload,
   );
+  await logAuditAction(databases, {
+    action: "LINKEDIN_ACCOUNT_UPDATE",
+    actorId: user.$id,
+    actorName: user.name,
+    targetType: "linkedin_account",
+    targetId: input.accountId!,
+    metadata: payload,
+  });
   return doc as unknown as LinkedinAccount;
 }
 

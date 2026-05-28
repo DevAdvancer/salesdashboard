@@ -16,6 +16,7 @@ export type ComponentKey =
   | 'coaching-notes'
   | 'review-queue'
   | 'notifications'
+  | 'attendance'
   | 'linkedin-requests'
   | 'linkedin-account-management'
   | 'linkedin-reports';
@@ -47,6 +48,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'coaching-notes', role: 'admin', allowed: true },
   { componentKey: 'review-queue', role: 'admin', allowed: true },
   { componentKey: 'notifications', role: 'admin', allowed: true },
+  { componentKey: 'attendance', role: 'admin', allowed: true },
   { componentKey: 'linkedin-requests', role: 'admin', allowed: false },
   { componentKey: 'linkedin-account-management', role: 'admin', allowed: true },
   { componentKey: 'linkedin-reports', role: 'admin', allowed: true },
@@ -68,6 +70,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'coaching-notes', role: 'manager', allowed: true },
   { componentKey: 'review-queue', role: 'manager', allowed: true },
   { componentKey: 'notifications', role: 'manager', allowed: true },
+  { componentKey: 'attendance', role: 'manager', allowed: true },
   { componentKey: 'linkedin-requests', role: 'manager', allowed: true },
   { componentKey: 'linkedin-account-management', role: 'manager', allowed: false },
   { componentKey: 'linkedin-reports', role: 'manager', allowed: false },
@@ -89,6 +92,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'coaching-notes', role: 'assistant_manager', allowed: true },
   { componentKey: 'review-queue', role: 'assistant_manager', allowed: true },
   { componentKey: 'notifications', role: 'assistant_manager', allowed: true },
+  { componentKey: 'attendance', role: 'assistant_manager', allowed: true },
   { componentKey: 'linkedin-requests', role: 'assistant_manager', allowed: true },
   { componentKey: 'linkedin-account-management', role: 'assistant_manager', allowed: false },
   { componentKey: 'linkedin-reports', role: 'assistant_manager', allowed: false },
@@ -110,6 +114,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'coaching-notes', role: 'team_lead', allowed: false },
   { componentKey: 'review-queue', role: 'team_lead', allowed: true },
   { componentKey: 'notifications', role: 'team_lead', allowed: true },
+  { componentKey: 'attendance', role: 'team_lead', allowed: true },
   { componentKey: 'linkedin-requests', role: 'team_lead', allowed: false },
   { componentKey: 'linkedin-account-management', role: 'team_lead', allowed: true },
   { componentKey: 'linkedin-reports', role: 'team_lead', allowed: true },
@@ -131,6 +136,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'coaching-notes', role: 'agent', allowed: false },
   { componentKey: 'review-queue', role: 'agent', allowed: false },
   { componentKey: 'notifications', role: 'agent', allowed: true },
+  { componentKey: 'attendance', role: 'agent', allowed: false },
   { componentKey: 'linkedin-requests', role: 'agent', allowed: true },
   { componentKey: 'linkedin-account-management', role: 'agent', allowed: false },
   { componentKey: 'linkedin-reports', role: 'agent', allowed: false },
@@ -152,6 +158,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'coaching-notes', role: 'lead_generation', allowed: false },
   { componentKey: 'review-queue', role: 'lead_generation', allowed: false },
   { componentKey: 'notifications', role: 'lead_generation', allowed: true },
+  { componentKey: 'attendance', role: 'lead_generation', allowed: false },
   { componentKey: 'linkedin-requests', role: 'lead_generation', allowed: false },
   { componentKey: 'linkedin-account-management', role: 'lead_generation', allowed: false },
   { componentKey: 'linkedin-reports', role: 'lead_generation', allowed: false },

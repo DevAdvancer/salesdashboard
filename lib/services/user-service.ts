@@ -564,8 +564,8 @@ export async function getAgentsByTeamLead(teamLeadId: string): Promise<User[]> {
       DATABASE_ID,
       USERS_COLLECTION_ID,
       [
-        Query.equal('role', 'agent'),
         Query.equal('teamLeadId', teamLeadId),
+        Query.or([Query.equal('role', 'agent'), Query.equal('role', 'lead_generation')]),
       ]
     );
     return response.documents.map(mapDocToUser);

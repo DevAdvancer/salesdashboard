@@ -314,7 +314,7 @@ export async function createLeadAction(
                         targetId: lead.$id,
                         targetType: 'LEAD',
                         metadata: JSON.stringify({ ...input.data, branchId: input.branchId }),
-                        timestamp: new Date().toISOString()
+                        performedAt: new Date().toISOString()
                      }
                  );
             }

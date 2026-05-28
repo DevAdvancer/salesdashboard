@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/lib/contexts/auth-context';
-import { listNotifications, markNotificationRead } from '@/lib/services/sop-service';
+import { listNotifications, markAllNotificationsRead, markNotificationRead } from '@/lib/services/sop-service';
 import type { NotificationRecord } from '@/lib/types';
 
 export default function NotificationsPage() {
@@ -23,6 +23,7 @@ function NotificationsContent() {
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [markingAll, setMarkingAll] = useState(false);
 
   const loadNotifications = useCallback(async () => {
     if (!user) return;
@@ -54,6 +55,22 @@ function NotificationsContent() {
     }
   };
 
+  const unreadCount = notifications.filter((item) => !item.readAt).length;
+
+  const markAllRead = async () => {
+    if (!user) return;
+    try {
+      setMarkingAll(true);
+      await markAllNotificationsRead(user.$id);
+      await loadNotifications();
+    } catch (error) {
+      console.error('Failed to mark all notifications read:', error);
+      setError('You are not authorized to update these notifications.');
+    } finally {
+      setMarkingAll(false);
+    }
+  };
+
   return (
     <div className="container mx-auto space-y-6">
       <div>
@@ -62,10 +79,21 @@ function NotificationsContent() {
       </div>
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Bell className="h-4 w-4" />
-            Inbox
-          </CardTitle>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Bell className="h-4 w-4" />
+              Inbox
+            </CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={markAllRead}
+              disabled={loading || markingAll || unreadCount === 0}
+            >
+              {markingAll ? 'Marking...' : 'Mark All Read'}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
           {loading ? (

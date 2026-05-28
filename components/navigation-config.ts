@@ -48,6 +48,7 @@ export const appIcons = {
   coachingNotes: NotebookTabs,
   reviewQueue: ShieldCheck,
   notifications: Bell,
+  attendance: CalendarClock,
   settings: Settings,
   linkedinRequests: Link2,
   linkedinAccounts: UserCog,
@@ -56,6 +57,7 @@ export const appIcons = {
 
 export const NAV_ITEMS: NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', href: '/dashboard', icon: appIcons.dashboard },
+  { key: 'attendance', label: 'Attendance', href: '/attendance', icon: appIcons.attendance },
   { key: 'branch-management', label: 'Branches', href: '/branches', icon: appIcons.branches },
   { key: 'leads', label: 'Leads', href: '/leads', icon: appIcons.leads },
   { key: 'history', label: 'Client', href: '/client', icon: appIcons.clients },

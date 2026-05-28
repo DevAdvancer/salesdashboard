@@ -253,8 +253,6 @@ function LinkedinReportsContent() {
     );
   }, [rows]);
 
-  if (!user) return null;
-
   const visibleRequests = useMemo(() => {
     const query = requestUrl.trim().toLowerCase();
     if (!query) return requests;
@@ -278,6 +276,8 @@ function LinkedinReportsContent() {
     });
     return copy;
   }, [agentsMap, visibleRequests]);
+
+  if (!user) return null;
 
   return (
     <div className="container mx-auto space-y-6">

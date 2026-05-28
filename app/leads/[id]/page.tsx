@@ -1,25 +1,28 @@
-'use client';
+"use client";
 
-import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '@/lib/contexts/auth-context';
-import { useRouter, useParams } from 'next/navigation';
-import { getLead, updateLead, closeLead } from '@/lib/services/lead-service';
-import { reopenLeadAction } from '@/app/actions/lead';
-import { assignLeadAction } from '@/lib/actions/lead-actions';
-import { getAgentsByManager, getAgentsByTeamLead } from '@/lib/services/user-service';
-import { getFormConfig } from '@/lib/services/form-config-service';
-import { Lead, User, FormField, LeadData } from '@/lib/types';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { useToast } from '@/components/ui/use-toast';
-import { ProtectedRoute } from '@/components/protected-route';
-import { LeadActivityTimeline } from '@/components/leads/lead-activity-timeline';
-import { LeadFollowUpCard } from '@/components/leads/lead-follow-up-card';
-import { LeadNotesCard } from '@/components/leads/lead-notes-card';
-import { storage } from '@/lib/appwrite';
-import { BUCKETS } from '@/lib/constants/appwrite';
+import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "@/lib/contexts/auth-context";
+import { useRouter, useParams } from "next/navigation";
+import { getLead, updateLead, closeLead } from "@/lib/services/lead-service";
+import { reopenLeadAction } from "@/app/actions/lead";
+import { assignLeadAction } from "@/lib/actions/lead-actions";
+import {
+  getAgentsByManager,
+  getAgentsByTeamLead,
+} from "@/lib/services/user-service";
+import { getFormConfig } from "@/lib/services/form-config-service";
+import { Lead, User, FormField, LeadData, LeadDataValue } from "@/lib/types";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/components/ui/use-toast";
+import { ProtectedRoute } from "@/components/protected-route";
+import { LeadActivityTimeline } from "@/components/leads/lead-activity-timeline";
+import { LeadFollowUpCard } from "@/components/leads/lead-follow-up-card";
+import { LeadNotesCard } from "@/components/leads/lead-notes-card";
+import { storage } from "@/lib/appwrite";
+import { BUCKETS } from "@/lib/constants/appwrite";
 
 export default function LeadDetailPage() {
   return (
@@ -49,7 +52,7 @@ function LeadDetailContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCloseDialog, setShowCloseDialog] = useState(false);
-  const [closeStatus, setCloseStatus] = useState('Closed');
+  const [closeStatus, setCloseStatus] = useState("Closed");
 
   const loadLead = useCallback(async () => {
     try {
@@ -59,8 +62,8 @@ function LeadDetailContent() {
       setLead(fetchedLead);
       setLeadData(JSON.parse(fetchedLead.data));
     } catch (err: unknown) {
-      console.error('Error loading lead:', err);
-      setError(getErrorMessage(err, 'Failed to load lead'));
+      console.error("Error loading lead:", err);
+      setError(getErrorMessage(err, "Failed to load lead"));
     } finally {
       setIsLoading(false);
     }
@@ -72,7 +75,7 @@ function LeadDetailContent() {
       const fields = config.fields;
       setFormFields(fields.sort((a, b) => a.order - b.order));
     } catch (err: unknown) {
-      console.error('Error loading form config:', err);
+      console.error("Error loading form config:", err);
     }
   }, []);
 
@@ -80,28 +83,28 @@ function LeadDetailContent() {
     if (!user) return;
 
     try {
-      if (user.role !== 'manager' && user.role !== 'team_lead') return;
+      if (user.role !== "manager" && user.role !== "team_lead") return;
 
       const fetchedAgents =
-        user.role === 'manager'
+        user.role === "manager"
           ? await getAgentsByManager(user.$id)
           : await getAgentsByTeamLead(user.$id);
       setAgents(fetchedAgents);
     } catch (err: unknown) {
-      console.error('Error loading agents:', err);
+      console.error("Error loading agents:", err);
     }
   }, [user]);
 
   useEffect(() => {
     if (!authLoading && !user) {
-      router.push('/login');
+      router.push("/login");
       return;
     }
 
     if (user && leadId) {
       loadLead();
       loadFormConfig();
-      if (user.role === 'manager' || user.role === 'team_lead') {
+      if (user.role === "manager" || user.role === "team_lead") {
         loadAgents();
       }
     }
@@ -114,17 +117,17 @@ function LeadDetailContent() {
       setIsSaving(true);
       await updateLead(leadId, leadData, user.$id, user.name);
       toast({
-        title: 'Success',
-        description: 'Lead updated successfully',
+        title: "Success",
+        description: "Lead updated successfully",
       });
       setIsEditing(false);
       await loadLead();
     } catch (err: unknown) {
-      console.error('Error saving lead:', err);
+      console.error("Error saving lead:", err);
       toast({
-        title: 'Error',
-        description: getErrorMessage(err, 'Failed to save lead'),
-        variant: 'destructive',
+        title: "Error",
+        description: getErrorMessage(err, "Failed to save lead"),
+        variant: "destructive",
       });
     } finally {
       setIsSaving(false);
@@ -138,17 +141,17 @@ function LeadDetailContent() {
       setIsSaving(true);
       await closeLead(leadId, closeStatus, user.$id, user.name);
       toast({
-        title: 'Success',
-        description: 'Lead closed successfully',
+        title: "Success",
+        description: "Lead closed successfully",
       });
       setShowCloseDialog(false);
-      router.push('/leads');
+      router.push("/leads");
     } catch (err: unknown) {
-      console.error('Error closing lead:', err);
+      console.error("Error closing lead:", err);
       toast({
-        title: 'Error',
-        description: getErrorMessage(err, 'Failed to close lead'),
-        variant: 'destructive',
+        title: "Error",
+        description: getErrorMessage(err, "Failed to close lead"),
+        variant: "destructive",
       });
     } finally {
       setIsSaving(false);
@@ -162,16 +165,16 @@ function LeadDetailContent() {
       setIsSaving(true);
       await reopenLeadAction(leadId, user.$id, user.name);
       toast({
-        title: 'Success',
-        description: 'Lead reopened successfully',
+        title: "Success",
+        description: "Lead reopened successfully",
       });
       await loadLead();
     } catch (err: unknown) {
-      console.error('Error reopening lead:', err);
+      console.error("Error reopening lead:", err);
       toast({
-        title: 'Error',
-        description: getErrorMessage(err, 'Failed to reopen lead'),
-        variant: 'destructive',
+        title: "Error",
+        description: getErrorMessage(err, "Failed to reopen lead"),
+        variant: "destructive",
       });
     } finally {
       setIsSaving(false);
@@ -184,30 +187,30 @@ function LeadDetailContent() {
     try {
       await assignLeadAction(leadId, agentId, user.$id, user.name);
       toast({
-        title: 'Success',
-        description: 'Lead assigned successfully',
+        title: "Success",
+        description: "Lead assigned successfully",
       });
       await loadLead();
     } catch (err: unknown) {
-      console.error('Error assigning lead:', err);
+      console.error("Error assigning lead:", err);
       toast({
-        title: 'Error',
-        description: getErrorMessage(err, 'Failed to assign lead'),
-        variant: 'destructive',
+        title: "Error",
+        description: getErrorMessage(err, "Failed to assign lead"),
+        variant: "destructive",
       });
     }
   };
 
-  const handleFieldChange = (key: string, value: unknown) => {
+  const handleFieldChange = (key: string, value: LeadDataValue) => {
     setLeadData((prev) => ({ ...prev, [key]: value }));
   };
 
   const renderField = (field: FormField) => {
-    const value = String(leadData[field.key] ?? '');
+    const value = String(leadData[field.key] ?? "");
     const isReadOnly = !isEditing || lead?.isClosed;
 
     switch (field.type) {
-      case 'textarea':
+      case "textarea":
         return (
           <textarea
             id={field.key}
@@ -219,15 +222,14 @@ function LeadDetailContent() {
           />
         );
 
-      case 'dropdown':
+      case "dropdown":
         return (
           <select
             id={field.key}
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             value={value}
             onChange={(e) => handleFieldChange(field.key, e.target.value)}
-            disabled={isReadOnly}
-          >
+            disabled={isReadOnly}>
             <option value="">Select {field.label}</option>
             {field.options?.map((option) => (
               <option key={option} value={option}>
@@ -271,8 +273,8 @@ function LeadDetailContent() {
             <CardTitle className="text-red-500">Error</CardTitle>
           </CardHeader>
           <CardContent>
-            <p>{error || 'Lead not found'}</p>
-            <Button onClick={() => router.push('/leads')} className="mt-4">
+            <p>{error || "Lead not found"}</p>
+            <Button onClick={() => router.push("/leads")} className="mt-4">
               Back to Leads
             </Button>
           </CardContent>
@@ -282,29 +284,40 @@ function LeadDetailContent() {
   }
 
   const leadGenerationVisibleKeys = new Set([
-    'firstName',
-    'middleName',
-    'lastName',
-    'email',
-    'phone',
-    'visaStatus',
-    'linkedinId',
+    "firstName",
+    "middleName",
+    "lastName",
+    "email",
+    "phone",
+    "visaStatus",
+    "linkedinId",
   ]);
 
-  const isLeadGeneration = user.role === 'lead_generation';
+  const isLeadGeneration = user.role === "lead_generation";
+  const headerFirstName =
+    typeof leadData.firstName === "string" ? leadData.firstName : "";
+  const headerLastName =
+    typeof leadData.lastName === "string" ? leadData.lastName : "";
+  const resumeFileId =
+    typeof leadData.resumeFileId === "string" ? leadData.resumeFileId : "";
+  const resumeFileName =
+    typeof leadData.resumeFileName === "string" ? leadData.resumeFileName : "";
 
   return (
     <div className="container mx-auto">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div id="tour-lead-header">
-          <Button variant="outline" onClick={() => router.push('/leads')} className="mb-2">
+          <Button
+            variant="outline"
+            onClick={() => router.push("/leads")}
+            className="mb-2">
             ← Back to Leads
           </Button>
           <h1 className="text-2xl md:text-3xl font-bold">
-            {leadData.firstName} {leadData.lastName || ''}
+            {headerFirstName} {headerLastName}
           </h1>
           <p className="text-muted-foreground mt-1">
-            {lead.isClosed ? 'Closed Lead' : 'Active Lead'}
+            {lead.isClosed ? "Closed Lead" : "Active Lead"}
           </p>
         </div>
         <div id="tour-lead-actions" className="flex flex-wrap gap-2">
@@ -316,8 +329,7 @@ function LeadDetailContent() {
                   {!isLeadGeneration && (
                     <Button
                       variant="destructive"
-                      onClick={() => setShowCloseDialog(true)}
-                    >
+                      onClick={() => setShowCloseDialog(true)}>
                       Close Lead
                     </Button>
                   )}
@@ -325,12 +337,14 @@ function LeadDetailContent() {
               ) : (
                 <>
                   <Button onClick={handleSave} disabled={isSaving}>
-                    {isSaving ? 'Saving...' : 'Save'}
+                    {isSaving ? "Saving..." : "Save"}
                   </Button>
-                  <Button variant="outline" onClick={() => {
-                    setIsEditing(false);
-                    setLeadData(JSON.parse(lead.data));
-                  }}>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsEditing(false);
+                      setLeadData(JSON.parse(lead.data));
+                    }}>
                     Cancel
                   </Button>
                 </>
@@ -338,13 +352,13 @@ function LeadDetailContent() {
             </>
           )}
           {lead.isClosed &&
-            (user?.role === 'manager' ||
-              user?.role === 'admin' ||
-              user?.role === 'team_lead') && (
-            <Button onClick={handleReopenLead} disabled={isSaving}>
-              {isSaving ? 'Reopening...' : 'Reopen Lead'}
-            </Button>
-          )}
+            (user?.role === "manager" ||
+              user?.role === "admin" ||
+              user?.role === "team_lead") && (
+              <Button onClick={handleReopenLead} disabled={isSaving}>
+                {isSaving ? "Reopening..." : "Reopen Lead"}
+              </Button>
+            )}
         </div>
       </div>
 
@@ -361,32 +375,30 @@ function LeadDetailContent() {
                 <p className="text-sm text-muted-foreground">LinkedIN/Lead</p>
               </div>
             )}
-            {leadData?.resumeFileId && (
+            {resumeFileId && (
               <div className="mb-4 flex flex-col gap-1 rounded-md border border-border bg-muted/20 p-3">
                 <Label>Resume</Label>
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate text-sm text-muted-foreground">
-                    {leadData?.resumeFileName || 'Resume'}
+                    {resumeFileName || "Resume"}
                   </span>
                   <div className="flex items-center gap-3">
                     <a
                       className="text-sm text-primary hover:underline"
                       href={storage
-                        .getFileView(BUCKETS.RESUMES, leadData.resumeFileId)
+                        .getFileView(BUCKETS.RESUMES, resumeFileId)
                         .toString()}
                       target="_blank"
-                      rel="noreferrer"
-                    >
+                      rel="noreferrer">
                       View
                     </a>
                     <a
                       className="text-sm text-primary hover:underline"
                       href={storage
-                        .getFileDownload(BUCKETS.RESUMES, leadData.resumeFileId)
+                        .getFileDownload(BUCKETS.RESUMES, resumeFileId)
                         .toString()}
                       target="_blank"
-                      rel="noreferrer"
-                    >
+                      rel="noreferrer">
                       Download
                     </a>
                   </div>
@@ -399,13 +411,15 @@ function LeadDetailContent() {
                   if (isLeadGeneration) {
                     return leadGenerationVisibleKeys.has(field.key);
                   }
-                  return user?.role === 'manager' || field.visible;
+                  return user.role === "manager" || field.visible;
                 })
                 .map((field) => (
                   <div key={field.id}>
                     <Label htmlFor={field.key}>
                       {field.label}
-                      {field.required && <span className="text-red-500 ml-1">*</span>}
+                      {field.required && (
+                        <span className="text-red-500 ml-1">*</span>
+                      )}
                     </Label>
                     {renderField(field)}
                   </div>
@@ -415,7 +429,7 @@ function LeadDetailContent() {
         </Card>
 
         {/* Assignment Section (Manager Only) */}
-        {(user?.role === 'manager' || user?.role === 'team_lead') && (
+        {(user?.role === "manager" || user?.role === "team_lead") && (
           <Card id="tour-lead-assignment">
             <CardHeader>
               <CardTitle>Assignment</CardTitle>
@@ -427,10 +441,9 @@ function LeadDetailContent() {
                   <select
                     id="assignedTo"
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    value={lead.assignedToId || ''}
+                    value={lead.assignedToId || ""}
                     onChange={(e) => handleAssignAgent(e.target.value)}
-                    disabled={lead.isClosed}
-                  >
+                    disabled={lead.isClosed}>
                     <option value="">Unassigned</option>
                     {agents.map((agent) => (
                       <option key={agent.$id} value={agent.$id}>
@@ -465,10 +478,7 @@ function LeadDetailContent() {
 
         {user && (
           <div id="tour-lead-notes">
-            <LeadNotesCard
-              leadId={lead.$id}
-              user={user}
-            />
+            <LeadNotesCard leadId={lead.$id} user={user} />
           </div>
         )}
 
@@ -486,13 +496,17 @@ function LeadDetailContent() {
               <div>
                 <Label>Created</Label>
                 <p className="text-muted-foreground">
-                  {lead.$createdAt ? new Date(lead.$createdAt).toLocaleString() : 'N/A'}
+                  {lead.$createdAt
+                    ? new Date(lead.$createdAt).toLocaleString()
+                    : "N/A"}
                 </p>
               </div>
               <div>
                 <Label>Last Updated</Label>
                 <p className="text-muted-foreground">
-                  {lead.$updatedAt ? new Date(lead.$updatedAt).toLocaleString() : 'N/A'}
+                  {lead.$updatedAt
+                    ? new Date(lead.$updatedAt).toLocaleString()
+                    : "N/A"}
                 </p>
               </div>
               {lead.closedAt && (
@@ -523,8 +537,7 @@ function LeadDetailContent() {
                   id="closeStatus"
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   value={closeStatus}
-                  onChange={(e) => setCloseStatus(e.target.value)}
-                >
+                  onChange={(e) => setCloseStatus(e.target.value)}>
                   <option value="Closed">Closed</option>
                   <option value="Won">Won</option>
                   <option value="Lost">Lost</option>
@@ -532,11 +545,18 @@ function LeadDetailContent() {
                 </select>
               </div>
               <div className="flex flex-col-reverse sm:flex-row gap-2">
-                <Button variant="outline" onClick={() => setShowCloseDialog(false)} className="w-full sm:w-auto">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowCloseDialog(false)}
+                  className="w-full sm:w-auto">
                   Cancel
                 </Button>
-                <Button onClick={handleCloseLead} disabled={isSaving} variant="destructive" className="w-full sm:w-auto">
-                  {isSaving ? 'Closing...' : 'Close Lead'}
+                <Button
+                  onClick={handleCloseLead}
+                  disabled={isSaving}
+                  variant="destructive"
+                  className="w-full sm:w-auto">
+                  {isSaving ? "Closing..." : "Close Lead"}
                 </Button>
               </div>
             </CardContent>
