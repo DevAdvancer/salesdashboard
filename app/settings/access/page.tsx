@@ -44,6 +44,7 @@ const ALL_COMPONENTS: {
   description: string;
 }[] = [
   { key: "dashboard", label: "Dashboard", description: "Main dashboard view" },
+  { key: "chat", label: "Chatting", description: "Announcements and team chat" },
   { key: "leads", label: "Leads", description: "Active leads management" },
   {
     key: "history",

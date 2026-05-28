@@ -13,6 +13,7 @@ const ACCESS_CONFIG_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_ACCESS_CONF
 
 export type ComponentKey =
   | 'dashboard'
+  | 'chat'
   | 'leads'
   | 'history'
   | 'user-management'

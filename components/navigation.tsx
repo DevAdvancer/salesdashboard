@@ -4,10 +4,12 @@ import { useAuth } from "@/lib/contexts/auth-context";
 import { useAccess, ComponentKey } from "@/lib/contexts/access-control-context";
 import { useRouter, usePathname } from "next/navigation";
 import {
+  Bell,
   ChevronDown,
   LogOut,
   Map,
   Menu,
+  MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
   Wrench,
@@ -45,6 +47,7 @@ export function Navigation({
   const router = useRouter();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [linkedinOpen, setLinkedinOpen] = useState(false);
   const [technicalOpen, setTechnicalOpen] = useState(false);
 
@@ -83,6 +86,7 @@ export function Navigation({
     (item) =>
       !technicalItemKeys.has(item.key) && !linkedinItemKeys.has(item.key),
   );
+  const chatItem = visibleItems.find((item) => item.key === "chat") ?? null;
   const technicalInsertBeforeKey = mainItems.some(
     (item) => item.key === "audit-logs",
   )
@@ -125,6 +129,75 @@ export function Navigation({
               paddingLeft: isCollapsed ? 0 : "0.75rem",
             }}>
             {linkedinItems.map((item) => {
+              const Icon = item.icon;
+              const isActive =
+                pathname === item.href ||
+                (pathname?.startsWith(item.href) &&
+                  pathname.charAt(item.href.length) === "/");
+              return (
+                <button
+                  key={item.key}
+                  id={`nav-${item.key}`}
+                  onClick={() => {
+                    router.push(item.href);
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`nav-item${isActive ? " active" : ""}`}
+                  title={item.label}
+                  style={{
+                    paddingLeft: isCollapsed ? undefined : "1.25rem",
+                  }}>
+                  <Icon size={16} />
+                  <span className={isCollapsed ? "lg:sr-only" : ""}>
+                    {item.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    ) : null;
+
+  const chatSection =
+    chatItem ? (
+      <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
+        <button
+          type="button"
+          onClick={() => setChatOpen((v) => !v)}
+          className="nav-item"
+          aria-expanded={chatOpen}
+          title="Chatting"
+          style={{
+            justifyContent: isCollapsed ? "center" : "flex-start",
+          }}>
+          <MessageSquare size={16} />
+          <span className={isCollapsed ? "lg:sr-only" : ""} style={{ flex: 1 }}>
+            Chatting
+          </span>
+          {!isCollapsed && (
+            <ChevronDown
+              size={16}
+              style={{
+                transform: chatOpen ? "rotate(180deg)" : "rotate(0deg)",
+                transition: "transform 0.12s ease",
+              }}
+            />
+          )}
+        </button>
+
+        {chatOpen && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "1px",
+              paddingLeft: isCollapsed ? 0 : "0.75rem",
+            }}>
+            {[
+              { key: "chat-announcement", label: "Announcement", href: "/chat/announcement", icon: Bell },
+              { key: "chat-general", label: "General", href: "/chat/general", icon: MessageSquare },
+            ].map((item) => {
               const Icon = item.icon;
               const isActive =
                 pathname === item.href ||
@@ -227,6 +300,11 @@ export function Navigation({
         acc.push(<div key="nav-linkedin-section">{linkedinSection}</div>);
       }
       acc.push(<div key="nav-technical-section">{technicalSection}</div>);
+    }
+
+    if (chatSection && item.key === "chat") {
+      acc.push(<div key="nav-chat-section">{chatSection}</div>);
+      return acc;
     }
 
     const Icon = item.icon;

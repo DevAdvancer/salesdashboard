@@ -4,6 +4,7 @@ type RoleAccessMap = Record<ComponentKey, readonly UserRole[]>;
 
 export const COMPONENT_ACCESS: RoleAccessMap = {
   dashboard: ['admin', 'manager', 'assistant_manager', 'team_lead', 'agent', 'lead_generation'],
+  chat: ['admin', 'manager', 'assistant_manager', 'team_lead', 'agent', 'lead_generation'],
   leads: ['admin', 'manager', 'assistant_manager', 'team_lead', 'agent', 'lead_generation'],
   history: ['admin', 'manager', 'assistant_manager', 'team_lead'],
   'user-management': ['admin', 'manager', 'assistant_manager', 'team_lead'],

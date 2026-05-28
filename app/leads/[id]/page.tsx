@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter, useParams } from "next/navigation";
 import { getLead, updateLead, closeLead } from "@/lib/services/lead-service";
 import { reopenLeadAction } from "@/app/actions/lead";
+import { sendChatMessageAction } from "@/app/actions/chat";
 import { assignLeadAction } from "@/lib/actions/lead-actions";
 import {
   getAgentsByManager,
@@ -140,6 +141,29 @@ function LeadDetailContent() {
     try {
       setIsSaving(true);
       await closeLead(leadId, closeStatus, user.$id, user.name);
+      try {
+        const firstName =
+          typeof leadData.firstName === "string" ? leadData.firstName : "";
+        const lastName =
+          typeof leadData.lastName === "string" ? leadData.lastName : "";
+        const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
+        const fallback =
+          leadData.legalName ??
+          leadData.name ??
+          leadData.company ??
+          leadData.email ??
+          leadData.phone;
+        const leadName =
+          fullName || (typeof fallback === "string" ? fallback : "");
+
+        await sendChatMessageAction({
+          currentUserId: user.$id,
+          channel: "general",
+          body: leadName
+            ? `Congratulations ${user.name} for closing ${leadName}!`
+            : `Congratulations ${user.name} for closing a lead!`,
+        });
+      } catch {}
       toast({
         title: "Success",
         description: "Lead closed successfully",

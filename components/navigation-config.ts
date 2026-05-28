@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   Link2,
   Mail,
+  MessageSquare,
   Network,
   NotebookTabs,
   ShieldCheck,
@@ -49,6 +50,7 @@ export const appIcons = {
   reviewQueue: ShieldCheck,
   notifications: Bell,
   attendance: CalendarClock,
+  chat: MessageSquare,
   settings: Settings,
   linkedinRequests: Link2,
   linkedinAccounts: UserCog,
@@ -58,6 +60,7 @@ export const appIcons = {
 export const NAV_ITEMS: NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', href: '/dashboard', icon: appIcons.dashboard },
   { key: 'attendance', label: 'Attendance', href: '/attendance', icon: appIcons.attendance },
+  { key: 'chat', label: 'Chatting', href: '/chat/announcement', icon: appIcons.chat },
   { key: 'branch-management', label: 'Branches', href: '/branches', icon: appIcons.branches },
   { key: 'leads', label: 'Leads', href: '/leads', icon: appIcons.leads },
   { key: 'history', label: 'Client', href: '/client', icon: appIcons.clients },

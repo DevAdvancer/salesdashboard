@@ -1,5 +1,6 @@
 export type ComponentKey =
   | 'dashboard'
+  | 'chat'
   | 'leads'
   | 'history'
   | 'user-management'
@@ -32,6 +33,7 @@ export interface AccessRule {
 export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   // Admin rules — all allowed
   { componentKey: 'dashboard', role: 'admin', allowed: true },
+  { componentKey: 'chat', role: 'admin', allowed: true },
   { componentKey: 'leads', role: 'admin', allowed: true },
   { componentKey: 'history', role: 'admin', allowed: true },
   { componentKey: 'user-management', role: 'admin', allowed: true },
@@ -54,6 +56,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'linkedin-reports', role: 'admin', allowed: true },
   // Manager rules
   { componentKey: 'dashboard', role: 'manager', allowed: true },
+  { componentKey: 'chat', role: 'manager', allowed: true },
   { componentKey: 'leads', role: 'manager', allowed: true },
   { componentKey: 'history', role: 'manager', allowed: true },
   { componentKey: 'user-management', role: 'manager', allowed: true },
@@ -76,6 +79,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'linkedin-reports', role: 'manager', allowed: false },
   // Assistant Manager rules
   { componentKey: 'dashboard', role: 'assistant_manager', allowed: true },
+  { componentKey: 'chat', role: 'assistant_manager', allowed: true },
   { componentKey: 'leads', role: 'assistant_manager', allowed: true },
   { componentKey: 'history', role: 'assistant_manager', allowed: true },
   { componentKey: 'user-management', role: 'assistant_manager', allowed: true },
@@ -98,6 +102,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'linkedin-reports', role: 'assistant_manager', allowed: false },
   // Team Lead rules
   { componentKey: 'dashboard', role: 'team_lead', allowed: true },
+  { componentKey: 'chat', role: 'team_lead', allowed: true },
   { componentKey: 'leads', role: 'team_lead', allowed: true },
   { componentKey: 'history', role: 'team_lead', allowed: true },
   { componentKey: 'user-management', role: 'team_lead', allowed: true },
@@ -120,6 +125,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'linkedin-reports', role: 'team_lead', allowed: true },
   // Agent rules
   { componentKey: 'dashboard', role: 'agent', allowed: true },
+  { componentKey: 'chat', role: 'agent', allowed: true },
   { componentKey: 'leads', role: 'agent', allowed: true },
   { componentKey: 'history', role: 'agent', allowed: false },
   { componentKey: 'user-management', role: 'agent', allowed: false },
@@ -142,6 +148,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'linkedin-reports', role: 'agent', allowed: false },
   // Lead Generation rules
   { componentKey: 'dashboard', role: 'lead_generation', allowed: true },
+  { componentKey: 'chat', role: 'lead_generation', allowed: true },
   { componentKey: 'leads', role: 'lead_generation', allowed: true },
   { componentKey: 'history', role: 'lead_generation', allowed: false },
   { componentKey: 'user-management', role: 'lead_generation', allowed: false },

@@ -185,6 +185,7 @@ export interface FormConfig {
 // Access configuration types
 export type ComponentKey =
   | 'dashboard'
+  | 'chat'
   | 'leads'
   | 'history'
   | 'user-management'
@@ -271,6 +272,19 @@ export interface AttendanceRecord {
   assignedById: string | null;
   assignedAt: string | null;
   presentWithDelegateFlag?: boolean;
+  $createdAt?: string;
+  $updatedAt?: string;
+}
+
+export type ChatChannelType = 'announcement' | 'general';
+
+export interface ChatMessage {
+  $id: string;
+  channel: ChatChannelType;
+  body: string;
+  createdById: string;
+  createdByName: string;
+  createdAt: string;
   $createdAt?: string;
   $updatedAt?: string;
 }
