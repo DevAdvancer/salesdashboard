@@ -240,21 +240,20 @@ export async function checkLinkedinDuplicateAction(input: {
     [
       Query.equal("company", company),
       Query.equal("targetUrl", targetUrl),
+      Query.orderDesc("$createdAt"),
       Query.limit(25),
     ],
   );
 
-  const docs = response.documents as Array<{
-    isActive?: unknown;
-    status?: unknown;
-  }>;
-  const isDuplicate = docs.some((doc) => {
-    const isActive = doc.isActive !== false;
-    const status = typeof doc.status === "string" ? doc.status : "";
-    return isActive && status !== "withdrawn";
-  });
-
-  return { isDuplicate };
+  const docs = response.documents as unknown as LinkedinRequest[];
+  const active = docs.find((doc) => (doc.isActive ?? true) && doc.status !== "withdrawn") ?? null;
+  return {
+    isDuplicate: Boolean(active),
+    activeRequestId: active?.$id ?? null,
+    activeStatus: active?.status ?? null,
+    activeAgentId: active?.agentId ?? null,
+    activeDateSent: active?.dateSent ?? null,
+  };
 }
 
 export async function createLinkedinRequestAction(input: {
@@ -293,6 +292,21 @@ export async function createLinkedinRequestAction(input: {
     );
   }
 
+  const existingByCompanyResponse = await databases.listDocuments(
+    DATABASE_ID,
+    COLLECTIONS.LINKEDIN_REQUESTS,
+    [
+      Query.equal("company", company),
+      Query.equal("targetUrl", targetUrl),
+      Query.orderDesc("$createdAt"),
+      Query.limit(25),
+    ],
+  );
+
+  const existingByCompany = existingByCompanyResponse.documents as unknown as LinkedinRequest[];
+  const activeByCompany =
+    existingByCompany.find((doc) => (doc.isActive ?? true) && doc.status !== "withdrawn") ?? null;
+
   const alreadySentResponse = await databases.listDocuments(
     DATABASE_ID,
     COLLECTIONS.LINKEDIN_REQUESTS,
@@ -302,13 +316,10 @@ export async function createLinkedinRequestAction(input: {
       Query.limit(2000),
     ],
   );
-  const alreadySent = (alreadySentResponse.documents as Array<{
-    status?: unknown;
-    isActive?: unknown;
-  }>).filter((doc) => {
-    const status = typeof doc.status === "string" ? doc.status : "";
-    const isActive = doc.isActive !== false;
-    return isActive && status !== "withdrawn";
+  const alreadySent = (alreadySentResponse.documents as unknown as LinkedinRequest[]).filter((doc) => {
+    if (activeByCompany && doc.$id === activeByCompany.$id) return false;
+    const isActive = doc.isActive ?? true;
+    return isActive && doc.status !== "withdrawn";
   }).length;
 
   if (alreadySent >= connectionLimit) {
@@ -318,6 +329,66 @@ export async function createLinkedinRequestAction(input: {
   }
 
   try {
+    const permissions = [
+      Permission.read(Role.user(user.$id)),
+      Permission.update(Role.user(user.$id)),
+      Permission.delete(Role.user(user.$id)),
+      Permission.read(Role.label("admin")),
+    ];
+
+    if (activeByCompany) {
+      if (activeByCompany.status === "accepted") {
+        throw new Error("This URL is already accepted for this company.");
+      }
+
+      const prev = {
+        accountId: activeByCompany.accountId,
+        agentId: activeByCompany.agentId,
+        teamLeadId: activeByCompany.teamLeadId,
+        dateSent: activeByCompany.dateSent,
+        status: activeByCompany.status,
+      };
+
+      const updated = await databases.updateDocument(
+        DATABASE_ID,
+        COLLECTIONS.LINKEDIN_REQUESTS,
+        activeByCompany.$id,
+        {
+          accountId: account.$id,
+          agentId: user.$id,
+          teamLeadId: user.teamLeadId || null,
+          dateSent,
+          status: "sent" satisfies LinkedinRequestStatus,
+          acceptedAt: null,
+          withdrawnAt: null,
+          isActive: true,
+        },
+        permissions,
+      );
+
+      await logAuditAction(databases, {
+        action: "LINKEDIN_REQUEST_RESEND",
+        actorId: user.$id,
+        actorName: user.name,
+        targetType: "linkedin_request",
+        targetId: activeByCompany.$id,
+        metadata: {
+          company,
+          targetUrl,
+          previous: prev,
+          next: {
+            accountId: account.$id,
+            agentId: user.$id,
+            teamLeadId: user.teamLeadId || null,
+            dateSent,
+            status: "sent",
+          },
+        },
+      });
+
+      return { request: updated as unknown as LinkedinRequest, mode: "resent" as const };
+    }
+
     const doc = await databases.createDocument(
       DATABASE_ID,
       COLLECTIONS.LINKEDIN_REQUESTS,
@@ -331,15 +402,11 @@ export async function createLinkedinRequestAction(input: {
         dateSent,
         status: "sent" satisfies LinkedinRequestStatus,
         acceptedAt: null,
+        leadId: null,
         withdrawnAt: null,
         isActive: true,
       },
-      [
-        Permission.read(Role.user(user.$id)),
-        Permission.update(Role.user(user.$id)),
-        Permission.delete(Role.user(user.$id)),
-        Permission.read(Role.label("admin")),
-      ],
+      permissions,
     );
 
     await logAuditAction(databases, {
@@ -358,7 +425,7 @@ export async function createLinkedinRequestAction(input: {
       },
     });
 
-    return doc as unknown as LinkedinRequest;
+    return { request: doc as unknown as LinkedinRequest, mode: "created" as const };
   } catch (error: unknown) {
     const details =
       typeof error === "object" && error !== null
@@ -371,6 +438,129 @@ export async function createLinkedinRequestAction(input: {
     }
     throw error;
   }
+}
+
+export async function linkLeadToLinkedinRequestAction(input: {
+  currentUserId: string;
+  requestId: string;
+  leadId: string;
+}) {
+  await assertAuthenticatedUserId(input.currentUserId);
+  const user = await getAuthenticatedUserDoc();
+  const { databases } = await createAdminClient();
+
+  const request = (await databases.getDocument(
+    DATABASE_ID,
+    COLLECTIONS.LINKEDIN_REQUESTS,
+    input.requestId,
+  )) as unknown as LinkedinRequest;
+
+  if (user.role !== "admin" && request.agentId !== user.$id) {
+    throw new Error("Unauthorized");
+  }
+
+  const updated = await databases.updateDocument(
+    DATABASE_ID,
+    COLLECTIONS.LINKEDIN_REQUESTS,
+    input.requestId,
+    { leadId: input.leadId },
+  );
+
+  await logAuditAction(databases, {
+    action: "LINKEDIN_REQUEST_LINK_LEAD",
+    actorId: user.$id,
+    actorName: user.name,
+    targetType: "linkedin_request",
+    targetId: input.requestId,
+    metadata: {
+      leadId: input.leadId,
+      targetUrl: request.targetUrl,
+      company: request.company,
+    },
+  });
+
+  return updated as unknown as LinkedinRequest;
+}
+
+export async function findBackedOutLeadForLinkedinTargetUrlAction(input: {
+  currentUserId: string;
+  targetUrl: string;
+}) {
+  await assertAuthenticatedUserId(input.currentUserId);
+  const targetUrl = normalizeUrl(input.targetUrl);
+  if (!targetUrl) throw new Error("URL is required");
+
+  const { databases } = await createAdminClient();
+  const requestsResponse = await databases.listDocuments(
+    DATABASE_ID,
+    COLLECTIONS.LINKEDIN_REQUESTS,
+    [Query.equal("targetUrl", targetUrl), Query.orderDesc("$createdAt"), Query.limit(2000)],
+  );
+
+  const requests = requestsResponse.documents as unknown as LinkedinRequest[];
+  const leadIds = Array.from(
+    new Set(
+      requests
+        .map((r) => (typeof r.leadId === "string" && r.leadId ? r.leadId : null))
+        .filter((v): v is string => Boolean(v)),
+    ),
+  );
+
+  for (const leadId of leadIds) {
+    try {
+      const lead = await databases.getDocument(DATABASE_ID, COLLECTIONS.LEADS, leadId);
+      const status = typeof (lead as any)?.status === "string" ? String((lead as any).status) : "";
+      const isClosed = Boolean((lead as any)?.isClosed);
+      if (isClosed && status.trim().toLowerCase() === "backout") {
+        return { leadId };
+      }
+    } catch {}
+  }
+
+  return { leadId: null };
+}
+
+export async function getLinkedinConnectionHistoryAction(input: {
+  currentUserId: string;
+  targetUrl: string;
+}) {
+  await assertAuthenticatedUserId(input.currentUserId);
+  const targetUrl = normalizeUrl(input.targetUrl);
+  if (!targetUrl) throw new Error("URL is required");
+
+  const { databases } = await createAdminClient();
+  const requestsResponse = await databases.listDocuments(
+    DATABASE_ID,
+    COLLECTIONS.LINKEDIN_REQUESTS,
+    [Query.equal("targetUrl", targetUrl), Query.orderDesc("$createdAt"), Query.limit(2000)],
+  );
+
+  const requests = requestsResponse.documents as unknown as LinkedinRequest[];
+  const histories = await Promise.all(
+    requests.map(async (req) => {
+      const logsResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, [
+        Query.equal("targetType", "linkedin_request"),
+        Query.equal("targetId", req.$id),
+        Query.orderDesc("performedAt"),
+        Query.limit(100),
+      ]);
+
+      const logs = logsResponse.documents.map((doc) => ({
+        $id: String((doc as any).$id),
+        action: String((doc as any).action ?? ""),
+        actorName: String((doc as any).actorName ?? ""),
+        performedAt: String((doc as any).performedAt ?? ""),
+        metadata: (doc as any).metadata ?? null,
+      }));
+
+      return {
+        request: req,
+        logs,
+      };
+    }),
+  );
+
+  return { targetUrl, histories };
 }
 
 export async function listMyLinkedinRequestsForAccountAction(input: {

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/auth-context";
-import { listLeadsAction } from "@/app/actions/lead";
+import { listLeads } from "@/lib/services/lead-action-service";
 import { Branch, Lead, LeadData, HistoryFilters, AuditLog } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -100,7 +100,7 @@ function HistoryContent() {
 
     try {
       setLoading(true);
-      const closedLeads = await listLeadsAction(
+      const closedLeads = await listLeads(
         {
           isClosed: true,
           assignedToId: filters.agentId,

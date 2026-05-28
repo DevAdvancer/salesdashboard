@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter } from "next/navigation";
-import { listLeadsAction } from "@/app/actions/lead";
+import { listLeads } from "@/lib/services/lead-action-service";
 import {
   getAgentsByTeamLead,
   getAssignableUsers,
@@ -194,7 +194,6 @@ function LeadsContent() {
     }
 
     if (user) {
-      loadLeads();
       if (
         ["admin", "manager", "assistant_manager", "team_lead"].includes(
           user.role,
@@ -378,7 +377,7 @@ function LeadsContent() {
         currentFilters.isClosed = false;
       }
 
-      const fetchedLeads = await listLeadsAction(
+      const fetchedLeads = await listLeads(
         currentFilters,
         user.$id,
         user.role,

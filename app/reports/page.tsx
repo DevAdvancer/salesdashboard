@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { listLeadsAction } from "@/app/actions/lead";
+import { listLeads } from "@/lib/services/lead-action-service";
 import { LeadershipDashboard } from "@/components/dashboard/leadership-dashboard";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,13 +38,13 @@ function ReportsContent() {
         setError(null);
         const [activeLeads, closedLeads, visibleUsers, allBranches] =
           await Promise.all([
-            listLeadsAction(
+            listLeads(
               { isClosed: false },
               user.$id,
               user.role,
               user.branchIds,
             ),
-            listLeadsAction(
+            listLeads(
               { isClosed: true },
               user.$id,
               user.role,

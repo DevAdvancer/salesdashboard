@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter, useParams } from "next/navigation";
 import { getLead } from "@/lib/services/lead-service";
-import { reopenLeadAction } from "@/app/actions/lead";
+import { reopenLead } from "@/lib/services/lead-action-service";
 import { getUserByIdOrNull } from "@/lib/services/user-service";
 import { User } from "@/lib/types";
 import { getFormConfig } from "@/lib/services/form-config-service";
@@ -107,7 +107,7 @@ function HistoryDetailContent() {
 
     try {
       setIsReopening(true);
-      await reopenLeadAction(leadId, user.$id, user.name);
+      await reopenLead(leadId, user.$id, user.name);
       toast({
         title: "Success",
         description: "Lead reopened successfully",

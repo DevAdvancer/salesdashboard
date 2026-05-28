@@ -13,6 +13,9 @@ import type { NotificationRecord } from '@/lib/types';
 import { getLatestNotifications } from '@/lib/utils/notifications';
 import { useToast } from '@/components/ui/use-toast';
 
+const NOTIFICATION_FALLBACK_POLL_MS = 5 * 60 * 1000;
+const NOTIFICATION_FORCE_REFRESH_COOLDOWN_MS = 5000;
+
 function formatNotificationTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -34,6 +37,7 @@ export function NotificationBell() {
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const toastedIdsRef = useRef<Set<string>>(new Set());
+  const lastForceRefreshAt = useRef(0);
 
   const canSeeNotifications = Boolean(user) && !accessLoading && canAccess('notifications');
   const unreadCount = useMemo(
@@ -45,11 +49,11 @@ export function NotificationBell() {
     [notifications]
   );
 
-  const load = useCallback(async () => {
+  const load = useCallback(async ({ forceRefresh = false }: { forceRefresh?: boolean } = {}) => {
     if (!user || !canSeeNotifications) return;
     try {
       setLoading(true);
-      const next = await listNotifications(user.$id);
+      const next = await listNotifications(user.$id, { forceRefresh });
       setNotifications(next);
 
       const unassigned = next.filter(
@@ -74,6 +78,16 @@ export function NotificationBell() {
     }
   }, [canSeeNotifications, toast, user]);
 
+  const forceLoad = useCallback(() => {
+    const now = Date.now();
+    if (now - lastForceRefreshAt.current < NOTIFICATION_FORCE_REFRESH_COOLDOWN_MS) {
+      return;
+    }
+
+    lastForceRefreshAt.current = now;
+    void load({ forceRefresh: true });
+  }, [load]);
+
   useEffect(() => {
     void load();
   }, [load]);
@@ -82,11 +96,15 @@ export function NotificationBell() {
     if (!canSeeNotifications) return;
 
     const intervalId = window.setInterval(() => {
-      void load();
-    }, 30000);
+      void load({ forceRefresh: true });
+    }, NOTIFICATION_FALLBACK_POLL_MS);
+    window.addEventListener('focus', forceLoad);
 
-    return () => window.clearInterval(intervalId);
-  }, [canSeeNotifications, load]);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', forceLoad);
+    };
+  }, [canSeeNotifications, forceLoad, load]);
 
   useEffect(() => {
     if (!user || !canSeeNotifications) return;
@@ -94,7 +112,7 @@ export function NotificationBell() {
     const unsubscribe = client.subscribe(
       `databases.${DATABASE_ID}.collections.${COLLECTIONS.NOTIFICATIONS}.documents`,
       () => {
-        void load();
+        forceLoad();
       }
     );
 

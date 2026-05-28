@@ -3,6 +3,7 @@
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -12,7 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ProtectedRoute } from "@/components/protected-route";
-import { listLeadsAction } from "@/app/actions/lead";
+import { listLeads } from "@/lib/services/lead-action-service";
 import { getMockAttempts } from "@/app/actions/mock";
 import { getInterviewAttempts } from "@/app/actions/interview";
 import { getAssessmentAttempts } from "@/app/actions/assessment";
@@ -21,16 +22,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Branch, User } from "@/lib/types";
 import { DollarSign, TrendingUp } from "lucide-react";
 import { appIcons } from "@/components/navigation-config";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from "recharts";
 import { LeadershipDashboard } from "@/components/dashboard/leadership-dashboard";
 import { FollowUpQueueCard } from "@/components/dashboard/follow-up-queue";
 import { RoleWorkDashboard } from "@/components/dashboard/role-work-dashboard";
@@ -39,6 +30,16 @@ import {
   resolveLeadUsersForInsights,
   type LeadershipDashboardInsights,
 } from "@/lib/utils/dashboard-insights";
+
+const FinancialInsightsChart = dynamic(
+  () =>
+    import("@/components/dashboard/financial-insights-chart").then(
+      (module) => module.FinancialInsightsChart
+    ),
+  {
+    loading: () => <Skeleton className="h-[300px] min-h-[300px] w-full" />,
+  }
+);
 
 type AmountChartDatum = {
   name: string;
@@ -172,13 +173,13 @@ function LegacyDashboardContent() {
         const userIsTeamLead = user.role === "team_lead";
 
         const [activeLeads, closedLeads] = await Promise.all([
-          listLeadsAction(
+          listLeads(
             { isClosed: false },
             user.$id,
             user.role,
             user.branchIds,
           ),
-          listLeadsAction(
+          listLeads(
             { isClosed: true },
             user.$id,
             user.role,
@@ -791,85 +792,7 @@ function LegacyDashboardContent() {
               </div>
             </div>
 
-            <div className="h-[300px] min-h-[300px] w-full min-w-0">
-              {displayedChartData.length > 0 ? (
-                <ResponsiveContainer
-                  width="100%"
-                  height={300}
-                  minWidth={0}
-                  minHeight={300}>
-                  <BarChart
-                    data={displayedChartData}
-                    margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      vertical={false}
-                      stroke="var(--hairline-soft)"
-                    />
-                    <XAxis
-                      dataKey="name"
-                      tick={{ fill: "var(--mute)", fontSize: 12 }}
-                      axisLine={{ stroke: "var(--hairline-soft)" }}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      width={72}
-                      tick={{ fill: "var(--mute)", fontSize: 12 }}
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={(value: number) => {
-                        if (value >= 1_000_000)
-                          return `$${(value / 1_000_000).toFixed(1)}M`;
-                        if (value >= 1_000)
-                          return `$${(value / 1_000).toFixed(0)}K`;
-                        return `$${value}`;
-                      }}
-                    />
-                    <Tooltip
-                      formatter={(value) => [
-                        currencyFormatter.format(Number(value)),
-                        "",
-                      ]}
-                      contentStyle={{
-                        backgroundColor: "var(--canvas)",
-                        borderColor: "var(--hairline)",
-                        borderRadius: "0",
-                        color: "var(--ink)",
-                        fontSize: "0.875rem",
-                      }}
-                      labelStyle={{
-                        color: "var(--mute)",
-                        marginBottom: "0.25rem",
-                      }}
-                      cursor={{ fill: "rgba(17,17,17,0.04)" }}
-                    />
-                    <Legend
-                      wrapperStyle={{
-                        fontSize: "0.8125rem",
-                        color: "var(--mute)",
-                        paddingTop: "0.5rem",
-                      }}
-                    />
-                    <Bar
-                      dataKey="Total"
-                      fill="var(--chart-1)"
-                      name="Total Deal Value"
-                      radius={[0, 0, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="Net"
-                      fill="var(--chart-2)"
-                      name="Net Revenue"
-                      radius={[0, 0, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex h-full items-center justify-center border border-dashed border-[var(--hairline)] text-sm text-[var(--mute)]">
-                  No financial data available yet.
-                </div>
-              )}
-            </div>
+            <FinancialInsightsChart data={displayedChartData} />
           </CardContent>
         </Card>
       )}
@@ -1108,7 +1031,7 @@ function LeadGenerationDashboardContent() {
 
     (async () => {
       try {
-        const leads = await listLeadsAction({ isClosed: false }, user.$id, user.role, user.branchIds);
+        const leads = await listLeads({ isClosed: false }, user.$id, user.role, user.branchIds);
         const unassigned = leads.filter((lead) => !lead.assignedToId).length;
         if (!cancelled) {
           setStats({ total: leads.length, unassigned, loading: false });

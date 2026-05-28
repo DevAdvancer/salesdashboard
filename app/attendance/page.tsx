@@ -103,7 +103,9 @@ function AttendanceContent() {
     setError(null);
     try {
       if (user.role === "team_lead") {
-        await checkAndNotifyMyTeamAbsencesAction({ currentUserId: user.$id });
+        void checkAndNotifyMyTeamAbsencesAction({ currentUserId: user.$id }).catch(
+          () => {},
+        );
         const [result, summary] = await Promise.all([
           listMyTeamAttendanceAction({
             currentUserId: user.$id,
@@ -130,9 +132,9 @@ function AttendanceContent() {
           return next;
         });
       } else if (user.role === "admin") {
-        await checkAndNotifyAdminAttendanceEscalationsAction({
+        void checkAndNotifyAdminAttendanceEscalationsAction({
           currentUserId: user.$id,
-        });
+        }).catch(() => {});
         const overview = await listTeamLeadsAttendanceForAdminAction({
           currentUserId: user.$id,
           dateKey: selectedDateKey || undefined,

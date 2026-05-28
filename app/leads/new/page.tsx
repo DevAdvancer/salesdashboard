@@ -2,8 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
-import { useRouter } from "next/navigation";
-import { createLeadAction } from "@/app/actions/lead";
+import { useRouter, useSearchParams } from "next/navigation";
+import { createLead } from "@/lib/services/lead-action-service";
+import {
+  findBackedOutLeadForLinkedinTargetUrlAction,
+  linkLeadToLinkedinRequestAction,
+} from "@/app/actions/linkedin";
 import { validateLeadUniqueness } from "@/lib/services/lead-validator";
 import { listBranches } from "@/lib/services/branch-service";
 import { getFormConfig } from "@/lib/services/form-config-service";
@@ -193,7 +197,7 @@ function LeadGenerationNewLeadContent() {
           ? user.branchIds[0]
           : undefined);
 
-      await createLeadAction(
+      await createLead(
         user.$id,
         {
           data: leadData,
@@ -403,6 +407,7 @@ function LeadGenerationNewLeadContent() {
 function LegacyNewLeadContent() {
   const { user, isAdmin, loading: authLoading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
 
   const [formFields, setFormFields] = useState<FormField[]>([]);
@@ -412,6 +417,9 @@ function LegacyNewLeadContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
+
+  const linkedinRequestId = (searchParams.get("linkedinRequestId") ?? "").trim();
+  const linkedinTargetUrl = (searchParams.get("linkedinTargetUrl") ?? "").trim();
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -426,6 +434,26 @@ function LegacyNewLeadContent() {
       }
     }
   }, [user, authLoading, router]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (!linkedinTargetUrl) return;
+    (async () => {
+      try {
+        const result = await findBackedOutLeadForLinkedinTargetUrlAction({
+          currentUserId: user.$id,
+          targetUrl: linkedinTargetUrl,
+        });
+        if (result.leadId) {
+          toast({
+            title: "Backed-out lead found",
+            description: "Opening the existing lead instead of creating a new one.",
+          });
+          router.push(`/leads/${encodeURIComponent(result.leadId)}`);
+        }
+      } catch {}
+    })();
+  }, [linkedinTargetUrl, router, toast, user]);
 
   const loadFormConfig = async () => {
     try {
@@ -458,8 +486,13 @@ function LegacyNewLeadContent() {
       setIsSaving(true);
       setDuplicateError(null);
 
+      const mergedData =
+        linkedinTargetUrl && !data.linkedinProfileUrl
+          ? { ...data, linkedinProfileUrl: linkedinTargetUrl }
+          : data;
+
       // Validate lead uniqueness before creating
-      const validation = await validateLeadUniqueness(data);
+      const validation = await validateLeadUniqueness(mergedData);
       if (!validation.isValid) {
         const fieldLabel =
           validation.duplicateField === "email"
@@ -482,7 +515,7 @@ function LegacyNewLeadContent() {
               : undefined);
 
       // Extract assignedToId added by DynamicLeadForm and prevent it from being stored in data JSON
-      const { assignedToId, ...sanitizedData } = data as {
+      const { assignedToId, ...sanitizedData } = mergedData as {
         assignedToId?: string;
       } & Record<string, any>;
 
@@ -490,7 +523,7 @@ function LegacyNewLeadContent() {
       const finalAssignedToId = assignedToId || user.$id;
 
       // Create lead with auto-set owner and assigned agent (defaults to creator)
-      await createLeadAction(
+      const created = await createLead(
         user.$id,
         {
           data: sanitizedData,
@@ -501,6 +534,16 @@ function LegacyNewLeadContent() {
         user.$id,
         user.name,
       );
+
+      if (linkedinRequestId) {
+        try {
+          await linkLeadToLinkedinRequestAction({
+            currentUserId: user.$id,
+            requestId: linkedinRequestId,
+            leadId: created.$id,
+          });
+        } catch {}
+      }
 
       toast({
         title: "Success",

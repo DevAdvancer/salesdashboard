@@ -4,9 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter, useParams } from "next/navigation";
 import { getLead, updateLead, closeLead } from "@/lib/services/lead-service";
-import { reopenLeadAction } from "@/app/actions/lead";
 import { sendChatMessageAction } from "@/app/actions/chat";
-import { assignLeadAction } from "@/lib/actions/lead-actions";
+import {
+  assignLead,
+  backoutLead,
+  clearLeadReadCache,
+  reopenLead,
+} from "@/lib/services/lead-action-service";
 import {
   getAgentsByManager,
   getAgentsByTeamLead,
@@ -117,6 +121,7 @@ function LeadDetailContent() {
     try {
       setIsSaving(true);
       await updateLead(leadId, leadData, user.$id, user.name);
+      clearLeadReadCache();
       toast({
         title: "Success",
         description: "Lead updated successfully",
@@ -140,7 +145,18 @@ function LeadDetailContent() {
 
     try {
       setIsSaving(true);
+      if (closeStatus.trim().toLowerCase() === "backout") {
+        await backoutLead(leadId, user.$id, user.name);
+        toast({
+          title: "Success",
+          description: "Lead marked as Backout",
+        });
+        setShowCloseDialog(false);
+        router.push("/leads");
+        return;
+      }
       await closeLead(leadId, closeStatus, user.$id, user.name);
+      clearLeadReadCache();
       try {
         const firstName =
           typeof leadData.firstName === "string" ? leadData.firstName : "";
@@ -187,7 +203,7 @@ function LeadDetailContent() {
 
     try {
       setIsSaving(true);
-      await reopenLeadAction(leadId, user.$id, user.name);
+      await reopenLead(leadId, user.$id, user.name);
       toast({
         title: "Success",
         description: "Lead reopened successfully",
@@ -209,7 +225,7 @@ function LeadDetailContent() {
     if (!lead || !user) return;
 
     try {
-      await assignLeadAction(leadId, agentId, user.$id, user.name);
+      await assignLead(leadId, agentId, user.$id, user.name);
       toast({
         title: "Success",
         description: "Lead assigned successfully",
@@ -566,6 +582,7 @@ function LeadDetailContent() {
                   <option value="Won">Won</option>
                   <option value="Lost">Lost</option>
                   <option value="Rejected">Rejected</option>
+                  <option value="Backout">Backout</option>
                 </select>
               </div>
               <div className="flex flex-col-reverse sm:flex-row gap-2">

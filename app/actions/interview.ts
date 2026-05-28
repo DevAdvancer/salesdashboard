@@ -2,7 +2,7 @@
 
 import { ID, Query } from 'node-appwrite';
 import { createAdminClient } from '@/lib/server/appwrite';
-import { assertAuthenticatedUserId } from '@/lib/server/current-user';
+import { assertAuthenticatedUserId, getAuthenticatedAccount } from '@/lib/server/current-user';
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const INTERVIEW_ATTEMPTS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_INTERVIEW_ATTEMPTS_COLLECTION_ID || 'interview_attempts';
@@ -201,6 +201,7 @@ export async function checkDuplicateInterviewSubject(leadId: string, subject: st
     if (!leadId || !subject) return false;
 
     try {
+        await getAuthenticatedAccount();
         const { databases } = await createAdminClient();
 
         const documents = await listAttemptsForLead(databases, leadId);

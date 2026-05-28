@@ -12,6 +12,8 @@ import {
 } from '@/app/actions/attendance';
 
 const PUBLIC_ROUTES = ['/login'];
+const ADMIN_ATTENDANCE_PING_COOLDOWN_MS = 30 * 60 * 1000;
+const ADMIN_ATTENDANCE_PING_STORAGE_KEY = 'crm:last-admin-attendance-ping-at';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -69,14 +71,19 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user || isPublicRoute) return;
+    if (user.role !== 'admin') return;
 
     const now = Date.now();
-    if (now - lastAttendancePingAt.current < 60_000) return;
-    lastAttendancePingAt.current = now;
+    const storedLastPingAt = Number(
+      window.sessionStorage.getItem(ADMIN_ATTENDANCE_PING_STORAGE_KEY) || 0
+    );
+    const lastPingAt = Math.max(lastAttendancePingAt.current, storedLastPingAt);
+    if (now - lastPingAt < ADMIN_ATTENDANCE_PING_COOLDOWN_MS) return;
 
-    if (user.role === 'admin') {
-      checkAndNotifyAdminAttendanceEscalationsAction({ currentUserId: user.$id }).catch(() => {});
-    }
+    lastAttendancePingAt.current = now;
+    window.sessionStorage.setItem(ADMIN_ATTENDANCE_PING_STORAGE_KEY, String(now));
+
+    checkAndNotifyAdminAttendanceEscalationsAction({ currentUserId: user.$id }).catch(() => {});
   }, [isPublicRoute, pathname, user]);
 
   if (loading) {

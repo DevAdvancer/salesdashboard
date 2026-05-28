@@ -104,9 +104,13 @@ export function updateReviewQueueStatus(
   return updateReviewQueueStatusAction(actorId, itemId, status).finally(clearClientReadCache);
 }
 
-export function listNotifications(actorId: string): Promise<NotificationRecord[]> {
+export function listNotifications(
+  actorId: string,
+  options: { forceRefresh?: boolean } = {}
+): Promise<NotificationRecord[]> {
   return cacheClientRead('sop:listNotifications', [actorId], () =>
-    listNotificationsAction(actorId)
+    listNotificationsAction(actorId),
+    { forceRefresh: options.forceRefresh }
   );
 }
 

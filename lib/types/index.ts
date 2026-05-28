@@ -250,6 +250,7 @@ export interface LinkedinRequest {
   dateSent: string;
   status: LinkedinRequestStatus;
   acceptedAt: string | null;
+  leadId?: string | null;
   withdrawnAt?: string | null;
   isActive?: boolean;
   $createdAt?: string;

@@ -32,7 +32,7 @@ import {
   rollbackInterviewAttempt,
   completeInterviewAttempt,
 } from "@/app/actions/interview";
-import { listLeadsAction } from "@/app/actions/lead";
+import { listLeads } from "@/lib/services/lead-action-service";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 
 interface InterviewFormData {
@@ -208,7 +208,7 @@ function InterviewContent() {
     if (!user) return;
     try {
       setIsLoading(true);
-      const fetchedLeads = await listLeadsAction({}, user.$id, user.role, user.branchIds);
+      const fetchedLeads = await listLeads({}, user.$id, user.role, user.branchIds);
       setLeads(fetchedLeads);
       setFilteredLeads(fetchedLeads);
       await loadInterviewAttempts(fetchedLeads.map((lead) => lead.$id));

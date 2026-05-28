@@ -198,9 +198,49 @@ async function getActiveLinkedinAccountsForUser(databases: Awaited<ReturnType<ty
     Query.equal("isActive", true),
     Query.orderAsc("accountType"),
     Query.orderAsc("idName"),
-    Query.limit(2000),
+    Query.limit(200),
   ]);
   return accounts.documents as unknown as LinkedinAccount[];
+}
+
+async function getActiveLinkedinAccountsForUsers(
+  databases: Awaited<ReturnType<typeof createAdminClient>>["databases"],
+  userIds: string[],
+) {
+  const map = new Map<string, LinkedinAccount[]>();
+  if (userIds.length === 0) return map;
+
+  const chunkSize = 100;
+  const limit = 200;
+  for (let i = 0; i < userIds.length; i += chunkSize) {
+    const chunk = userIds.slice(i, i + chunkSize);
+    let offset = 0;
+    while (true) {
+      const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LINKEDIN_ACCOUNTS, [
+        Query.equal("assignedUserId", chunk),
+        Query.equal("isActive", true),
+        Query.orderAsc("accountType"),
+        Query.orderAsc("idName"),
+        Query.limit(limit),
+        Query.offset(offset),
+      ]);
+
+      const docs = response.documents as unknown as LinkedinAccount[];
+      for (const doc of docs) {
+        const assignedUserId = String((doc as unknown as { assignedUserId?: unknown }).assignedUserId ?? "");
+        if (!assignedUserId) continue;
+        const existing = map.get(assignedUserId) ?? [];
+        existing.push(doc);
+        map.set(assignedUserId, existing);
+      }
+
+      if (docs.length < limit) break;
+      offset += limit;
+      if (offset >= 5000) break;
+    }
+  }
+
+  return map;
 }
 
 function formatLinkedinAccountsForNotification(accounts: LinkedinAccount[]) {
@@ -394,13 +434,13 @@ export async function checkAndNotifyMyTeamAbsencesAction(input: {
   const attendanceByUserId = new Map<string, AttendanceRecord>();
   attendanceDocs.forEach((doc) => attendanceByUserId.set(doc.userId, doc));
 
-  let notified = 0;
+  const notifyAgentIds: string[] = [];
+  const notifyAgentNameById = new Map<string, string>();
+
   for (const agent of agents) {
     const existing = attendanceByUserId.get(agent.$id) ?? null;
     const isPresent = existing?.present === true;
-    if (isPresent) {
-      continue;
-    }
+    if (isPresent) continue;
 
     const shouldNotify = !existing || !existing.absentNotifiedAt;
     const updated = await upsertAttendanceDoc(databases, {
@@ -414,23 +454,28 @@ export async function checkAndNotifyMyTeamAbsencesAction(input: {
     });
     attendanceByUserId.set(agent.$id, updated);
 
-    if (!shouldNotify) {
-      continue;
-    }
-
-    const accounts = await getActiveLinkedinAccountsForUser(databases, agent.$id);
-    await createNotificationRecord(databases, {
-      recipientId: recipientTeamLeadId,
-      type: "ATTENDANCE_ABSENT",
-      title: `Absent: ${agent.name}`,
-      body: `No Outlook-connected activity detected in 9-10 ET. Linkedin IDs: ${formatLinkedinAccountsForNotification(accounts)}`,
-      targetType: "attendance",
-      targetId: agent.$id,
-    });
-    notified += 1;
+    if (!shouldNotify) continue;
+    notifyAgentIds.push(agent.$id);
+    notifyAgentNameById.set(agent.$id, agent.name);
   }
 
-  return { dateKey, notified };
+  const accountsByUserId = await getActiveLinkedinAccountsForUsers(databases, notifyAgentIds);
+  await Promise.all(
+    notifyAgentIds.map(async (agentId) => {
+      const name = notifyAgentNameById.get(agentId) ?? "Agent";
+      const accounts = accountsByUserId.get(agentId) ?? [];
+      await createNotificationRecord(databases, {
+        recipientId: recipientTeamLeadId,
+        type: "ATTENDANCE_ABSENT",
+        title: `Absent: ${name}`,
+        body: `No Outlook-connected activity detected in 9-10 ET. Linkedin IDs: ${formatLinkedinAccountsForNotification(accounts)}`,
+        targetType: "attendance",
+        targetId: agentId,
+      });
+    }),
+  );
+
+  return { dateKey, notified: notifyAgentIds.length };
 }
 
 export async function listMyTeamAttendanceAction(input: {
@@ -494,12 +539,17 @@ export async function listMyTeamAttendanceAction(input: {
       teamLeadDelegateUserId,
     )) as unknown as User) : null;
 
+  const accountsByUserId = await getActiveLinkedinAccountsForUsers(
+    databases,
+    agents.map((a) => a.$id),
+  );
+
   const rows = await Promise.all(
     agents.map(async (agent) => {
       const attendance = attendanceByUserId.get(agent.$id) ?? null;
       const delegateUserId = attendance?.delegateUserId ?? null;
       const delegate = delegateUserId ? agentsById.get(delegateUserId) ?? null : null;
-      const accounts = await getActiveLinkedinAccountsForUser(databases, agent.$id);
+      const accounts = accountsByUserId.get(agent.$id) ?? [];
       return {
         userId: agent.$id,
         userName: agent.name,
@@ -802,17 +852,32 @@ export async function listTeamLeadsAttendanceForAdminAction(input: {
   const attendanceByUserId = new Map<string, AttendanceRecord>();
   attendanceDocs.forEach((doc) => attendanceByUserId.set(doc.userId, doc));
 
+  const delegateIds = Array.from(
+    new Set(
+      attendanceDocs
+        .map((d) => (typeof d.delegateUserId === "string" && d.delegateUserId ? d.delegateUserId : null))
+        .filter((v): v is string => Boolean(v)),
+    ),
+  );
+
+  const delegateById = new Map<string, User>();
+  if (delegateIds.length > 0) {
+    const chunkSize = 100;
+    for (let i = 0; i < delegateIds.length; i += chunkSize) {
+      const chunk = delegateIds.slice(i, i + chunkSize);
+      const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
+        Query.equal("$id", chunk),
+        Query.limit(2000),
+      ]);
+      (response.documents as unknown as User[]).forEach((u) => delegateById.set(u.$id, u));
+    }
+  }
+
   const rows = await Promise.all(
     teamLeads.map(async (tl) => {
       const attendance = attendanceByUserId.get(tl.$id) ?? null;
       const delegateUserId = attendance?.delegateUserId ?? null;
-      const delegateUser = delegateUserId
-        ? ((await databases.getDocument(
-            DATABASE_ID,
-            COLLECTIONS.USERS,
-            delegateUserId,
-          )) as unknown as User)
-        : null;
+      const delegateUser = delegateUserId ? delegateById.get(delegateUserId) ?? null : null;
       return {
         userId: tl.$id,
         userName: tl.name,
@@ -869,14 +934,25 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
   let agentAbsentNotified = 0;
   let agentEscalated = 0;
 
+  const teamLeadIds = teamLeads.map((t) => t.$id);
+  const teamLeadAttendanceResponse =
+    teamLeadIds.length > 0
+      ? await databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
+          Query.equal("dateKey", dateKey),
+          Query.equal("userId", teamLeadIds),
+          Query.limit(2000),
+        ])
+      : { documents: [] as unknown[] };
+  const teamLeadAttendanceDocs =
+    teamLeadAttendanceResponse.documents as unknown as AttendanceRecord[];
+  const teamLeadAttendanceByUserId = new Map<string, AttendanceRecord>();
+  teamLeadAttendanceDocs.forEach((doc) => teamLeadAttendanceByUserId.set(doc.userId, doc));
+
   for (const teamLead of teamLeads) {
-    const teamLeadAttendance = await getAttendanceDoc(databases, {
-      dateKey,
-      userId: teamLead.$id,
-    });
+    const teamLeadAttendance = teamLeadAttendanceByUserId.get(teamLead.$id) ?? null;
     const teamLeadIsPresent = teamLeadAttendance?.present === true;
     if (!teamLeadIsPresent && !teamLeadAttendance?.absentNotifiedAt) {
-      await upsertAttendanceDoc(databases, {
+      const updatedTl = await upsertAttendanceDoc(databases, {
         dateKey,
         userId: teamLead.$id,
         teamLeadId: teamLead.$id,
@@ -885,6 +961,7 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
           absentNotifiedAt: now.toISOString(),
         },
       });
+      teamLeadAttendanceByUserId.set(teamLead.$id, updatedTl);
       await createNotificationsForRecipients(databases, adminRecipientIds, {
         type: "ATTENDANCE_TL_ABSENT",
         title: `TL Absent: ${teamLead.name}`,
@@ -918,6 +995,10 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
     const attendanceByUserId = new Map<string, AttendanceRecord>();
     attendanceDocs.forEach((doc) => attendanceByUserId.set(doc.userId, doc));
 
+    const notifyAgentIds: string[] = [];
+    const notifyAgentNameById = new Map<string, string>();
+    const escalateAgentIds = new Set<string>();
+
     for (const agent of agents) {
       const existing = attendanceByUserId.get(agent.$id) ?? null;
       const isPresent = existing?.present === true;
@@ -939,15 +1020,8 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
       attendanceByUserId.set(agent.$id, updated);
 
       if (shouldNotifyTeamLead) {
-        const accounts = await getActiveLinkedinAccountsForUser(databases, agent.$id);
-        await createNotificationRecord(databases, {
-          recipientId: recipientTeamLeadId,
-          type: "ATTENDANCE_ABSENT",
-          title: `Absent: ${agent.name}`,
-          body: `No Outlook-connected activity detected in 9-10 ET. Linkedin IDs: ${formatLinkedinAccountsForNotification(accounts)}`,
-          targetType: "attendance",
-          targetId: agent.$id,
-        });
+        notifyAgentIds.push(agent.$id);
+        notifyAgentNameById.set(agent.$id, agent.name);
         agentAbsentNotified += 1;
       }
 
@@ -962,11 +1036,34 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
       if (!needsEscalation) {
         continue;
       }
+      escalateAgentIds.add(agent.$id);
+    }
 
-      const accounts = await getActiveLinkedinAccountsForUser(databases, agent.$id);
+    const accountLookupIds = Array.from(new Set([...notifyAgentIds, ...Array.from(escalateAgentIds)]));
+    const accountsByUserId = await getActiveLinkedinAccountsForUsers(databases, accountLookupIds);
+
+    await Promise.all(
+      notifyAgentIds.map(async (agentId) => {
+        const name = notifyAgentNameById.get(agentId) ?? "Agent";
+        const accounts = accountsByUserId.get(agentId) ?? [];
+        await createNotificationRecord(databases, {
+          recipientId: recipientTeamLeadId,
+          type: "ATTENDANCE_ABSENT",
+          title: `Absent: ${name}`,
+          body: `No Outlook-connected activity detected in 9-10 ET. Linkedin IDs: ${formatLinkedinAccountsForNotification(accounts)}`,
+          targetType: "attendance",
+          targetId: agentId,
+        });
+      }),
+    );
+
+    for (const agentId of escalateAgentIds) {
+      const agent = agents.find((a) => a.$id === agentId);
+      const name = agent?.name ?? "Agent";
+      const accounts = accountsByUserId.get(agentId) ?? [];
       await upsertAttendanceDoc(databases, {
         dateKey,
-        userId: agent.$id,
+        userId: agentId,
         teamLeadId: teamLead.$id,
         patch: {
           adminEscalatedAt: now.toISOString(),
@@ -974,10 +1071,10 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
       });
       await createNotificationsForRecipients(databases, adminRecipientIds, {
         type: "ATTENDANCE_UNASSIGNED",
-        title: `Unassigned absence: ${agent.name}`,
-        body: `Agent ${agent.name} is absent (Team Lead: ${teamLead.name}) and no delegate was assigned within 30 minutes. Linkedin IDs: ${formatLinkedinAccountsForNotification(accounts)}`,
+        title: `Unassigned absence: ${name}`,
+        body: `Agent ${name} is absent (Team Lead: ${teamLead.name}) and no delegate was assigned within 30 minutes. Linkedin IDs: ${formatLinkedinAccountsForNotification(accounts)}`,
         targetType: "attendance",
-        targetId: agent.$id,
+        targetId: agentId,
       });
       agentEscalated += 1;
     }

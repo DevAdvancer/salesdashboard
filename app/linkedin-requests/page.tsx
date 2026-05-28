@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
+import { useRouter } from "next/navigation";
 import {
   Table,
   TableBody,
@@ -20,6 +21,7 @@ import { useAuth } from "@/lib/contexts/auth-context";
 import {
   checkLinkedinDuplicateAction,
   createLinkedinRequestAction,
+  getLinkedinConnectionHistoryAction,
   listMyLinkedinAccountsAction,
   listMyLinkedinRequestsForAccountAction,
   markLinkedinRequestAcceptedAction,
@@ -63,12 +65,19 @@ function daysSinceDateInputValue(dateValue: string) {
 function LinkedinRequestsContent() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
   const [accounts, setAccounts] = useState<LinkedinAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [dateSent, setDateSent] = useState(todayDateInputValue());
   const [targetUrl, setTargetUrl] = useState("");
   const [checking, setChecking] = useState(false);
   const [isDuplicate, setIsDuplicate] = useState<boolean | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyTargetUrl, setHistoryTargetUrl] = useState("");
+  const [historyData, setHistoryData] = useState<Awaited<
+    ReturnType<typeof getLinkedinConnectionHistoryAction>
+  > | null>(null);
   const [adding, setAdding] = useState(false);
   const [loadingList, setLoadingList] = useState(false);
   const [requests, setRequests] = useState<LinkedinRequest[]>([]);
@@ -175,24 +184,26 @@ function LinkedinRequestsContent() {
 
     try {
       setChecking(true);
+      setHistoryLoading(true);
       const result = await checkLinkedinDuplicateAction({
         currentUserId: user.$id,
         company: selectedAccount.company,
         targetUrl,
       });
       setIsDuplicate(result.isDuplicate);
-      if (result.isDuplicate) {
-        toast({
-          title: "Duplicate found",
-          description: "Same Company + URL already exists. Try a new URL.",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "OK to add",
-          description: "Not found for this company. You can add now.",
-        });
-      }
+      const history = await getLinkedinConnectionHistoryAction({
+        currentUserId: user.$id,
+        targetUrl,
+      });
+      setHistoryData(history);
+      setHistoryTargetUrl(targetUrl.trim());
+      setHistoryOpen(true);
+      toast({
+        title: result.isDuplicate ? "History loaded (resend)" : "History loaded",
+        description: result.isDuplicate
+          ? "This URL already exists for this company. Adding will resend it."
+          : "No active request for this company. You can add now.",
+      });
     } catch (error: unknown) {
       toast({
         title: "Check failed",
@@ -202,6 +213,7 @@ function LinkedinRequestsContent() {
       setIsDuplicate(null);
     } finally {
       setChecking(false);
+      setHistoryLoading(false);
     }
   };
 
@@ -229,13 +241,19 @@ function LinkedinRequestsContent() {
 
     try {
       setAdding(true);
-      await createLinkedinRequestAction({
+      const result = await createLinkedinRequestAction({
         currentUserId: user.$id,
         accountId: selectedAccount.$id,
         dateSent,
         targetUrl,
       });
-      toast({ title: "Added", description: "Linkedin request saved." });
+      toast({
+        title: result.mode === "resent" ? "Resent" : "Added",
+        description:
+          result.mode === "resent"
+            ? "Existing request updated and reassigned."
+            : "Linkedin request saved.",
+      });
       setTargetUrl("");
       setIsDuplicate(null);
       await loadRequests();
@@ -503,12 +521,33 @@ function LinkedinRequestsContent() {
                     <TableCell>{statusLabel}</TableCell>
                     <TableCell>
                       {r.status === "accepted" ? (
-                        <span className="text-sm text-muted-foreground">
-                          Accepted{" "}
-                          {r.acceptedAt
-                            ? `(${new Date(r.acceptedAt).toLocaleDateString()})`
-                            : ""}
-                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {r.leadId ? (
+                            <Button
+                              variant="outline"
+                              onClick={() => router.push(`/leads/${encodeURIComponent(r.leadId!)}`)}
+                            >
+                              Open Lead
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              onClick={() =>
+                                router.push(
+                                  `/leads/new?linkedinRequestId=${encodeURIComponent(r.$id)}&linkedinTargetUrl=${encodeURIComponent(r.targetUrl)}`,
+                                )
+                              }
+                            >
+                              Create Lead
+                            </Button>
+                          )}
+                          <span className="text-sm text-muted-foreground">
+                            Accepted{" "}
+                            {r.acceptedAt
+                              ? `(${new Date(r.acceptedAt).toLocaleDateString()})`
+                              : ""}
+                          </span>
+                        </div>
                       ) : r.status === "sent" && (r.isActive ?? true) ? (
                         <div className="flex flex-wrap gap-2">
                           <Button
@@ -535,6 +574,60 @@ function LinkedinRequestsContent() {
           </Table>
         </CardContent>
       </Card>
+
+      {historyOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50">
+          <Card className="w-full sm:max-w-2xl sm:mx-4 rounded-b-none sm:rounded-b-lg">
+            <CardHeader>
+              <CardTitle>Connection History</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-sm break-all">{historyTargetUrl}</div>
+              {historyLoading ? (
+                <div className="text-sm text-muted-foreground">Loading...</div>
+              ) : !historyData || historyData.histories.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No history found.</div>
+              ) : (
+                <div className="space-y-4 max-h-[60vh] overflow-auto">
+                  {historyData.histories.map((h) => (
+                    <div key={h.request.$id} className="rounded-md border border-border p-3">
+                      <div className="flex flex-wrap justify-between gap-2">
+                        <div className="text-sm font-medium">{h.request.company}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {h.request.status}
+                          {h.request.leadId ? ` • Lead: ${h.request.leadId}` : ""}
+                        </div>
+                      </div>
+                      <div className="mt-2 space-y-1">
+                        {h.logs.length === 0 ? (
+                          <div className="text-sm text-muted-foreground">No events.</div>
+                        ) : (
+                          h.logs.map((log) => (
+                            <div key={log.$id} className="text-sm">
+                              <span className="font-medium">{log.actorName}</span>{" "}
+                              <span className="text-muted-foreground">{log.action}</span>{" "}
+                              <span className="text-muted-foreground">
+                                {log.performedAt
+                                  ? `(${new Date(log.performedAt).toLocaleString()})`
+                                  : ""}
+                              </span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={() => setHistoryOpen(false)}>
+                  Close
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

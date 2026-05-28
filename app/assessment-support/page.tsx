@@ -32,7 +32,7 @@ import {
   rollbackAssessmentAttempt,
   completeAssessmentAttempt,
 } from "@/app/actions/assessment";
-import { listLeadsAction } from "@/app/actions/lead";
+import { listLeads } from "@/lib/services/lead-action-service";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 
 interface AssessmentFormData {
@@ -215,7 +215,7 @@ function AssessmentContent() {
 
     try {
       setIsLoading(true);
-      const fetchedLeads = await listLeadsAction(
+      const fetchedLeads = await listLeads(
         {},
         user.$id,
         user.role,

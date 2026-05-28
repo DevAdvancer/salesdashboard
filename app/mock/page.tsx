@@ -35,7 +35,7 @@ import {
   rollbackMockAttempt,
   completeMockAttempt,
 } from "@/app/actions/mock";
-import { listLeadsAction } from "@/app/actions/lead";
+import { listLeads } from "@/lib/services/lead-action-service";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 // import { useMsal } from "@azure/msal-react";
 // import { loginRequest } from "@/lib/msal-config";
@@ -190,7 +190,7 @@ function MockContent() {
 
     try {
       setIsLoading(true);
-      const fetchedLeads = await listLeadsAction(
+      const fetchedLeads = await listLeads(
         {},
         user.$id,
         user.role,

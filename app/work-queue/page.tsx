@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { listLeadsAction } from "@/app/actions/lead";
+import { listLeads } from "@/lib/services/lead-action-service";
 import { FollowUpQueueCard } from "@/components/dashboard/follow-up-queue";
 import { RoleWorkDashboard } from "@/components/dashboard/role-work-dashboard";
 import { ProtectedRoute } from "@/components/protected-route";
@@ -44,13 +44,13 @@ function WorkQueueContent() {
         setLoading(true);
         setError(null);
         const [activeLeads, closedLeads] = await Promise.all([
-          listLeadsAction(
+          listLeads(
             { isClosed: false },
             user.$id,
             user.role,
             user.branchIds,
           ),
-          listLeadsAction(
+          listLeads(
             { isClosed: true },
             user.$id,
             user.role,
