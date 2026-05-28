@@ -7,6 +7,7 @@ import { createNotificationsForRecipients } from "@/lib/server/notifications";
 import { assertAuthenticatedUserId } from "@/lib/server/current-user";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { isRoleEligibleForComponent } from "@/lib/constants/component-access";
+import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
 import {
   buildFormFieldTargetOptions,
   buildLeadTargetOptions,
@@ -31,7 +32,13 @@ import type {
 async function getActor(userId: string): Promise<User> {
   await assertAuthenticatedUserId(userId);
   const { databases } = await createAdminClient();
-  const doc = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, userId);
+  const doc = await (async () => {
+    try {
+      return await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, userId);
+    } catch (error) {
+      throw new Error(getAppwriteErrorMessage(error));
+    }
+  })();
   return {
     $id: doc.$id,
     name: doc.name,

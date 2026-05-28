@@ -1,5 +1,6 @@
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { createAdminClient, createSessionClient } from "@/lib/server/appwrite";
+import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
 import type { User } from "@/lib/types";
 
 export async function getAuthenticatedAccount() {
@@ -23,7 +24,13 @@ export async function assertAuthenticatedUserId(userId: string | null | undefine
 export async function getAuthenticatedUserDoc(): Promise<User> {
   const account = await getAuthenticatedAccount();
   const { databases } = await createAdminClient();
-  const doc = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, account.$id);
+  const doc = await (async () => {
+    try {
+      return await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, account.$id);
+    } catch (error) {
+      throw new Error(getAppwriteErrorMessage(error));
+    }
+  })();
 
   return {
     $id: doc.$id,

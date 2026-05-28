@@ -1,6 +1,7 @@
 'use server';
 
 import { createAdminClient } from "@/lib/server/appwrite";
+import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
 import { Lead, LeadData, LeadListFilters, UserRole, CreateLeadInput } from "@/lib/types";
 import { Query, ID, Permission, Role } from "node-appwrite";
 import { COLLECTIONS } from "@/lib/constants/appwrite";
@@ -640,6 +641,6 @@ export async function listLeadsAction(
     return leads;
   } catch (error: any) {
     console.error('Error listing leads (action):', error);
-    throw new Error(error.message || 'Failed to list leads');
+    throw new Error(getAppwriteErrorMessage(error) || 'Failed to list leads');
   }
 }
