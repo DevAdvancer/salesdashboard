@@ -21,6 +21,7 @@ import { useAuth } from "@/lib/contexts/auth-context";
 import {
   checkLinkedinDuplicateAction,
   createLinkedinRequestAction,
+  getBackoutStatusForLeadIdsAction,
   getLinkedinConnectionHistoryAction,
   listMyLinkedinAccountsAction,
   listMyLinkedinRequestsForAccountAction,
@@ -43,6 +44,15 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Please try again";
 }
 
+function safeParseJson(value: unknown) {
+  if (typeof value !== "string" || !value) return null;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
+}
+
 function RequiredMark() {
   return <span className="text-red-500">*</span>;
 }
@@ -57,7 +67,11 @@ function daysSinceDateInputValue(dateValue: string) {
     parsed.getUTCMonth(),
     parsed.getUTCDate(),
   );
-  const endUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const endUtc = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+  );
   const diff = Math.floor((endUtc - startUtc) / (24 * 60 * 60 * 1000));
   return Math.max(diff, 0);
 }
@@ -82,9 +96,15 @@ function LinkedinRequestsContent() {
   const [loadingList, setLoadingList] = useState(false);
   const [requests, setRequests] = useState<LinkedinRequest[]>([]);
   const [filterDate, setFilterDate] = useState<string>("");
-  const [filterStatus, setFilterStatus] = useState<"all" | "sent" | "accepted" | "withdrawn">("all");
+  const [filterStatus, setFilterStatus] = useState<
+    "all" | "sent" | "accepted" | "withdrawn"
+  >("all");
   const [filterUrl, setFilterUrl] = useState<string>("");
   const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
+  const [backoutByLeadId, setBackoutByLeadId] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
   const selectedAccount = useMemo(
     () => accounts.find((a) => a.$id === selectedAccountId) ?? null,
@@ -136,8 +156,29 @@ function LinkedinRequestsContent() {
         limit: 100,
       });
       setRequests(next);
+      const leadIds = Array.from(
+        new Set(
+          next
+            .map((r) => (typeof r.leadId === "string" && r.leadId ? r.leadId : null))
+            .filter((v): v is string => Boolean(v)),
+        ),
+      );
+      if (leadIds.length > 0) {
+        const status = await getBackoutStatusForLeadIdsAction({
+          currentUserId: user.$id,
+          leadIds,
+        });
+        const map: Record<string, boolean> = {};
+        Object.entries(status.byLeadId).forEach(([leadId, info]) => {
+          map[leadId] = Boolean(info?.isBackout);
+        });
+        setBackoutByLeadId(map);
+      } else {
+        setBackoutByLeadId({});
+      }
     } catch {
       setRequests([]);
+      setBackoutByLeadId({});
     } finally {
       setLoadingList(false);
     }
@@ -199,7 +240,9 @@ function LinkedinRequestsContent() {
       setHistoryTargetUrl(targetUrl.trim());
       setHistoryOpen(true);
       toast({
-        title: result.isDuplicate ? "History loaded (resend)" : "History loaded",
+        title: result.isDuplicate
+          ? "History loaded (resend)"
+          : "History loaded",
         description: result.isDuplicate
           ? "This URL already exists for this company. Adding will resend it."
           : "No active request for this company. You can add now.",
@@ -271,6 +314,7 @@ function LinkedinRequestsContent() {
   const markAccepted = async (requestId: string) => {
     if (!user) return;
     try {
+      setAcceptingId(requestId);
       await markLinkedinRequestAcceptedAction({
         currentUserId: user.$id,
         requestId,
@@ -287,6 +331,9 @@ function LinkedinRequestsContent() {
         description: getErrorMessage(error),
         variant: "destructive",
       });
+      await loadRequests();
+    } finally {
+      setAcceptingId(null);
     }
   };
 
@@ -300,7 +347,8 @@ function LinkedinRequestsContent() {
       });
       toast({
         title: "Withdrawn",
-        description: "Request withdrawn. Others can send this URL for the same company now.",
+        description:
+          "Request withdrawn. Others can send this URL for the same company now.",
       });
       await loadRequests();
     } catch (error: unknown) {
@@ -380,7 +428,9 @@ function LinkedinRequestsContent() {
 
           {accounts.length > 0 && selectedAccount && (
             <div className="text-sm text-muted-foreground">
-              {selectedAccount.licenseType ? `License: ${selectedAccount.licenseType} · ` : ""}
+              {selectedAccount.licenseType
+                ? `License: ${selectedAccount.licenseType} · `
+                : ""}
               {dailyLimit === null
                 ? "Limit: Not set (ask Team Lead/Admin)"
                 : `Limit: ${dailyLimit} · Used today: ${usedToday} · Remaining: ${remainingToday}`}
@@ -428,7 +478,16 @@ function LinkedinRequestsContent() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Requests</CardTitle>
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle>Requests</CardTitle>
+            <Button
+              variant="outline"
+              onClick={() => void loadRequests()}
+              disabled={loadingList || !selectedAccountId}
+            >
+              {loadingList ? "Refreshing..." : "Refresh"}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="mb-4 grid gap-4 md:grid-cols-3">
@@ -449,8 +508,7 @@ function LinkedinRequestsContent() {
                     e.target.value as "all" | "sent" | "accepted" | "withdrawn",
                   )
                 }
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              >
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
                 <option value="all">All</option>
                 <option value="sent">Not Accepted</option>
                 <option value="accepted">Accepted</option>
@@ -504,7 +562,9 @@ function LinkedinRequestsContent() {
                       ? `Not Accepted - ${daysLeft} days left`
                       : "Not Accepted - 0 days left";
                   const canWithdraw =
-                    r.status === "sent" && (r.isActive ?? true) && daysLeft === 0;
+                    r.status === "sent" &&
+                    (r.isActive ?? true) &&
+                    daysLeft === 0;
                   const statusLabel =
                     r.status === "accepted"
                       ? "Accepted"
@@ -514,59 +574,80 @@ function LinkedinRequestsContent() {
 
                   return (
                     <TableRow key={r.$id}>
-                    <TableCell className="break-all">{r.targetUrl}</TableCell>
-                    <TableCell>
-                      {new Date(r.dateSent).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>{statusLabel}</TableCell>
-                    <TableCell>
-                      {r.status === "accepted" ? (
-                        <div className="flex flex-wrap gap-2">
-                          {r.leadId ? (
+                      <TableCell className="break-all">{r.targetUrl}</TableCell>
+                      <TableCell>
+                        {new Date(r.dateSent).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>{statusLabel}</TableCell>
+                      <TableCell>
+                        {r.status === "accepted" ? (
+                          <div className="flex flex-wrap gap-2">
+                            {r.leadId ? (
+                              backoutByLeadId[r.leadId] ? (
+                                <Button variant="destructive" disabled>
+                                  Backed Out
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="outline"
+                                  onClick={() =>
+                                    router.push(
+                                      `/leads/${encodeURIComponent(r.leadId!)}`,
+                                    )
+                                  }>
+                                  Open Lead
+                                </Button>
+                              )
+                            ) : (
+                              <Button
+                                variant="outline"
+                                onClick={() =>
+                                  router.push(
+                                    `/leads/new?linkedinRequestId=${encodeURIComponent(r.$id)}&linkedinTargetUrl=${encodeURIComponent(r.targetUrl)}&linkedinCompany=${encodeURIComponent(r.company)}`,
+                                  )
+                                }>
+                                Create Lead
+                              </Button>
+                            )}
+                            <span className="text-sm text-muted-foreground">
+                              Accepted{" "}
+                              {r.acceptedAt
+                                ? `(${new Date(r.acceptedAt).toLocaleDateString()})`
+                                : ""}
+                            </span>
+                          </div>
+                        ) : r.status === "sent" && (r.isActive ?? true) ? (
+                          <div className="flex flex-wrap gap-2">
                             <Button
                               variant="outline"
-                              onClick={() => router.push(`/leads/${encodeURIComponent(r.leadId!)}`)}
-                            >
-                              Open Lead
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              onClick={() =>
-                                router.push(
-                                  `/leads/new?linkedinRequestId=${encodeURIComponent(r.$id)}&linkedinTargetUrl=${encodeURIComponent(r.targetUrl)}`,
-                                )
+                              disabled={
+                                acceptingId === r.$id || withdrawingId === r.$id
                               }
-                            >
-                              Create Lead
+                              onClick={() => markAccepted(r.$id)}>
+                              {acceptingId === r.$id
+                                ? "Updating..."
+                                : "Connection Accepted"}
                             </Button>
-                          )}
+                            <Button
+                              variant="outline"
+                              disabled={
+                                !canWithdraw ||
+                                withdrawingId === r.$id ||
+                                acceptingId === r.$id
+                              }
+                              onClick={() => withdraw(r.$id)}>
+                              {withdrawingId === r.$id
+                                ? "Withdrawing..."
+                                : "Withdraw"}
+                            </Button>
+                          </div>
+                        ) : (
                           <span className="text-sm text-muted-foreground">
-                            Accepted{" "}
-                            {r.acceptedAt
-                              ? `(${new Date(r.acceptedAt).toLocaleDateString()})`
-                              : ""}
+                            -
                           </span>
-                        </div>
-                      ) : r.status === "sent" && (r.isActive ?? true) ? (
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            variant="outline"
-                            onClick={() => markAccepted(r.$id)}>
-                            Connection Accepted
-                          </Button>
-                          <Button
-                            variant="outline"
-                            disabled={!canWithdraw || withdrawingId === r.$id}
-                            onClick={() => withdraw(r.$id)}>
-                            {withdrawingId === r.$id ? "Withdrawing..." : "Withdraw"}
-                          </Button>
-                        </div>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
+                        )}
+                      </TableCell>
+                    </TableRow>
                   );
                 })
               )}
@@ -586,33 +667,86 @@ function LinkedinRequestsContent() {
               {historyLoading ? (
                 <div className="text-sm text-muted-foreground">Loading...</div>
               ) : !historyData || historyData.histories.length === 0 ? (
-                <div className="text-sm text-muted-foreground">No history found.</div>
+                <div className="text-sm text-muted-foreground">
+                  No history found.
+                </div>
               ) : (
                 <div className="space-y-4 max-h-[60vh] overflow-auto">
                   {historyData.histories.map((h) => (
-                    <div key={h.request.$id} className="rounded-md border border-border p-3">
+                    <div
+                      key={h.request.$id}
+                      className="rounded-md border border-border p-3">
                       <div className="flex flex-wrap justify-between gap-2">
-                        <div className="text-sm font-medium">{h.request.company}</div>
+                        <div className="text-sm font-medium">
+                          {h.request.company}
+                        </div>
                         <div className="text-sm text-muted-foreground">
-                          {h.request.status}
+                          {h.lead?.status ? h.lead.status : h.request.status}
                           {h.request.leadId ? ` • Lead: ${h.request.leadId}` : ""}
                         </div>
                       </div>
                       <div className="mt-2 space-y-1">
-                        {h.logs.length === 0 ? (
-                          <div className="text-sm text-muted-foreground">No events.</div>
+                        {h.logs.length === 0 && h.leadLogs.length === 0 ? (
+                          <div className="text-sm text-muted-foreground">
+                            No events.
+                          </div>
                         ) : (
-                          h.logs.map((log) => (
-                            <div key={log.$id} className="text-sm">
-                              <span className="font-medium">{log.actorName}</span>{" "}
-                              <span className="text-muted-foreground">{log.action}</span>{" "}
-                              <span className="text-muted-foreground">
-                                {log.performedAt
-                                  ? `(${new Date(log.performedAt).toLocaleString()})`
-                                  : ""}
-                              </span>
-                            </div>
-                          ))
+                          [...h.logs.map((log) => ({ kind: "request" as const, log })), ...h.leadLogs.map((log) => ({ kind: "lead" as const, log }))]
+                            .sort((a, b) => {
+                              const aTime = a.log.performedAt ? new Date(a.log.performedAt).getTime() : 0;
+                              const bTime = b.log.performedAt ? new Date(b.log.performedAt).getTime() : 0;
+                              return bTime - aTime;
+                            })
+                            .map(({ kind, log }) => {
+                              const meta = safeParseJson(log.metadata);
+                              const changes =
+                                meta &&
+                                typeof meta === "object" &&
+                                meta !== null &&
+                                "changes" in meta &&
+                                typeof (meta as any).changes === "object" &&
+                                (meta as any).changes !== null
+                                  ? (meta as any).changes
+                                  : null;
+                              const statusValue =
+                                meta &&
+                                typeof meta === "object" &&
+                                meta !== null &&
+                                "status" in meta &&
+                                typeof (meta as any).status === "string"
+                                  ? String((meta as any).status)
+                                  : null;
+                              const summary =
+                                kind === "lead" && (statusValue || changes)
+                                  ? [
+                                      statusValue ? `status=${statusValue}` : "",
+                                      changes ? `changed=${Object.keys(changes).join(",")}` : "",
+                                    ]
+                                      .filter(Boolean)
+                                      .join(" • ")
+                                  : null;
+
+                              return (
+                                <div key={`${kind}:${log.$id}`} className="text-sm">
+                                  <span className="font-medium">
+                                    {log.actorName}
+                                  </span>{" "}
+                                  <span className="text-muted-foreground">
+                                    {log.action}
+                                  </span>{" "}
+                                  {summary ? (
+                                    <span className="text-muted-foreground">
+                                      {`• ${summary} `}
+                                    </span>
+                                  ) : null}
+                                  <span className="text-muted-foreground">
+                                    {log.performedAt
+                                      ? `(${new Date(log.performedAt).toLocaleString()})`
+                                      : ""}
+                                  </span>
+                                </div>
+                              );
+                            })
                         )}
                       </div>
                     </div>

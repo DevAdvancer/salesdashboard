@@ -401,10 +401,10 @@ export async function backoutLeadAction(
     leadId,
     {
       ownerId: unassignedOwnerId,
-      assignedToId: null,
+      assignedToId: unassignedOwnerId,
       isClosed: true,
       closedAt: nowIso,
-      status: "Backout",
+      status: "Backed Out",
     },
     [...new Set(permissions)],
   );
@@ -417,9 +417,9 @@ export async function backoutLeadAction(
       targetId: leadId,
       targetType: "LEAD",
       metadata: JSON.stringify({
-        status: "Backout",
+        status: "Backed Out",
         ownerId: unassignedOwnerId,
-        assignedToId: null,
+        assignedToId: unassignedOwnerId,
         isClosed: true,
         closedAt: nowIso,
       }),

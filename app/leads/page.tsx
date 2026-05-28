@@ -20,6 +20,7 @@ import { DateRangePicker } from "@/components/ui/date-picker";
 import { handleError } from "@/lib/utils/error-handler";
 import { ProtectedRoute } from "@/components/protected-route";
 import { canExportLeadsByEmail } from "@/lib/constants/lead-export-access";
+import { getFormConfig } from "@/lib/services/form-config-service";
 
 import { Download } from "lucide-react";
 
@@ -63,6 +64,15 @@ function LeadsContent() {
   const [filters, setFilters] = useState<LeadListFilters>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [statusOptions, setStatusOptions] = useState<string[]>([
+    "Generated",
+    "Interested",
+    "Not-Interested",
+    "Pipeline",
+    "Prospect",
+    "Signed",
+    "Backed Out",
+  ]);
   const [assignedToFilter, setAssignedToFilter] = useState("");
   const [branchFilter, setBranchFilter] = useState("");
   const [dateFromFilter, setDateFromFilter] = useState("");
@@ -204,6 +214,21 @@ function LeadsContent() {
       if (user.role === "admin" || user.role === "manager") {
         loadBranches();
       }
+      void (async () => {
+        try {
+          const config = await getFormConfig();
+          const statusField = config.fields.find((f) => f.key === "status");
+          const options = Array.isArray(statusField?.options)
+            ? statusField.options.filter((v) => typeof v === "string" && v.trim())
+            : [];
+          const merged = [
+            "Generated",
+            ...options,
+            "Backed Out",
+          ].map((v) => v.trim()).filter(Boolean);
+          setStatusOptions(Array.from(new Set(merged)));
+        } catch {}
+      })();
     }
   }, [user, loading, router]);
 
@@ -373,8 +398,19 @@ function LeadsContent() {
 
       // If we are searching, we might want to search across ALL leads (closed and open)?
       // For now, let's stick to active leads unless user filters for closed.
+      const normalizedStatus =
+        typeof currentFilters.status === "string"
+          ? currentFilters.status.trim().toLowerCase().replace(/\s+/g, "")
+          : "";
+      const isBackout =
+        normalizedStatus === "backout" || normalizedStatus === "backedout";
+
       if (currentFilters.isClosed === undefined) {
+        if (isBackout) {
+          currentFilters.isClosed = true;
+        } else {
         currentFilters.isClosed = false;
+        }
       }
 
       const fetchedLeads = await listLeads(
@@ -520,12 +556,11 @@ function LeadsContent() {
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}>
                 <option value="">All Statuses</option>
-                <option value="Generated">Generated</option>
-                <option value="Interested">Interested</option>
-                <option value="Not-Interested">Not-Interested</option>
-                <option value="Pipeline">Pipeline</option>
-                <option value="Prospect">Prospect</option>
-                <option value="Signed">Signed</option>
+                {statusOptions.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
               </select>
             </div>
 

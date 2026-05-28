@@ -29,6 +29,19 @@ import { LeadNotesCard } from "@/components/leads/lead-notes-card";
 import { storage } from "@/lib/appwrite";
 import { BUCKETS } from "@/lib/constants/appwrite";
 
+function isBackoutStatus(value: unknown) {
+  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (!text) return false;
+  return (
+    text === "backout" ||
+    text === "backedout" ||
+    text === "backed out" ||
+    text === "back out" ||
+    text.replace(/\s+/g, "") === "backedout" ||
+    text.replace(/\s+/g, "") === "backout"
+  );
+}
+
 export default function LeadDetailPage() {
   return (
     <ProtectedRoute componentKey="leads">
@@ -121,12 +134,22 @@ function LeadDetailContent() {
     try {
       setIsSaving(true);
       await updateLead(leadId, leadData, user.$id, user.name);
+      if (isBackoutStatus((leadData as any).status)) {
+        await backoutLead(leadId, user.$id, user.name);
+        toast({
+          title: "Success",
+          description: "Lead marked as Backout",
+        });
+        setIsEditing(false);
+        await loadLead();
+        router.push("/leads");
+        return;
+      }
       clearLeadReadCache();
       toast({
         title: "Success",
         description: "Lead updated successfully",
       });
-      setIsEditing(false);
       await loadLead();
     } catch (err: unknown) {
       console.error("Error saving lead:", err);
@@ -145,7 +168,7 @@ function LeadDetailContent() {
 
     try {
       setIsSaving(true);
-      if (closeStatus.trim().toLowerCase() === "backout") {
+      if (isBackoutStatus(closeStatus)) {
         await backoutLead(leadId, user.$id, user.name);
         toast({
           title: "Success",
@@ -395,9 +418,39 @@ function LeadDetailContent() {
             (user?.role === "manager" ||
               user?.role === "admin" ||
               user?.role === "team_lead") && (
-              <Button onClick={handleReopenLead} disabled={isSaving}>
-                {isSaving ? "Reopening..." : "Reopen Lead"}
-              </Button>
+              <>
+                {isBackoutStatus(lead.status) && (
+                  <Button
+                    variant="destructive"
+                    onClick={async () => {
+                      if (!user) return;
+                      try {
+                        setIsSaving(true);
+                        await backoutLead(leadId, user.$id, user.name);
+                        toast({
+                          title: "Success",
+                          description: "Backout rules applied",
+                        });
+                        await loadLead();
+                      } catch (err: unknown) {
+                        toast({
+                          title: "Error",
+                          description: getErrorMessage(err, "Failed to apply Backout"),
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setIsSaving(false);
+                      }
+                    }}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? "Applying..." : "Apply Backout"}
+                  </Button>
+                )}
+                <Button onClick={handleReopenLead} disabled={isSaving}>
+                  {isSaving ? "Reopening..." : "Reopen Lead"}
+                </Button>
+              </>
             )}
         </div>
       </div>
@@ -582,7 +635,7 @@ function LeadDetailContent() {
                   <option value="Won">Won</option>
                   <option value="Lost">Lost</option>
                   <option value="Rejected">Rejected</option>
-                  <option value="Backout">Backout</option>
+                  <option value="Backed Out">Backed Out</option>
                 </select>
               </div>
               <div className="flex flex-col-reverse sm:flex-row gap-2">

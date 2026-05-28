@@ -179,7 +179,13 @@ async function getLeadVisibilityUserIds(databases: any, viewerId: string, viewer
   return getVisibleHierarchyUserIds(viewerId, viewerRole, response.documents as HierarchyUserDocument[]);
 }
 
-function appendHierarchyLeadVisibilityQuery(queries: string[], visibleUserIds: string[], specialBranchId?: string | null) {
+function appendHierarchyLeadVisibilityQuery(
+  queries: string[],
+  visibleUserIds: string[],
+  specialBranchId?: string | null,
+  branchIds?: string[],
+  includeBackedOutForBranches?: boolean,
+) {
   const orConditions = [
     Query.equal('ownerId', visibleUserIds),
     Query.equal('assignedToId', visibleUserIds),
@@ -187,6 +193,16 @@ function appendHierarchyLeadVisibilityQuery(queries: string[], visibleUserIds: s
 
   if (specialBranchId) {
     orConditions.push(Query.equal('branchId', specialBranchId));
+  }
+
+  if (includeBackedOutForBranches && branchIds && branchIds.length > 0) {
+    orConditions.push(
+      Query.and([
+        Query.equal('branchId', branchIds),
+        Query.equal('isClosed', true),
+        Query.equal('status', ['Backout', 'Backed Out', 'Backedout', 'Backed out']),
+      ]),
+    );
   }
 
   queries.push(Query.or(orConditions));
@@ -429,7 +445,7 @@ export async function listLeadsAction(
   filters: LeadListFilters,
   userId: string,
   _userRole: UserRole,
-  _branchIds?: string[]
+  branchIds?: string[]
 ): Promise<Lead[]> {
   try {
     await assertAuthenticatedUserId(userId);
@@ -458,13 +474,31 @@ export async function listLeadsAction(
       // Admins and Managers see all leads across all branches — no branch/owner filter
     } else if (userRole === 'manager') {
       const visibleUserIds = await getLeadVisibilityUserIds(databases, userId, userRole);
-      appendHierarchyLeadVisibilityQuery(queries, visibleUserIds, specialBranchId);
+      appendHierarchyLeadVisibilityQuery(
+        queries,
+        visibleUserIds,
+        specialBranchId,
+        branchIds,
+        true,
+      );
     } else if (userRole === 'assistant_manager') {
       const visibleUserIds = await getLeadVisibilityUserIds(databases, userId, userRole);
-      appendHierarchyLeadVisibilityQuery(queries, visibleUserIds, specialBranchId);
+      appendHierarchyLeadVisibilityQuery(
+        queries,
+        visibleUserIds,
+        specialBranchId,
+        branchIds,
+        true,
+      );
     } else if (userRole === 'team_lead') {
       const visibleUserIds = await getLeadVisibilityUserIds(databases, userId, userRole);
-      appendHierarchyLeadVisibilityQuery(queries, visibleUserIds, specialBranchId);
+      appendHierarchyLeadVisibilityQuery(
+        queries,
+        visibleUserIds,
+        specialBranchId,
+        branchIds,
+        true,
+      );
     }
 
     /*
@@ -591,7 +625,13 @@ export async function listLeadsAction(
 
     // Apply status filter
     if (filters.status) {
-      queries.push(Query.equal('status', filters.status));
+      const statusText = typeof filters.status === 'string' ? filters.status : '';
+      const normalized = statusText.trim().toLowerCase().replace(/\s+/g, '');
+      if (normalized === 'backout' || normalized === 'backedout') {
+        queries.push(Query.equal('status', ['Backout', 'Backed Out', 'Backedout', 'Backed out']));
+      } else {
+        queries.push(Query.equal('status', filters.status));
+      }
     }
 
     // Apply assigned agent filter

@@ -18,6 +18,19 @@ import { ProtectedRoute } from "@/components/protected-route";
 import { LeadActivityTimeline } from "@/components/leads/lead-activity-timeline";
 import { LeadNotesCard } from "@/components/leads/lead-notes-card";
 
+function isBackoutStatus(value: unknown) {
+  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (!text) return false;
+  return (
+    text === "backout" ||
+    text === "backedout" ||
+    text === "backed out" ||
+    text === "back out" ||
+    text.replace(/\s+/g, "") === "backedout" ||
+    text.replace(/\s+/g, "") === "backout"
+  );
+}
+
 export default function HistoryDetailPage() {
   return (
     <ProtectedRoute componentKey="history">
@@ -63,6 +76,10 @@ function HistoryDetailContent() {
 
       // Verify this is a closed lead
       if (!fetchedLead.isClosed) {
+        router.push(`/leads/${leadId}`);
+        return;
+      }
+      if (isBackoutStatus(fetchedLead.status)) {
         router.push(`/leads/${leadId}`);
         return;
       }

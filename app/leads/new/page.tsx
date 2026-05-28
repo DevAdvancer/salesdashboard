@@ -420,6 +420,7 @@ function LegacyNewLeadContent() {
 
   const linkedinRequestId = (searchParams.get("linkedinRequestId") ?? "").trim();
   const linkedinTargetUrl = (searchParams.get("linkedinTargetUrl") ?? "").trim();
+  const linkedinCompany = (searchParams.get("linkedinCompany") ?? "").trim();
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -443,6 +444,7 @@ function LegacyNewLeadContent() {
         const result = await findBackedOutLeadForLinkedinTargetUrlAction({
           currentUserId: user.$id,
           targetUrl: linkedinTargetUrl,
+          company: linkedinCompany || undefined,
         });
         if (result.leadId) {
           toast({
@@ -453,7 +455,7 @@ function LegacyNewLeadContent() {
         }
       } catch {}
     })();
-  }, [linkedinTargetUrl, router, toast, user]);
+  }, [linkedinCompany, linkedinTargetUrl, router, toast, user]);
 
   const loadFormConfig = async () => {
     try {

@@ -485,16 +485,23 @@ export async function linkLeadToLinkedinRequestAction(input: {
 export async function findBackedOutLeadForLinkedinTargetUrlAction(input: {
   currentUserId: string;
   targetUrl: string;
+  company?: string;
 }) {
   await assertAuthenticatedUserId(input.currentUserId);
   const targetUrl = normalizeUrl(input.targetUrl);
   if (!targetUrl) throw new Error("URL is required");
+  const company = input.company ? normalizeCompany(input.company) : "";
 
   const { databases } = await createAdminClient();
   const requestsResponse = await databases.listDocuments(
     DATABASE_ID,
     COLLECTIONS.LINKEDIN_REQUESTS,
-    [Query.equal("targetUrl", targetUrl), Query.orderDesc("$createdAt"), Query.limit(2000)],
+    [
+      Query.equal("targetUrl", targetUrl),
+      ...(company ? [Query.equal("company", company)] : []),
+      Query.orderDesc("$createdAt"),
+      Query.limit(2000),
+    ],
   );
 
   const requests = requestsResponse.documents as unknown as LinkedinRequest[];
@@ -511,7 +518,8 @@ export async function findBackedOutLeadForLinkedinTargetUrlAction(input: {
       const lead = await databases.getDocument(DATABASE_ID, COLLECTIONS.LEADS, leadId);
       const status = typeof (lead as any)?.status === "string" ? String((lead as any).status) : "";
       const isClosed = Boolean((lead as any)?.isClosed);
-      if (isClosed && status.trim().toLowerCase() === "backout") {
+      const normalizedStatus = status.trim().toLowerCase().replace(/\s+/g, "");
+      if (isClosed && (normalizedStatus === "backout" || normalizedStatus === "backedout")) {
         return { leadId };
       }
     } catch {}
@@ -536,6 +544,60 @@ export async function getLinkedinConnectionHistoryAction(input: {
   );
 
   const requests = requestsResponse.documents as unknown as LinkedinRequest[];
+  const leadIds = Array.from(
+    new Set(
+      requests
+        .map((r) => (typeof r.leadId === "string" && r.leadId ? r.leadId : null))
+        .filter((v): v is string => Boolean(v)),
+    ),
+  );
+
+  const leadById = new Map<string, { leadId: string; status: string; isClosed: boolean }>();
+  if (leadIds.length > 0) {
+    const chunkSize = 100;
+    for (let i = 0; i < leadIds.length; i += chunkSize) {
+      const chunk = leadIds.slice(i, i + chunkSize);
+      const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS, [
+        Query.equal("$id", chunk),
+        Query.limit(2000),
+      ]);
+      for (const doc of response.documents as unknown as Array<{ $id: string; status?: unknown; isClosed?: unknown }>) {
+        leadById.set(doc.$id, {
+          leadId: doc.$id,
+          status: typeof doc.status === "string" ? doc.status : "",
+          isClosed: Boolean(doc.isClosed),
+        });
+      }
+    }
+  }
+
+  const leadAuditByLeadId = new Map<
+    string,
+    Array<{ $id: string; action: string; actorName: string; performedAt: string; metadata: unknown }>
+  >();
+  await Promise.all(
+    leadIds.map(async (leadId) => {
+      try {
+        const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, [
+          Query.equal("targetType", "LEAD"),
+          Query.equal("targetId", leadId),
+          Query.orderDesc("performedAt"),
+          Query.limit(50),
+        ]);
+        const logs = response.documents.map((doc) => ({
+          $id: String((doc as any).$id),
+          action: String((doc as any).action ?? ""),
+          actorName: String((doc as any).actorName ?? ""),
+          performedAt: String((doc as any).performedAt ?? ""),
+          metadata: (doc as any).metadata ?? null,
+        }));
+        leadAuditByLeadId.set(leadId, logs);
+      } catch {
+        leadAuditByLeadId.set(leadId, []);
+      }
+    }),
+  );
+
   const histories = await Promise.all(
     requests.map(async (req) => {
       const logsResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, [
@@ -553,14 +615,49 @@ export async function getLinkedinConnectionHistoryAction(input: {
         metadata: (doc as any).metadata ?? null,
       }));
 
+      const leadId = typeof req.leadId === "string" && req.leadId ? req.leadId : null;
       return {
         request: req,
         logs,
+        lead: leadId ? leadById.get(leadId) ?? null : null,
+        leadLogs: leadId ? leadAuditByLeadId.get(leadId) ?? [] : [],
       };
     }),
   );
 
   return { targetUrl, histories };
+}
+
+export async function getBackoutStatusForLeadIdsAction(input: {
+  currentUserId: string;
+  leadIds: string[];
+}) {
+  await assertAuthenticatedUserId(input.currentUserId);
+  const leadIds = Array.from(
+    new Set(input.leadIds.filter((id) => typeof id === "string" && id.trim())),
+  );
+  if (leadIds.length === 0) return { byLeadId: {} as Record<string, { isBackout: boolean }> };
+
+  const { databases } = await createAdminClient();
+
+  const byLeadId: Record<string, { isBackout: boolean }> = {};
+  const chunkSize = 100;
+  for (let i = 0; i < leadIds.length; i += chunkSize) {
+    const chunk = leadIds.slice(i, i + chunkSize);
+    const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS, [
+      Query.equal("$id", chunk),
+      Query.limit(2000),
+    ]);
+    for (const doc of response.documents as unknown as Array<{ $id: string; status?: unknown; isClosed?: unknown }>) {
+      const status = typeof doc.status === "string" ? doc.status.trim().toLowerCase() : "";
+      const normalized = status.replace(/\s+/g, "");
+      const isBackout =
+        normalized === "backout" || normalized === "backedout";
+      byLeadId[doc.$id] = { isBackout };
+    }
+  }
+
+  return { byLeadId };
 }
 
 export async function listMyLinkedinRequestsForAccountAction(input: {
@@ -606,7 +703,27 @@ export async function markLinkedinRequestAcceptedAction(input: {
     throw new Error("Unauthorized");
   }
 
-  if (existing.status !== "sent" || existing.isActive === false) {
+  if (existing.status === "accepted") {
+    if (!existing.acceptedAt || existing.isActive === false) {
+      const updated = await databases.updateDocument(
+        DATABASE_ID,
+        COLLECTIONS.LINKEDIN_REQUESTS,
+        input.requestId,
+        {
+          acceptedAt: existing.acceptedAt ?? new Date().toISOString(),
+          isActive: true,
+        },
+      );
+      return updated as unknown as LinkedinRequest;
+    }
+    return existing;
+  }
+
+  if (existing.status === "withdrawn" || existing.isActive === false) {
+    throw new Error("This request is withdrawn and cannot be accepted.");
+  }
+
+  if (existing.status !== "sent") {
     throw new Error("Only active 'sent' requests can be accepted.");
   }
 

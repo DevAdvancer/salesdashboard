@@ -264,6 +264,13 @@ export function buildLeadershipDashboardInsights({
     upcoming: [],
   };
 
+  const normalizeStatus = (value: unknown) => {
+    const text = typeof value === 'string' ? value : '';
+    const normalized = text.trim().toLowerCase().replace(/\s+/g, '');
+    if (normalized === 'backout' || normalized === 'backedout') return 'Backed Out';
+    return text || 'Unknown';
+  };
+
   for (const currentUser of users) {
     if (currentUser.role === 'manager') roleCounts.managers += 1;
     if (currentUser.role === 'assistant_manager') roleCounts.assistantManagers += 1;
@@ -282,7 +289,7 @@ export function buildLeadershipDashboardInsights({
     const hasPendingFollowUp = Boolean(followUpDate && !currentLead.isClosed && currentLead.followUpStatus !== 'completed');
     const followUpIsOverdue = Boolean(hasPendingFollowUp && followUpDate && followUpDate.getTime() < now.getTime() && !isSameLocalDay(followUpDate, now));
     const followUpIsDueToday = Boolean(hasPendingFollowUp && followUpDate && isSameLocalDay(followUpDate, now));
-    const status = currentLead.status || 'Unknown';
+    const status = normalizeStatus(currentLead.status);
     const branchId = currentLead.branchId ?? 'unassigned-branch';
     const branchSummary = branchMap.get(branchId);
     const branchName = branchSummary?.branchName ?? 'No branch';

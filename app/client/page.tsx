@@ -15,6 +15,19 @@ import { getAuditLogs } from "@/lib/services/audit-service";
 import { DateRangePicker } from "@/components/ui/date-picker";
 import { listBranches } from "@/lib/services/branch-service";
 
+function isBackoutStatus(value: unknown) {
+  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (!text) return false;
+  return (
+    text === "backout" ||
+    text === "backedout" ||
+    text === "backed out" ||
+    text === "back out" ||
+    text.replace(/\s+/g, "") === "backedout" ||
+    text.replace(/\s+/g, "") === "backout"
+  );
+}
+
 function HistoryContent() {
   const router = useRouter();
   const { user } = useAuth();
@@ -112,7 +125,7 @@ function HistoryContent() {
         user.role,
         user.branchIds,
       );
-      setLeads(closedLeads);
+      setLeads(closedLeads.filter((lead) => !isBackoutStatus(lead.status)));
     } catch (error) {
       console.error("Error loading closed leads:", error);
     } finally {
