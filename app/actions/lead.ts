@@ -10,6 +10,7 @@ import { logAction } from "@/lib/services/audit-service";
 import { assertAuthenticatedUserId } from "@/lib/server/current-user";
 import { createNotificationsForRecipients } from "@/lib/server/notifications";
 import { getLinkedinProfileUrlSearchNeedle, normalizeLinkedinProfileUrl } from "@/lib/utils/linkedin";
+import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const LEADS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_LEADS_COLLECTION_ID!;
@@ -39,8 +40,15 @@ async function validateLeadUniqueness(
 
     if (email) {
         const queries = [Query.contains('data', [email])];
-        const response = await databases.listDocuments(DATABASE_ID, LEADS_COLLECTION_ID, queries);
-        for (const doc of response.documents) {
+        const documents = await listAllDocuments<any>({
+            databases,
+            databaseId: DATABASE_ID,
+            collectionId: LEADS_COLLECTION_ID,
+            queries,
+            pageLimit: 100,
+            maxPages: 50,
+        });
+        for (const doc of documents) {
             if (excludeLeadId && doc.$id === excludeLeadId) continue;
             try {
                 const leadData = JSON.parse(doc.data as string) as LeadData;
@@ -58,8 +66,15 @@ async function validateLeadUniqueness(
 
     if (phone) {
         const queries = [Query.contains('data', [phone])];
-        const response = await databases.listDocuments(DATABASE_ID, LEADS_COLLECTION_ID, queries);
-        for (const doc of response.documents) {
+        const documents = await listAllDocuments<any>({
+            databases,
+            databaseId: DATABASE_ID,
+            collectionId: LEADS_COLLECTION_ID,
+            queries,
+            pageLimit: 100,
+            maxPages: 50,
+        });
+        for (const doc of documents) {
             if (excludeLeadId && doc.$id === excludeLeadId) continue;
             try {
                 const leadData = JSON.parse(doc.data as string) as LeadData;
@@ -78,10 +93,17 @@ async function validateLeadUniqueness(
     if (linkedinProfileUrl) {
         const needle = getLinkedinProfileUrlSearchNeedle(linkedinProfileUrl);
         const queries = [Query.contains('data', [needle || linkedinProfileUrl])];
-        const response = await databases.listDocuments(DATABASE_ID, LEADS_COLLECTION_ID, queries);
+        const documents = await listAllDocuments<any>({
+            databases,
+            databaseId: DATABASE_ID,
+            collectionId: LEADS_COLLECTION_ID,
+            queries,
+            pageLimit: 100,
+            maxPages: 100,
+        });
         const inputNormalized = normalizeLinkedinProfileUrl(linkedinProfileUrl);
         if (inputNormalized) {
-            for (const doc of response.documents) {
+            for (const doc of documents) {
                 if (excludeLeadId && doc.$id === excludeLeadId) continue;
                 try {
                     const leadData = JSON.parse(doc.data as string) as LeadData;
@@ -189,25 +211,32 @@ async function getLeadVisibilityUserIds(databases: any, viewerId: string, viewer
   if (viewerRole === 'agent') return [viewerId];
 
   if (viewerRole === 'team_lead') {
-    const agents = await databases.listDocuments(
-      DATABASE_ID,
-      COLLECTIONS.USERS,
-      [
+    const agents = await listAllDocuments<{ $id: string }>({
+      databases,
+      databaseId: DATABASE_ID,
+      collectionId: COLLECTIONS.USERS,
+      queries: [
         Query.equal('teamLeadId', viewerId),
         Query.or([Query.equal('role', 'agent'), Query.equal('role', 'lead_generation')]),
-      ]
-    );
+        Query.orderAsc('$id'),
+      ],
+      pageLimit: 100,
+      maxPages: 100,
+    });
 
-    return [viewerId, ...agents.documents.map((agent: { $id: string }) => agent.$id)];
+    return [viewerId, ...agents.map((agent) => agent.$id)];
   }
 
-  const response = await databases.listDocuments(
-    DATABASE_ID,
-    COLLECTIONS.USERS,
-    [Query.limit(5000)]
-  );
+  const users = await listAllDocuments<HierarchyUserDocument>({
+    databases,
+    databaseId: DATABASE_ID,
+    collectionId: COLLECTIONS.USERS,
+    queries: [Query.orderAsc('$id')],
+    pageLimit: 100,
+    maxPages: 500,
+  });
 
-  return getVisibleHierarchyUserIds(viewerId, viewerRole, response.documents as HierarchyUserDocument[]);
+  return getVisibleHierarchyUserIds(viewerId, viewerRole, users);
 }
 
 function appendHierarchyLeadVisibilityQuery(
@@ -504,17 +533,20 @@ export async function listLeadsAction(
     } else if (userRole === 'admin') {
       // Admins and Managers see all leads across all branches — no branch/owner filter
       if (filters.teamLeadId) {
-        const agents = await databases.listDocuments(
-          DATABASE_ID,
-          COLLECTIONS.USERS,
-          [
+        const agents = await listAllDocuments<{ $id: string }>({
+          databases,
+          databaseId: DATABASE_ID,
+          collectionId: COLLECTIONS.USERS,
+          queries: [
             Query.equal('teamLeadId', filters.teamLeadId),
             Query.or([Query.equal('role', 'agent'), Query.equal('role', 'lead_generation')]),
-            Query.limit(5000),
+            Query.orderAsc('$id'),
           ],
-        );
+          pageLimit: 100,
+          maxPages: 100,
+        });
 
-        const teamIds = [filters.teamLeadId, ...agents.documents.map((agent: { $id: string }) => agent.$id)];
+        const teamIds = [filters.teamLeadId, ...agents.map((agent) => agent.$id)];
         queries.push(
           Query.or([Query.equal('ownerId', teamIds), Query.equal('assignedToId', teamIds)]),
         );
@@ -704,14 +736,15 @@ export async function listLeadsAction(
     // Order by creation date (newest first)
     queries.push(Query.orderDesc('$createdAt'));
 
-    // Set a high limit to fetch all leads
-    queries.push(Query.limit(5000));
-
-    // Fetch leads
-    const response = await databases.listDocuments(DATABASE_ID, LEADS_COLLECTION_ID, queries);
-
     // Apply search query filter (in-memory)
-    let leads = response.documents as unknown as Lead[];
+    let leads = await listAllDocuments<Lead>({
+      databases,
+      databaseId: DATABASE_ID,
+      collectionId: LEADS_COLLECTION_ID,
+      queries,
+      pageLimit: 100,
+      maxPages: 500,
+    });
 
     if (filters.searchQuery) {
       const searchLower = filters.searchQuery.toLowerCase();

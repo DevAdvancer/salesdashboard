@@ -63,9 +63,37 @@ function getLinkedinAllowedStatuses(currentStatus: unknown) {
   if (normalized === 'pipelinefollowup') {
     return ['Pipeline / Follow up', 'Signed/Closure', 'Backed Out'];
   }
-  return typeof currentStatus === 'string' && currentStatus.trim()
-    ? [currentStatus.trim()]
-    : [];
+  const standardStatuses = [
+    'Connection Accepted',
+    'Interested',
+    'Not Interested',
+    'Pipeline / Follow up',
+    'Signed/Closure',
+    'Backed Out',
+  ];
+  const currentText = typeof currentStatus === 'string' ? currentStatus.trim() : '';
+  const canonicalByNormalized = new Map<string, string>([
+    ['connectionaccepted', 'Connection Accepted'],
+    ['interested', 'Interested'],
+    ['notinterested', 'Not Interested'],
+    ['pipelinefollowup', 'Pipeline / Follow up'],
+    ['signedclosure', 'Signed/Closure'],
+    ['backout', 'Backed Out'],
+    ['backedout', 'Backed Out'],
+  ]);
+  const currentCanonical = currentText
+    ? canonicalByNormalized.get(normalizeStatusText(currentText)) ?? currentText
+    : '';
+
+  const seen = new Set<string>();
+  const output: string[] = [];
+  for (const value of [currentCanonical, ...standardStatuses]) {
+    const key = normalizeStatusText(value);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    output.push(value);
+  }
+  return output;
 }
 
 type HierarchyUserDocument = {

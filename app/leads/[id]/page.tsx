@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter, useParams } from "next/navigation";
 import { getLead, updateLead, closeLead } from "@/lib/services/lead-service";
@@ -74,9 +80,39 @@ function getLinkedinAllowedStatuses(currentStatus: unknown) {
   if (normalized === "pipelinefollowup") {
     return ["Pipeline / Follow up", "Signed/Closure", "Backed Out"];
   }
-  return typeof currentStatus === "string" && currentStatus.trim()
-    ? [currentStatus.trim()]
-    : [];
+  const standardStatuses = [
+    "Connection Accepted",
+    "Interested",
+    "Not Interested",
+    "Pipeline / Follow up",
+    "Signed/Closure",
+    "Backed Out",
+  ];
+  const currentText =
+    typeof currentStatus === "string" ? currentStatus.trim() : "";
+  const canonicalByNormalized = new Map<string, string>([
+    ["connectionaccepted", "Connection Accepted"],
+    ["interested", "Interested"],
+    ["notinterested", "Not Interested"],
+    ["pipelinefollowup", "Pipeline / Follow up"],
+    ["signedclosure", "Signed/Closure"],
+    ["backout", "Backed Out"],
+    ["backedout", "Backed Out"],
+  ]);
+  const currentCanonical = currentText
+    ? (canonicalByNormalized.get(normalizeStatusText(currentText)) ??
+      currentText)
+    : "";
+
+  const seen = new Set<string>();
+  const output: string[] = [];
+  for (const value of [currentCanonical, ...standardStatuses]) {
+    const key = normalizeStatusText(value);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    output.push(value);
+  }
+  return output;
 }
 
 export default function LeadDetailPage() {
@@ -111,8 +147,12 @@ function LeadDetailContent() {
   const [closeStep, setCloseStep] = useState(1);
   const [closureFields, setClosureFields] = useState<FormField[]>([]);
   const [paymentPlanFields, setPaymentPlanFields] = useState<FormField[]>([]);
-  const [closureValues, setClosureValues] = useState<Record<string, unknown>>({});
-  const [paymentPlanValues, setPaymentPlanValues] = useState<Record<string, unknown>>({});
+  const [closureValues, setClosureValues] = useState<Record<string, unknown>>(
+    {},
+  );
+  const [paymentPlanValues, setPaymentPlanValues] = useState<
+    Record<string, unknown>
+  >({});
 
   const loadLead = useCallback(async () => {
     try {
@@ -225,11 +265,14 @@ function LeadDetailContent() {
 
       if (!isLeadGeneration && !lead.isClosed) {
         const hasNextFollowUpAt = Boolean(lead.nextFollowUpAt);
-        const hasNextAction = Boolean(lead.nextAction && String(lead.nextAction).trim());
+        const hasNextAction = Boolean(
+          lead.nextAction && String(lead.nextAction).trim(),
+        );
         if (!hasNextFollowUpAt || !hasNextAction) {
           toast({
             title: "Follow-up required",
-            description: "Please fill Next Follow-Up and Next Action in Follow-Up Plan and save it before updating the lead.",
+            description:
+              "Please fill Next Follow-Up and Next Action in Follow-Up Plan and save it before updating the lead.",
             variant: "destructive",
           });
           return;
@@ -310,7 +353,9 @@ function LeadDetailContent() {
             /Duplicate\s+linkedinProfileUrl\s+found\s+in\s+lead\s+([a-zA-Z0-9._-]+)/,
           );
           const existingLeadId = match?.[1];
-          const linkedinProfileUrl = String((leadData as any).linkedinProfileUrl ?? "").trim();
+          const linkedinProfileUrl = String(
+            (leadData as any).linkedinProfileUrl ?? "",
+          ).trim();
           if (existingLeadId && linkedinProfileUrl) {
             void notifyDuplicateLinkedinUrlUpdateAttemptAction({
               actorId: user.$id,
@@ -348,23 +393,31 @@ function LeadDetailContent() {
         return;
       }
 
-      const missingRequired = (fields: FormField[], values: Record<string, unknown>) => {
+      const missingRequired = (
+        fields: FormField[],
+        values: Record<string, unknown>,
+      ) => {
         const missing: string[] = [];
         for (const field of fields) {
           if (!field.visible || !field.required) continue;
           const raw = values[field.key];
           if (field.type === "checklist") {
-            if (!Array.isArray(raw) || raw.length === 0) missing.push(field.label);
+            if (!Array.isArray(raw) || raw.length === 0)
+              missing.push(field.label);
             continue;
           }
-          const text = typeof raw === "string" ? raw.trim() : String(raw ?? "").trim();
+          const text =
+            typeof raw === "string" ? raw.trim() : String(raw ?? "").trim();
           if (!text) missing.push(field.label);
         }
         return missing;
       };
 
       const missingClosure = missingRequired(closureFields, closureValues);
-      const missingPayment = missingRequired(paymentPlanFields, paymentPlanValues);
+      const missingPayment = missingRequired(
+        paymentPlanFields,
+        paymentPlanValues,
+      );
       const missing = [...missingClosure, ...missingPayment];
       if (missing.length > 0) {
         toast({
@@ -379,10 +432,15 @@ function LeadDetailContent() {
       const months = Number(paymentPlanValues.paymentMonths);
       const upfrontAmount = Number(paymentPlanValues.upfrontAmount);
 
-      if (!Number.isFinite(percent) || !Number.isFinite(months) || !Number.isFinite(upfrontAmount)) {
+      if (
+        !Number.isFinite(percent) ||
+        !Number.isFinite(months) ||
+        !Number.isFinite(upfrontAmount)
+      ) {
         toast({
           title: "Invalid payment details",
-          description: "Payment percent, months, and upfront amount must be valid numbers.",
+          description:
+            "Payment percent, months, and upfront amount must be valid numbers.",
           variant: "destructive",
         });
         return;
@@ -798,15 +856,17 @@ function LeadDetailContent() {
                       } catch (err: unknown) {
                         toast({
                           title: "Error",
-                          description: getErrorMessage(err, "Failed to apply Backout"),
+                          description: getErrorMessage(
+                            err,
+                            "Failed to apply Backout",
+                          ),
                           variant: "destructive",
                         });
                       } finally {
                         setIsSaving(false);
                       }
                     }}
-                    disabled={isSaving}
-                  >
+                    disabled={isSaving}>
                     {isSaving ? "Applying..." : "Apply Backout"}
                   </Button>
                 )}
@@ -1009,7 +1069,11 @@ function LeadDetailContent() {
                               <span className="text-red-500 ml-1">*</span>
                             )}
                           </Label>
-                          {renderCloseField(field, closureValues, setClosureValues)}
+                          {renderCloseField(
+                            field,
+                            closureValues,
+                            setClosureValues,
+                          )}
                         </div>
                       ))}
                   </div>
@@ -1062,7 +1126,9 @@ function LeadDetailContent() {
                         onChange={(e) => setCloseStatus(e.target.value)}>
                         {isLinkedinRequestLead(leadData) ? (
                           <>
-                            <option value="Signed/Closure">Signed/Closure</option>
+                            <option value="Signed/Closure">
+                              Signed/Closure
+                            </option>
                             <option value="Backed Out">Backed Out</option>
                           </>
                         ) : (
