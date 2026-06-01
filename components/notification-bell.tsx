@@ -12,6 +12,7 @@ import { client, COLLECTIONS, DATABASE_ID } from '@/lib/appwrite';
 import type { NotificationRecord } from '@/lib/types';
 import { getLatestNotifications } from '@/lib/utils/notifications';
 import { useToast } from '@/components/ui/use-toast';
+import { cn } from '@/lib/utils';
 
 const NOTIFICATION_FALLBACK_POLL_MS = 5 * 60 * 1000;
 const NOTIFICATION_FORCE_REFRESH_COOLDOWN_MS = 5000;
@@ -28,7 +29,7 @@ function formatNotificationTime(value: string) {
   });
 }
 
-export function NotificationBell() {
+export function NotificationBell({ className }: { className?: string }) {
   const router = useRouter();
   const { user } = useAuth();
   const { canAccess, isLoading: accessLoading } = useAccess();
@@ -136,7 +137,7 @@ export function NotificationBell() {
   };
 
   return (
-    <div className="fixed right-4 top-3 z-50 w-10 sm:right-6 lg:right-8">
+    <div className={cn('relative z-50 w-10', className)}>
       <button
         type="button"
         aria-label="Notifications"
@@ -150,14 +151,14 @@ export function NotificationBell() {
       >
         <Bell className="h-4 w-4" />
         {unreadCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-[var(--ink)] px-1.5 text-[0.6875rem] font-semibold text-white">
+          <span className="absolute -right-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-foreground px-1.5 text-[0.6875rem] font-semibold text-background">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-12 w-[min(22rem,calc(100vw-2rem))] border border-border bg-background shadow-none">
+        <div className="absolute left-0 top-12 w-[min(22rem,calc(100vw-2rem))] border border-border bg-background shadow-none">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div>
               <p className="text-sm font-semibold">Notifications</p>

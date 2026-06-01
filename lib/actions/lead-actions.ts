@@ -429,3 +429,90 @@ export async function backoutLeadAction(
 
   return { success: true, lead: updated as unknown as Lead };
 }
+
+export async function notInterestedLeadAction(
+  leadId: string,
+  actorId: string,
+  actorName: string,
+) {
+  await assertAuthenticatedUserId(actorId);
+  const { databases } = await createAdminClient();
+
+  const actorDoc = (await databases.getDocument(
+    DATABASE_ID,
+    COLLECTIONS.USERS,
+    actorId,
+  )) as unknown as User;
+
+  const currentLead = (await databases.getDocument(
+    DATABASE_ID,
+    COLLECTIONS.LEADS,
+    leadId,
+  )) as unknown as Lead;
+
+  const allowedByRole = ["admin", "manager", "assistant_manager", "team_lead", "agent"].includes(
+    actorDoc.role,
+  );
+  const allowedByOwnership =
+    currentLead.ownerId === actorId ||
+    (currentLead.assignedToId ? currentLead.assignedToId === actorId : false);
+  if (!allowedByRole && !allowedByOwnership) {
+    throw new Error("Permission denied");
+  }
+
+  const unassignedOwnerId =
+    process.env.NEXT_PUBLIC_APPWRITE_UNASSIGNED_OWNER_ID ||
+    process.env.APPWRITE_UNASSIGNED_OWNER_ID ||
+    "";
+  if (!unassignedOwnerId) {
+    throw new Error("Missing unassigned owner user id (APPWRITE_UNASSIGNED_OWNER_ID).");
+  }
+
+  const permissions: string[] = [
+    Permission.read(Role.user(unassignedOwnerId)),
+    Permission.update(Role.user(unassignedOwnerId)),
+    Permission.delete(Role.user(unassignedOwnerId)),
+    Permission.read(Role.label("admin")),
+    Permission.update(Role.label("admin")),
+    Permission.delete(Role.label("admin")),
+    Permission.read(Role.user(actorId)),
+  ];
+
+  const hierarchyPerms = await getHierarchyPermissionsServer(unassignedOwnerId, databases);
+  permissions.push(...hierarchyPerms);
+
+  const nowIso = new Date().toISOString();
+  const updated = await databases.updateDocument(
+    DATABASE_ID,
+    COLLECTIONS.LEADS,
+    leadId,
+    {
+      ownerId: unassignedOwnerId,
+      assignedToId: unassignedOwnerId,
+      isClosed: true,
+      closedAt: nowIso,
+      status: "Not Interested",
+    },
+    [...new Set(permissions)],
+  );
+
+  try {
+    await databases.createDocument(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, ID.unique(), {
+      action: "LEAD_UPDATE",
+      actorId,
+      actorName,
+      targetId: leadId,
+      targetType: "LEAD",
+      metadata: JSON.stringify({
+        status: "Not Interested",
+        ownerId: unassignedOwnerId,
+        assignedToId: unassignedOwnerId,
+        isClosed: true,
+        closedAt: nowIso,
+      }),
+      performedAt: nowIso,
+    });
+  } catch {}
+
+  return { success: true, lead: updated as unknown as Lead };
+}

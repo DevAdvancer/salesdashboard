@@ -57,11 +57,6 @@ const ALL_COMPONENTS: {
     description: "Create and manage agents",
   },
   {
-    key: "field-management",
-    label: "Field Management",
-    description: "Configure lead form fields",
-  },
-  {
     key: "linkedin-requests",
     label: "Linkedin Request",
     description: "Send and track Linkedin connection requests",

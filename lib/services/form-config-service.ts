@@ -8,6 +8,9 @@ const FORM_CONFIG_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_FORM_CONFIG_C
 
 // Singleton document ID for form configuration
 const FORM_CONFIG_DOC_ID = 'current';
+const CLOSURE_FORM_CONFIG_DOC_ID = 'closure';
+const PAYMENT_PLAN_FORM_CONFIG_DOC_ID = 'payment_plan';
+const CLIENT_INTAKE_FORM_CONFIG_DOC_ID = 'client_intake';
 
 /**
  * Default form fields configuration
@@ -37,7 +40,7 @@ export const DEFAULT_FIELDS: FormField[] = [
     required: true,
     visible: true,
     order: 7,
-    options: ['Interested', 'Not-Interested', 'Pipeline', 'Prospect', 'Signed'],
+    options: ['Interested', 'Not Interested', 'Pipeline', 'Prospect', 'Signed'],
   },
   { id: '10', type: 'text', label: 'Legal Name', key: 'legalName', required: false, visible: true, order: 8 },
   {
@@ -72,6 +75,140 @@ export const DEFAULT_FIELDS: FormField[] = [
   },
 ];
 
+export const DEFAULT_CLOSURE_FIELDS: FormField[] = [
+  { id: '1', type: 'text', label: 'First Name', key: 'firstName', required: true, visible: true, order: 1 },
+  { id: '2', type: 'text', label: 'Last Name', key: 'lastName', required: false, visible: true, order: 2 },
+  { id: '3', type: 'email', label: 'Email', key: 'email', required: true, visible: true, order: 3 },
+  { id: '4', type: 'phone', label: 'Phone', key: 'phone', required: false, visible: true, order: 4 },
+  { id: '5', type: 'text', label: 'Address', key: 'address', required: false, visible: true, order: 5 },
+];
+
+export const DEFAULT_PAYMENT_PLAN_FIELDS: FormField[] = [
+  {
+    id: '1',
+    type: 'dropdown',
+    label: 'Payment Percentage',
+    key: 'paymentPercent',
+    required: true,
+    visible: true,
+    order: 1,
+    options: ['10', '11', '12', '14'],
+  },
+  {
+    id: '2',
+    type: 'dropdown',
+    label: 'Months',
+    key: 'paymentMonths',
+    required: true,
+    visible: true,
+    order: 2,
+    options: ['3', '4', '5', '6'],
+  },
+  {
+    id: '3',
+    type: 'text',
+    label: 'Upfront Amount',
+    key: 'upfrontAmount',
+    required: true,
+    visible: true,
+    order: 3,
+    placeholder: 'e.g. 500',
+    validation: { pattern: '^\\d+(\\.\\d+)?$' },
+  },
+];
+
+export const DEFAULT_CLIENT_INTAKE_FIELDS: FormField[] = [
+  { id: '1', type: 'text', label: 'Salesperson', key: 'salesperson', required: true, visible: true, order: 1 },
+  { id: '2', type: 'text', label: 'Ref', key: 'ref', required: true, visible: true, order: 2 },
+  { id: '3', type: 'text', label: 'Area of Interest (Roles)', key: 'areaOfInterestRoles', required: true, visible: true, order: 3 },
+  { id: '4', type: 'text', label: 'Full Name', key: 'fullName', required: true, visible: true, order: 4 },
+  { id: '5', type: 'text', label: 'Date of Birth', key: 'dateOfBirth', required: true, visible: true, order: 5 },
+  { id: '6', type: 'text', label: 'Visa Status', key: 'visaStatus', required: true, visible: true, order: 6 },
+  { id: '7', type: 'text', label: 'Arrival in the USA', key: 'arrivalInUsa', required: true, visible: true, order: 7 },
+  { id: '8', type: 'text', label: "Master’s Degree Details", key: 'mastersDegreeDetails', required: true, visible: true, order: 8 },
+  { id: '9', type: 'text', label: "Bachelor’s Degree Details", key: 'bachelorsDegreeDetails', required: true, visible: true, order: 9 },
+  { id: '10', type: 'email', label: 'Email Address', key: 'email', required: true, visible: true, order: 10 },
+  { id: '11', type: 'phone', label: 'Contact Number', key: 'phone', required: true, visible: true, order: 11 },
+  { id: '12', type: 'text', label: 'Current Location', key: 'currentLocation', required: true, visible: true, order: 12 },
+  { id: '13', type: 'text', label: 'Total Experience', key: 'totalExperience', required: true, visible: true, order: 13 },
+  { id: '14', type: 'textarea', label: 'Technology/Skill Set', key: 'technologySkillSet', required: true, visible: true, order: 14 },
+  { id: '15', type: 'dropdown', label: 'Open to Relocation (Yes/No)', key: 'openToRelocation', required: true, visible: true, order: 15, options: ['Yes', 'No'] },
+  { id: '16', type: 'text', label: 'Availability for Marketing', key: 'availabilityForMarketing', required: true, visible: true, order: 16 },
+  { id: '17', type: 'text', label: 'Agreement', key: 'agreement', required: true, visible: true, order: 17 },
+  { id: '18', type: 'text', label: 'Upfront', key: 'upfront', required: true, visible: true, order: 18 },
+  { id: '19', type: 'text', label: 'BGC', key: 'bgc', required: true, visible: true, order: 19 },
+  { id: '20', type: 'text', label: 'LinkedIn profile link', key: 'linkedinProfileUrl', required: true, visible: true, order: 20 },
+];
+
+function buildOptionKey(value: string, fieldKey?: string): string {
+  const trimmed = value.trim().toLowerCase();
+  if (fieldKey === 'status') {
+    return trimmed.replace(/[\s_-]+/g, ' ').trim();
+  }
+  return trimmed;
+}
+
+function canonicalizeOption(value: string, fieldKey?: string): string {
+  const trimmed = value.trim();
+  if (fieldKey === 'status') {
+    const key = buildOptionKey(trimmed, fieldKey);
+    if (key === 'not interested') return 'Not Interested';
+  }
+  return trimmed;
+}
+
+function dedupeOptions(options: unknown, fieldKey?: string): string[] | undefined {
+  if (!Array.isArray(options)) return undefined;
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const entry of options) {
+    if (typeof entry !== 'string') continue;
+    const normalized = entry.trim();
+    if (!normalized) continue;
+    const canonical = canonicalizeOption(normalized, fieldKey);
+    const key = buildOptionKey(canonical, fieldKey);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(canonical);
+  }
+  return result;
+}
+
+function normalizeFormFields(fields: FormField[]): FormField[] {
+  return fields.map((field) => {
+    if (field.type !== 'dropdown' && field.type !== 'checklist') return field;
+    const options = dedupeOptions(field.options, field.key);
+    return options ? { ...field, options } : { ...field, options: undefined };
+  });
+}
+
+async function getFormConfigDocument(
+  docId: string,
+  defaultFields: FormField[]
+): Promise<{ fields: FormField[]; version: number; updatedBy: string }> {
+  try {
+    const config = await databases.getDocument(DATABASE_ID, FORM_CONFIG_COLLECTION_ID, docId);
+    const fields = normalizeFormFields(JSON.parse(config.fields as string) as FormField[]);
+
+    return {
+      fields,
+      version: config.version as number,
+      updatedBy: config.updatedBy as string,
+    };
+  } catch (error: any) {
+    if (error.code === 404 || error.message?.includes('not found')) {
+      return {
+        fields: normalizeFormFields(defaultFields),
+        version: 0,
+        updatedBy: '',
+      };
+    }
+
+    console.error('Error fetching form config:', error);
+    throw new Error(error.message || 'Failed to fetch form configuration');
+  }
+}
+
 /**
  * Get the current form configuration
  *
@@ -81,34 +218,19 @@ export const DEFAULT_FIELDS: FormField[] = [
  * @returns The current form configuration with parsed fields
  */
 export async function getFormConfig(): Promise<{ fields: FormField[]; version: number; updatedBy: string }> {
-  try {
-    const config = await databases.getDocument(
-      DATABASE_ID,
-      FORM_CONFIG_COLLECTION_ID,
-      FORM_CONFIG_DOC_ID
-    );
+  return getFormConfigDocument(FORM_CONFIG_DOC_ID, DEFAULT_FIELDS);
+}
 
-    // Parse the JSON string to get the fields array
-    const fields = JSON.parse(config.fields as string) as FormField[];
+export async function getClosureFormConfig(): Promise<{ fields: FormField[]; version: number; updatedBy: string }> {
+  return getFormConfigDocument(CLOSURE_FORM_CONFIG_DOC_ID, DEFAULT_CLOSURE_FIELDS);
+}
 
-    return {
-      fields,
-      version: config.version as number,
-      updatedBy: config.updatedBy as string,
-    };
-  } catch (error: any) {
-    // If document doesn't exist (404), return default fields
-    if (error.code === 404 || error.message?.includes('not found')) {
-      return {
-        fields: DEFAULT_FIELDS,
-        version: 0,
-        updatedBy: '',
-      };
-    }
+export async function getPaymentPlanFormConfig(): Promise<{ fields: FormField[]; version: number; updatedBy: string }> {
+  return getFormConfigDocument(PAYMENT_PLAN_FORM_CONFIG_DOC_ID, DEFAULT_PAYMENT_PLAN_FIELDS);
+}
 
-    console.error('Error fetching form config:', error);
-    throw new Error(error.message || 'Failed to fetch form configuration');
-  }
+export async function getClientIntakeFormConfig(): Promise<{ fields: FormField[]; version: number; updatedBy: string }> {
+  return getFormConfigDocument(CLIENT_INTAKE_FORM_CONFIG_DOC_ID, DEFAULT_CLIENT_INTAKE_FIELDS);
 }
 
 /**
@@ -189,108 +311,11 @@ export async function updateFormConfig(
   managerId: string,
   managerName?: string
 ): Promise<{ fields: FormField[]; version: number; updatedBy: string }> {
-  try {
-    // Get current config to increment version
-    const currentConfig = await getFormConfig();
-    const newVersion = currentConfig.version + 1;
-
-    // Serialize fields to JSON string
-    const fieldsJson = JSON.stringify(fields);
-
-    // Try to update existing document
-    try {
-      const updatedConfig = await databases.updateDocument(
-        DATABASE_ID,
-        FORM_CONFIG_COLLECTION_ID,
-        FORM_CONFIG_DOC_ID,
-        {
-          fields: fieldsJson,
-          version: newVersion,
-          updatedBy: managerId,
-        }
-      );
-
-      // Log audit
-      if (managerName) {
-        const diff = calculateFieldDiff(currentConfig.fields, fields);
-        await logAction({
-            action: 'FORM_CONFIG_UPDATE',
-            actorId: managerId,
-            actorName: managerName,
-            targetId: FORM_CONFIG_DOC_ID,
-            targetType: 'FORM_CONFIG',
-            metadata: {
-              version: newVersion,
-              fieldCount: fields.length,
-              changes: diff
-            }
-        });
-      }
-
-      return {
-        fields,
-        version: updatedConfig.version as number,
-        updatedBy: updatedConfig.updatedBy as string,
-      };
-    } catch (updateError: any) {
-      // If document doesn't exist, create it
-      if (updateError.code === 404 || updateError.message?.includes('not found')) {
-        const createdConfig = await databases.createDocument(
-          DATABASE_ID,
-          FORM_CONFIG_COLLECTION_ID,
-          FORM_CONFIG_DOC_ID,
-          {
-            fields: fieldsJson,
-            version: newVersion,
-            updatedBy: managerId,
-          },
-          [
-            // All authenticated users can read
-            Permission.read(Role.users()),
-            // Only managers can update
-            Permission.update(Role.label('manager')),
-            // Only managers can delete
-            Permission.delete(Role.label('manager')),
-          ]
-        );
-
-        // Log audit
-      if (managerName) {
-        // For creation, everything is "added"
-        const diff = {
-          added: fields,
-          removed: [],
-          modified: []
-        };
-        await logAction({
-            action: 'FORM_CONFIG_UPDATE',
-            actorId: managerId,
-            actorName: managerName,
-            targetId: FORM_CONFIG_DOC_ID,
-            targetType: 'FORM_CONFIG',
-            metadata: {
-              version: newVersion,
-              fieldCount: fields.length,
-              isCreation: true,
-              changes: diff
-            }
-        });
-      }
-
-        return {
-          fields,
-          version: createdConfig.version as number,
-          updatedBy: createdConfig.updatedBy as string,
-        };
-      }
-
-      throw updateError;
-    }
-  } catch (error: any) {
-    console.error('Error updating form config:', error);
-    throw new Error(error.message || 'Failed to update form configuration');
+  void fields;
+  void managerId;
+  void managerName;
+  throw new Error('Field management is disabled');
   }
-}
 
 /**
  * Add a new field to the form configuration

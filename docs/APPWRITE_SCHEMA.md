@@ -59,6 +59,34 @@ Permissions:
 
 ---
 
+## Collection: `client_payments` (NEW)
+
+Display Name: Client Payments
+
+| Attribute       | Type     | Required | Size  | Default | Description                                  |
+|----------------|----------|----------|-------|---------|----------------------------------------------|
+| leadId         | string   | Yes      | 255   | -       | Lead/client document ID                      |
+| personalDetails| string   | No       | 65535 | `{}`    | JSON-serialized closure personal details     |
+| paymentPlan    | string   | Yes      | 65535 | -       | JSON-serialized payment plan                 |
+| status         | string   | Yes      | 50    | -       | `not_paid`, `partially_paid`, `fully_paid`   |
+| updates        | string   | No       | 65535 | `[]`    | JSON-serialized payment updates (latest first) |
+| createdAt      | datetime | Yes      | -     | -       | Record creation timestamp                    |
+| updatedAt      | datetime | No       | -     | null    | Last update timestamp                        |
+| lastReminderAt | datetime | No       | -     | null    | Last reminder sent timestamp                 |
+| updatedById    | string   | No       | 255   | null    | Last updater user ID                         |
+| updatedByName  | string   | No       | 255   | null    | Last updater display name                    |
+
+Indexes:
+- `leadId_idx` — unique on `[leadId]`
+
+Permissions:
+- Read: users
+- Create: users
+- Update: users
+- Delete: users
+
+---
+
 ## Collection: `branches` (NEW)
 
 Display Name: Branches

@@ -5,6 +5,7 @@ import { account, databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { User, UserRole, AuthContext as AuthContextType } from '@/lib/types';
 import { getSignupRoleForEmail } from '@/lib/utils/user-hierarchy';
 import { ID } from 'appwrite';
+import { deleteAppwritePresence } from '@/lib/utils/appwrite-presences';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const SERVER_SESSION_SYNC_COOLDOWN_MS = 5 * 60 * 1000;
@@ -190,6 +191,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Logout function
   const logout = useCallback(async () => {
     try {
+      if (user?.$id) {
+        await deleteAppwritePresence({ presenceId: user.$id }).catch(() => {});
+      }
       await account.deleteSession('current');
       await clearServerSession();
       databases.clearReadCache?.();
@@ -198,7 +202,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Logout error:', error);
       throw error;
     }
-  }, [clearServerSession]);
+  }, [clearServerSession, user]);
 
   // Signup function - creates manager account by default
   const signup = useCallback(async (name: string, email: string, password: string) => {

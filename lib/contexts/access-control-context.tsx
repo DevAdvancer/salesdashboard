@@ -99,6 +99,10 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
       return true;
     }
 
+    if (componentKey === 'history' && user.role === 'agent') {
+      return true;
+    }
+
     // Check for custom rule from DB
     const ruleKey = `${componentKey}-${user.role}`;
     const customRule = rules.get(ruleKey);

@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { NAV_ITEMS } from "./navigation-config";
+import { NotificationBell } from "./notification-bell";
 import {
   startDashboardTour,
   startLeadsTour,
@@ -426,19 +427,22 @@ export function Navigation({
             </div>
           </div>
 
-          <button
-            type="button"
-            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-pressed={isCollapsed}
-            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            onClick={() => onCollapsedChange(!isCollapsed)}
-            className="hidden lg:flex size-10 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
-            {isCollapsed ? (
-              <PanelLeftOpen size={17} />
-            ) : (
-              <PanelLeftClose size={17} />
-            )}
-          </button>
+          <div className="hidden lg:flex items-center gap-2 shrink-0">
+            <NotificationBell />
+            <button
+              type="button"
+              aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-pressed={isCollapsed}
+              title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              onClick={() => onCollapsedChange(!isCollapsed)}
+              className="flex size-10 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+              {isCollapsed ? (
+                <PanelLeftOpen size={17} />
+              ) : (
+                <PanelLeftClose size={17} />
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Nav links */}

@@ -339,7 +339,7 @@ function LinkedinReportsContent() {
               <TableRow>
                 <TableHead>Agent</TableHead>
                 <TableHead>Company</TableHead>
-                <TableHead>ID</TableHead>
+                <TableHead>Account</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Sent</TableHead>
                 <TableHead>Accepted</TableHead>
@@ -373,7 +373,7 @@ function LinkedinReportsContent() {
                     <TableRow key={`${r.agentId}-${r.accountId}`}>
                       <TableCell>
                         {shouldShowAgent
-                          ? (agentsMap.get(r.agentId) ?? r.agentId)
+                          ? (agentsMap.get(r.agentId) ?? "Agent")
                           : ""}
                       </TableCell>
                       <TableCell>{r.company}</TableCell>

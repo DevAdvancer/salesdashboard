@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { listLeads } from "@/lib/services/lead-action-service";
-import { Branch, Lead, LeadData, HistoryFilters, AuditLog } from "@/lib/types";
+import { Branch, Lead, LeadData, HistoryFilters, AuditLog, PaymentStatus } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,7 @@ import { ProtectedRoute } from "@/components/protected-route";
 import { getAuditLogs } from "@/lib/services/audit-service";
 import { DateRangePicker } from "@/components/ui/date-picker";
 import { listBranches } from "@/lib/services/branch-service";
+import { listClientPaymentSummaries } from "@/lib/services/client-payment-service";
 
 function isBackoutStatus(value: unknown) {
   const text = typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -41,6 +42,10 @@ function HistoryContent() {
   }>({});
   const [search, setSearch] = useState("");
   const [closedByMap, setClosedByMap] = useState<Record<string, string>>({});
+  const [paymentByLeadId, setPaymentByLeadId] = useState<
+    Record<string, { status: PaymentStatus; personalDetails: Record<string, unknown> }>
+  >({});
+  const [paymentFilter, setPaymentFilter] = useState<PaymentStatus | "no_record" | "all">("all");
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
   const getLeadData = (lead: Lead): LeadData => {
@@ -50,25 +55,129 @@ function HistoryContent() {
       return {};
     }
   };
+
+  const formatPaymentStatusLabel = (status: PaymentStatus | "no_record") => {
+    if (status === "no_record") return "No Record";
+    if (status === "fully_paid") return "Fully Paid";
+    if (status === "partially_paid") return "Partially Paid";
+    return "Not Paid";
+  };
+
+  const buildCopyText = (
+    lead: Lead,
+    leadData: LeadData,
+    personalDetails: Record<string, unknown>,
+    status: PaymentStatus | "no_record",
+    closedByName: string,
+  ) => {
+    const get = (key: string) => {
+      const value = personalDetails[key] ?? (leadData as any)[key];
+      if (value === null || value === undefined) return "";
+      if (typeof value === "string") return value.trim();
+      if (typeof value === "number" || typeof value === "boolean") return String(value);
+      return JSON.stringify(value);
+    };
+
+    const salesperson = closedByName || get("salesperson");
+    const ref = get("ref");
+    const area = get("areaOfInterestRoles");
+    const fullName =
+      get("fullName") ||
+      `${typeof leadData.firstName === "string" ? leadData.firstName : ""} ${
+        typeof leadData.lastName === "string" ? leadData.lastName : ""
+      }`.trim();
+
+    return [
+      `Salesperson: ${salesperson}`,
+      `Ref: ${ref}`,
+      `Area of Interest (Roles): ${area}`,
+      `Full Name: ${fullName}`,
+      `Date of Birth: ${get("dateOfBirth")}`,
+      `Visa Status: ${get("visaStatus")}`,
+      `Arrival in the USA: ${get("arrivalInUsa")}`,
+      `Master’s Degree Details: ${get("mastersDegreeDetails")}`,
+      `Bachelor’s Degree Details: ${get("bachelorsDegreeDetails")}`,
+      `Email Address: ${get("email")}`,
+      `Contact Number: ${get("phone")}`,
+      `Current Location: ${get("currentLocation")}`,
+      `Total Experience: ${get("totalExperience")}`,
+      `Technology/Skill Set: ${get("technologySkillSet")}`,
+      `Open to Relocation (Yes/No): ${get("openToRelocation")}`,
+      `Availability for Marketing: ${get("availabilityForMarketing")}`,
+      `Agreement: ${get("agreement")}`,
+      `Upfront: ${get("upfront")}`,
+      `BGC: ${get("bgc")}`,
+      `LinkedIn profile link: ${get("linkedinProfileUrl")}`,
+      "",
+    ].join("\n");
+  };
+
+  const fetchClosedByName = async (leadId: string) => {
+    try {
+      const { logs } = await getAuditLogs({
+        targetId: leadId,
+        targetType: "LEAD",
+        limit: 10,
+      });
+
+      const closeLog = logs.find((log: AuditLog) => {
+        if (log.action !== "LEAD_UPDATE" || !log.metadata) return false;
+        try {
+          const metadata = JSON.parse(log.metadata);
+          return metadata.isClosed === true;
+        } catch {
+          return false;
+        }
+      });
+
+      return closeLog?.actorName || "";
+    } catch {
+      return "";
+    }
+  };
+
+  const handleCopy = async (lead: Lead) => {
+    const data = getLeadData(lead);
+    const payment = paymentByLeadId[lead.$id];
+    const status = payment?.status ?? "no_record";
+    const personalDetails = payment?.personalDetails ?? {};
+    let closedByName = closedByMap[lead.$id] || "";
+    if (!closedByName) {
+      closedByName = await fetchClosedByName(lead.$id);
+      if (closedByName) {
+        setClosedByMap((prev) => ({ ...prev, [lead.$id]: closedByName }));
+      }
+    }
+    const text = buildCopyText(lead, data, personalDetails, status, closedByName);
+    await navigator.clipboard.writeText(text);
+  };
+
   const filteredLeads = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return leads;
+    const base = query
+      ? leads.filter((lead) => {
+          const data = getLeadData(lead);
+          const name = `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim();
+          const email = `${data.email ?? ""}`.trim();
+          const source = `${data.sourceName ?? data.source ?? ""}`.trim();
+          const status = `${lead.status ?? ""}`.trim();
 
-    return leads.filter((lead) => {
-      const data = getLeadData(lead);
-      const name = `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim();
-      const email = `${data.email ?? ""}`.trim();
-      const source = `${data.sourceName ?? data.source ?? ""}`.trim();
-      const status = `${lead.status ?? ""}`.trim();
+          return (
+            name.toLowerCase().includes(query) ||
+            email.toLowerCase().includes(query) ||
+            source.toLowerCase().includes(query) ||
+            status.toLowerCase().includes(query)
+          );
+        })
+      : leads;
 
-      return (
-        name.toLowerCase().includes(query) ||
-        email.toLowerCase().includes(query) ||
-        source.toLowerCase().includes(query) ||
-        status.toLowerCase().includes(query)
-      );
+    if (paymentFilter === "all") return base;
+
+    return base.filter((lead) => {
+      const status = paymentByLeadId[lead.$id]?.status ?? "no_record";
+      return status === paymentFilter;
     });
-  }, [leads, search]);
+  }, [leads, search, paymentFilter, paymentByLeadId]);
 
   const totalPages = Math.max(1, Math.ceil(filteredLeads.length / ITEMS_PER_PAGE));
   const paginatedLeads = useMemo(() => {
@@ -125,7 +234,24 @@ function HistoryContent() {
         user.role,
         user.branchIds,
       );
-      setLeads(closedLeads.filter((lead) => !isBackoutStatus(lead.status)));
+      const visible = closedLeads.filter((lead) => !isBackoutStatus(lead.status));
+      setLeads(visible);
+      setPaymentByLeadId({});
+      if (visible.length > 0) {
+        try {
+          const summaries = await listClientPaymentSummaries({
+            actorId: user.$id,
+            leadIds: visible.map((lead) => lead.$id),
+          });
+          const next: Record<string, { status: PaymentStatus; personalDetails: Record<string, unknown> }> = {};
+          for (const item of summaries) {
+            next[item.leadId] = { status: item.status, personalDetails: item.personalDetails ?? {} };
+          }
+          setPaymentByLeadId(next);
+        } catch (error) {
+          console.error("Error loading payment statuses:", error);
+        }
+      }
     } catch (error) {
       console.error("Error loading closed leads:", error);
     } finally {
@@ -180,6 +306,7 @@ function HistoryContent() {
     setDateRange({});
     setFilters({});
     setSearch("");
+    setPaymentFilter("all");
     setCurrentPage(1);
   };
 
@@ -240,6 +367,26 @@ function HistoryContent() {
               }}
               placeholder="Name, email, status, source..."
             />
+          </div>
+          <div>
+            <Label htmlFor="clientPaymentFilter">Payment</Label>
+            <select
+              id="clientPaymentFilter"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+              value={paymentFilter}
+              onChange={(event) => {
+                setPaymentFilter(
+                  (event.target.value as PaymentStatus | "no_record" | "all") || "all",
+                );
+                setCurrentPage(1);
+              }}
+            >
+              <option value="all">All</option>
+              <option value="no_record">No Record</option>
+              <option value="not_paid">Not Paid</option>
+              <option value="partially_paid">Partially Paid</option>
+              <option value="fully_paid">Fully Paid</option>
+            </select>
           </div>
           <div className="sm:col-span-2">
             <Label htmlFor="clientDateRange">Date Range</Label>
@@ -308,11 +455,14 @@ function HistoryContent() {
           <table className="w-full min-w-[500px]">
             <thead>
               <tr className="border-b border-border">
-                <th className="text-left p-3 md:p-4 font-semibold">Name</th>
+                <th className="text-left p-3 md:p-4 font-semibold">Client</th>
                 <th className="text-left p-3 md:p-4 font-semibold hidden sm:table-cell">
                   Email
                 </th>
                 <th className="text-left p-3 md:p-4 font-semibold">Status</th>
+                <th className="text-left p-3 md:p-4 font-semibold hidden md:table-cell">
+                  Payment
+                </th>
                 <th className="text-left p-3 md:p-4 font-semibold hidden lg:table-cell">
                   Source
                 </th>
@@ -345,6 +495,7 @@ function HistoryContent() {
                   const sourceName =
                     typeof data.sourceName === "string" ? data.sourceName : "";
                   const source = typeof data.source === "string" ? data.source : "";
+                  const paymentStatus = paymentByLeadId[lead.$id]?.status ?? "no_record";
                   return (
                     <tr
                       key={lead.$id}
@@ -361,6 +512,11 @@ function HistoryContent() {
                           {lead.status}
                         </span>
                       </td>
+                      <td className="p-3 md:p-4 hidden md:table-cell">
+                        <span className="px-2 py-1 rounded-full text-xs bg-secondary text-secondary-foreground">
+                          {formatPaymentStatusLabel(paymentStatus)}
+                        </span>
+                      </td>
                       <td className="p-3 md:p-4 text-muted-foreground hidden lg:table-cell">
                         {sourceName || source || "-"}
                       </td>
@@ -371,16 +527,27 @@ function HistoryContent() {
                         {formatDate(lead.closedAt)}
                       </td>
                       <td className="p-3 md:p-4">
-                        <Button
-                          id="tour-client-view-btn"
-                          variant="outline"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/client/${lead.$id}`);
-                          }}>
-                          View
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              await handleCopy(lead);
+                            }}>
+                            Copy
+                          </Button>
+                          <Button
+                            id="tour-client-view-btn"
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/client/${lead.$id}`);
+                            }}>
+                            View
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );

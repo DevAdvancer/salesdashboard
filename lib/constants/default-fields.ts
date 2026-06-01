@@ -81,7 +81,15 @@ export const DEFAULT_FIELDS: FormField[] = [
     required: true,
     visible: true,
     order: 7,
-    options: ['Interested', 'Not-Interested', 'Pipeline', 'Prospect', 'Signed']
+    options: [
+      'Connection Accepted',
+      'Interested',
+      'Not Interested',
+      'Pipeline / Follow up',
+      'Prospect',
+      'Signed/Closure',
+      'Backed Out'
+    ]
   },
   {
     id: '10',

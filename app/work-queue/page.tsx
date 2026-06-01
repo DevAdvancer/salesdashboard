@@ -6,6 +6,7 @@ import { FollowUpQueueCard } from "@/components/dashboard/follow-up-queue";
 import { RoleWorkDashboard } from "@/components/dashboard/role-work-dashboard";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/contexts/auth-context";
 import {
   buildLeadershipDashboardInsights,
@@ -16,6 +17,7 @@ import { listBranches } from "@/lib/services/branch-service";
 import {
   getAgentsByTeamLead,
   getAssignableUsers,
+  getTeamLeads,
   getUserByIdOrNull,
 } from "@/lib/services/user-service";
 import type { Branch, User } from "@/lib/types";
@@ -36,6 +38,34 @@ function WorkQueueContent() {
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [teamLeads, setTeamLeads] = useState<User[]>([]);
+  const [selectedTeamLeadId, setSelectedTeamLeadId] = useState<string>("");
+
+  useEffect(() => {
+    if (!user || !isAdmin) return;
+    let cancelled = false;
+
+    async function loadTeamLeads() {
+      try {
+        const leads = await getTeamLeads();
+        if (cancelled) return;
+        setTeamLeads(leads);
+        if (leads.length > 0) {
+          setSelectedTeamLeadId((current) => current || leads[0].$id);
+        }
+      } catch {
+        if (cancelled) return;
+        setTeamLeads([]);
+        setSelectedTeamLeadId("");
+      }
+    }
+
+    void loadTeamLeads();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, isAdmin]);
 
   useEffect(() => {
     async function loadQueue() {
@@ -43,22 +73,38 @@ function WorkQueueContent() {
       try {
         setLoading(true);
         setError(null);
+        const teamLeadId = isAdmin ? selectedTeamLeadId : undefined;
+        if (isAdmin && !teamLeadId) {
+          setInsights(null);
+          setLoading(false);
+          return;
+        }
         const [activeLeads, closedLeads] = await Promise.all([
           listLeads(
-            { isClosed: false },
+            { isClosed: false, teamLeadId },
             user.$id,
             user.role,
             user.branchIds,
           ),
           listLeads(
-            { isClosed: true },
+            { isClosed: true, teamLeadId },
             user.$id,
             user.role,
             user.branchIds,
           ),
         ]);
         let usersForInsights: User[] = [user];
-        if (isAdmin || isManager || isAssistantManager) {
+        if (isAdmin) {
+          const selectedTeamLead = teamLeads.find(
+            (candidate) => candidate.$id === selectedTeamLeadId,
+          );
+          if (selectedTeamLead) {
+            usersForInsights = [
+              selectedTeamLead,
+              ...(await getAgentsByTeamLead(selectedTeamLead.$id)),
+            ];
+          }
+        } else if (isManager || isAssistantManager) {
           const visibleUsers = await getAssignableUsers(
             user.role,
             user.branchIds || [],
@@ -90,8 +136,8 @@ function WorkQueueContent() {
             .map((lead) => lead.branchId)
             .filter((branchId): branchId is string => Boolean(branchId)),
         ]);
-        const branches: Branch[] = allBranches.filter(
-          (branch) => isAdmin || branchIds.has(branch.$id),
+        const branches: Branch[] = allBranches.filter((branch) =>
+          branchIds.has(branch.$id),
         );
         setInsights(
           buildLeadershipDashboardInsights({
@@ -110,7 +156,19 @@ function WorkQueueContent() {
     }
 
     void loadQueue();
-  }, [user, isAdmin, isAssistantManager, isManager, isTeamLead]);
+  }, [
+    user,
+    isAdmin,
+    isAssistantManager,
+    isManager,
+    isTeamLead,
+    selectedTeamLeadId,
+    teamLeads,
+  ]);
+
+  const selectedTeamLeadName = isAdmin
+    ? teamLeads.find((candidate) => candidate.$id === selectedTeamLeadId)?.name
+    : null;
 
   return (
     <div className="container mx-auto space-y-6">
@@ -121,6 +179,33 @@ function WorkQueueContent() {
             Daily follow-ups, overdue work, and active lead pressure.
           </p>
         </div>
+        {isAdmin && (
+          <div className="w-full max-w-xs space-y-2">
+            <Label htmlFor="workQueueTeam">Team</Label>
+            <select
+              id="workQueueTeam"
+              value={selectedTeamLeadId}
+              onChange={(event) => setSelectedTeamLeadId(event.target.value)}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={loading || teamLeads.length === 0}
+            >
+              {teamLeads.length === 0 ? (
+                <option value="">No teams available</option>
+              ) : (
+                teamLeads.map((teamLead) => (
+                  <option key={teamLead.$id} value={teamLead.$id}>
+                    {teamLead.name}
+                  </option>
+                ))
+              )}
+            </select>
+            {selectedTeamLeadName ? (
+              <p className="text-xs text-muted-foreground">
+                Viewing {selectedTeamLeadName}&apos;s team queue
+              </p>
+            ) : null}
+          </div>
+        )}
       </div>
 
       {error && (
@@ -134,7 +219,7 @@ function WorkQueueContent() {
       {user && (
         <div id="tour-work-queue-tabs">
           <RoleWorkDashboard
-            role={user.role}
+            role={isAdmin ? "team_lead" : user.role}
             insights={insights}
             isLoading={loading}
           />

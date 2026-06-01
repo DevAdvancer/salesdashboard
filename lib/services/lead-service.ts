@@ -42,6 +42,32 @@ function getErrorMessage(error: unknown, fallback: string): string {
     return error instanceof Error ? error.message : fallback;
 }
 
+function normalizeStatusText(value: unknown) {
+  const text = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return text.replace(/[^a-z0-9]/g, '');
+}
+
+function isLinkedinRequestLeadData(data: LeadData) {
+  const requestId = (data as any).linkedinRequestId;
+  return typeof requestId === 'string' && requestId.trim().length > 0;
+}
+
+function getLinkedinAllowedStatuses(currentStatus: unknown) {
+  const normalized = normalizeStatusText(currentStatus);
+  if (normalized === 'connectionaccepted') {
+    return ['Connection Accepted', 'Interested', 'Not Interested'];
+  }
+  if (normalized === 'interested') {
+    return ['Interested', 'Pipeline / Follow up'];
+  }
+  if (normalized === 'pipelinefollowup') {
+    return ['Pipeline / Follow up', 'Signed/Closure', 'Backed Out'];
+  }
+  return typeof currentStatus === 'string' && currentStatus.trim()
+    ? [currentStatus.trim()]
+    : [];
+}
+
 type HierarchyUserDocument = {
   $id: string;
   managerId?: string | null;
@@ -313,6 +339,19 @@ export async function updateLead(
 
     // Merge current data with updates
     const updatedData = { ...currentData, ...data };
+
+    const nextStatus = (updatedData as any).status;
+    if (isLinkedinRequestLeadData(updatedData) && nextStatus) {
+      const previousStatus = currentLead.status;
+      if (normalizeStatusText(previousStatus) !== normalizeStatusText(nextStatus)) {
+        const allowed = new Set(
+          getLinkedinAllowedStatuses(previousStatus).map(normalizeStatusText)
+        );
+        if (!allowed.has(normalizeStatusText(nextStatus))) {
+          throw new Error('Invalid status transition for this lead.');
+        }
+      }
+    }
 
     // Validate lead uniqueness before updating (exclude self)
     const validation = await validateLeadUniqueness(updatedData, leadId);
@@ -642,7 +681,8 @@ export async function closeLead(
     leadId: string,
     closedStatus: string,
     actorId?: string,
-    actorName?: string
+    actorName?: string,
+    actorRole?: import('@/lib/types').UserRole
 ): Promise<Lead> {
   try {
     // Get the current lead to preserve owner and assigned agent
@@ -655,6 +695,10 @@ export async function closeLead(
       leadData = {};
     }
 
+    const shouldAssignClosingAgent =
+      actorRole === 'agent' && Boolean(actorId) && !currentLead.assignedToId;
+    const nextAssignedToId = shouldAssignClosingAgent ? actorId! : currentLead.assignedToId;
+
     // Build new permissions (read-only for agent, full access for owner)
     const permissions: string[] = [
       Permission.read(Role.user(currentLead.ownerId)),
@@ -663,8 +707,12 @@ export async function closeLead(
     ];
 
     // Agent gets read-only access
-    if (currentLead.assignedToId) {
-      permissions.push(Permission.read(Role.user(currentLead.assignedToId)));
+    if (nextAssignedToId) {
+      permissions.push(Permission.read(Role.user(nextAssignedToId)));
+    }
+
+    if (actorId && actorId !== currentLead.ownerId && actorId !== nextAssignedToId) {
+      permissions.push(Permission.read(Role.user(actorId)));
     }
 
     // Update the lead
@@ -676,6 +724,7 @@ export async function closeLead(
         isClosed: true,
         closedAt: new Date().toISOString(),
         status: closedStatus,
+        ...(shouldAssignClosingAgent ? { assignedToId: actorId } : {}),
       },
       permissions
     );

@@ -441,7 +441,7 @@ describe('Lead Service', () => {
       (databases.getDocument as jest.Mock).mockResolvedValue(currentLead);
       (databases.updateDocument as jest.Mock).mockResolvedValue(closedLead);
 
-      const result = await closeLead(leadId, 'Won');
+      const result = await closeLead(leadId, 'Won', mockManagerId, 'Manager', 'manager');
 
       expect(result.isClosed).toBe(true);
       expect(result.closedAt).toBeTruthy();
@@ -482,7 +482,7 @@ describe('Lead Service', () => {
         isClosed: true,
       });
 
-      await closeLead(leadId, 'Closed');
+      await closeLead(leadId, 'Closed', mockManagerId, 'Manager', 'manager');
 
       const callArgs = (databases.updateDocument as jest.Mock).mock.calls[0];
       const permissions = callArgs[4];
@@ -518,7 +518,7 @@ describe('Lead Service', () => {
         isClosed: true,
       });
 
-      await closeLead(leadId, 'Closed');
+      await closeLead(leadId, 'Closed', mockAgentId, 'Agent', 'agent');
 
       expect(databases.updateDocument).toHaveBeenCalled();
     });
@@ -528,7 +528,7 @@ describe('Lead Service', () => {
         message: 'Lead not found',
       });
 
-      await expect(closeLead('invalid-id', 'Closed')).rejects.toThrow('Lead not found');
+      await expect(closeLead('invalid-id', 'Closed', mockManagerId, 'Manager', 'manager')).rejects.toThrow('Lead not found');
     });
   });
 

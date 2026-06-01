@@ -185,9 +185,6 @@ export function buildAuditLogDetailModel(
 
   if (log.targetType.toUpperCase() === 'LEAD') {
     model.rows.push({ label: 'Lead', value: getLeadName(metadata, idToNameMap, log) });
-    if (log.targetId) {
-      model.rows.push({ label: 'Lead ID', value: log.targetId });
-    }
   }
 
   if (log.action === 'USER_UPDATE' && metadata.profileSelfUpdate) {

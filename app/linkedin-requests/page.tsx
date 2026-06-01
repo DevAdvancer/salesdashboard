@@ -365,7 +365,13 @@ function LinkedinRequestsContent() {
   const filteredRequests = useMemo(() => {
     const normalizedUrl = filterUrl.trim().toLowerCase();
     return requests.filter((r) => {
-      if (filterStatus !== "all" && r.status !== filterStatus) return false;
+      if (filterStatus === "all") {
+        const isActive = r.isActive !== false;
+        if (!isActive) return false;
+        if (r.status === "withdrawn") return false;
+      } else if (r.status !== filterStatus) {
+        return false;
+      }
       if (filterDate) {
         const sent = new Date(r.dateSent);
         const sentValue = Number.isNaN(sent.getTime())

@@ -20,8 +20,6 @@ export default function TestAuthPage() {
     try {
       addLog('🚀 Starting full signup test...');
       addLog(`📧 Test email: ${testEmail}`);
-      addLog(`🗄️ Database ID: ${DATABASE_ID}`);
-      addLog(`📁 Users Collection: ${COLLECTIONS.USERS}`);
 
       // Step 0: Clear any existing session
       addLog('0️⃣ Clearing any existing session...');
@@ -40,7 +38,7 @@ export default function TestAuthPage() {
         'TestPassword123!',
         'Test User'
       );
-      addLog(`✅ Account created with ID: ${newAccount.$id}`);
+      addLog('✅ Account created');
 
       // Step 2: Create user document
       addLog('2️⃣ Creating user document...');
@@ -55,7 +53,8 @@ export default function TestAuthPage() {
           managerId: null,
         }
       );
-      addLog(`✅ User document created with ID: ${userDoc.$id}`);
+      void userDoc;
+      addLog('✅ User document created');
 
       // Step 3: Create session
       addLog('3️⃣ Creating session...');
@@ -65,16 +64,18 @@ export default function TestAuthPage() {
       // Step 4: Verify session
       addLog('4️⃣ Verifying session...');
       const session = await account.get();
-      addLog(`✅ Session verified for user: ${session.$id}`);
+      void session;
+      addLog('✅ Session verified');
 
       // Step 5: Fetch user document
       addLog('5️⃣ Fetching user document...');
       const fetchedDoc = await databases.getDocument(
         DATABASE_ID,
         COLLECTIONS.USERS,
-        session.$id
+        newAccount.$id
       );
-      addLog(`✅ User document fetched: ${JSON.stringify(fetchedDoc, null, 2)}`);
+      void fetchedDoc;
+      addLog('✅ User document fetched');
 
       addLog('🎉 All tests passed!');
     } catch (error: any) {
@@ -87,8 +88,6 @@ export default function TestAuthPage() {
     setLogs([]);
     try {
       addLog('🔍 Testing database connection...');
-      addLog(`🗄️ Database ID: ${DATABASE_ID}`);
-      addLog(`📁 Users Collection: ${COLLECTIONS.USERS}`);
 
       // Try to list documents from users collection (client-safe method)
       addLog('Attempting to list users documents...');
@@ -108,7 +107,7 @@ export default function TestAuthPage() {
 
       // Try to create a test document
       const testId = ID.unique();
-      addLog(`Creating test document with ID: ${testId}`);
+      addLog('Creating test document...');
 
       const doc = await databases.createDocument(
         DATABASE_ID,
@@ -122,7 +121,8 @@ export default function TestAuthPage() {
         }
       );
 
-      addLog(`✅ Document created successfully: ${doc.$id}`);
+      void doc;
+      addLog('✅ Document created successfully');
 
       // Clean up
       await databases.deleteDocument(DATABASE_ID, COLLECTIONS.USERS, testId);
@@ -191,9 +191,7 @@ export default function TestAuthPage() {
           <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-950 rounded-md">
             <h4 className="font-semibold mb-2">Configuration:</h4>
             <pre className="text-xs">
-              Database ID: {DATABASE_ID}
-              {'\n'}Users Collection: {COLLECTIONS.USERS}
-              {'\n'}Test Email: {testEmail}
+              Test Email: {testEmail}
             </pre>
           </div>
         </CardContent>

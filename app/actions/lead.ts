@@ -9,6 +9,7 @@ import { getSpecialBranchLeadAccess } from '@/lib/constants/special-lead-access'
 import { logAction } from "@/lib/services/audit-service";
 import { assertAuthenticatedUserId } from "@/lib/server/current-user";
 import { createNotificationsForRecipients } from "@/lib/server/notifications";
+import { getLinkedinProfileUrlSearchNeedle, normalizeLinkedinProfileUrl } from "@/lib/utils/linkedin";
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const LEADS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_LEADS_COLLECTION_ID!;
@@ -25,10 +26,16 @@ function isValidId(id: string | null | undefined): boolean {
 async function validateLeadUniqueness(
     data: LeadData,
     excludeLeadId?: string
-): Promise<{ isValid: boolean; duplicateField?: string; existingLeadId?: string; existingBranchId?: string }> {
+): Promise<{
+    isValid: boolean;
+    duplicateField?: 'email' | 'phone' | 'linkedinProfileUrl';
+    existingLeadId?: string;
+    existingBranchId?: string;
+}> {
     const { databases } = await createAdminClient();
     const email = data.email as string | undefined;
     const phone = data.phone as string | undefined;
+    const linkedinProfileUrl = data.linkedinProfileUrl as string | undefined;
 
     if (email) {
         const queries = [Query.contains('data', [email])];
@@ -65,6 +72,30 @@ async function validateLeadUniqueness(
                     };
                 }
             } catch {}
+        }
+    }
+
+    if (linkedinProfileUrl) {
+        const needle = getLinkedinProfileUrlSearchNeedle(linkedinProfileUrl);
+        const queries = [Query.contains('data', [needle || linkedinProfileUrl])];
+        const response = await databases.listDocuments(DATABASE_ID, LEADS_COLLECTION_ID, queries);
+        const inputNormalized = normalizeLinkedinProfileUrl(linkedinProfileUrl);
+        if (inputNormalized) {
+            for (const doc of response.documents) {
+                if (excludeLeadId && doc.$id === excludeLeadId) continue;
+                try {
+                    const leadData = JSON.parse(doc.data as string) as LeadData;
+                    const docNormalized = normalizeLinkedinProfileUrl((leadData as any).linkedinProfileUrl);
+                    if (docNormalized && docNormalized === inputNormalized) {
+                        return {
+                            isValid: false,
+                            duplicateField: 'linkedinProfileUrl',
+                            existingLeadId: doc.$id,
+                            existingBranchId: (doc.branchId as string) || undefined,
+                        };
+                    }
+                } catch {}
+            }
         }
     }
 
@@ -472,6 +503,22 @@ export async function listLeadsAction(
       queries.push(Query.equal('ownerId', userId));
     } else if (userRole === 'admin') {
       // Admins and Managers see all leads across all branches — no branch/owner filter
+      if (filters.teamLeadId) {
+        const agents = await databases.listDocuments(
+          DATABASE_ID,
+          COLLECTIONS.USERS,
+          [
+            Query.equal('teamLeadId', filters.teamLeadId),
+            Query.or([Query.equal('role', 'agent'), Query.equal('role', 'lead_generation')]),
+            Query.limit(5000),
+          ],
+        );
+
+        const teamIds = [filters.teamLeadId, ...agents.documents.map((agent: { $id: string }) => agent.$id)];
+        queries.push(
+          Query.or([Query.equal('ownerId', teamIds), Query.equal('assignedToId', teamIds)]),
+        );
+      }
     } else if (userRole === 'manager') {
       const visibleUserIds = await getLeadVisibilityUserIds(databases, userId, userRole);
       appendHierarchyLeadVisibilityQuery(
@@ -626,9 +673,11 @@ export async function listLeadsAction(
     // Apply status filter
     if (filters.status) {
       const statusText = typeof filters.status === 'string' ? filters.status : '';
-      const normalized = statusText.trim().toLowerCase().replace(/\s+/g, '');
+      const normalized = statusText.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
       if (normalized === 'backout' || normalized === 'backedout') {
         queries.push(Query.equal('status', ['Backout', 'Backed Out', 'Backedout', 'Backed out']));
+      } else if (normalized === 'notinterested') {
+        queries.push(Query.equal('status', ['Not-Interested', 'Not Interested']));
       } else {
         queries.push(Query.equal('status', filters.status));
       }

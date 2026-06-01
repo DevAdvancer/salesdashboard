@@ -1,21 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter, useParams } from "next/navigation";
 import { getLead, updateLead, closeLead } from "@/lib/services/lead-service";
 import { sendChatMessageAction } from "@/app/actions/chat";
+import { notifyDuplicateLinkedinUrlUpdateAttemptAction } from "@/app/actions/lead-duplicates";
 import {
   assignLead,
   backoutLead,
   clearLeadReadCache,
+  notInterestedLead,
   reopenLead,
 } from "@/lib/services/lead-action-service";
 import {
   getAgentsByManager,
   getAgentsByTeamLead,
 } from "@/lib/services/user-service";
-import { getFormConfig } from "@/lib/services/form-config-service";
+import {
+  getClosureFormConfig,
+  getFormConfig,
+  getPaymentPlanFormConfig,
+} from "@/lib/services/form-config-service";
+import { upsertClientPaymentRecord } from "@/lib/services/client-payment-service";
 import { Lead, User, FormField, LeadData, LeadDataValue } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,6 +47,36 @@ function isBackoutStatus(value: unknown) {
     text.replace(/\s+/g, "") === "backedout" ||
     text.replace(/\s+/g, "") === "backout"
   );
+}
+
+function normalizeStatusText(value: unknown) {
+  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return text.replace(/[^a-z0-9]/g, "");
+}
+
+function isNotInterestedStatus(value: unknown) {
+  return normalizeStatusText(value) === "notinterested";
+}
+
+function isLinkedinRequestLead(data: LeadData) {
+  const requestId = (data as any).linkedinRequestId;
+  return typeof requestId === "string" && requestId.trim().length > 0;
+}
+
+function getLinkedinAllowedStatuses(currentStatus: unknown) {
+  const normalized = normalizeStatusText(currentStatus);
+  if (normalized === "connectionaccepted") {
+    return ["Connection Accepted", "Interested", "Not Interested"];
+  }
+  if (normalized === "interested") {
+    return ["Interested", "Pipeline / Follow up"];
+  }
+  if (normalized === "pipelinefollowup") {
+    return ["Pipeline / Follow up", "Signed/Closure", "Backed Out"];
+  }
+  return typeof currentStatus === "string" && currentStatus.trim()
+    ? [currentStatus.trim()]
+    : [];
 }
 
 export default function LeadDetailPage() {
@@ -71,6 +108,11 @@ function LeadDetailContent() {
   const [error, setError] = useState<string | null>(null);
   const [showCloseDialog, setShowCloseDialog] = useState(false);
   const [closeStatus, setCloseStatus] = useState("Closed");
+  const [closeStep, setCloseStep] = useState(1);
+  const [closureFields, setClosureFields] = useState<FormField[]>([]);
+  const [paymentPlanFields, setPaymentPlanFields] = useState<FormField[]>([]);
+  const [closureValues, setClosureValues] = useState<Record<string, unknown>>({});
+  const [paymentPlanValues, setPaymentPlanValues] = useState<Record<string, unknown>>({});
 
   const loadLead = useCallback(async () => {
     try {
@@ -96,6 +138,47 @@ function LeadDetailContent() {
       console.error("Error loading form config:", err);
     }
   }, []);
+
+  const loadCloseConfigs = useCallback(async () => {
+    try {
+      const [closureConfig, paymentConfig] = await Promise.all([
+        getClosureFormConfig(),
+        getPaymentPlanFormConfig(),
+      ]);
+      const closure = closureConfig.fields.sort((a, b) => a.order - b.order);
+      const payment = paymentConfig.fields.sort((a, b) => a.order - b.order);
+      setClosureFields(closure);
+      setPaymentPlanFields(payment);
+
+      const nextClosureValues: Record<string, unknown> = {};
+      for (const field of closure) {
+        const rawValue = leadData[field.key];
+        if (
+          typeof rawValue === "string" ||
+          typeof rawValue === "number" ||
+          typeof rawValue === "boolean"
+        ) {
+          nextClosureValues[field.key] = String(rawValue);
+        } else if (Array.isArray(rawValue)) {
+          nextClosureValues[field.key] = rawValue.map((v) => String(v));
+        } else if (rawValue === null || rawValue === undefined) {
+          nextClosureValues[field.key] = field.type === "checklist" ? [] : "";
+        } else {
+          nextClosureValues[field.key] = JSON.stringify(rawValue);
+        }
+      }
+
+      const nextPaymentValues: Record<string, unknown> = {};
+      for (const field of payment) {
+        nextPaymentValues[field.key] = field.type === "checklist" ? [] : "";
+      }
+
+      setClosureValues(nextClosureValues);
+      setPaymentPlanValues(nextPaymentValues);
+    } catch (err: unknown) {
+      console.error("Error loading close configs:", err);
+    }
+  }, [leadData]);
 
   const loadAgents = useCallback(async () => {
     if (!user) return;
@@ -128,13 +211,64 @@ function LeadDetailContent() {
     }
   }, [user, authLoading, leadId, router, loadLead, loadFormConfig, loadAgents]);
 
+  useEffect(() => {
+    if (!showCloseDialog) return;
+    setCloseStep(1);
+    void loadCloseConfigs();
+  }, [showCloseDialog, loadCloseConfigs]);
+
   const handleSave = async () => {
     if (!lead || !user) return;
 
     try {
       setIsSaving(true);
+
+      if (!isLeadGeneration && !lead.isClosed) {
+        const hasNextFollowUpAt = Boolean(lead.nextFollowUpAt);
+        const hasNextAction = Boolean(lead.nextAction && String(lead.nextAction).trim());
+        if (!hasNextFollowUpAt || !hasNextAction) {
+          toast({
+            title: "Follow-up required",
+            description: "Please fill Next Follow-Up and Next Action in Follow-Up Plan and save it before updating the lead.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
+      const nextStatus = (leadData as any).status;
+      const previousStatus = lead.status;
+      const statusChanged =
+        normalizeStatusText(nextStatus) &&
+        normalizeStatusText(previousStatus) !== normalizeStatusText(nextStatus);
+
+      if (isLinkedinRequestLead(leadData) && statusChanged) {
+        const allowed = new Set(
+          getLinkedinAllowedStatuses(previousStatus).map(normalizeStatusText),
+        );
+        if (!allowed.has(normalizeStatusText(nextStatus))) {
+          toast({
+            title: "Error",
+            description: "Invalid status transition for this lead.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
       await updateLead(leadId, leadData, user.$id, user.name);
-      if (isBackoutStatus((leadData as any).status)) {
+      if (statusChanged && isNotInterestedStatus(nextStatus)) {
+        await notInterestedLead(leadId, user.$id, user.name);
+        toast({
+          title: "Success",
+          description: "Lead marked as Not Interested",
+        });
+        setIsEditing(false);
+        await loadLead();
+        router.push("/leads");
+        return;
+      }
+      if (statusChanged && isBackoutStatus(nextStatus)) {
         await backoutLead(leadId, user.$id, user.name);
         toast({
           title: "Success",
@@ -145,14 +279,49 @@ function LeadDetailContent() {
         router.push("/leads");
         return;
       }
+      if (
+        statusChanged &&
+        isLinkedinRequestLead(leadData) &&
+        normalizeStatusText(nextStatus) === "signedclosure"
+      ) {
+        await closeLead(leadId, "Signed/Closure", user.$id, user.name);
+        clearLeadReadCache();
+        toast({
+          title: "Success",
+          description: "Lead closed successfully",
+        });
+        setIsEditing(false);
+        router.push("/leads");
+        return;
+      }
       clearLeadReadCache();
       toast({
         title: "Success",
         description: "Lead updated successfully",
       });
+      setIsEditing(false);
       await loadLead();
     } catch (err: unknown) {
       console.error("Error saving lead:", err);
+      try {
+        if (user) {
+          const message = err instanceof Error ? err.message : "";
+          const match = message.match(
+            /Duplicate\s+linkedinProfileUrl\s+found\s+in\s+lead\s+([a-zA-Z0-9._-]+)/,
+          );
+          const existingLeadId = match?.[1];
+          const linkedinProfileUrl = String((leadData as any).linkedinProfileUrl ?? "").trim();
+          if (existingLeadId && linkedinProfileUrl) {
+            void notifyDuplicateLinkedinUrlUpdateAttemptAction({
+              actorId: user.$id,
+              actorName: user.name,
+              leadId,
+              linkedinProfileUrl,
+              existingLeadId,
+            }).catch(() => null);
+          }
+        }
+      } catch {}
       toast({
         title: "Error",
         description: getErrorMessage(err, "Failed to save lead"),
@@ -178,7 +347,56 @@ function LeadDetailContent() {
         router.push("/leads");
         return;
       }
-      await closeLead(leadId, closeStatus, user.$id, user.name);
+
+      const missingRequired = (fields: FormField[], values: Record<string, unknown>) => {
+        const missing: string[] = [];
+        for (const field of fields) {
+          if (!field.visible || !field.required) continue;
+          const raw = values[field.key];
+          if (field.type === "checklist") {
+            if (!Array.isArray(raw) || raw.length === 0) missing.push(field.label);
+            continue;
+          }
+          const text = typeof raw === "string" ? raw.trim() : String(raw ?? "").trim();
+          if (!text) missing.push(field.label);
+        }
+        return missing;
+      };
+
+      const missingClosure = missingRequired(closureFields, closureValues);
+      const missingPayment = missingRequired(paymentPlanFields, paymentPlanValues);
+      const missing = [...missingClosure, ...missingPayment];
+      if (missing.length > 0) {
+        toast({
+          title: "Missing required fields",
+          description: `Please fill: ${missing.join(", ")}`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const percent = Number(paymentPlanValues.paymentPercent);
+      const months = Number(paymentPlanValues.paymentMonths);
+      const upfrontAmount = Number(paymentPlanValues.upfrontAmount);
+
+      if (!Number.isFinite(percent) || !Number.isFinite(months) || !Number.isFinite(upfrontAmount)) {
+        toast({
+          title: "Invalid payment details",
+          description: "Payment percent, months, and upfront amount must be valid numbers.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      await upsertClientPaymentRecord({
+        actorId: user.$id,
+        leadId,
+        personalDetails: closureValues,
+        paymentPlan: { percent, months, upfrontAmount },
+        initialStatus: upfrontAmount > 0 ? "partially_paid" : "not_paid",
+      });
+
+      await closeLead(leadId, closeStatus, user.$id, user.name, user.role);
       clearLeadReadCache();
       try {
         const firstName =
@@ -286,6 +504,49 @@ function LeadDetailContent() {
         );
 
       case "dropdown":
+        if (field.key === "status" && isLinkedinRequestLead(leadData)) {
+          const allowed = new Set(
+            getLinkedinAllowedStatuses(value).map(normalizeStatusText),
+          );
+          const workflowOptions = [
+            "Connection Accepted",
+            "Interested",
+            "Not Interested",
+            "Pipeline / Follow up",
+            "Signed/Closure",
+            "Backed Out",
+          ];
+          const mergedOptions = Array.from(
+            new Set([...(field.options ?? []), ...workflowOptions]),
+          );
+          const options =
+            value && !mergedOptions.includes(value)
+              ? [value, ...mergedOptions]
+              : mergedOptions;
+
+          return (
+            <select
+              id={field.key}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              value={value}
+              onChange={(e) => handleFieldChange(field.key, e.target.value)}
+              disabled={isReadOnly}>
+              <option value="">Select {field.label}</option>
+              {options.map((option) => (
+                <option
+                  key={option}
+                  value={option}
+                  disabled={
+                    isEditing &&
+                    !lead?.isClosed &&
+                    !allowed.has(normalizeStatusText(option))
+                  }>
+                  {option}
+                </option>
+              ))}
+            </select>
+          );
+        }
         return (
           <select
             id={field.key}
@@ -310,6 +571,101 @@ function LeadDetailContent() {
             value={value}
             onChange={(e) => handleFieldChange(field.key, e.target.value)}
             disabled={isReadOnly}
+            placeholder={field.placeholder}
+          />
+        );
+    }
+  };
+
+  const renderCloseField = (
+    field: FormField,
+    values: Record<string, unknown>,
+    setValues: Dispatch<SetStateAction<Record<string, unknown>>>,
+  ) => {
+    const rawValue = values[field.key];
+    const value =
+      rawValue === null || rawValue === undefined
+        ? ""
+        : typeof rawValue === "string" ||
+            typeof rawValue === "number" ||
+            typeof rawValue === "boolean"
+          ? String(rawValue)
+          : Array.isArray(rawValue)
+            ? rawValue.map((v) => String(v)).join(", ")
+            : JSON.stringify(rawValue);
+    const checkedValues = Array.isArray(rawValue)
+      ? rawValue.map((v) => String(v))
+      : [];
+
+    switch (field.type) {
+      case "textarea":
+        return (
+          <textarea
+            id={field.key}
+            className="w-full min-h-[100px] px-3 py-2 rounded-md border border-input bg-background text-foreground"
+            value={value}
+            onChange={(e) =>
+              setValues((prev) => ({ ...prev, [field.key]: e.target.value }))
+            }
+            placeholder={field.placeholder}
+          />
+        );
+
+      case "dropdown":
+        return (
+          <select
+            id={field.key}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            value={value}
+            onChange={(e) =>
+              setValues((prev) => ({ ...prev, [field.key]: e.target.value }))
+            }>
+            <option value="">Select {field.label}</option>
+            {field.options?.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        );
+
+      case "checklist":
+        return (
+          <div className="space-y-2">
+            {field.options?.map((option) => (
+              <label key={option} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={checkedValues.includes(option)}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setValues((prev) => {
+                      const currentRaw = prev[field.key];
+                      const current = Array.isArray(currentRaw)
+                        ? currentRaw.map((v) => String(v))
+                        : [];
+                      const next = checked
+                        ? Array.from(new Set([...current, option]))
+                        : current.filter((v) => v !== option);
+                      return { ...prev, [field.key]: next };
+                    });
+                  }}
+                />
+                <span>{option}</span>
+              </label>
+            ))}
+          </div>
+        );
+
+      default:
+        return (
+          <Input
+            id={field.key}
+            type={field.type}
+            value={value}
+            onChange={(e) =>
+              setValues((prev) => ({ ...prev, [field.key]: e.target.value }))
+            }
             placeholder={field.placeholder}
           />
         );
@@ -392,7 +748,14 @@ function LeadDetailContent() {
                   {!isLeadGeneration && (
                     <Button
                       variant="destructive"
-                      onClick={() => setShowCloseDialog(true)}>
+                      onClick={() => {
+                        setCloseStatus(
+                          isLinkedinRequestLead(leadData)
+                            ? "Signed/Closure"
+                            : "Closed",
+                        );
+                        setShowCloseDialog(true);
+                      }}>
                       Close Lead
                     </Button>
                   )}
@@ -618,40 +981,147 @@ function LeadDetailContent() {
       {/* Close Lead Dialog */}
       {showCloseDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50">
-          <Card className="w-full sm:max-w-md sm:mx-4 rounded-b-none sm:rounded-b-lg">
+          <Card className="w-full sm:max-w-2xl sm:mx-4 rounded-b-none sm:rounded-b-lg">
             <CardHeader>
-              <CardTitle>Close Lead</CardTitle>
+              <CardTitle className="flex items-center justify-between gap-3">
+                <span>Close Lead</span>
+                <span className="text-sm text-muted-foreground">
+                  Step {closeStep} of 3
+                </span>
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="mb-4">Are you sure you want to close this lead?</p>
-              <div className="mb-4">
-                <Label htmlFor="closeStatus">Final Status</Label>
-                <select
-                  id="closeStatus"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  value={closeStatus}
-                  onChange={(e) => setCloseStatus(e.target.value)}>
-                  <option value="Closed">Closed</option>
-                  <option value="Won">Won</option>
-                  <option value="Lost">Lost</option>
-                  <option value="Rejected">Rejected</option>
-                  <option value="Backed Out">Backed Out</option>
-                </select>
-              </div>
-              <div className="flex flex-col-reverse sm:flex-row gap-2">
+              {closeStep === 1 && (
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">
+                      Personal Details
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {closureFields
+                      .filter((field) => field.visible)
+                      .map((field) => (
+                        <div key={field.id} className="space-y-2">
+                          <Label htmlFor={field.key}>
+                            {field.label}
+                            {field.required && (
+                              <span className="text-red-500 ml-1">*</span>
+                            )}
+                          </Label>
+                          {renderCloseField(field, closureValues, setClosureValues)}
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {closeStep === 2 && (
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">
+                      Payment Plan
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {paymentPlanFields
+                      .filter((field) => field.visible)
+                      .map((field) => (
+                        <div key={field.id} className="space-y-2">
+                          <Label htmlFor={field.key}>
+                            {field.label}
+                            {field.required && (
+                              <span className="text-red-500 ml-1">*</span>
+                            )}
+                          </Label>
+                          {renderCloseField(
+                            field,
+                            paymentPlanValues,
+                            setPaymentPlanValues,
+                          )}
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {closeStep === 3 && (
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">
+                      Final Status & Confirmation
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="closeStatus">Final Status</Label>
+                      <select
+                        id="closeStatus"
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        value={closeStatus}
+                        onChange={(e) => setCloseStatus(e.target.value)}>
+                        {isLinkedinRequestLead(leadData) ? (
+                          <>
+                            <option value="Signed/Closure">Signed/Closure</option>
+                            <option value="Backed Out">Backed Out</option>
+                          </>
+                        ) : (
+                          <>
+                            <option value="Closed">Closed</option>
+                            <option value="Won">Won</option>
+                            <option value="Lost">Lost</option>
+                            <option value="Rejected">Rejected</option>
+                            <option value="Backed Out">Backed Out</option>
+                          </>
+                        )}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Initial Payment Status</Label>
+                      <p className="text-sm text-muted-foreground">
+                        {Number(paymentPlanValues.upfrontAmount) > 0
+                          ? "partially_paid"
+                          : "not_paid"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-6 flex flex-col-reverse sm:flex-row justify-between gap-2">
                 <Button
                   variant="outline"
-                  onClick={() => setShowCloseDialog(false)}
+                  onClick={() => {
+                    setShowCloseDialog(false);
+                  }}
                   className="w-full sm:w-auto">
                   Cancel
                 </Button>
-                <Button
-                  onClick={handleCloseLead}
-                  disabled={isSaving}
-                  variant="destructive"
-                  className="w-full sm:w-auto">
-                  {isSaving ? "Closing..." : "Close Lead"}
-                </Button>
+                <div className="flex flex-col-reverse sm:flex-row gap-2">
+                  {closeStep > 1 && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setCloseStep((s) => Math.max(1, s - 1))}
+                      className="w-full sm:w-auto">
+                      Back
+                    </Button>
+                  )}
+                  {closeStep < 3 ? (
+                    <Button
+                      onClick={() => setCloseStep((s) => Math.min(3, s + 1))}
+                      className="w-full sm:w-auto">
+                      Next
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={handleCloseLead}
+                      disabled={isSaving}
+                      variant="destructive"
+                      className="w-full sm:w-auto">
+                      {isSaving ? "Closing..." : "Close Lead"}
+                    </Button>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>

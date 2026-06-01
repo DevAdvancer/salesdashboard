@@ -193,10 +193,10 @@ const canResolve = isAdmin || isManager || isAssistantManager;
               </datalist>
               <p className="mt-1 text-xs text-muted-foreground">
                 {selectedTarget
-                  ? `Selected ID: ${selectedTarget.id}`
+                  ? 'Target selected.'
                   : targetInput.trim()
-                    ? 'Typed value will be saved as the target ID.'
-                    : 'Choose from the dropdown or paste an Appwrite ID.'}
+                    ? 'Typed value will be saved.'
+                    : 'Choose from the dropdown.'}
               </p>
             </div>
           </div>
@@ -226,9 +226,6 @@ const canResolve = isAdmin || isManager || isAssistantManager;
                   <p className="text-xs text-muted-foreground">
                     {item.targetType}: {targetLabel} / Requested by {item.requestedByName}
                   </p>
-                  {targetLabel !== item.targetId && (
-                    <p className="mt-1 text-xs text-muted-foreground">ID: {item.targetId}</p>
-                  )}
                   {item.reason && <p className="mt-2 text-sm text-muted-foreground">{item.reason}</p>}
                 </div>
                 {canResolve && (
@@ -250,14 +247,14 @@ const canResolve = isAdmin || isManager || isAssistantManager;
 
 function getReviewTargetLabel(item: ReviewQueueItem) {
   if (!item.metadata) {
-    return item.targetId;
+    return 'Target';
   }
 
   try {
     const metadata = JSON.parse(item.metadata) as { targetLabel?: string };
-    return metadata.targetLabel || item.targetId;
+    return metadata.targetLabel || 'Target';
   } catch {
-    return item.targetId;
+    return 'Target';
   }
 }
 

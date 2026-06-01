@@ -255,7 +255,6 @@ function formatLinkedinAccountsForNotification(accounts: LinkedinAccount[]) {
 
 export async function markAttendancePresenceAction(input: {
   currentUserId: string;
-  outlookConnected: boolean;
   path?: string | null;
 }) {
   await assertAuthenticatedUserId(input.currentUserId);
@@ -267,21 +266,147 @@ export async function markAttendancePresenceAction(input: {
 
   const now = new Date();
   const dateKey = getEtDateKey(now);
-  await createAdminClient().then(async ({ databases }) => {
-    await upsertAttendanceDoc(databases, {
-      dateKey,
-      userId: user.$id,
-      teamLeadId: user.role === "team_lead" ? user.$id : (user.teamLeadId ?? null),
-      patch: {
-        outlookConnected: input.outlookConnected,
-        lastSeenAt: now.toISOString(),
-        lastSeenPath: input.path ?? null,
-      },
-    });
+  const hour = getEtHour(now);
+  const shouldAutoMarkPresent = hour >= 9 && hour < 10;
+  let marked = false;
+
+  const appwriteEndpointRaw = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT ?? "";
+  const appwriteEndpoint = appwriteEndpointRaw.endsWith("/")
+    ? appwriteEndpointRaw.slice(0, -1)
+    : appwriteEndpointRaw;
+  const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID ?? "";
+  const apiKey = process.env.APPWRITE_API_KEY ?? "";
+
+  const { databases } = await createAdminClient();
+  const existing = await getAttendanceDoc(databases, {
+    dateKey,
+    userId: user.$id,
   });
 
-  return { dateKey, marked: false };
+  const patch: Partial<Omit<AttendanceRecord, "$id">> = {
+    outlookConnected: false,
+    lastSeenAt: now.toISOString(),
+    lastSeenPath: input.path ?? null,
+  };
+
+  let hasActivePresence = false;
+  if (shouldAutoMarkPresent && appwriteEndpoint && projectId && apiKey) {
+    const presenceResponse = await fetch(
+      `${appwriteEndpoint}/presences/${encodeURIComponent(user.$id)}`,
+      {
+        method: "GET",
+        headers: {
+          "X-Appwrite-Project": projectId,
+          "X-Appwrite-Key": apiKey,
+        },
+      },
+    ).catch(() => null);
+
+    if (presenceResponse?.ok) {
+      const presence = (await presenceResponse.json().catch(() => null)) as null | {
+        status?: unknown;
+      };
+      hasActivePresence = presence?.status === "online" || Boolean(presence);
+    }
+  }
+
+  if (shouldAutoMarkPresent && hasActivePresence && existing?.present !== true) {
+    marked = true;
+    patch.present = true;
+    patch.presentAt = now.toISOString();
+    patch.absentNotifiedAt = null;
+    patch.adminEscalatedAt = null;
+    patch.presentWithDelegateFlag = false;
+  }
+
+  await upsertAttendanceDoc(databases, {
+    dateKey,
+    userId: user.$id,
+    teamLeadId: user.role === "team_lead" ? user.$id : (user.teamLeadId ?? null),
+    patch,
+  });
+
+  return { dateKey, marked };
 }
+
+export async function getMyAttendanceToggleStateAction(input: {
+  currentUserId: string;
+}) {
+  await assertAuthenticatedUserId(input.currentUserId);
+  const user = await getAuthenticatedUserDoc();
+
+  if (user.role !== "agent" && user.role !== "team_lead") {
+    return {
+      dateKey: getEtDateKey(new Date()),
+      present: false,
+      canMarkPresent: false,
+      windowStatus: "closed" as const,
+    };
+  }
+
+  const now = new Date();
+  const dateKey = getEtDateKey(now);
+  const hour = getEtHour(now);
+  const windowStatus = hour < 9 ? "before" : hour < 10 ? "open" : "closed";
+
+  const { databases } = await createAdminClient();
+  const existing = await getAttendanceDoc(databases, { dateKey, userId: user.$id });
+  const present = existing?.present === true;
+
+  return {
+    dateKey,
+    present,
+    canMarkPresent: windowStatus === "open" && !present,
+    windowStatus,
+  };
+}
+
+export async function markMyselfPresentAction(input: { currentUserId: string }) {
+  await assertAuthenticatedUserId(input.currentUserId);
+  const user = await getAuthenticatedUserDoc();
+
+  if (user.role !== "agent" && user.role !== "team_lead") {
+    throw new Error("Unauthorized");
+  }
+
+  const now = new Date();
+  const dateKey = getEtDateKey(now);
+  const hour = getEtHour(now);
+  if (hour < 9 || hour >= 10) {
+    throw new Error("You can only mark present between 9-10 ET");
+  }
+
+  const { databases } = await createAdminClient();
+  const existing = await getAttendanceDoc(databases, { dateKey, userId: user.$id });
+  if (existing?.present === true) {
+    return { dateKey, present: true };
+  }
+
+  const updated = await upsertAttendanceDoc(databases, {
+    dateKey,
+    userId: user.$id,
+    teamLeadId: user.role === "team_lead" ? user.$id : (user.teamLeadId ?? null),
+    patch: {
+      present: true,
+      presentAt: now.toISOString(),
+      absentNotifiedAt: null,
+      adminEscalatedAt: null,
+      presentWithDelegateFlag: false,
+    },
+  });
+
+  await logAuditAction(databases, {
+    action: "ATTENDANCE_SELF_MARK_PRESENT",
+    actorId: user.$id,
+    actorName: user.name,
+    targetType: "attendance",
+    targetId: user.$id,
+    metadata: { dateKey },
+  });
+
+  return { dateKey, present: updated.present === true };
+}
+
 
 export async function markAttendancePresentByTeamLeadAction(input: {
   currentUserId: string;
@@ -468,7 +593,7 @@ export async function checkAndNotifyMyTeamAbsencesAction(input: {
         recipientId: recipientTeamLeadId,
         type: "ATTENDANCE_ABSENT",
         title: `Absent: ${name}`,
-        body: `No Outlook-connected activity detected in 9-10 ET. Linkedin IDs: ${formatLinkedinAccountsForNotification(accounts)}`,
+        body: `No in-app presence detected in 9-10 ET. Linkedin IDs: ${formatLinkedinAccountsForNotification(accounts)}`,
         targetType: "attendance",
         targetId: agentId,
       });
@@ -965,7 +1090,7 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
       await createNotificationsForRecipients(databases, adminRecipientIds, {
         type: "ATTENDANCE_TL_ABSENT",
         title: `TL Absent: ${teamLead.name}`,
-        body: `No Outlook-connected activity detected in 9-10 ET for Team Lead ${teamLead.name}.`,
+        body: `No in-app presence detected in 9-10 ET for Team Lead ${teamLead.name}.`,
         targetType: "attendance",
         targetId: teamLead.$id,
       });
@@ -1050,7 +1175,7 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
           recipientId: recipientTeamLeadId,
           type: "ATTENDANCE_ABSENT",
           title: `Absent: ${name}`,
-          body: `No Outlook-connected activity detected in 9-10 ET. Linkedin IDs: ${formatLinkedinAccountsForNotification(accounts)}`,
+          body: `No in-app presence detected in 9-10 ET. Linkedin IDs: ${formatLinkedinAccountsForNotification(accounts)}`,
           targetType: "attendance",
           targetId: agentId,
         });

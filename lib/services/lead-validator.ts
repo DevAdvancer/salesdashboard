@@ -1,6 +1,7 @@
 import { Query } from 'appwrite';
 import { databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { LeadData, LeadValidationResult } from '@/lib/types';
+import { getLinkedinProfileUrlSearchNeedle, normalizeLinkedinProfileUrl } from '@/lib/utils/linkedin';
 
 /**
  * Validate lead uniqueness across all branches
@@ -20,6 +21,7 @@ export async function validateLeadUniqueness(
   try {
     const email = data.email as string | undefined;
     const phone = data.phone as string | undefined;
+    const linkedinProfileUrl = data.linkedinProfileUrl as string | undefined;
 
     // Check email uniqueness if email is provided
     if (email) {
@@ -32,6 +34,13 @@ export async function validateLeadUniqueness(
     // Check phone uniqueness if phone is provided
     if (phone) {
       const result = await checkDuplicateField('phone', phone, excludeLeadId);
+      if (result) {
+        return result;
+      }
+    }
+
+    if (linkedinProfileUrl) {
+      const result = await checkDuplicateField('linkedinProfileUrl', linkedinProfileUrl, excludeLeadId);
       if (result) {
         return result;
       }
@@ -57,14 +66,14 @@ export async function validateLeadUniqueness(
  * @returns LeadValidationResult if duplicate found, null otherwise
  */
 async function checkDuplicateField(
-  field: 'email' | 'phone',
+  field: 'email' | 'phone' | 'linkedinProfileUrl',
   value: string,
   excludeLeadId?: string
 ): Promise<LeadValidationResult | null> {
-  // Use Query.contains to narrow down candidates that have the value in their data JSON
-  const queries: string[] = [
-    Query.contains('data', [value]),
-  ];
+  const normalizedNeedle =
+    field === 'linkedinProfileUrl' ? getLinkedinProfileUrlSearchNeedle(value) : value;
+
+  const queries: string[] = [Query.contains('data', [normalizedNeedle || value])];
 
   const response = await databases.listDocuments(
     DATABASE_ID,
@@ -81,7 +90,18 @@ async function checkDuplicateField(
 
     try {
       const leadData = JSON.parse(doc.data as string) as LeadData;
-      if (leadData[field] === value) {
+      if (field === 'linkedinProfileUrl') {
+        const inputNormalized = normalizeLinkedinProfileUrl(value);
+        const docNormalized = normalizeLinkedinProfileUrl(leadData.linkedinProfileUrl);
+        if (inputNormalized && docNormalized && inputNormalized === docNormalized) {
+          return {
+            isValid: false,
+            duplicateField: field,
+            existingLeadId: doc.$id,
+            existingBranchId: (doc.branchId as string) || undefined,
+          };
+        }
+      } else if (leadData[field] === value) {
         return {
           isValid: false,
           duplicateField: field,

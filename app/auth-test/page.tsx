@@ -23,9 +23,6 @@ export default function AuthTestPage() {
         {user ? (
           <div className="space-y-2">
             <p>
-              <strong>ID:</strong> {user.$id}
-            </p>
-            <p>
               <strong>Name:</strong> {user.name}
             </p>
             <p>
@@ -33,9 +30,6 @@ export default function AuthTestPage() {
             </p>
             <p>
               <strong>Role:</strong> {user.role}
-            </p>
-            <p>
-              <strong>Manager ID:</strong> {user.managerId || 'N/A'}
             </p>
             <p>
               <strong>Is Manager:</strong> {isManager ? 'Yes' : 'No'}

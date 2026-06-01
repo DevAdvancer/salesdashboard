@@ -157,7 +157,7 @@ describe('Integration: Complete Lead Lifecycle', () => {
     (databases.getDocument as jest.Mock).mockResolvedValue(currentLead);
     (databases.updateDocument as jest.Mock).mockResolvedValue(closedLead);
 
-    currentLead = await closeLead(currentLead.$id, 'Won');
+    currentLead = await closeLead(currentLead.$id, 'Won', managerId, 'Manager', 'manager');
 
     expect(currentLead.isClosed).toBe(true);
     expect(currentLead.closedAt).toBeTruthy();

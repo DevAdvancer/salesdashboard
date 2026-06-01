@@ -488,9 +488,6 @@ function HierarchyContent() {
                       {branch.isActive ? "Active" : "Inactive"}
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {branch.$id}
-                  </p>
                 </div>
               ))}
             </div>

@@ -8,6 +8,7 @@ import {
 } from "@/lib/server/current-user";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import type {
+  Lead,
   LinkedinAccount,
   LinkedinAccountType,
   LinkedinRequest,
@@ -440,6 +441,27 @@ export async function createLinkedinRequestAction(input: {
   }
 }
 
+export async function getLinkedinRequestCompanyAction(input: {
+  currentUserId: string;
+  requestId: string;
+}) {
+  await assertAuthenticatedUserId(input.currentUserId);
+  const user = await getAuthenticatedUserDoc();
+  const { databases } = await createAdminClient();
+
+  const request = (await databases.getDocument(
+    DATABASE_ID,
+    COLLECTIONS.LINKEDIN_REQUESTS,
+    input.requestId,
+  )) as unknown as LinkedinRequest;
+
+  if (user.role !== "admin" && request.agentId !== user.$id) {
+    throw new Error("Unauthorized");
+  }
+
+  return { company: request.company ?? "" };
+}
+
 export async function linkLeadToLinkedinRequestAction(input: {
   currentUserId: string;
   requestId: string;
@@ -465,6 +487,29 @@ export async function linkLeadToLinkedinRequestAction(input: {
     input.requestId,
     { leadId: input.leadId },
   );
+
+  try {
+    const lead = (await databases.getDocument(
+      DATABASE_ID,
+      COLLECTIONS.LEADS,
+      input.leadId,
+    )) as unknown as Lead;
+    const currentData = (() => {
+      try {
+        return JSON.parse(lead.data ?? "{}");
+      } catch {
+        return {};
+      }
+    })();
+    if (
+      !currentData.linkedinRequestId ||
+      String(currentData.linkedinRequestId).trim() !== input.requestId
+    ) {
+      await databases.updateDocument(DATABASE_ID, COLLECTIONS.LEADS, input.leadId, {
+        data: JSON.stringify({ ...currentData, linkedinRequestId: input.requestId }),
+      });
+    }
+  } catch {}
 
   await logAuditAction(databases, {
     action: "LINKEDIN_REQUEST_LINK_LEAD",

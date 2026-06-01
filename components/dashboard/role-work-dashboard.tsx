@@ -142,6 +142,15 @@ export function RoleWorkDashboard({ role, insights, isLoading }: RoleWorkDashboa
                     </tr>
                   </thead>
                   <tbody>
+                    {summary?.unassignedLeads ? (
+                      <tr key="unassigned" className="border-b">
+                        <td className="p-3 text-sm font-medium">Unassigned</td>
+                        <td className="p-3 text-sm text-muted-foreground">Unassigned</td>
+                        <td className="p-3 text-sm">{summary.unassignedLeads}</td>
+                        <td className="p-3 text-sm">0</td>
+                        <td className="p-3 text-sm">0</td>
+                      </tr>
+                    ) : null}
                     {insights.assigneeWorkload.map((item) => (
                       <tr key={item.userId} className="border-b last:border-0">
                         <td className="p-3 text-sm font-medium">{item.userName}</td>

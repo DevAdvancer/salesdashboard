@@ -7,12 +7,24 @@ import { getLead } from "@/lib/services/lead-service";
 import { reopenLead } from "@/lib/services/lead-action-service";
 import { getUserByIdOrNull } from "@/lib/services/user-service";
 import { User } from "@/lib/types";
-import { getFormConfig } from "@/lib/services/form-config-service";
-import { Lead, FormField, LeadData } from "@/lib/types";
+import {
+  getClosureFormConfig,
+  getFormConfig,
+  getClientIntakeFormConfig,
+  getPaymentPlanFormConfig,
+} from "@/lib/services/form-config-service";
+import {
+  addClientPaymentUpdate,
+  getClientPaymentRecord,
+  upsertClientPaymentRecord,
+  updateClientPersonalDetails,
+} from "@/lib/services/client-payment-service";
+import { Lead, FormField, LeadData, ClientPaymentRecord, PaymentStatus } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { ProtectedRoute } from "@/components/protected-route";
 import { LeadActivityTimeline } from "@/components/leads/lead-activity-timeline";
@@ -55,6 +67,20 @@ function HistoryDetailContent() {
   const [showReopenDialog, setShowReopenDialog] = useState(false);
   const [owner, setOwner] = useState<User | null>(null);
   const [assignedTo, setAssignedTo] = useState<User | null>(null);
+  const [closureFields, setClosureFields] = useState<FormField[]>([]);
+  const [paymentPlanFields, setPaymentPlanFields] = useState<FormField[]>([]);
+  const [clientIntakeFields, setClientIntakeFields] = useState<FormField[]>([]);
+  const [paymentRecord, setPaymentRecord] = useState<ClientPaymentRecord | null>(null);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("not_paid");
+  const [paymentNote, setPaymentNote] = useState("");
+  const [paymentSaving, setPaymentSaving] = useState(false);
+  const [paymentInitSaving, setPaymentInitSaving] = useState(false);
+  const [paymentInitPlanValues, setPaymentInitPlanValues] = useState<Record<string, unknown>>({});
+  const [paymentInitPersonalValues, setPaymentInitPersonalValues] = useState<Record<string, unknown>>({});
+  const [clientIntakeValues, setClientIntakeValues] = useState<Record<string, unknown>>({});
+  const [clientIntakeSaving, setClientIntakeSaving] = useState(false);
+  const [clientIntakeInitializedForRecord, setClientIntakeInitializedForRecord] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -65,6 +91,9 @@ function HistoryDetailContent() {
     if (user && leadId) {
       loadLead();
       loadFormConfig();
+      loadPayment();
+      loadCloseConfigs();
+      loadClientIntakeConfig();
     }
   }, [user, authLoading, leadId, router]);
 
@@ -116,6 +145,191 @@ function HistoryDetailContent() {
       console.error("Error loading form config:", err);
     }
   };
+
+  const loadCloseConfigs = async () => {
+    try {
+      const [closureConfig, paymentConfig] = await Promise.all([
+        getClosureFormConfig(),
+        getPaymentPlanFormConfig(),
+      ]);
+      setClosureFields(closureConfig.fields.sort((a, b) => a.order - b.order));
+      setPaymentPlanFields(paymentConfig.fields.sort((a, b) => a.order - b.order));
+    } catch (err: unknown) {
+      console.error("Error loading close configs:", err);
+    }
+  };
+
+  const loadClientIntakeConfig = async () => {
+    try {
+      const config = await getClientIntakeFormConfig();
+      setClientIntakeFields(config.fields.sort((a, b) => a.order - b.order));
+    } catch (err: unknown) {
+      console.error("Error loading client intake config:", err);
+    }
+  };
+
+  const handlePaymentInitPlanChange = (key: string, value: unknown) => {
+    setPaymentInitPlanValues((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handlePaymentInitPersonalChange = (key: string, value: unknown) => {
+    setPaymentInitPersonalValues((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const renderPaymentInitField = (
+    field: FormField,
+    values: Record<string, unknown>,
+    onChange: (key: string, value: unknown) => void,
+    disabled: boolean,
+  ) => {
+    const rawValue = values[field.key];
+    const value =
+      rawValue === null || rawValue === undefined
+        ? ""
+        : typeof rawValue === "string" ||
+            typeof rawValue === "number" ||
+            typeof rawValue === "boolean"
+          ? String(rawValue)
+          : Array.isArray(rawValue)
+            ? rawValue.map((v) => String(v)).join(", ")
+            : JSON.stringify(rawValue);
+
+    if (field.type === "textarea") {
+      return (
+        <Textarea
+          id={field.key}
+          value={value}
+          onChange={(e) => onChange(field.key, e.target.value)}
+          disabled={disabled}
+          placeholder={field.placeholder}
+        />
+      );
+    }
+
+    if (field.type === "dropdown") {
+      return (
+        <select
+          id={field.key}
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          value={value}
+          onChange={(e) => onChange(field.key, e.target.value)}
+          disabled={disabled}
+        >
+          <option value="" disabled>
+            Select...
+          </option>
+          {(field.options ?? []).map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    return (
+      <Input
+        id={field.key}
+        type={field.type === "email" ? "email" : field.type === "phone" ? "tel" : "text"}
+        value={value}
+        onChange={(e) => onChange(field.key, e.target.value)}
+        disabled={disabled}
+        placeholder={field.placeholder}
+      />
+    );
+  };
+
+  const handleCreatePaymentRecord = async () => {
+    if (!user) return;
+
+    const percent = Number(paymentInitPlanValues.paymentPercent);
+    const months = Number(paymentInitPlanValues.paymentMonths);
+    const upfrontAmount = Number(paymentInitPlanValues.upfrontAmount);
+
+    if (!Number.isFinite(percent) || !Number.isFinite(months) || !Number.isFinite(upfrontAmount)) {
+      toast({
+        title: "Invalid payment details",
+        description: "Payment percent, months, and upfront amount must be valid numbers.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setPaymentInitSaving(true);
+      const created = await upsertClientPaymentRecord({
+        actorId: user.$id,
+        leadId,
+        personalDetails: paymentInitPersonalValues,
+        paymentPlan: { percent, months, upfrontAmount },
+        initialStatus: upfrontAmount > 0 ? "partially_paid" : "not_paid",
+      });
+      setPaymentRecord(created);
+      setPaymentStatus(created.status);
+      toast({ title: "Success", description: "Payment record created." });
+    } catch (err: unknown) {
+      console.error("Error creating payment record:", err);
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to create payment record",
+        variant: "destructive",
+      });
+    } finally {
+      setPaymentInitSaving(false);
+    }
+  };
+
+  const loadPayment = async () => {
+    if (!user) return;
+    try {
+      setPaymentLoading(true);
+      const record = await getClientPaymentRecord(user.$id, leadId);
+      setPaymentRecord(record);
+      if (record) setPaymentStatus(record.status);
+      setClientIntakeInitializedForRecord(null);
+      if (!record) {
+        setPaymentInitPlanValues({});
+        setPaymentInitPersonalValues({});
+      }
+    } catch (err: unknown) {
+      console.error("Error loading payment record:", err);
+      setPaymentRecord(null);
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!paymentRecord) return;
+    if (clientIntakeInitializedForRecord === paymentRecord.$id) return;
+
+    const firstName = typeof leadData.firstName === "string" ? leadData.firstName.trim() : "";
+    const lastName = typeof leadData.lastName === "string" ? leadData.lastName.trim() : "";
+    const fallbackName = typeof leadData.legalName === "string" ? leadData.legalName.trim() : "";
+    const fullName = [firstName, lastName].filter(Boolean).join(" ").trim() || fallbackName;
+
+    const salesperson = assignedTo?.name || owner?.name || "";
+    const agreement = `${paymentRecord.paymentPlan.percent}% in ${paymentRecord.paymentPlan.months} Months`;
+    const upfront = String(paymentRecord.paymentPlan.upfrontAmount);
+
+    const stored = paymentRecord.personalDetails ?? {};
+    const next: Record<string, unknown> = { ...stored };
+
+    if (!next.salesperson) next.salesperson = salesperson;
+    if (!next.fullName) next.fullName = fullName;
+    if (!next.visaStatus) next.visaStatus = typeof leadData.visaStatus === "string" ? leadData.visaStatus : "";
+    if (!next.email) next.email = typeof leadData.email === "string" ? leadData.email : "";
+    if (!next.phone) next.phone = typeof leadData.phone === "string" ? leadData.phone : "";
+    if (!next.linkedinProfileUrl) {
+      next.linkedinProfileUrl =
+        typeof (leadData as any).linkedinProfileUrl === "string" ? (leadData as any).linkedinProfileUrl : "";
+    }
+    if (!next.agreement) next.agreement = agreement;
+    if (!next.upfront) next.upfront = upfront;
+
+    setClientIntakeValues(next);
+    setClientIntakeInitializedForRecord(paymentRecord.$id);
+  }, [paymentRecord, leadData, assignedTo, owner, clientIntakeInitializedForRecord]);
 
   const canReopen = Boolean(isManager || isTeamLead);
 
@@ -205,6 +419,176 @@ function HistoryDetailContent() {
             readOnly
           />
         );
+    }
+  };
+
+  const renderReadOnlyValue = (value: unknown) => {
+    if (value === null || value === undefined) return "";
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+    if (Array.isArray(value)) return value.map((v) => String(v)).join(", ");
+    return JSON.stringify(value);
+  };
+
+  const formatPaymentStatusLabel = (status: PaymentStatus) => {
+    if (status === "fully_paid") return "Fully Paid";
+    if (status === "partially_paid") return "Partially Paid";
+    return "Not Paid";
+  };
+
+  const handleClientIntakeChange = (key: string, value: unknown) => {
+    setClientIntakeValues((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const renderClientIntakeField = (field: FormField) => {
+    const valueRaw = clientIntakeValues[field.key];
+    const value =
+      valueRaw === null || valueRaw === undefined
+        ? ""
+        : typeof valueRaw === "string" || typeof valueRaw === "number" || typeof valueRaw === "boolean"
+          ? String(valueRaw)
+          : JSON.stringify(valueRaw);
+
+    const isLockedField = field.key === "salesperson" || field.key === "agreement" || field.key === "upfront";
+    const isDisabled = clientIntakeSaving || !paymentRecord || paymentRecord.status !== "fully_paid" || isLockedField;
+
+    if (field.type === "textarea") {
+      return (
+        <Textarea
+          id={field.key}
+          value={value}
+          disabled={isDisabled}
+          onChange={(e) => handleClientIntakeChange(field.key, e.target.value)}
+          placeholder={field.placeholder}
+        />
+      );
+    }
+
+    if (field.type === "dropdown") {
+      return (
+        <select
+          id={field.key}
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          value={value}
+          onChange={(e) => handleClientIntakeChange(field.key, e.target.value)}
+          disabled={isDisabled}
+        >
+          <option value="" disabled>
+            Select...
+          </option>
+          {(field.options ?? []).map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    return (
+      <Input
+        id={field.key}
+        type={field.type === "email" ? "email" : field.type === "phone" ? "tel" : "text"}
+        value={value}
+        disabled={isDisabled}
+        onChange={(e) => handleClientIntakeChange(field.key, e.target.value)}
+        placeholder={field.placeholder}
+      />
+    );
+  };
+
+  const handleSaveClientIntake = async () => {
+    if (!user) return;
+    if (!paymentRecord) return;
+
+    if (paymentRecord.status !== "fully_paid") {
+      toast({
+        title: "Payment not completed",
+        description: "Client details can be completed only after payment status is Fully Paid.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const derivedSalesperson = assignedTo?.name || owner?.name || "";
+    const derivedAgreement = `${paymentRecord.paymentPlan.percent}% in ${paymentRecord.paymentPlan.months} Months`;
+    const derivedUpfront = String(paymentRecord.paymentPlan.upfrontAmount);
+
+    const merged: Record<string, unknown> = {
+      ...(paymentRecord.personalDetails ?? {}),
+      ...clientIntakeValues,
+      salesperson: derivedSalesperson,
+      agreement: derivedAgreement,
+      upfront: derivedUpfront,
+    };
+
+    const missing: string[] = [];
+    for (const field of clientIntakeFields) {
+      if (!field.visible || !field.required) continue;
+      const raw = merged[field.key];
+      if (field.type === "checklist") {
+        if (!Array.isArray(raw) || raw.length === 0) missing.push(field.label);
+        continue;
+      }
+      const text = typeof raw === "string" ? raw.trim() : String(raw ?? "").trim();
+      if (!text) missing.push(field.label);
+    }
+
+    if (missing.length > 0) {
+      toast({
+        title: "Missing required fields",
+        description: `Please fill: ${missing.join(", ")}`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setClientIntakeSaving(true);
+      const updated = await updateClientPersonalDetails({
+        actorId: user.$id,
+        leadId,
+        personalDetails: merged,
+      });
+      setPaymentRecord(updated);
+      setClientIntakeValues(updated.personalDetails ?? {});
+      toast({ title: "Success", description: "Client details saved." });
+    } catch (err: unknown) {
+      console.error("Error saving client intake:", err);
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to save client details",
+        variant: "destructive",
+      });
+    } finally {
+      setClientIntakeSaving(false);
+    }
+  };
+
+  const handleAddPaymentUpdate = async () => {
+    if (!user) return;
+    if (!paymentRecord) return;
+    try {
+      setPaymentSaving(true);
+      const updated = await addClientPaymentUpdate({
+        actorId: user.$id,
+        leadId,
+        status: paymentStatus,
+        note: paymentNote.trim() ? paymentNote.trim() : null,
+      });
+      setPaymentRecord(updated);
+      setPaymentNote("");
+      toast({ title: "Success", description: "Payment update saved." });
+    } catch (err: unknown) {
+      console.error("Error saving payment update:", err);
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to save payment update",
+        variant: "destructive",
+      });
+    } finally {
+      setPaymentSaving(false);
     }
   };
 
@@ -358,6 +742,237 @@ function HistoryDetailContent() {
                 </p>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Payments</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {paymentLoading ? (
+              <p className="text-sm text-muted-foreground">Loading payments...</p>
+            ) : !paymentRecord ? (
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  No payment record found for this client. Create one to track payment status.
+                </p>
+
+                {paymentPlanFields.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {paymentPlanFields
+                      .filter((field) => field.visible)
+                      .map((field) => (
+                        <div key={field.id}>
+                          <Label>{field.label}</Label>
+                          {renderPaymentInitField(
+                            field,
+                            paymentInitPlanValues,
+                            handlePaymentInitPlanChange,
+                            paymentInitSaving,
+                          )}
+                        </div>
+                      ))}
+                  </div>
+                )}
+
+                {closureFields.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {closureFields
+                      .filter((field) => field.visible)
+                      .map((field) => (
+                        <div key={field.id} className={field.type === "textarea" ? "md:col-span-2" : undefined}>
+                          <Label>{field.label}</Label>
+                          {renderPaymentInitField(
+                            field,
+                            paymentInitPersonalValues,
+                            handlePaymentInitPersonalChange,
+                            paymentInitSaving,
+                          )}
+                        </div>
+                      ))}
+                  </div>
+                )}
+
+                <div className="flex justify-end">
+                  <Button onClick={handleCreatePaymentRecord} disabled={paymentInitSaving}>
+                    {paymentInitSaving ? "Creating..." : "Create Payment Record"}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label>Plan</Label>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {paymentRecord.paymentPlan.percent}% in{" "}
+                      {paymentRecord.paymentPlan.months} months, upfront{" "}
+                      {paymentRecord.paymentPlan.upfrontAmount}
+                    </p>
+                  </div>
+                  <div>
+                    <Label>Status</Label>
+                    <p className="mt-2">
+                      <span className="inline-block px-3 py-1 rounded-full bg-secondary text-secondary-foreground text-sm">
+                        {formatPaymentStatusLabel(paymentRecord.status)}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                {closureFields.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {closureFields
+                      .filter((field) => field.visible)
+                      .map((field) => (
+                        <div key={field.id}>
+                          <Label>{field.label}</Label>
+                          <Input
+                            value={renderReadOnlyValue(paymentRecord.personalDetails[field.key])}
+                            disabled
+                            readOnly
+                          />
+                        </div>
+                      ))}
+                  </div>
+                )}
+
+                {paymentPlanFields.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {paymentPlanFields
+                      .filter((field) => field.visible)
+                      .map((field) => (
+                        <div key={field.id}>
+                          <Label>{field.label}</Label>
+                          <Input
+                            value={renderReadOnlyValue(
+                              field.key === "paymentPercent"
+                                ? paymentRecord.paymentPlan.percent
+                                : field.key === "paymentMonths"
+                                  ? paymentRecord.paymentPlan.months
+                                  : field.key === "upfrontAmount"
+                                    ? paymentRecord.paymentPlan.upfrontAmount
+                                    : (paymentRecord.paymentPlan as any)[field.key],
+                            )}
+                            disabled
+                            readOnly
+                          />
+                        </div>
+                      ))}
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                    <div className="space-y-2">
+                      <Label htmlFor="paymentStatus">Update Status</Label>
+                      <select
+                        id="paymentStatus"
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        value={paymentStatus}
+                        onChange={(e) => setPaymentStatus(e.target.value as PaymentStatus)}
+                      >
+                        <option value="not_paid">Not Paid</option>
+                        <option value="partially_paid">Partially Paid</option>
+                        <option value="fully_paid">Fully Paid</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="paymentNote">Note</Label>
+                      <Textarea
+                        id="paymentNote"
+                        value={paymentNote}
+                        onChange={(e) => setPaymentNote(e.target.value)}
+                        placeholder="Add a follow-up update..."
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button
+                      onClick={handleAddPaymentUpdate}
+                      disabled={paymentSaving}
+                    >
+                      {paymentSaving ? "Saving..." : "Add Update"}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <Label>Updates</Label>
+                  {paymentRecord.updates.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No updates yet.</p>
+                  ) : (
+                    paymentRecord.updates.map((update) => (
+                      <div key={update.id} className="rounded-md border border-border p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium">{update.actorName}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatPaymentStatusLabel(update.status)}
+                            </p>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(update.createdAt).toLocaleString()}
+                          </p>
+                        </div>
+                        {update.note && (
+                          <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+                            {update.note}
+                          </p>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Client Details (After Payment)</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {paymentRecord?.status === "fully_paid"
+                ? "All fields are required."
+                : "Complete payment first (set status to Fully Paid) to fill client details."}
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!paymentRecord ? (
+              <p className="text-sm text-muted-foreground">No payment record found.</p>
+            ) : clientIntakeFields.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No client intake configuration found.</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {clientIntakeFields
+                    .filter((field) => field.visible)
+                    .map((field) => (
+                      <div key={field.id} className={field.type === "textarea" ? "md:col-span-2" : undefined}>
+                        <Label htmlFor={field.key}>
+                          {field.label}
+                          {field.required && <span className="text-red-500 ml-1">*</span>}
+                        </Label>
+                        {renderClientIntakeField(field)}
+                      </div>
+                    ))}
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    onClick={handleSaveClientIntake}
+                    disabled={
+                      clientIntakeSaving ||
+                      paymentLoading ||
+                      paymentRecord.status !== "fully_paid"
+                    }
+                  >
+                    {clientIntakeSaving ? "Saving..." : "Save Client Details"}
+                  </Button>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 

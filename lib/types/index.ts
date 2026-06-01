@@ -130,7 +130,7 @@ export interface UpdateBranchInput {
 // Lead validation types
 export interface LeadValidationResult {
   isValid: boolean;
-  duplicateField?: 'email' | 'phone';
+  duplicateField?: 'email' | 'phone' | 'linkedinProfileUrl';
   existingLeadId?: string;
   existingBranchId?: string;
 }
@@ -147,6 +147,7 @@ export interface LeadListFilters {
   assignedToId?: string;
   ownerId?: string;
   branchId?: string;
+  teamLeadId?: string;
   dateFrom?: string;
   dateTo?: string;
   searchQuery?: string;
@@ -347,6 +348,37 @@ export interface HistoryFilters {
 export interface HistoryEntry extends Lead {
   isClosed: true;
   closedAt: string;
+}
+
+export type PaymentStatus = 'not_paid' | 'partially_paid' | 'fully_paid';
+
+export interface ClientPaymentPlan {
+  percent: number;
+  months: number;
+  upfrontAmount: number;
+}
+
+export interface ClientPaymentUpdate {
+  id: string;
+  status: PaymentStatus;
+  note?: string | null;
+  actorId: string;
+  actorName: string;
+  createdAt: string;
+}
+
+export interface ClientPaymentRecord {
+  $id: string;
+  leadId: string;
+  personalDetails: Record<string, unknown>;
+  paymentPlan: ClientPaymentPlan;
+  status: PaymentStatus;
+  updates: ClientPaymentUpdate[];
+  createdAt: string;
+  updatedAt?: string | null;
+  lastReminderAt?: string | null;
+  updatedById?: string | null;
+  updatedByName?: string | null;
 }
 
 export type LeadNoteVisibility = 'team' | 'leadership' | 'manager_only';

@@ -66,11 +66,15 @@ function LeadsContent() {
   const [statusFilter, setStatusFilter] = useState("");
   const [statusOptions, setStatusOptions] = useState<string[]>([
     "Generated",
+    "Connection Accepted",
     "Interested",
     "Not-Interested",
+    "Not Interested",
     "Pipeline",
+    "Pipeline / Follow up",
     "Prospect",
     "Signed",
+    "Signed/Closure",
     "Backed Out",
   ]);
   const [assignedToFilter, setAssignedToFilter] = useState("");

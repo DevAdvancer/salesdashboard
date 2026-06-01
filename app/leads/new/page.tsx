@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createLead } from "@/lib/services/lead-action-service";
 import {
   findBackedOutLeadForLinkedinTargetUrlAction,
+  getLinkedinRequestCompanyAction,
   linkLeadToLinkedinRequestAction,
 } from "@/app/actions/linkedin";
 import { validateLeadUniqueness } from "@/lib/services/lead-validator";
@@ -410,6 +411,9 @@ function LegacyNewLeadContent() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
 
+  const LINKEDIN_INITIAL_STATUS = "Connection Accepted";
+  const LINKEDIN_SOURCE = "LinkedIN/Lead";
+
   const [formFields, setFormFields] = useState<FormField[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<string>("");
@@ -417,10 +421,14 @@ function LegacyNewLeadContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
+  const [linkedinRequestCompanyResolved, setLinkedinRequestCompanyResolved] =
+    useState<string>("");
 
   const linkedinRequestId = (searchParams.get("linkedinRequestId") ?? "").trim();
   const linkedinTargetUrl = (searchParams.get("linkedinTargetUrl") ?? "").trim();
   const linkedinCompany = (searchParams.get("linkedinCompany") ?? "").trim();
+  const isLinkedinRequestLead = Boolean(linkedinRequestId);
+  const isDirectLinkedinLead = Boolean(linkedinTargetUrl) && !isLinkedinRequestLead;
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -434,7 +442,22 @@ function LegacyNewLeadContent() {
         loadBranches();
       }
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, linkedinRequestId, linkedinTargetUrl]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (!linkedinRequestId) return;
+    (async () => {
+      try {
+        const result = await getLinkedinRequestCompanyAction({
+          currentUserId: user.$id,
+          requestId: linkedinRequestId,
+        });
+        const company = typeof result.company === "string" ? result.company.trim() : "";
+        if (company) setLinkedinRequestCompanyResolved(company);
+      } catch {}
+    })();
+  }, [linkedinRequestId, user]);
 
   useEffect(() => {
     if (!user) return;
@@ -463,7 +486,29 @@ function LegacyNewLeadContent() {
       setError(null);
       const config = await getFormConfig();
       const fields = config.fields;
-      setFormFields(fields.sort((a, b) => a.order - b.order));
+      const sorted = fields.sort((a, b) => a.order - b.order);
+      const adjusted = isLinkedinRequestLead
+        ? sorted.map((field) =>
+            field.key === "status"
+              ? { ...field, options: [LINKEDIN_INITIAL_STATUS] }
+              : field.key === "linkedinProfileUrl"
+                ? { ...field, required: true }
+              : field.key === "company" ||
+                  field.key === "source" ||
+                  field.key === "sourceName"
+                ? { ...field, visible: false, required: false }
+                : field,
+          )
+        : isDirectLinkedinLead
+          ? sorted.map((field) =>
+              field.key === "status"
+                ? { ...field, options: ["Interested", "Not Interested"] }
+                : field.key === "linkedinProfileUrl"
+                  ? { ...field, required: true }
+                  : field,
+            )
+          : sorted;
+      setFormFields(adjusted);
     } catch (err: any) {
       console.error("Error loading form config:", err);
       setError(err.message || "Failed to load form configuration");
@@ -488,18 +533,15 @@ function LegacyNewLeadContent() {
       setIsSaving(true);
       setDuplicateError(null);
 
-      const mergedData =
-        linkedinTargetUrl && !data.linkedinProfileUrl
-          ? { ...data, linkedinProfileUrl: linkedinTargetUrl }
-          : data;
-
       // Validate lead uniqueness before creating
-      const validation = await validateLeadUniqueness(mergedData);
+      const validation = await validateLeadUniqueness(data);
       if (!validation.isValid) {
         const fieldLabel =
           validation.duplicateField === "email"
             ? "email address"
-            : "phone number";
+            : validation.duplicateField === "phone"
+              ? "phone number"
+              : "LinkedIn URL";
         setDuplicateError(
           `A lead with this ${fieldLabel} already exists${validation.existingBranchId ? " in another branch" : ""}.`,
         );
@@ -517,9 +559,34 @@ function LegacyNewLeadContent() {
               : undefined);
 
       // Extract assignedToId added by DynamicLeadForm and prevent it from being stored in data JSON
-      const { assignedToId, ...sanitizedData } = mergedData as {
+      const { assignedToId, ...sanitizedData } = data as {
         assignedToId?: string;
       } & Record<string, any>;
+
+      const effectiveLinkedinCompany = (
+        linkedinRequestCompanyResolved ||
+        linkedinCompany
+      ).trim();
+      if (isLinkedinRequestLead && !effectiveLinkedinCompany) {
+        toast({
+          title: "Missing company",
+          description:
+            "Company could not be resolved from the LinkedIn request. Please go back and retry from LinkedIn Requests.",
+          variant: "destructive",
+        });
+        setIsSaving(false);
+        return;
+      }
+      const finalData = isLinkedinRequestLead
+        ? {
+            ...sanitizedData,
+            status: LINKEDIN_INITIAL_STATUS,
+            linkedinRequestId,
+            ...(effectiveLinkedinCompany ? { company: effectiveLinkedinCompany } : {}),
+            sourceName: LINKEDIN_SOURCE,
+            source: LINKEDIN_SOURCE,
+          }
+        : sanitizedData;
 
       // Auto-assign to creator if no one is selected
       const finalAssignedToId = assignedToId || user.$id;
@@ -528,9 +595,11 @@ function LegacyNewLeadContent() {
       const created = await createLead(
         user.$id,
         {
-          data: sanitizedData,
+          data: finalData,
           assignedToId: finalAssignedToId,
-          status: sanitizedData.status || "Interested",
+          status: isLinkedinRequestLead
+            ? LINKEDIN_INITIAL_STATUS
+            : finalData.status || "Interested",
           branchId,
         },
         user.$id,
@@ -639,10 +708,27 @@ function LegacyNewLeadContent() {
 
           {/* Dynamic Lead Form */}
           <DynamicLeadForm
+            key={`${linkedinRequestId || "manual"}-${linkedinRequestCompanyResolved || ""}`}
             formConfig={formFields}
             onSubmit={handleSubmit}
             submitLabel="Create Lead"
             isLoading={isSaving}
+            defaultValues={
+              isLinkedinRequestLead
+                ? {
+                    status: LINKEDIN_INITIAL_STATUS,
+                    company:
+                      (linkedinRequestCompanyResolved || linkedinCompany).trim() ||
+                      undefined,
+                    source: LINKEDIN_SOURCE,
+                    sourceName: LINKEDIN_SOURCE,
+                  }
+                : isDirectLinkedinLead
+                  ? {
+                      status: "Interested",
+                    }
+                  : undefined
+            }
           />
         </CardContent>
       </Card>

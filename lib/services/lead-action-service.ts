@@ -6,6 +6,7 @@ import {
 import {
   assignLeadAction,
   backoutLeadAction,
+  notInterestedLeadAction,
 } from "@/lib/actions/lead-actions";
 import { cacheClientRead, clearClientReadCache } from "@/lib/utils/client-read-cache";
 import type { CreateLeadInput, Lead, LeadListFilters, UserRole } from "@/lib/types";
@@ -65,4 +66,12 @@ export function backoutLead(
   actorName: string
 ): Promise<{ success: boolean; lead: Lead }> {
   return backoutLeadAction(leadId, actorId, actorName).finally(clearLeadReadCache);
+}
+
+export function notInterestedLead(
+  leadId: string,
+  actorId: string,
+  actorName: string
+): Promise<{ success: boolean; lead: Lead }> {
+  return notInterestedLeadAction(leadId, actorId, actorName).finally(clearLeadReadCache);
 }
