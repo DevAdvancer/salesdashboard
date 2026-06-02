@@ -170,15 +170,24 @@ export async function updateLeadFollowUpAction(input: {
 
   const { databases } = await createAdminClient();
   const currentLead = await databases.getDocument(DATABASE_ID, COLLECTIONS.LEADS, input.leadId);
+  const nextFollowUpAt = input.nextFollowUpAt ?? null;
+  const nextAction = input.nextAction ?? null;
+  const lastContactedAt = input.lastContactedAt ?? null;
+  const previousLead = currentLead as unknown as Lead;
+  const shouldResetToPending =
+    Boolean(nextFollowUpAt) &&
+    nextFollowUpAt !== (previousLead.nextFollowUpAt ?? null) &&
+    (previousLead.followUpStatus === "completed" || input.followUpStatus === "completed");
+  const followUpStatus = shouldResetToPending ? "pending" : (input.followUpStatus ?? "pending");
   const doc = await databases.updateDocument(
     DATABASE_ID,
     COLLECTIONS.LEADS,
     input.leadId,
     {
-      nextFollowUpAt: input.nextFollowUpAt ?? null,
-      nextAction: input.nextAction ?? null,
-      lastContactedAt: input.lastContactedAt ?? null,
-      followUpStatus: input.followUpStatus ?? "pending",
+      nextFollowUpAt,
+      nextAction,
+      lastContactedAt,
+      followUpStatus,
     }
   );
 
@@ -195,7 +204,7 @@ export async function updateLeadFollowUpAction(input: {
         targetType: "LEAD",
       }
     );
-  } else if (currentLead.nextFollowUpAt && updatedLead.followUpStatus === "completed") {
+  } else if (previousLead.nextFollowUpAt && updatedLead.followUpStatus === "completed") {
     await createNotificationsForRecipients(
       databases,
       [updatedLead.assignedToId, updatedLead.ownerId],
@@ -208,6 +217,52 @@ export async function updateLeadFollowUpAction(input: {
       }
     );
   }
+
+  try {
+    const followUpChanges: Record<string, { from: unknown; to: unknown }> = {};
+    const previous = {
+      nextFollowUpAt: previousLead.nextFollowUpAt ?? null,
+      nextAction: previousLead.nextAction ?? null,
+      lastContactedAt: previousLead.lastContactedAt ?? null,
+      followUpStatus: previousLead.followUpStatus ?? null,
+    };
+    const next = {
+      nextFollowUpAt,
+      nextAction,
+      lastContactedAt,
+      followUpStatus,
+    };
+    for (const key of Object.keys(next) as Array<keyof typeof next>) {
+      const from = previous[key];
+      const to = next[key];
+      if (JSON.stringify(from) !== JSON.stringify(to)) {
+        followUpChanges[key] = { from, to };
+      }
+    }
+
+    if (Object.keys(followUpChanges).length > 0) {
+      const nowIso = new Date().toISOString();
+      await databases.createDocument(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, ID.unique(), {
+        action: "LEAD_UPDATE",
+        actorId: actor.$id,
+        actorName: actor.name,
+        targetId: updatedLead.$id,
+        targetType: "LEAD",
+        metadata: JSON.stringify({
+          kind: "FOLLOW_UP",
+          leadName: getLeadDisplayName(updatedLead),
+              snapshot: {
+                nextFollowUpAt: updatedLead.nextFollowUpAt ?? null,
+                nextAction: updatedLead.nextAction ?? null,
+                lastContactedAt: updatedLead.lastContactedAt ?? null,
+                followUpStatus: updatedLead.followUpStatus ?? null,
+              },
+          changes: followUpChanges,
+        }),
+        performedAt: nowIso,
+      });
+    }
+  } catch {}
 
   return doc as unknown as Lead;
 }

@@ -96,7 +96,7 @@ export const DEFAULT_FIELDS: FormField[] = [
     type: 'text',
     label: 'Legal Name',
     key: 'legalName',
-    required: false,
+    required: true,
     visible: true,
     order: 8
   },

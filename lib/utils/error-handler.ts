@@ -2,6 +2,7 @@ import React from 'react';
 import * as Sentry from '@sentry/nextjs';
 import { toast } from '@/components/ui/use-toast';
 import { ToastAction } from '@/components/ui/toast';
+import { SUPPORT_EMAIL } from '@/lib/constants/support';
 
 /**
  * Error handling utilities for consistent error notifications
@@ -12,6 +13,60 @@ export interface ErrorHandlerOptions {
   title?: string;
   showToast?: boolean;
   retry?: () => void | Promise<void>;
+}
+
+function getStatusCode(error: any): number | null {
+  const candidate =
+    error?.status ??
+    error?.response?.status ??
+    error?.response?.statusCode ??
+    error?.statusCode;
+
+  if (typeof candidate === 'number') return candidate;
+  if (typeof candidate === 'string') {
+    const parsed = Number(candidate);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function isTemporaryError(error: any, message: string): boolean {
+  const status = getStatusCode(error);
+  if (status && [408, 425, 429, 500, 502, 503, 504].includes(status)) return true;
+
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('timeout') ||
+    normalized.includes('temporar') ||
+    normalized.includes('rate limit') ||
+    normalized.includes('too many requests') ||
+    normalized.includes('service unavailable') ||
+    normalized.includes('bad gateway') ||
+    normalized.includes('gateway timeout')
+  );
+}
+
+function refreshPage() {
+  if (typeof window === 'undefined') return;
+  window.location.reload();
+}
+
+function openSupportEmail() {
+  if (typeof window === 'undefined') return;
+  window.location.href = `mailto:${SUPPORT_EMAIL}`;
+}
+
+function createToastAction(
+  label: string,
+  altText: string,
+  onClick: () => void | Promise<void>,
+) {
+  return React.createElement(
+    ToastAction,
+    { altText, onClick },
+    label,
+  ) as any;
 }
 
 /**
@@ -27,7 +82,6 @@ export function handleValidationError(
     toast({
       title,
       description: message,
-      variant: 'destructive',
     });
   }
 
@@ -56,7 +110,10 @@ export function handleApiError(
   // Handle specific error types
   let isExpectedUserError = false;
 
-  if (message.includes('Invalid credentials') || message.includes('user_invalid_credentials')) {
+  if (
+    message.includes('Invalid credentials') ||
+    message.includes('user_invalid_credentials')
+  ) {
     message = 'Invalid email or password';
     isExpectedUserError = true;
   } else if (message.includes('user_not_found')) {
@@ -73,14 +130,31 @@ export function handleApiError(
     isExpectedUserError = true;
   }
 
+  const status = getStatusCode(error);
+  const isTemporary = !isExpectedUserError && isTemporaryError(error, message);
+  const needsSupport =
+    !isExpectedUserError &&
+    !isTemporary &&
+    ((typeof status === 'number' && status >= 500) ||
+      message === 'An unexpected error occurred');
+
+  if (isTemporary) {
+    message = 'This looks like a temporary issue. Please refresh and try again.';
+  } else if (needsSupport) {
+    message = `We couldn't complete that right now. Please refresh and try again. If it keeps happening, contact ${SUPPORT_EMAIL} for instant help.`;
+  }
+
   if (showToast) {
     toast({
       title,
       description: message,
-      variant: 'destructive',
-      action: retry
-        ? React.createElement(ToastAction, { altText: 'Retry', onClick: retry }, 'Retry') as any
-        : undefined,
+      action: isTemporary
+        ? createToastAction('Refresh', 'Refresh', refreshPage)
+        : needsSupport
+          ? createToastAction('Email support', 'Email support', openSupportEmail)
+          : retry
+            ? createToastAction('Try again', 'Try again', retry)
+            : undefined,
     });
   }
 
@@ -107,7 +181,6 @@ export function handlePermissionError(
     toast({
       title,
       description: message,
-      variant: 'destructive',
     });
   }
 
@@ -124,21 +197,21 @@ export function handleNetworkError(
 ) {
   const { title = 'Network Error', showToast = true, retry } = options;
 
-  const message = 'Unable to connect. Please check your internet connection.';
+  const message =
+    "We're having trouble connecting right now. Please refresh and try again.";
 
   if (showToast) {
     toast({
       title,
       description: message,
-      variant: 'destructive',
-      action: retry
-        ? React.createElement(ToastAction, { altText: 'Retry', onClick: retry }, 'Retry') as any
-        : undefined,
+      action: createToastAction('Refresh', 'Refresh', refreshPage),
     });
   }
 
   console.error('Network error:', error);
   Sentry.captureException(error);
+
+  return message;
 }
 
 /**

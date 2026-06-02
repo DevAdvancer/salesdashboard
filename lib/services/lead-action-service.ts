@@ -2,6 +2,7 @@ import {
   createLeadAction,
   listLeadsAction,
   reopenLeadAction,
+  updateLeadAction,
 } from "@/app/actions/lead";
 import {
   assignLeadAction,
@@ -9,7 +10,7 @@ import {
   notInterestedLeadAction,
 } from "@/lib/actions/lead-actions";
 import { cacheClientRead, clearClientReadCache } from "@/lib/utils/client-read-cache";
-import type { CreateLeadInput, Lead, LeadListFilters, UserRole } from "@/lib/types";
+import type { CreateLeadInput, Lead, LeadData, LeadListFilters, UserRole } from "@/lib/types";
 
 const LEAD_READ_SCOPE_PREFIX = "lead:";
 const LEAD_LIST_TTL_MS = 60 * 1000;
@@ -49,6 +50,15 @@ export function reopenLead(
   actorName?: string
 ): Promise<Lead> {
   return reopenLeadAction(leadId, actorId, actorName).finally(clearLeadReadCache);
+}
+
+export function updateLead(
+  leadId: string,
+  data: Partial<LeadData>,
+  actorId: string,
+  actorName?: string
+): Promise<Lead> {
+  return updateLeadAction(leadId, data, actorId, actorName).finally(clearLeadReadCache);
 }
 
 export function assignLead(

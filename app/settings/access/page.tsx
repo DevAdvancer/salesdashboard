@@ -28,13 +28,7 @@ const ACCESS_CONFIG_COLLECTION_ID =
 interface AccessRule {
   $id?: string;
   componentKey: ComponentKey;
-  role:
-    | "admin"
-    | "manager"
-    | "assistant_manager"
-    | "team_lead"
-    | "agent"
-    | "lead_generation";
+  role: UserRole;
   allowed: boolean;
 }
 
@@ -142,14 +136,15 @@ export default function AccessConfigPage() {
 }
 
 function AccessConfigContent() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isDeveloper } = useAuth();
   const { refreshRules } = useAccess();
   const router = useRouter();
   const [rules, setRules] = useState<Map<string, AccessRule>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const isManagerRole = user?.role === "manager";
-  const canManageAccess = user?.role === "admin" || user?.role === "manager";
+  const canManageAccess =
+    user?.role === "admin" || user?.role === "developer" || user?.role === "manager";
 
   useEffect(() => {
     if (user && !canManageAccess) {
@@ -190,7 +185,7 @@ function AccessConfigContent() {
 
   const toggleAccess = async (
     componentKey: ComponentKey,
-    role: Exclude<UserRole, "admin">,
+    role: Exclude<UserRole, "admin" | "developer">,
   ) => {
     if (!user) {
       return;
@@ -224,7 +219,7 @@ function AccessConfigContent() {
       updatedRules.set(key, {
         $id: savedRule.$id,
         componentKey: savedRule.componentKey,
-        role: savedRule.role,
+        role: savedRule.role as UserRole,
         allowed: savedRule.allowed,
       });
       setRules(updatedRules);
@@ -238,7 +233,7 @@ function AccessConfigContent() {
 
   const isAllowed = (
     componentKey: ComponentKey,
-    role: Exclude<UserRole, "admin">,
+    role: Exclude<UserRole, "admin" | "developer">,
   ): boolean => {
     if (componentKey === "settings") {
       return isRoleEligibleForComponent(componentKey, role);
@@ -254,17 +249,18 @@ function AccessConfigContent() {
     return getDefaultComponentAccess(componentKey, role);
   };
 
-  // Admin sees all components (including branch-management)
+  // Admin/Developer sees all components (including branch-management)
   // Manager sees all except branch-management
-  const visibleComponents = isAdmin
+  const isAdminOrDev = isAdmin || isDeveloper;
+  const visibleComponents = isAdminOrDev
     ? ALL_COMPONENTS
     : ALL_COMPONENTS.filter((c) => c.key !== "branch-management");
 
-  // Admin can toggle: manager + team_lead + lead_generation + agent columns
+  // Admin/Developer can toggle: manager + team_lead + lead_generation + agent columns
   // Manager can toggle: team_lead + lead_generation + agent columns only
-  const canEditTeamLead = isAdmin || isManagerRole;
-  const canEditAgent = isAdmin || isManagerRole;
-  const canEditLeadGeneration = isAdmin || isManagerRole;
+  const canEditTeamLead = isAdminOrDev || isManagerRole;
+  const canEditAgent = isAdminOrDev || isManagerRole;
+  const canEditLeadGeneration = isAdminOrDev || isManagerRole;
 
   if (!canManageAccess) {
     return null;
@@ -288,8 +284,8 @@ function AccessConfigContent() {
             Access Control Configuration
           </CardTitle>
           <CardDescription>
-            {isAdmin
-              ? 'Configure which components are visible to managers, team leads, lead generation users, and agents. Admin always has full access.'
+            {isAdminOrDev
+              ? 'Configure which components are visible to managers, team leads, lead generation users, and agents. Admin and Developer always have full access.'
               : 'Configure which components are visible to team leads, lead generation users, and agents. Managers always have full access.'}
           </CardDescription>
         </CardHeader>
@@ -297,12 +293,12 @@ function AccessConfigContent() {
           <div className="space-y-6">
             {/* Header Row */}
             <div
-              className={`hidden sm:grid gap-4 pb-4 border-b ${isAdmin ? "grid-cols-7" : "grid-cols-5"}`}>
+              className={`hidden sm:grid gap-4 pb-4 border-b ${isAdminOrDev ? "grid-cols-7" : "grid-cols-5"}`}>
               <div className="font-semibold">Component</div>
-              {isAdmin && (
+              {isAdminOrDev && (
                 <div className="font-semibold text-center">Manager</div>
               )}
-              {isAdmin && (
+              {isAdminOrDev && (
                 <div className="font-semibold text-center">Asst. Manager</div>
               )}
               <div className="font-semibold text-center">Team Lead</div>
@@ -316,7 +312,7 @@ function AccessConfigContent() {
               <div
                 key={component.key}
                 className={`grid grid-cols-1 gap-2 items-center border-b sm:border-b-0 pb-4 sm:pb-0 ${
-                  isAdmin
+                  isAdminOrDev
                     ? "sm:grid-cols-7 sm:gap-4"
                     : "sm:grid-cols-5 sm:gap-4"
                 }`}>
@@ -327,8 +323,8 @@ function AccessConfigContent() {
                   </p>
                 </div>
 
-                {/* Manager column — only visible to admin */}
-                {isAdmin && (
+                {/* Manager column — only visible to admin/developer */}
+                {isAdminOrDev && (
                   <div className="flex sm:justify-center items-center gap-2 sm:gap-0">
                     <span className="text-sm text-muted-foreground sm:hidden">
                       Manager:
@@ -347,8 +343,8 @@ function AccessConfigContent() {
                   </div>
                 )}
 
-                {/* Assistant Manager column — only visible to admin */}
-                {isAdmin && (
+                {/* Assistant Manager column — only visible to admin/developer */}
+                {isAdminOrDev && (
                   <div className="flex sm:justify-center items-center gap-2 sm:gap-0">
                     <span className="text-sm text-muted-foreground sm:hidden">
                       Asst. Manager:
@@ -441,12 +437,12 @@ function AccessConfigContent() {
 
           <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
             <p className="text-sm text-blue-800 dark:text-blue-200">
-              {isAdmin ? (
+              {isAdminOrDev ? (
                 <>
                   <strong>Note:</strong> Changes are saved immediately. Admin
-                  always has full access to all components. Toggle the
-                  checkboxes to control what managers, team leads, and agents
-                  can see.
+                  and Developer always have full access to all components. Toggle
+                  the checkboxes to control what managers, team leads, and
+                  agents can see.
                 </>
               ) : (
                 <>

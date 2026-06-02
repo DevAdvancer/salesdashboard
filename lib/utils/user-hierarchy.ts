@@ -14,7 +14,7 @@ export function canCreateManagerlessTeamLead(params: {
   callerRole: UserRole;
   managerIds?: string[];
 }): boolean {
-  return params.callerRole === 'admin' && (params.managerIds?.length ?? 0) === 0;
+  return (params.callerRole === 'admin' || params.callerRole === 'developer') && (params.managerIds?.length ?? 0) === 0;
 }
 
 export function buildTeamLeadHierarchy(params: {

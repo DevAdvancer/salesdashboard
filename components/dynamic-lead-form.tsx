@@ -1,15 +1,18 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { FormField } from '@/lib/types';
-import { generateZodSchema, getVisibleFields } from '@/lib/utils/form-schema-generator';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { useAuth } from '@/lib/contexts/auth-context';
-import { LeadAssignmentDropdown } from '@/components/lead-assignment-dropdown';
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { FormField } from "@/lib/types";
+import {
+  generateZodSchema,
+  getVisibleFields,
+} from "@/lib/utils/form-schema-generator";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/contexts/auth-context";
+import { LeadAssignmentDropdown } from "@/components/lead-assignment-dropdown";
 
 interface DynamicLeadFormProps {
   formConfig: FormField[];
@@ -17,6 +20,25 @@ interface DynamicLeadFormProps {
   defaultValues?: Record<string, unknown>;
   submitLabel?: string;
   isLoading?: boolean;
+}
+
+function filterReservedLeadSources(
+  options: string[] | undefined,
+  fieldKey: string,
+) {
+  if (!options) return options;
+  if (fieldKey !== "source" && fieldKey !== "sourceName") return options;
+
+  const reserved = new Set([
+    "linkedin",
+    "linkedin/lead",
+    "cold call",
+    "cold calls",
+  ]);
+  return options.filter((option) => {
+    const normalized = option.trim().toLowerCase();
+    return normalized && !reserved.has(normalized);
+  });
 }
 
 /**
@@ -35,7 +57,7 @@ export function DynamicLeadForm({
   formConfig,
   onSubmit,
   defaultValues = {},
-  submitLabel = 'Submit',
+  submitLabel = "Submit",
   isLoading = false,
 }: DynamicLeadFormProps) {
   const { user, isAgent } = useAuth();
@@ -43,38 +65,40 @@ export function DynamicLeadForm({
   // State for the lead assignment dropdown (Requirement 4.2, 4.3, 4.4)
   // Agents auto-assign to themselves; managers/team leads default to creator
   const [assignedToId, setAssignedToId] = useState<string | null>(
-    isAgent && user ? user.$id : (user ? user.$id : null)
+    isAgent && user ? user.$id : user ? user.$id : null,
   );
 
   // Filter out ownerId, assignedToId, and lastName from configurable form fields (Requirement 4.5)
   // Filter out ownerId and assignedToId from configurable form fields (Requirement 4.5)
   // These are handled automatically: ownerId by createLead, assignedToId by the dropdown
   const filteredConfig = formConfig.filter(
-    (f) => f.key !== 'ownerId' && f.key !== 'assignedToId'
+    (f) => f.key !== "ownerId" && f.key !== "assignedToId",
   );
 
   // If lastName is not in the config (removed by user), inject it manually just under firstName (or at start if firstName missing)
-  const hasLastName = filteredConfig.some(f => f.key === 'lastName');
+  const hasLastName = filteredConfig.some((f) => f.key === "lastName");
   const effectiveConfig = [...filteredConfig];
 
   if (!hasLastName) {
-    const firstNameIndex = effectiveConfig.findIndex(f => f.key === 'firstName');
+    const firstNameIndex = effectiveConfig.findIndex(
+      (f) => f.key === "firstName",
+    );
     const lastNameField: FormField = {
-        id: 'static-lastname',
-        key: 'lastName',
-        label: 'Last Name',
-        type: 'text',
-        required: false, // Updated to not required as requested
-        visible: true,
-        order: 0 // Will be ignored by splice logic below, or handled by visible fields sort
+      id: "static-lastname",
+      key: "lastName",
+      label: "Last Name",
+      type: "text",
+      required: false, // Updated to not required as requested
+      visible: true,
+      order: 0, // Will be ignored by splice logic below, or handled by visible fields sort
     };
 
     if (firstNameIndex !== -1) {
-        // Insert after firstName
-        effectiveConfig.splice(firstNameIndex + 1, 0, lastNameField);
+      // Insert after firstName
+      effectiveConfig.splice(firstNameIndex + 1, 0, lastNameField);
     } else {
-        // If no firstName, add to start (or end?) - let's add to start to be safe
-        effectiveConfig.unshift(lastNameField);
+      // If no firstName, add to start (or end?) - let's add to start to be safe
+      effectiveConfig.unshift(lastNameField);
     }
   }
 
@@ -82,28 +106,30 @@ export function DynamicLeadForm({
   // Managers see all fields in form builder, but in lead forms, we filter for agents
   const visibleFields = isAgent
     ? getVisibleFields(effectiveConfig)
-    : effectiveConfig.filter(f => f.visible).sort((a, b) => {
-        // If we injected a field, its order might be 0.
-        // If we spliced it, the array order is already correct-ish, but sort might mess it up if we don't adjust 'order' property.
-        // If we injected it, let's assume we want to keep the spliced order relative to neighbors.
-        // Actually, 'sort' relies on 'order' property.
-        // If I injected it with order 0, it might jump to top.
-        // I should set its order to be firstName.order + 0.1?
-        return a.order - b.order;
-    });
+    : effectiveConfig
+        .filter((f) => f.visible)
+        .sort((a, b) => {
+          // If we injected a field, its order might be 0.
+          // If we spliced it, the array order is already correct-ish, but sort might mess it up if we don't adjust 'order' property.
+          // If we injected it, let's assume we want to keep the spliced order relative to neighbors.
+          // Actually, 'sort' relies on 'order' property.
+          // If I injected it with order 0, it might jump to top.
+          // I should set its order to be firstName.order + 0.1?
+          return a.order - b.order;
+        });
 
   // Correction for injected field order:
   // If we injected lastName, we want it visually after firstName.
   // The 'visibleFields' sort might reorder it based on 'order'.
   // Let's fix the order property of the injected field if it exists.
   if (!hasLastName) {
-      const firstNameField = effectiveConfig.find(f => f.key === 'firstName');
-      const lastNameField = effectiveConfig.find(f => f.key === 'lastName');
-      if (firstNameField && lastNameField) {
-          lastNameField.order = firstNameField.order + 0.1;
-      }
-      // Re-sort visibleFields if we modified order
-      visibleFields.sort((a, b) => a.order - b.order);
+    const firstNameField = effectiveConfig.find((f) => f.key === "firstName");
+    const lastNameField = effectiveConfig.find((f) => f.key === "lastName");
+    if (firstNameField && lastNameField) {
+      lastNameField.order = firstNameField.order + 0.1;
+    }
+    // Re-sort visibleFields if we modified order
+    visibleFields.sort((a, b) => a.order - b.order);
   }
 
   // Generate zod schema from form config (Requirements 10.5, 11.1, 11.2, 11.3)
@@ -114,7 +140,6 @@ export function DynamicLeadForm({
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-    watch,
   } = useForm({
     resolver: zodResolver(schema),
     defaultValues,
@@ -137,9 +162,9 @@ export function DynamicLeadForm({
     const errorMessage = error?.message as string | undefined;
 
     switch (field.type) {
-      case 'text':
-      case 'email':
-      case 'phone':
+      case "text":
+      case "email":
+      case "phone":
         return (
           <div key={field.id} className="space-y-2">
             <Label htmlFor={field.key}>
@@ -148,10 +173,16 @@ export function DynamicLeadForm({
             </Label>
             <Input
               id={field.key}
-              type={field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : 'text'}
+              type={
+                field.type === "email"
+                  ? "email"
+                  : field.type === "phone"
+                    ? "tel"
+                    : "text"
+              }
               placeholder={field.placeholder}
               {...register(field.key)}
-              className={error ? 'border-red-500' : ''}
+              className={error ? "border-red-500" : ""}
             />
             {errorMessage && (
               <p className="text-sm text-red-500">{errorMessage}</p>
@@ -159,7 +190,7 @@ export function DynamicLeadForm({
           </div>
         );
 
-      case 'textarea':
+      case "textarea":
         return (
           <div key={field.id} className="space-y-2">
             <Label htmlFor={field.key}>
@@ -171,7 +202,7 @@ export function DynamicLeadForm({
               placeholder={field.placeholder}
               {...register(field.key)}
               className={`flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
-                error ? 'border-red-500' : ''
+                error ? "border-red-500" : ""
               }`}
               rows={4}
             />
@@ -181,7 +212,11 @@ export function DynamicLeadForm({
           </div>
         );
 
-      case 'dropdown':
+      case "dropdown":
+        const dropdownOptions = filterReservedLeadSources(
+          field.options,
+          field.key,
+        );
         return (
           <div key={field.id} className="space-y-2">
             <Label htmlFor={field.key}>
@@ -192,11 +227,10 @@ export function DynamicLeadForm({
               id={field.key}
               {...register(field.key)}
               className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
-                error ? 'border-red-500' : ''
-              }`}
-            >
+                error ? "border-red-500" : ""
+              }`}>
               <option value="">Select {field.label}</option>
-              {field.options?.map((option) => (
+              {dropdownOptions?.map((option) => (
                 <option key={option} value={option}>
                   {option}
                 </option>
@@ -208,7 +242,11 @@ export function DynamicLeadForm({
           </div>
         );
 
-      case 'checklist':
+      case "checklist":
+        const checklistOptions = filterReservedLeadSources(
+          field.options,
+          field.key,
+        );
         return (
           <div key={field.id} className="space-y-2">
             <Label>
@@ -216,7 +254,7 @@ export function DynamicLeadForm({
               {field.required && <span className="text-red-500 ml-1">*</span>}
             </Label>
             <div className="space-y-2">
-              {field.options?.map((option, index) => (
+              {checklistOptions?.map((option, index) => (
                 <div key={option} className="flex items-center space-x-2">
                   <input
                     type="checkbox"
@@ -227,8 +265,7 @@ export function DynamicLeadForm({
                   />
                   <Label
                     htmlFor={`${field.key}-${index}`}
-                    className="text-sm font-normal cursor-pointer"
-                  >
+                    className="text-sm font-normal cursor-pointer">
                     {option}
                   </Label>
                 </div>
@@ -266,9 +303,8 @@ export function DynamicLeadForm({
         <Button
           type="submit"
           disabled={isLoading || isSubmitting}
-          className="min-w-[120px]"
-        >
-          {isLoading || isSubmitting ? 'Submitting...' : submitLabel}
+          className="min-w-[120px]">
+          {isLoading || isSubmitting ? "Submitting..." : submitLabel}
         </Button>
       </div>
     </form>

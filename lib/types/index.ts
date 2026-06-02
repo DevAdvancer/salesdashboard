@@ -1,7 +1,7 @@
 // User types
-export type UserRole = 'admin' | 'manager' | 'assistant_manager' | 'team_lead' | 'agent' | 'lead_generation';
+export type UserRole = 'admin' | 'developer' | 'manager' | 'assistant_manager' | 'team_lead' | 'agent' | 'lead_generation';
 
-export const VALID_ROLES: UserRole[] = ['admin', 'manager', 'assistant_manager', 'team_lead', 'agent', 'lead_generation'];
+export const VALID_ROLES: UserRole[] = ['admin', 'developer', 'manager', 'assistant_manager', 'team_lead', 'agent', 'lead_generation'];
 
 export function isValidRole(value: string): value is UserRole {
   return VALID_ROLES.includes(value as UserRole);
@@ -248,6 +248,8 @@ export interface LinkedinRequest {
   teamLeadId: string | null;
   company: string;
   targetUrl: string;
+  coldCall?: boolean;
+  coldCallPhone?: string | null;
   dateSent: string;
   status: LinkedinRequestStatus;
   acceptedAt: string | null;
@@ -324,6 +326,7 @@ export interface AuditLog {
 export interface AuthContext {
   user: User | null;
   isAdmin: boolean;
+  isDeveloper: boolean;
   isManager: boolean;
   isAssistantManager: boolean;
   isTeamLead: boolean;

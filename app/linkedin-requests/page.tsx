@@ -29,6 +29,7 @@ import {
   withdrawLinkedinRequestAction,
 } from "@/app/actions/linkedin";
 import type { LinkedinAccount, LinkedinRequest } from "@/lib/types";
+import { validateLeadUniqueness } from "@/lib/services/lead-validator";
 
 const LINKEDIN_ACCEPT_WINDOW_DAYS = 15;
 
@@ -51,6 +52,18 @@ function safeParseJson(value: unknown) {
   } catch {
     return null;
   }
+}
+
+function toUsPhoneDigits(value: string) {
+  return value.replace(/\D/g, "").slice(0, 10);
+}
+
+function formatUsPhone(value: string) {
+  const digits = toUsPhoneDigits(value);
+  if (!digits) return "";
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
 function RequiredMark() {
@@ -84,6 +97,8 @@ function LinkedinRequestsContent() {
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [dateSent, setDateSent] = useState(todayDateInputValue());
   const [targetUrl, setTargetUrl] = useState("");
+  const [coldCallEnabled, setColdCallEnabled] = useState(false);
+  const [coldCallPhone, setColdCallPhone] = useState("");
   const [checking, setChecking] = useState(false);
   const [isDuplicate, setIsDuplicate] = useState<boolean | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -101,11 +116,10 @@ function LinkedinRequestsContent() {
   >("all");
   const [filterUrl, setFilterUrl] = useState<string>("");
   const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
-  const [backoutByLeadId, setBackoutByLeadId] = useState<Record<string, boolean>>(
-    {},
-  );
+  const [backoutByLeadId, setBackoutByLeadId] = useState<
+    Record<string, boolean>
+  >({});
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
-
   const selectedAccount = useMemo(
     () => accounts.find((a) => a.$id === selectedAccountId) ?? null,
     [accounts, selectedAccountId],
@@ -159,7 +173,9 @@ function LinkedinRequestsContent() {
       const leadIds = Array.from(
         new Set(
           next
-            .map((r) => (typeof r.leadId === "string" && r.leadId ? r.leadId : null))
+            .map((r) =>
+              typeof r.leadId === "string" && r.leadId ? r.leadId : null,
+            )
             .filter((v): v is string => Boolean(v)),
         ),
       );
@@ -226,6 +242,45 @@ function LinkedinRequestsContent() {
     try {
       setChecking(true);
       setHistoryLoading(true);
+
+      const urlCheck = await validateLeadUniqueness({
+        linkedinProfileUrl: targetUrl.trim(),
+      });
+      if (!urlCheck.isValid) {
+        toast({
+          title: "Duplicate LinkedIn URL",
+          description: `A lead with this LinkedIn profile already exists (lead: ${urlCheck.existingLeadId}).`,
+          variant: "destructive",
+        });
+        setIsDuplicate(null);
+        return;
+      }
+
+      if (coldCallEnabled) {
+        const digits = toUsPhoneDigits(coldCallPhone);
+        if (digits.length !== 10) {
+          toast({
+            title: "Invalid phone number",
+            description: "Enter a valid 10-digit US phone number.",
+            variant: "destructive",
+          });
+          return;
+        }
+        const phoneFormatted = formatUsPhone(digits);
+        const phoneCheck = await validateLeadUniqueness({
+          phone: phoneFormatted,
+        });
+        if (!phoneCheck.isValid) {
+          toast({
+            title: "Duplicate phone",
+            description: `A lead with this phone already exists (lead: ${phoneCheck.existingLeadId}).`,
+            variant: "destructive",
+          });
+          setIsDuplicate(null);
+          return;
+        }
+      }
+
       const result = await checkLinkedinDuplicateAction({
         currentUserId: user.$id,
         company: selectedAccount.company,
@@ -289,6 +344,8 @@ function LinkedinRequestsContent() {
         accountId: selectedAccount.$id,
         dateSent,
         targetUrl,
+        coldCall: coldCallEnabled,
+        coldCallPhone: coldCallEnabled ? coldCallPhone : undefined,
       });
       toast({
         title: result.mode === "resent" ? "Resent" : "Added",
@@ -299,6 +356,8 @@ function LinkedinRequestsContent() {
       });
       setTargetUrl("");
       setIsDuplicate(null);
+      setColdCallEnabled(false);
+      setColdCallPhone("");
       await loadRequests();
     } catch (error: unknown) {
       toast({
@@ -445,6 +504,39 @@ function LinkedinRequestsContent() {
 
           {accounts.length > 0 && (
             <div className="space-y-3">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={coldCallEnabled}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    setColdCallEnabled(enabled);
+                    setIsDuplicate(null);
+                    if (!enabled) setColdCallPhone("");
+                  }}
+                />
+                <span>Cold call</span>
+              </label>
+
+              {coldCallEnabled && (
+                <div className="space-y-2">
+                  <Label htmlFor="coldCallPhoneInput">
+                    Phone (US) <RequiredMark />
+                  </Label>
+                  <Input
+                    id="coldCallPhoneInput"
+                    type="tel"
+                    inputMode="tel"
+                    value={coldCallPhone}
+                    onChange={(e) => {
+                      setColdCallPhone(formatUsPhone(e.target.value));
+                      setIsDuplicate(null);
+                    }}
+                    placeholder="(555) 555-5555"
+                  />
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label>
                   Linkedin Profile URL <RequiredMark />
@@ -489,8 +581,7 @@ function LinkedinRequestsContent() {
             <Button
               variant="outline"
               onClick={() => void loadRequests()}
-              disabled={loadingList || !selectedAccountId}
-            >
+              disabled={loadingList || !selectedAccountId}>
               {loadingList ? "Refreshing..." : "Refresh"}
             </Button>
           </div>
@@ -607,11 +698,26 @@ function LinkedinRequestsContent() {
                             ) : (
                               <Button
                                 variant="outline"
-                                onClick={() =>
+                                onClick={() => {
+                                  const params = new URLSearchParams();
+                                  params.set("linkedinRequestId", r.$id);
+                                  params.set("linkedinTargetUrl", r.targetUrl);
+                                  params.set("linkedinCompany", r.company);
+                                  if (
+                                    r.coldCall &&
+                                    typeof r.coldCallPhone === "string" &&
+                                    r.coldCallPhone.trim()
+                                  ) {
+                                    params.set("coldCall", "1");
+                                    params.set(
+                                      "coldCallPhone",
+                                      r.coldCallPhone.trim(),
+                                    );
+                                  }
                                   router.push(
-                                    `/leads/new?linkedinRequestId=${encodeURIComponent(r.$id)}&linkedinTargetUrl=${encodeURIComponent(r.targetUrl)}&linkedinCompany=${encodeURIComponent(r.company)}`,
-                                  )
-                                }>
+                                    `/leads/new?${params.toString()}`,
+                                  );
+                                }}>
                                 Create Lead
                               </Button>
                             )}
@@ -688,7 +794,9 @@ function LinkedinRequestsContent() {
                         </div>
                         <div className="text-sm text-muted-foreground">
                           {h.lead?.status ? h.lead.status : h.request.status}
-                          {h.request.leadId ? ` • Lead: ${h.request.leadId}` : ""}
+                          {h.request.leadId
+                            ? ` • Lead: ${h.request.leadId}`
+                            : ""}
                         </div>
                       </div>
                       <div className="mt-2 space-y-1">
@@ -697,10 +805,23 @@ function LinkedinRequestsContent() {
                             No events.
                           </div>
                         ) : (
-                          [...h.logs.map((log) => ({ kind: "request" as const, log })), ...h.leadLogs.map((log) => ({ kind: "lead" as const, log }))]
+                          [
+                            ...h.logs.map((log) => ({
+                              kind: "request" as const,
+                              log,
+                            })),
+                            ...h.leadLogs.map((log) => ({
+                              kind: "lead" as const,
+                              log,
+                            })),
+                          ]
                             .sort((a, b) => {
-                              const aTime = a.log.performedAt ? new Date(a.log.performedAt).getTime() : 0;
-                              const bTime = b.log.performedAt ? new Date(b.log.performedAt).getTime() : 0;
+                              const aTime = a.log.performedAt
+                                ? new Date(a.log.performedAt).getTime()
+                                : 0;
+                              const bTime = b.log.performedAt
+                                ? new Date(b.log.performedAt).getTime()
+                                : 0;
                               return bTime - aTime;
                             })
                             .map(({ kind, log }) => {
@@ -725,15 +846,21 @@ function LinkedinRequestsContent() {
                               const summary =
                                 kind === "lead" && (statusValue || changes)
                                   ? [
-                                      statusValue ? `status=${statusValue}` : "",
-                                      changes ? `changed=${Object.keys(changes).join(",")}` : "",
+                                      statusValue
+                                        ? `status=${statusValue}`
+                                        : "",
+                                      changes
+                                        ? `changed=${Object.keys(changes).join(",")}`
+                                        : "",
                                     ]
                                       .filter(Boolean)
                                       .join(" • ")
                                   : null;
 
                               return (
-                                <div key={`${kind}:${log.$id}`} className="text-sm">
+                                <div
+                                  key={`${kind}:${log.$id}`}
+                                  className="text-sm">
                                   <span className="font-medium">
                                     {log.actorName}
                                   </span>{" "}

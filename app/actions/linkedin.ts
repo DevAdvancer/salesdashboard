@@ -262,6 +262,8 @@ export async function createLinkedinRequestAction(input: {
   accountId: string;
   dateSent: string;
   targetUrl: string;
+  coldCall?: boolean;
+  coldCallPhone?: string;
 }) {
   await assertAuthenticatedUserId(input.currentUserId);
   const user = await getAuthenticatedUserDoc();
@@ -272,6 +274,14 @@ export async function createLinkedinRequestAction(input: {
   }
 
   const dateSent = assertDateIso(input.dateSent);
+  const coldCall = Boolean(input.coldCall);
+  const coldCallPhone =
+    coldCall && typeof input.coldCallPhone === "string" && input.coldCallPhone.trim()
+      ? input.coldCallPhone.trim()
+      : null;
+  if (coldCall && !coldCallPhone) {
+    throw new Error("Cold call phone number is required.");
+  }
   const { databases } = await createAdminClient();
   const account = await assertAccessibleLinkedinAccount(databases, user.$id, input.accountId);
   const company = normalizeCompany(account.company);
@@ -348,6 +358,11 @@ export async function createLinkedinRequestAction(input: {
         teamLeadId: activeByCompany.teamLeadId,
         dateSent: activeByCompany.dateSent,
         status: activeByCompany.status,
+        coldCall: Boolean(activeByCompany.coldCall),
+        coldCallPhone:
+          typeof activeByCompany.coldCallPhone === "string"
+            ? activeByCompany.coldCallPhone
+            : null,
       };
 
       const updated = await databases.updateDocument(
@@ -359,6 +374,7 @@ export async function createLinkedinRequestAction(input: {
           agentId: user.$id,
           teamLeadId: user.teamLeadId || null,
           dateSent,
+          ...(coldCall ? { coldCall: true, coldCallPhone } : {}),
           status: "sent" satisfies LinkedinRequestStatus,
           acceptedAt: null,
           withdrawnAt: null,
@@ -382,6 +398,8 @@ export async function createLinkedinRequestAction(input: {
             agentId: user.$id,
             teamLeadId: user.teamLeadId || null,
             dateSent,
+            coldCall,
+            coldCallPhone,
             status: "sent",
           },
         },
@@ -401,6 +419,7 @@ export async function createLinkedinRequestAction(input: {
         company,
         targetUrl,
         dateSent,
+        ...(coldCall ? { coldCall: true, coldCallPhone } : {}),
         status: "sent" satisfies LinkedinRequestStatus,
         acceptedAt: null,
         leadId: null,
@@ -421,6 +440,8 @@ export async function createLinkedinRequestAction(input: {
         company,
         targetUrl,
         dateSent,
+        coldCall,
+        coldCallPhone,
         agentId: user.$id,
         teamLeadId: user.teamLeadId || null,
       },
@@ -1148,8 +1169,12 @@ export async function getLinkedinWeeklyReportAction(input: {
     if (!cursor) break;
   }
 
+  const uniqueRequests = Array.from(
+    new Map(all.map((r) => [r.$id, r] as const)).values(),
+  );
+
   const accountIds = Array.from(
-    new Set(all.map((r) => r.accountId).filter(Boolean)),
+    new Set(uniqueRequests.map((r) => r.accountId).filter(Boolean)),
   );
 
   const accountsMap = new Map<string, LinkedinAccount>();
@@ -1171,13 +1196,17 @@ export async function getLinkedinWeeklyReportAction(input: {
     idName: string;
     accountType: LinkedinAccountType;
     sent: number;
+    coldCalls: number;
     accepted: number;
+    leadsGenerated: number;
+    closures: number;
     notAccepted: number;
     withdrawn: number;
   };
 
   const map = new Map<string, Row>();
-  for (const req of all) {
+  const leadIdsByKey = new Map<string, Set<string>>();
+  for (const req of uniqueRequests) {
     const account = accountsMap.get(req.accountId);
     const accountType = (account?.accountType ?? "main") as LinkedinAccountType;
     const idName = account?.idName ?? req.accountId;
@@ -1189,11 +1218,17 @@ export async function getLinkedinWeeklyReportAction(input: {
       idName,
       accountType,
       sent: 0,
+      coldCalls: 0,
       accepted: 0,
+      leadsGenerated: 0,
+      closures: 0,
       notAccepted: 0,
       withdrawn: 0,
     };
     existing.sent += 1;
+    if (req.coldCall) {
+      existing.coldCalls += 1;
+    }
     const status = req.status;
     const isActive = req.isActive !== false;
     if (status === "accepted") {
@@ -1203,7 +1238,51 @@ export async function getLinkedinWeeklyReportAction(input: {
     } else {
       existing.notAccepted += 1;
     }
+
+    const leadId = typeof req.leadId === "string" && req.leadId ? req.leadId : null;
+    if (leadId) {
+      const set = leadIdsByKey.get(key) ?? new Set<string>();
+      set.add(leadId);
+      leadIdsByKey.set(key, set);
+    }
     map.set(key, existing);
+  }
+
+  const leadIds = Array.from(
+    new Set(Array.from(leadIdsByKey.values()).flatMap((set) => Array.from(set))),
+  );
+  const leadById = new Map<string, { isClosed: boolean; status: string }>();
+  if (leadIds.length > 0) {
+    const chunkSize = 100;
+    for (let i = 0; i < leadIds.length; i += chunkSize) {
+      const chunk = leadIds.slice(i, i + chunkSize);
+      const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS, [
+        Query.equal("$id", chunk),
+        Query.limit(2000),
+      ]);
+      for (const doc of response.documents as unknown as Array<{ $id: string; status?: unknown; isClosed?: unknown }>) {
+        leadById.set(doc.$id, {
+          isClosed: Boolean(doc.isClosed),
+          status: typeof doc.status === "string" ? doc.status : "",
+        });
+      }
+    }
+  }
+
+  for (const [key, row] of map.entries()) {
+    const leadIdsForKey = leadIdsByKey.get(key);
+    if (!leadIdsForKey) continue;
+    row.leadsGenerated = leadIdsForKey.size;
+    let closures = 0;
+    for (const leadId of leadIdsForKey) {
+      const lead = leadById.get(leadId);
+      if (!lead) continue;
+      const normalizedStatus = lead.status.trim().toLowerCase().replace(/\s+/g, "");
+      if (lead.isClosed && normalizedStatus === "won") {
+        closures += 1;
+      }
+    }
+    row.closures = closures;
   }
 
   return {
@@ -1258,5 +1337,6 @@ export async function listLinkedinRequestsForAdminAction(input: {
     queries,
   );
 
-  return response.documents as unknown as LinkedinRequest[];
+  const docs = response.documents as unknown as LinkedinRequest[];
+  return Array.from(new Map(docs.map((r) => [r.$id, r] as const)).values());
 }

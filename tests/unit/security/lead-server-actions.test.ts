@@ -33,6 +33,7 @@ jest.mock('node-appwrite', () => ({
     lessThanEqual: jest.fn((key, value) => `lte:${key}:${value}`),
     limit: jest.fn((limit) => `limit:${limit}`),
     or: jest.fn((conditions) => `or:${conditions.join('|')}`),
+    orderAsc: jest.fn((key) => `orderAsc:${key}`),
     orderDesc: jest.fn((key) => `orderDesc:${key}`),
   },
   Role: {
@@ -263,5 +264,140 @@ describe('lead server action authorization', () => {
       { assignedToId: 'agent-1' },
       expect.arrayContaining(['read:user:agent-1', 'update:user:agent-1'])
     );
+  });
+
+  it('blocks duplicate lead edits and notifies admins and team leads only', async () => {
+    mockGetDocument
+      .mockResolvedValueOnce({
+        $id: 'manager-1',
+        email: 'manager@example.com',
+        role: 'manager',
+        branchIds: ['branch-1'],
+        managerId: null,
+        managerIds: [],
+        teamLeadId: null,
+      })
+      .mockResolvedValueOnce({
+        $id: 'lead-1',
+        data: JSON.stringify({
+          firstName: 'Current',
+          email: 'current@example.com',
+          phone: '(555) 111-2222',
+          linkedinProfileUrl: 'https://linkedin.com/in/current',
+        }),
+        ownerId: 'manager-1',
+        assignedToId: 'agent-1',
+        branchId: 'branch-1',
+        isClosed: false,
+        closedAt: null,
+        status: 'Interested',
+      });
+
+    mockListDocuments
+      .mockResolvedValueOnce({
+        documents: [
+          {
+            $id: 'lead-2',
+            branchId: 'branch-2',
+            data: JSON.stringify({
+              firstName: 'Existing',
+              email: 'other@example.com',
+              phone: '5551112222',
+              linkedinProfileUrl: 'https://linkedin.com/in/existing',
+            }),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        documents: [
+          { $id: 'admin-1', role: 'admin' },
+          { $id: 'tl-1', role: 'team_lead' },
+          { $id: 'tl-2', role: 'team_lead' },
+          { $id: 'tl-3', role: 'team_lead' },
+          { $id: 'agent-1', role: 'agent' },
+        ],
+      });
+
+    const { updateLeadAction } = await import('@/app/actions/lead');
+    const { createNotificationsForRecipients } = await import('@/lib/server/notifications');
+
+    await expect(
+      updateLeadAction('lead-1', { phone: '+1 (555) 111-2222' }, 'manager-1', 'Manager')
+    ).rejects.toThrow('Duplicate phone found in lead lead-2');
+
+    expect(mockUpdateDocument).not.toHaveBeenCalled();
+    expect(createNotificationsForRecipients).toHaveBeenCalledWith(
+      expect.anything(),
+      ['admin-1', 'tl-1', 'tl-2', 'tl-3'],
+      expect.objectContaining({
+        type: 'LEAD_DUPLICATE_UPDATE',
+        title: 'Duplicate lead update blocked',
+        targetId: 'lead-1',
+        targetType: 'LEAD',
+      })
+    );
+  });
+
+  it('rejects blank required lead fields before updating', async () => {
+    mockGetDocument
+      .mockResolvedValueOnce({
+        $id: 'manager-1',
+        email: 'manager@example.com',
+        role: 'manager',
+        branchIds: ['branch-1'],
+        managerId: null,
+        managerIds: [],
+        teamLeadId: null,
+      })
+      .mockResolvedValueOnce({
+        $id: 'lead-1',
+        data: JSON.stringify({
+          firstName: 'Current',
+          lastName: 'Lead',
+          email: 'current@example.com',
+          phone: '5551112222',
+          status: 'Interested',
+        }),
+        ownerId: 'manager-1',
+        assignedToId: 'agent-1',
+        branchId: 'branch-1',
+        isClosed: false,
+        closedAt: null,
+        status: 'Interested',
+      });
+
+    mockListDocuments.mockResolvedValueOnce({ documents: [] });
+
+    const { updateLeadAction } = await import('@/app/actions/lead');
+
+    await expect(
+      updateLeadAction('lead-1', { firstName: '   ' }, 'manager-1', 'Manager')
+    ).rejects.toThrow('First Name is required');
+
+    expect(mockUpdateDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects blank required lead fields before creating', async () => {
+    const { createLeadAction } = await import('@/app/actions/lead');
+
+    await expect(
+      createLeadAction(
+        'manager-1',
+        {
+          data: {
+            firstName: '',
+            lastName: 'Lead',
+            email: 'lead@example.com',
+            phone: '5551112222',
+          },
+          status: 'Interested',
+        },
+        'manager-1',
+        'Manager',
+      )
+    ).rejects.toThrow('First Name is required');
+
+    expect(mockListDocuments).not.toHaveBeenCalled();
+    expect(mockUpdateDocument).not.toHaveBeenCalled();
   });
 });

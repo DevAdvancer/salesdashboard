@@ -1,7 +1,7 @@
 import { Query } from 'appwrite';
 import { databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { LeadData, LeadValidationResult } from '@/lib/types';
-import { getLinkedinProfileUrlSearchNeedle, normalizeLinkedinProfileUrl } from '@/lib/utils/linkedin';
+import { normalizeLinkedinProfileUrl } from '@/lib/utils/linkedin';
 
 /**
  * Validate lead uniqueness across all branches
@@ -21,7 +21,9 @@ export async function validateLeadUniqueness(
   try {
     const email = data.email as string | undefined;
     const phone = data.phone as string | undefined;
-    const linkedinProfileUrl = data.linkedinProfileUrl as string | undefined;
+    const linkedinProfileUrl = (data as any).linkedinProfileUrl as string | undefined;
+    const linkedinProfile = (data as any).linkedinProfile as string | undefined;
+    const linkedinValue = (linkedinProfileUrl || linkedinProfile || '').trim();
 
     // Check email uniqueness if email is provided
     if (email) {
@@ -39,8 +41,12 @@ export async function validateLeadUniqueness(
       }
     }
 
-    if (linkedinProfileUrl) {
-      const result = await checkDuplicateField('linkedinProfileUrl', linkedinProfileUrl, excludeLeadId);
+    if (linkedinValue) {
+      const result = await checkDuplicateField(
+        'linkedinProfileUrl',
+        linkedinValue,
+        excludeLeadId,
+      );
       if (result) {
         return result;
       }
@@ -70,19 +76,32 @@ async function checkDuplicateField(
   value: string,
   excludeLeadId?: string
 ): Promise<LeadValidationResult | null> {
-  const normalizedNeedle =
-    field === 'linkedinProfileUrl' ? getLinkedinProfileUrlSearchNeedle(value) : value;
+  const documents: any[] = [];
+  let cursorAfter: string | undefined;
+  for (let page = 0; page < 100; page += 1) {
+    const queries: string[] = [
+      Query.orderAsc('$id'),
+      Query.limit(100),
+      ...(cursorAfter ? [Query.cursorAfter(cursorAfter)] : []),
+    ];
 
-  const queries: string[] = [Query.contains('data', [normalizedNeedle || value])];
+    const response = await databases.listDocuments(
+      DATABASE_ID,
+      COLLECTIONS.LEADS,
+      queries,
+    );
+    documents.push(...response.documents);
 
-  const response = await databases.listDocuments(
-    DATABASE_ID,
-    COLLECTIONS.LEADS,
-    queries
-  );
+    if (response.documents.length < 100) break;
+    const lastDoc = response.documents[response.documents.length - 1] as any;
+    if (!lastDoc?.$id) break;
+    cursorAfter = lastDoc.$id as string;
+  }
+
+  const inputNormalized = normalizeDuplicateFieldValue(field, value);
 
   // Parse each candidate's data to verify the exact field match
-  for (const doc of response.documents) {
+  for (const doc of documents) {
     // Skip the lead being updated
     if (excludeLeadId && doc.$id === excludeLeadId) {
       continue;
@@ -91,8 +110,9 @@ async function checkDuplicateField(
     try {
       const leadData = JSON.parse(doc.data as string) as LeadData;
       if (field === 'linkedinProfileUrl') {
-        const inputNormalized = normalizeLinkedinProfileUrl(value);
-        const docNormalized = normalizeLinkedinProfileUrl(leadData.linkedinProfileUrl);
+        const docNormalized = normalizeLinkedinProfileUrl(
+          (leadData as any).linkedinProfileUrl || (leadData as any).linkedinProfile,
+        );
         if (inputNormalized && docNormalized && inputNormalized === docNormalized) {
           return {
             isValid: false,
@@ -101,7 +121,10 @@ async function checkDuplicateField(
             existingBranchId: (doc.branchId as string) || undefined,
           };
         }
-      } else if (leadData[field] === value) {
+      } else if (
+        inputNormalized &&
+        normalizeDuplicateFieldValue(field, leadData[field]) === inputNormalized
+      ) {
         return {
           isValid: false,
           duplicateField: field,
@@ -116,4 +139,17 @@ async function checkDuplicateField(
   }
 
   return null;
+}
+
+function normalizeDuplicateFieldValue(
+  field: 'email' | 'phone' | 'linkedinProfileUrl',
+  value: unknown,
+) {
+  if (typeof value !== 'string') return '';
+  if (field === 'email') return value.trim().toLowerCase();
+  if (field === 'phone') {
+    const digits = value.replace(/\D/g, '');
+    return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+  }
+  return normalizeLinkedinProfileUrl(value) ?? '';
 }

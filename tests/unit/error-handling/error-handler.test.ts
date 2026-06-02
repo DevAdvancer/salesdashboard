@@ -36,7 +36,6 @@ describe('Error Handler Utilities', () => {
       expect(toast).toHaveBeenCalledWith({
         title: 'Validation Error',
         description: 'Email is required',
-        variant: 'destructive',
       });
     });
 
@@ -46,7 +45,6 @@ describe('Error Handler Utilities', () => {
       expect(toast).toHaveBeenCalledWith({
         title: 'Form Error',
         description: 'Invalid input',
-        variant: 'destructive',
       });
     });
 
@@ -66,7 +64,6 @@ describe('Error Handler Utilities', () => {
       expect(toast).toHaveBeenCalledWith(
         expect.objectContaining({
           description: 'API request failed',
-          variant: 'destructive',
         })
       );
     });
@@ -114,7 +111,7 @@ describe('Error Handler Utilities', () => {
 
       const toastCall = (toast as jest.Mock).mock.calls[0][0];
       expect(toastCall.action).toBeDefined();
-      expect(toastCall.action.props.altText).toBe('Retry');
+      expect(toastCall.action.props.altText).toBe('Try again');
       expect(toastCall.action.props.onClick).toBe(retryFn);
     });
 
@@ -127,7 +124,7 @@ describe('Error Handler Utilities', () => {
     it('should use default message for unknown errors', () => {
       const result = handleApiError({});
 
-      expect(result).toBe('An unexpected error occurred');
+      expect(result).toContain('contact');
     });
   });
 
@@ -138,7 +135,6 @@ describe('Error Handler Utilities', () => {
       expect(toast).toHaveBeenCalledWith({
         title: 'Permission Denied',
         description: "You don't have permission to access this resource",
-        variant: 'destructive',
       });
     });
 
@@ -148,7 +144,6 @@ describe('Error Handler Utilities', () => {
       expect(toast).toHaveBeenCalledWith({
         title: 'Permission Denied',
         description: 'Cannot access admin panel',
-        variant: 'destructive',
       });
     });
   });
@@ -160,9 +155,9 @@ describe('Error Handler Utilities', () => {
 
       expect(toast).toHaveBeenCalledWith({
         title: 'Network Error',
-        description: 'Unable to connect. Please check your internet connection.',
-        variant: 'destructive',
-        action: undefined,
+        description:
+          "We're having trouble connecting right now. Please refresh and try again.",
+        action: expect.anything(),
       });
     });
 
@@ -174,8 +169,7 @@ describe('Error Handler Utilities', () => {
 
       const toastCall = (toast as jest.Mock).mock.calls[0][0];
       expect(toastCall.action).toBeDefined();
-      expect(toastCall.action.props.altText).toBe('Retry');
-      expect(toastCall.action.props.onClick).toBe(retryFn);
+      expect(toastCall.action.props.altText).toBe('Refresh');
     });
   });
 
@@ -211,7 +205,8 @@ describe('Error Handler Utilities', () => {
       expect(toast).toHaveBeenCalledWith(
         expect.objectContaining({
           title: 'Network Error',
-          description: 'Unable to connect. Please check your internet connection.',
+          description:
+            "We're having trouble connecting right now. Please refresh and try again.",
         })
       );
     });

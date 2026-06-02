@@ -477,11 +477,11 @@ export async function getAssignableUsers(
   creatorId?: string
 ): Promise<User[]> {
   if (creatorRole === 'agent' || creatorRole === 'lead_generation') return [];
-  if (creatorRole !== 'admin' && !creatorBranchIds.length) return [];
+  if (creatorRole !== 'admin' && creatorRole !== 'developer' && !creatorBranchIds.length) return [];
 
   try {
     const allowedRoles: UserRole[] =
-      creatorRole === 'admin' ? ['manager', 'assistant_manager', 'team_lead', 'agent'] :
+      (creatorRole === 'admin' || creatorRole === 'developer') ? ['admin', 'developer', 'manager', 'assistant_manager', 'team_lead', 'agent', 'lead_generation'] :
       creatorRole === 'manager' ? ['assistant_manager', 'team_lead', 'agent'] :
       creatorRole === 'assistant_manager' ? ['team_lead', 'agent'] :
       creatorRole === 'team_lead' ? ['agent'] :
@@ -495,9 +495,11 @@ export async function getAssignableUsers(
         : Query.equal('role', allowedRoles)
     ];
 
-    if (creatorRole !== 'admin') {
+    if (creatorRole !== 'admin' && creatorRole !== 'developer') {
       queries.push(Query.contains('branchIds', creatorBranchIds));
     }
+
+    queries.push(Query.limit(5000));
 
     const response = await databases.listDocuments(
       DATABASE_ID,
@@ -546,6 +548,7 @@ export async function getAgentsByManager(managerId: string): Promise<User[]> {
       [
         Query.equal('role', 'agent'),
         Query.equal('managerId', managerId),
+        Query.limit(5000),
       ]
     );
     return response.documents.map(mapDocToUser);
@@ -566,6 +569,7 @@ export async function getAgentsByTeamLead(teamLeadId: string): Promise<User[]> {
       [
         Query.equal('teamLeadId', teamLeadId),
         Query.or([Query.equal('role', 'agent'), Query.equal('role', 'lead_generation')]),
+        Query.limit(5000),
       ]
     );
     return response.documents.map(mapDocToUser);

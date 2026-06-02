@@ -3,7 +3,7 @@ import 'driver.js/dist/driver.css';
 import type { UserRole } from '@/lib/types';
 
 export function startDashboardTour(role: UserRole) {
-  const isAdmin = role === 'admin';
+  const isAdmin = role === 'admin' || role === 'developer';
   const isManager = role === 'manager' || role === 'assistant_manager';
   const isTeamLead = role === 'team_lead';
   const isAgent = role === 'agent';
@@ -242,7 +242,7 @@ export function startLeadDetailTour(role: UserRole) {
     },
   ];
 
-  if (role === 'manager' || role === 'admin') {
+  if (role === 'manager' || role === 'admin' || role === 'developer') {
     steps.push({
       element: '#tour-lead-assignment',
       popover: {

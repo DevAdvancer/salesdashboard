@@ -42,7 +42,7 @@ export const DEFAULT_FIELDS: FormField[] = [
     order: 7,
     options: ['Interested', 'Not Interested', 'Pipeline', 'Prospect', 'Signed'],
   },
-  { id: '10', type: 'text', label: 'Legal Name', key: 'legalName', required: false, visible: true, order: 8 },
+  { id: '10', type: 'text', label: 'Legal Name', key: 'legalName', required: true, visible: true, order: 8 },
   {
     id: '11',
     type: 'text',

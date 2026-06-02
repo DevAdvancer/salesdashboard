@@ -218,14 +218,14 @@ export async function createAssistantManagerAction(input: CreateAssistantManager
 
     const callerDoc = await getUserDoc(currentUserId);
     // Allow admin and manager roles to create assistant managers
-    if (!callerDoc || (callerDoc.role !== 'manager' && callerDoc.role !== 'admin')) {
+    if (!callerDoc || (callerDoc.role !== 'manager' && callerDoc.role !== 'admin' && callerDoc.role !== 'developer')) {
         throw new Error("Permission denied: Only managers and admins can create assistant managers");
     }
 
     // Validate branches (skip for admin, but verify existence)
     const { users, databases } = await createAdminClient();
 
-    if (callerDoc.role !== 'admin') {
+    if (callerDoc.role !== 'admin' && callerDoc.role !== 'developer') {
         const callerBranches = (callerDoc.branchIds as string[]) || [];
         for (const bid of amInput.branchIds) {
             if (!callerBranches.includes(bid)) {
@@ -313,7 +313,7 @@ export async function createManagerAction(input: CreateManagerInput & { currentU
 
     // Allow both admin and manager roles to create managers
     // This enables manager-to-manager creation until proper admin bootstrap is in place
-    if (callerDoc.role !== 'admin' && callerDoc.role !== 'manager') {
+    if (callerDoc.role !== 'admin' && callerDoc.role !== 'developer' && callerDoc.role !== 'manager') {
         console.error("createManagerAction: Insufficient permissions. Role:", callerDoc.role);
         throw new Error("Permission denied: Only admins and managers can create managers");
     }
@@ -385,8 +385,8 @@ export async function createAdminAction(input: CreateAdminInput & { currentUserI
     await assertAuthenticatedUserId(currentUserId);
 
     const callerDoc = await getUserDoc(currentUserId);
-    if (!callerDoc || callerDoc.role !== 'admin') {
-        throw new Error("Permission denied: Only admins can create admins");
+    if (!callerDoc || (callerDoc.role !== 'admin' && callerDoc.role !== 'developer')) {
+        throw new Error("Permission denied: Only admins and developers can create admins");
     }
 
     const { users, databases } = await createAdminClient();
@@ -443,6 +443,70 @@ export async function createAdminAction(input: CreateAdminInput & { currentUserI
     }
 }
 
+export async function createDeveloperAction(input: CreateAdminInput & { currentUserId: string }) {
+    const { currentUserId, name, email, password } = input;
+
+    await assertAuthenticatedUserId(currentUserId);
+
+    const callerDoc = await getUserDoc(currentUserId);
+    if (!callerDoc || (callerDoc.role !== 'admin' && callerDoc.role !== 'developer')) {
+        throw new Error("Permission denied: Only admins and developers can create developers");
+    }
+
+    const { users, databases } = await createAdminClient();
+    const userId = ID.unique();
+    const normalizedEmail = normalizeEmail(email);
+
+    try {
+        await users.create(userId, normalizedEmail, undefined, password, name);
+    } catch (e: unknown) {
+        if (getErrorCode(e) === 409) throw new Error("A user with this email already exists");
+        throw e;
+    }
+
+    try {
+        await databases.createDocument(
+            DATABASE_ID,
+            USERS_COLLECTION_ID,
+            userId,
+            {
+                name,
+                email: normalizedEmail,
+                role: 'developer',
+                managerId: null,
+                managerIds: [],
+                assistantManagerIds: [],
+                teamLeadId: null,
+                isActive: true,
+                branchIds: [],
+            },
+            [
+                Permission.read(Role.user(userId)),
+                Permission.read(Role.label('admin')),
+                Permission.update(Role.user(userId)),
+                Permission.update(Role.label('admin')),
+                Permission.delete(Role.label('admin')),
+            ]
+        );
+
+        await logAuditAction(
+            databases,
+            'USER_CREATE',
+            callerDoc.$id,
+            callerDoc.name,
+            userId,
+            'developer',
+            { role: 'developer', email: normalizedEmail, name }
+        );
+
+        return { success: true, userId };
+    } catch (error: unknown) {
+        console.error("DB Creation failed, rolling back Auth User", error);
+        await users.delete(userId);
+        throw new Error("Failed to create user profile: " + getErrorMessage(error));
+    }
+}
+
 export async function createTeamLeadAction(input: CreateTeamLeadInput & { currentUserId: string }) {
     const { currentUserId, ...teamLeadInput } = input;
 
@@ -450,12 +514,12 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
 
     const callerDoc = await getUserDoc(currentUserId);
     // Allow admin, manager, and assistant_manager roles to create team leads
-    if (!callerDoc || (callerDoc.role !== 'manager' && callerDoc.role !== 'admin' && callerDoc.role !== 'assistant_manager')) {
+    if (!callerDoc || (callerDoc.role !== 'manager' && callerDoc.role !== 'admin' && callerDoc.role !== 'developer' && callerDoc.role !== 'assistant_manager')) {
         throw new Error("Permission denied: Only managers, assistant managers, and admins can create team leads");
     }
 
-    // Validate branches (skip for admin)
-    if (callerDoc.role !== 'admin') {
+    // Validate branches (skip for admin/developer)
+    if (callerDoc.role !== 'admin' && callerDoc.role !== 'developer') {
         const callerBranches = (callerDoc.branchIds as string[]) || [];
         for (const bid of teamLeadInput.branchIds) {
             if (!callerBranches.includes(bid)) {
@@ -545,11 +609,11 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
     await assertAuthenticatedUserId(currentUserId);
 
     const callerDoc = await getUserDoc(currentUserId);
-    if (!callerDoc || (callerDoc.role !== 'team_lead' && callerDoc.role !== 'manager' && callerDoc.role !== 'admin' && callerDoc.role !== 'assistant_manager')) {
+    if (!callerDoc || (callerDoc.role !== 'team_lead' && callerDoc.role !== 'manager' && callerDoc.role !== 'admin' && callerDoc.role !== 'developer' && callerDoc.role !== 'assistant_manager')) {
         throw new Error("Permission denied: Only team leads, managers, assistant managers, or admins can create agents");
     }
 
-    if (callerDoc.role !== 'admin') {
+    if (callerDoc.role !== 'admin' && callerDoc.role !== 'developer') {
         const callerBranches = (callerDoc.branchIds as string[]) || [];
         for (const bid of agentInput.branchIds) {
             if (!callerBranches.includes(bid)) {
@@ -567,7 +631,7 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
     const { users, databases } = await createAdminClient();
     const userId = ID.unique();
 
-    if (callerDoc.role === 'admin' && !agentInput.managerId && !agentInput.teamLeadId) {
+    if ((callerDoc.role === 'admin' || callerDoc.role === 'developer') && !agentInput.managerId && !agentInput.teamLeadId) {
         const managersResponse = await databases.listDocuments(
             DATABASE_ID,
             USERS_COLLECTION_ID,
@@ -770,7 +834,7 @@ export async function updateUserAction(input: {
     const targetUserDoc = await getUserDoc(userId);
     if (!targetUserDoc) throw new Error("Target user not found");
 
-    const isCallerAdmin = callerDoc.role === 'admin';
+    const isCallerAdmin = callerDoc.role === 'admin' || callerDoc.role === 'developer';
     const isCallerManager = callerDoc.role === 'manager';
     const isCallerAssistantManager = callerDoc.role === 'assistant_manager';
     const isCallerTeamLead = callerDoc.role === 'team_lead';
@@ -1029,8 +1093,8 @@ export async function deleteUserAction(input: {
     }
 
     const callerDoc = await getUserDoc(currentUserId);
-    if (!callerDoc || callerDoc.role !== 'admin') {
-        throw new Error("Permission denied: Only admins can delete users");
+    if (!callerDoc || (callerDoc.role !== 'admin' && callerDoc.role !== 'developer')) {
+        throw new Error("Permission denied: Only admins and developers can delete users");
     }
 
     const targetUserDoc = await getUserDoc(userId);
@@ -1092,8 +1156,8 @@ export async function setAgentActiveAction(input: {
     await assertAuthenticatedUserId(currentUserId);
 
     const callerDoc = await getUserDoc(currentUserId);
-    if (!callerDoc || callerDoc.role !== 'admin') {
-        throw new Error("Permission denied: Only admins can update agent active status");
+    if (!callerDoc || (callerDoc.role !== 'admin' && callerDoc.role !== 'developer')) {
+        throw new Error("Permission denied: Only admins and developers can update agent active status");
     }
 
     const targetUserDoc = await getUserDoc(userId);

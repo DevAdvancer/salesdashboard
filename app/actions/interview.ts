@@ -223,7 +223,7 @@ export async function reserveInterviewAttempt(userId: string, leadId: string, su
         await assertAuthenticatedUserId(userId);
         const { databases } = await createAdminClient();
         const user = await databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, userId) as unknown as UserDocument;
-        const isAdmin = user.role === 'admin';
+        const isAdmin = user.role === 'admin' || user.role === 'developer';
 
         const allAttempts = await listAttemptsForLead(databases, leadId);
 

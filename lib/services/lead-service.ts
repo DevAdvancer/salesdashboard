@@ -5,6 +5,10 @@ import { validateLeadUniqueness } from '@/lib/services/lead-validator';
 import { logAction } from './audit-service';
 import { getUserById } from '@/lib/services/user-service';
 import { getSpecialBranchLeadAccess } from '@/lib/constants/special-lead-access';
+import {
+  isAllowedLeadStatusTransition,
+  normalizeLeadStatus,
+} from '@/lib/utils/lead-status-workflow';
 
 // Helper to validate Appwrite ID format
 function isValidId(id: string | null | undefined): boolean {
@@ -49,51 +53,12 @@ function normalizeStatusText(value: unknown) {
 
 function isLinkedinRequestLeadData(data: LeadData) {
   const requestId = (data as any).linkedinRequestId;
-  return typeof requestId === 'string' && requestId.trim().length > 0;
-}
-
-function getLinkedinAllowedStatuses(currentStatus: unknown) {
-  const normalized = normalizeStatusText(currentStatus);
-  if (normalized === 'connectionaccepted') {
-    return ['Connection Accepted', 'Interested', 'Not Interested'];
-  }
-  if (normalized === 'interested') {
-    return ['Interested', 'Pipeline / Follow up'];
-  }
-  if (normalized === 'pipelinefollowup') {
-    return ['Pipeline / Follow up', 'Signed/Closure', 'Backed Out'];
-  }
-  const standardStatuses = [
-    'Connection Accepted',
-    'Interested',
-    'Not Interested',
-    'Pipeline / Follow up',
-    'Signed/Closure',
-    'Backed Out',
-  ];
-  const currentText = typeof currentStatus === 'string' ? currentStatus.trim() : '';
-  const canonicalByNormalized = new Map<string, string>([
-    ['connectionaccepted', 'Connection Accepted'],
-    ['interested', 'Interested'],
-    ['notinterested', 'Not Interested'],
-    ['pipelinefollowup', 'Pipeline / Follow up'],
-    ['signedclosure', 'Signed/Closure'],
-    ['backout', 'Backed Out'],
-    ['backedout', 'Backed Out'],
-  ]);
-  const currentCanonical = currentText
-    ? canonicalByNormalized.get(normalizeStatusText(currentText)) ?? currentText
-    : '';
-
-  const seen = new Set<string>();
-  const output: string[] = [];
-  for (const value of [currentCanonical, ...standardStatuses]) {
-    const key = normalizeStatusText(value);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    output.push(value);
-  }
-  return output;
+  if (typeof requestId === 'string' && requestId.trim().length > 0) return true;
+  const source = typeof (data as any).source === 'string' ? (data as any).source.trim() : '';
+  const sourceName =
+    typeof (data as any).sourceName === 'string' ? (data as any).sourceName.trim() : '';
+  const normalizedSource = normalizeStatusText(source || sourceName);
+  return normalizedSource === 'linkedinlead' || normalizedSource === 'linkedin';
 }
 
 type HierarchyUserDocument = {
@@ -369,15 +334,21 @@ export async function updateLead(
     const updatedData = { ...currentData, ...data };
 
     const nextStatus = (updatedData as any).status;
-    if (isLinkedinRequestLeadData(updatedData) && nextStatus) {
+    if (nextStatus) {
       const previousStatus = currentLead.status;
-      if (normalizeStatusText(previousStatus) !== normalizeStatusText(nextStatus)) {
-        const allowed = new Set(
-          getLinkedinAllowedStatuses(previousStatus).map(normalizeStatusText)
+      const shouldEnforceWorkflow =
+        isLinkedinRequestLeadData(updatedData) ||
+        ['interested', 'notinterested', 'pipelinefollowup', 'signedclosure', 'backedout'].includes(
+          normalizeLeadStatus(previousStatus),
+        ) ||
+        ['pipelinefollowup', 'signedclosure', 'backedout'].includes(
+          normalizeLeadStatus(nextStatus),
         );
-        if (!allowed.has(normalizeStatusText(nextStatus))) {
-          throw new Error('Invalid status transition for this lead.');
-        }
+      if (
+        shouldEnforceWorkflow &&
+        !isAllowedLeadStatusTransition(previousStatus, nextStatus)
+      ) {
+        throw new Error('Invalid status transition for this lead.');
       }
     }
 
@@ -521,7 +492,7 @@ export async function listLeads(
       queries.push(Query.or(orConditions));
     } else if (userRole === 'lead_generation') {
       queries.push(Query.equal('ownerId', userId));
-    } else if (userRole === 'admin') {
+    } else if (userRole === 'admin' || userRole === 'developer') {
       // Admins and Managers see all leads across all branches — no branch/owner filter
     } else if (userRole === 'manager') {
       const visibleUserIds = await getLeadVisibilityUserIds(userId, userRole);

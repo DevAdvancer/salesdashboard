@@ -292,11 +292,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [syncServerSession]);
 
   // Role-based helper properties
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'developer';
+  const isDeveloper = user?.role === 'developer';
   const isAssistantManager = user?.role === 'assistant_manager';
   // Manager includes actual managers and assistant managers (since they share access)
-  // Admin is also considered a manager for access purposes
-  const isManager = user?.role === 'manager' || user?.role === 'assistant_manager' || user?.role === 'admin';
+  // Admin and Developer are also considered managers for access purposes
+  const isManager = user?.role === 'manager' || user?.role === 'assistant_manager' || user?.role === 'admin' || user?.role === 'developer';
   const isTeamLead = user?.role === 'team_lead';
   const isAgent = user?.role === 'agent';
   const isLeadGeneration = user?.role === 'lead_generation';
@@ -304,6 +305,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value: AuthContextType = {
     user,
     isAdmin,
+    isDeveloper,
     isManager,
     isAssistantManager,
     isTeamLead,

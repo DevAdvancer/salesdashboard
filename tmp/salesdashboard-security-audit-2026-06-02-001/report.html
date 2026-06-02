@@ -1,0 +1,24 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Codex Security Diff Audit Report</title></head><body><pre># Codex Security Diff Audit Report
+
+Target: current salesdashboard working-tree patch.
+Date: 2026-06-02.
+
+## Result
+
+No reportable security vulnerability survived validation in the reviewed diff. Two production-failure/security-hygiene issues were fixed narrowly:
+
+- Repaired installed dependency tree so `next@16.2.6` uses overridden `postcss@8.5.10`; npm install reported `found 0 vulnerabilities`.
+- Added safe fallback JSON parsing in `app/actions/weekly-report.ts` for optional payment JSON fields.
+
+A focused test mock was also fixed in `tests/unit/security/lead-server-actions.test.ts` so it matches the installed `node-appwrite` API.
+
+## Verification
+
+- `npm.cmd ls postcss next --depth=3`: pass; `next -&gt; postcss@8.5.10 overridden`.
+- `npm.cmd exec tsc -- --noEmit`: pass.
+- Focused Jest command: pass, 5 suites / 16 tests.
+- `npm.cmd run build`: pass with network access for Google Fonts.
+- `npm.cmd run lint`: fail due existing broad repo lint debt; not fully remediated to avoid unrelated logic churn.
+
+Direct `npm audit --json` was not used after policy rejection because it discloses dependency metadata externally. The approved `npm install` run performed npm&#39;s built-in audit and reported zero vulnerabilities.
+</pre></body></html>

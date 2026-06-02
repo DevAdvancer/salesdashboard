@@ -9,8 +9,15 @@ import { getSpecialBranchLeadAccess } from '@/lib/constants/special-lead-access'
 import { logAction } from "@/lib/services/audit-service";
 import { assertAuthenticatedUserId } from "@/lib/server/current-user";
 import { createNotificationsForRecipients } from "@/lib/server/notifications";
-import { getLinkedinProfileUrlSearchNeedle, normalizeLinkedinProfileUrl } from "@/lib/utils/linkedin";
+import { notifyDuplicateLeadCreateAttemptAction, notifyDuplicateLeadUpdateAttemptAction } from "@/app/actions/lead-duplicates";
+import { normalizeLinkedinProfileUrl } from "@/lib/utils/linkedin";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
+import { cookies } from "next/headers";
+import { readErrorResponseMessage } from "@/lib/utils/http-error-response";
+import {
+  isAllowedLeadStatusTransition,
+  normalizeLeadStatus,
+} from "@/lib/utils/lead-status-workflow";
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const LEADS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_LEADS_COLLECTION_ID!;
@@ -24,6 +31,45 @@ function isValidId(id: string | null | undefined): boolean {
 }
 
 // Server-side lead uniqueness validation
+function normalizeDuplicateFieldValue(
+    field: 'email' | 'phone' | 'linkedinProfileUrl',
+    value: unknown
+) {
+    if (typeof value !== 'string') return '';
+    if (field === 'email') return value.trim().toLowerCase();
+    if (field === 'phone') {
+        const digits = value.replace(/\D/g, '');
+        return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+    }
+    return normalizeLinkedinProfileUrl(value) ?? '';
+}
+
+const REQUIRED_LEAD_FIELD_LABELS: Record<string, string> = {
+    firstName: 'First Name',
+    lastName: 'Last Name',
+    name: 'Name',
+    legalName: 'Legal Name',
+    email: 'Email',
+    phone: 'Phone',
+    visaStatus: 'Visa Status',
+    linkedinProfileUrl: 'LinkedIn profile URL',
+    linkedinProfile: 'LinkedIn profile URL',
+};
+
+function isBlankLeadValue(value: unknown) {
+    if (typeof value === 'string') return value.trim().length === 0;
+    if (Array.isArray(value)) return value.length === 0;
+    return value === null || value === undefined;
+}
+
+function assertRequiredLeadData(data: LeadData) {
+    for (const [key, label] of Object.entries(REQUIRED_LEAD_FIELD_LABELS)) {
+        if (Object.prototype.hasOwnProperty.call(data, key) && isBlankLeadValue(data[key])) {
+            throw new Error(`${label} is required.`);
+        }
+    }
+}
+
 async function validateLeadUniqueness(
     data: LeadData,
     excludeLeadId?: string
@@ -32,96 +78,91 @@ async function validateLeadUniqueness(
     duplicateField?: 'email' | 'phone' | 'linkedinProfileUrl';
     existingLeadId?: string;
     existingBranchId?: string;
+    duplicateWarnings?: Array<{
+      field: 'email' | 'phone' | 'linkedinProfileUrl';
+      existingLeadId: string;
+      existingBranchId?: string;
+    }>;
 }> {
     const { databases } = await createAdminClient();
     const email = data.email as string | undefined;
     const phone = data.phone as string | undefined;
-    const linkedinProfileUrl = data.linkedinProfileUrl as string | undefined;
+    const linkedinProfileUrl = (data as any).linkedinProfileUrl as string | undefined;
+    const linkedinProfile = (data as any).linkedinProfile as string | undefined;
+    const linkedinValue = (linkedinProfileUrl || linkedinProfile || '').trim();
+    const documents = await listAllDocuments<any>({
+        databases,
+        databaseId: DATABASE_ID,
+        collectionId: LEADS_COLLECTION_ID,
+        queries: [Query.orderAsc('$id')],
+        pageLimit: 100,
+        maxPages: 500,
+    });
 
-    if (email) {
-        const queries = [Query.contains('data', [email])];
-        const documents = await listAllDocuments<any>({
-            databases,
-            databaseId: DATABASE_ID,
-            collectionId: LEADS_COLLECTION_ID,
-            queries,
-            pageLimit: 100,
-            maxPages: 50,
-        });
-        for (const doc of documents) {
-            if (excludeLeadId && doc.$id === excludeLeadId) continue;
-            try {
-                const leadData = JSON.parse(doc.data as string) as LeadData;
-                if (leadData.email === email) {
-                    return {
-                        isValid: false,
-                        duplicateField: 'email',
+    const inputEmail = email ? normalizeDuplicateFieldValue('email', email) : '';
+    const inputPhone = phone ? normalizeDuplicateFieldValue('phone', phone) : '';
+    const inputLinkedin = linkedinValue ? (normalizeLinkedinProfileUrl(linkedinValue) ?? '') : '';
+
+    const warnings: Array<{
+      field: 'email' | 'phone' | 'linkedinProfileUrl';
+      existingLeadId: string;
+      existingBranchId?: string;
+    }> = [];
+
+    for (const doc of documents) {
+        if (excludeLeadId && doc.$id === excludeLeadId) continue;
+        try {
+            const leadData = JSON.parse(doc.data as string) as LeadData;
+
+            if (inputEmail && warnings.every((w) => w.field !== 'email')) {
+                if (normalizeDuplicateFieldValue('email', leadData.email) === inputEmail) {
+                    warnings.push({
+                        field: 'email',
                         existingLeadId: doc.$id,
                         existingBranchId: (doc.branchId as string) || undefined,
-                    };
+                    });
                 }
-            } catch {}
-        }
-    }
-
-    if (phone) {
-        const queries = [Query.contains('data', [phone])];
-        const documents = await listAllDocuments<any>({
-            databases,
-            databaseId: DATABASE_ID,
-            collectionId: LEADS_COLLECTION_ID,
-            queries,
-            pageLimit: 100,
-            maxPages: 50,
-        });
-        for (const doc of documents) {
-            if (excludeLeadId && doc.$id === excludeLeadId) continue;
-            try {
-                const leadData = JSON.parse(doc.data as string) as LeadData;
-                if (leadData.phone === phone) {
-                    return {
-                        isValid: false,
-                        duplicateField: 'phone',
-                        existingLeadId: doc.$id,
-                        existingBranchId: (doc.branchId as string) || undefined,
-                    };
-                }
-            } catch {}
-        }
-    }
-
-    if (linkedinProfileUrl) {
-        const needle = getLinkedinProfileUrlSearchNeedle(linkedinProfileUrl);
-        const queries = [Query.contains('data', [needle || linkedinProfileUrl])];
-        const documents = await listAllDocuments<any>({
-            databases,
-            databaseId: DATABASE_ID,
-            collectionId: LEADS_COLLECTION_ID,
-            queries,
-            pageLimit: 100,
-            maxPages: 100,
-        });
-        const inputNormalized = normalizeLinkedinProfileUrl(linkedinProfileUrl);
-        if (inputNormalized) {
-            for (const doc of documents) {
-                if (excludeLeadId && doc.$id === excludeLeadId) continue;
-                try {
-                    const leadData = JSON.parse(doc.data as string) as LeadData;
-                    const docNormalized = normalizeLinkedinProfileUrl((leadData as any).linkedinProfileUrl);
-                    if (docNormalized && docNormalized === inputNormalized) {
-                        return {
-                            isValid: false,
-                            duplicateField: 'linkedinProfileUrl',
-                            existingLeadId: doc.$id,
-                            existingBranchId: (doc.branchId as string) || undefined,
-                        };
-                    }
-                } catch {}
             }
-        }
+
+            if (inputPhone && warnings.every((w) => w.field !== 'phone')) {
+                if (normalizeDuplicateFieldValue('phone', leadData.phone) === inputPhone) {
+                    warnings.push({
+                        field: 'phone',
+                        existingLeadId: doc.$id,
+                        existingBranchId: (doc.branchId as string) || undefined,
+                    });
+                }
+            }
+
+            if (inputLinkedin && warnings.every((w) => w.field !== 'linkedinProfileUrl')) {
+                const docNormalized = normalizeLinkedinProfileUrl(
+                    (leadData as any).linkedinProfileUrl || (leadData as any).linkedinProfile,
+                );
+                if (docNormalized && docNormalized === inputLinkedin) {
+                    warnings.push({
+                        field: 'linkedinProfileUrl',
+                        existingLeadId: doc.$id,
+                        existingBranchId: (doc.branchId as string) || undefined,
+                    });
+                }
+            }
+
+            if (warnings.length === 3) break;
+        } catch {}
     }
 
-    return { isValid: true };
+    if (warnings.length > 0) {
+        const first = warnings[0];
+        return {
+            isValid: false,
+            duplicateField: first.field,
+            existingLeadId: first.existingLeadId,
+            existingBranchId: first.existingBranchId,
+            duplicateWarnings: warnings,
+        };
+    }
+
+    return { isValid: true, duplicateWarnings: [] };
 }
 
 // Helper to get hierarchy permissions (server-side)
@@ -281,7 +322,7 @@ async function assertLeadReopenAllowed(
   actorDoc: UserDocument,
   lead: Lead
 ) {
-  if (actorDoc.role === 'admin') return;
+  if (actorDoc.role === 'admin' || actorDoc.role === 'developer') return;
 
   if (actorDoc.role !== 'manager' && actorDoc.role !== 'team_lead') {
     throw new Error('Permission denied');
@@ -301,6 +342,85 @@ async function assertLeadReopenAllowed(
   throw new Error('Permission denied');
 }
 
+async function assertLeadUpdateAllowed(
+  databases: Awaited<ReturnType<typeof createAdminClient>>['databases'],
+  actorDoc: UserDocument,
+  lead: Lead
+) {
+  if (actorDoc.role === 'admin' || actorDoc.role === 'developer') return;
+
+  const specialBranchId = getSpecialBranchLeadAccess(actorDoc.email);
+  if (specialBranchId && lead.branchId === specialBranchId) return;
+
+  if (lead.ownerId === actorDoc.$id || lead.assignedToId === actorDoc.$id) {
+    return;
+  }
+
+  if (actorDoc.role === 'lead_generation') {
+    throw new Error('Permission denied');
+  }
+
+  const visibleUserIds = await getLeadVisibilityUserIds(databases, actorDoc.$id, actorDoc.role);
+  if (
+    visibleUserIds.includes(lead.ownerId) ||
+    (lead.assignedToId ? visibleUserIds.includes(lead.assignedToId) : false)
+  ) {
+    return;
+  }
+
+  throw new Error('Permission denied');
+}
+
+function getLeadAuditName(data: LeadData): string {
+  const firstName = typeof data.firstName === 'string' ? data.firstName : '';
+  const lastName = typeof data.lastName === 'string' ? data.lastName : '';
+  const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+  const fallback = data.legalName || data.name || data.company || data.email || data.phone;
+  return fullName || (typeof fallback === 'string' ? fallback : '');
+}
+
+function buildAuditChanges(previousData: LeadData, nextData: LeadData, changedData: Partial<LeadData>) {
+  const changes: Record<string, { from: unknown; to: unknown }> = {};
+
+  Object.keys(changedData).forEach((key) => {
+    const previousValue = previousData[key];
+    const nextValue = nextData[key];
+    if (JSON.stringify(previousValue) !== JSON.stringify(nextValue)) {
+      changes[key] = {
+        from: previousValue ?? null,
+        to: nextValue ?? null,
+      };
+    }
+  });
+
+  return changes;
+}
+
+function getDuplicateValue(data: LeadData, field: 'email' | 'phone' | 'linkedinProfileUrl') {
+  if (field === 'linkedinProfileUrl') {
+    const value = (data.linkedinProfileUrl ?? data.linkedinProfile) as unknown;
+    return typeof value === 'string' ? value : undefined;
+  }
+
+  const value = data[field] as unknown;
+  return typeof value === 'string' ? value : undefined;
+}
+
+function normalizeStatusText(value: unknown) {
+  const text = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return text.replace(/[^a-z0-9]/g, '');
+}
+
+function isLinkedinRequestLeadData(data: LeadData) {
+  const requestId = (data as any).linkedinRequestId;
+  if (typeof requestId === 'string' && requestId.trim().length > 0) return true;
+  const source = typeof (data as any).source === 'string' ? (data as any).source.trim() : '';
+  const sourceName =
+    typeof (data as any).sourceName === 'string' ? (data as any).sourceName.trim() : '';
+  const normalizedSource = normalizeStatusText(source || sourceName);
+  return normalizedSource === 'linkedinlead' || normalizedSource === 'linkedin';
+}
+
 export async function createLeadAction(
     ownerId: string,
     input: CreateLeadInput,
@@ -311,9 +431,48 @@ export async function createLeadAction(
         await assertAuthenticatedUserId(creatingUserId || ownerId);
         const { databases } = await createAdminClient();
 
+        assertRequiredLeadData(input.data);
+
         // Validate uniqueness
         const validation = await validateLeadUniqueness(input.data);
         if (!validation.isValid) {
+            // Fire email + in-app notifications when ≥2 duplicate fields are found
+            const warnings = validation.duplicateWarnings ?? [];
+            if (warnings.length >= 2) {
+                try {
+                    // Fetch actor email for Graph sendMail
+                    let actorEmail: string | undefined;
+                    const actorId = creatingUserId || ownerId;
+                    try {
+                        const actorDoc = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, actorId) as any;
+                        actorEmail = typeof actorDoc.email === 'string' ? actorDoc.email : undefined;
+                    } catch {}
+
+                    const leadData = input.data as any;
+                    const firstName = typeof leadData.firstName === 'string' ? leadData.firstName : '';
+                    const lastName  = typeof leadData.lastName  === 'string' ? leadData.lastName  : '';
+                    const clientName = [firstName, lastName].filter(Boolean).join(' ').trim() || undefined;
+
+                    await notifyDuplicateLeadCreateAttemptAction({
+                        actorId,
+                        actorName: creatingUserName || actorId,
+                        actorEmail,
+                        leadId: '',
+                        duplicateWarnings: warnings,
+                        clientName,
+                        clientEmail:       typeof leadData.email  === 'string' ? leadData.email  : undefined,
+                        clientPhone:       typeof leadData.phone  === 'string' ? leadData.phone  : undefined,
+                        clientLinkedinUrl: typeof leadData.linkedinProfileUrl === 'string'
+                            ? leadData.linkedinProfileUrl
+                            : typeof leadData.linkedinProfile === 'string'
+                                ? leadData.linkedinProfile
+                                : undefined,
+                    });
+                } catch (notifyErr) {
+                    console.error('Failed to send duplicate create notifications:', notifyErr);
+                }
+            }
+
             throw new Error(
                 `Duplicate ${validation.duplicateField} found in lead ${validation.existingLeadId}` +
                 (validation.existingBranchId ? ` (branch: ${validation.existingBranchId})` : '')
@@ -447,6 +606,135 @@ export async function createLeadAction(
     }
 }
 
+export async function updateLeadAction(
+    leadId: string,
+    data: Partial<LeadData>,
+    actorId: string,
+    actorName?: string
+): Promise<Lead> {
+    await assertAuthenticatedUserId(actorId);
+    const { databases } = await createAdminClient();
+
+    try {
+        const actorDoc = await databases.getDocument(
+            DATABASE_ID,
+            COLLECTIONS.USERS,
+            actorId
+        ) as unknown as UserDocument;
+
+        const currentLead = await databases.getDocument(
+            DATABASE_ID,
+            LEADS_COLLECTION_ID,
+            leadId
+        ) as unknown as Lead;
+        await assertLeadUpdateAllowed(databases, actorDoc, currentLead);
+
+        const currentData = JSON.parse(currentLead.data) as LeadData;
+        const updatedData = { ...currentData, ...data };
+
+        assertRequiredLeadData(updatedData);
+
+        const nextStatus = (updatedData as any).status;
+        if (nextStatus) {
+            const previousStatus = currentLead.status;
+            const shouldEnforceWorkflow =
+                isLinkedinRequestLeadData(updatedData) ||
+                ['interested', 'notinterested', 'pipelinefollowup', 'signedclosure', 'backedout'].includes(
+                    normalizeLeadStatus(previousStatus),
+                ) ||
+                ['pipelinefollowup', 'signedclosure', 'backedout'].includes(
+                    normalizeLeadStatus(nextStatus),
+                );
+            if (
+                shouldEnforceWorkflow &&
+                !isAllowedLeadStatusTransition(previousStatus, nextStatus)
+            ) {
+                throw new Error('Invalid status transition for this lead.');
+            }
+        }
+
+        const validation = await validateLeadUniqueness(updatedData, leadId);
+        if (!validation.isValid && validation.duplicateField && validation.existingLeadId) {
+            try {
+                // Fetch actor email for Graph sendMail
+                let actorEmail: string | undefined;
+                try {
+                    const actorEmailDoc = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, actorId) as any;
+                    actorEmail = typeof actorEmailDoc.email === 'string' ? actorEmailDoc.email : undefined;
+                } catch {}
+
+                const firstName = typeof updatedData.firstName === 'string' ? updatedData.firstName : '';
+                const lastName  = typeof updatedData.lastName  === 'string' ? updatedData.lastName  : '';
+                const clientName = [firstName, lastName].filter(Boolean).join(' ').trim() || undefined;
+
+                await notifyDuplicateLeadUpdateAttemptAction({
+                    actorId,
+                    actorName: actorName || actorDoc.$id,
+                    actorEmail,
+                    leadId,
+                    duplicateField: validation.duplicateField,
+                    duplicateValue: getDuplicateValue(updatedData, validation.duplicateField),
+                    existingLeadId: validation.existingLeadId,
+                    clientName,
+                    clientPhone:       typeof updatedData.phone  === 'string' ? updatedData.phone  : undefined,
+                    clientLinkedinUrl: typeof (updatedData as any).linkedinProfileUrl === 'string'
+                        ? (updatedData as any).linkedinProfileUrl
+                        : typeof (updatedData as any).linkedinProfile === 'string'
+                            ? (updatedData as any).linkedinProfile
+                            : undefined,
+                });
+            } catch (error) {
+                console.error('Failed to notify duplicate lead update attempt:', error);
+            }
+
+            throw new Error(
+                `Duplicate ${validation.duplicateField} found in lead ${validation.existingLeadId}` +
+                (validation.existingBranchId ? ` (branch: ${validation.existingBranchId})` : '')
+            );
+        }
+
+        const lead = await databases.updateDocument(
+            DATABASE_ID,
+            LEADS_COLLECTION_ID,
+            leadId,
+            {
+                data: JSON.stringify(updatedData),
+                status: (updatedData.status as string) || currentLead.status,
+            }
+        );
+
+        if (actorName) {
+            try {
+                await databases.createDocument(
+                    DATABASE_ID,
+                    process.env.NEXT_PUBLIC_APPWRITE_AUDIT_LOGS_COLLECTION_ID!,
+                    ID.unique(),
+                    {
+                        action: 'LEAD_UPDATE',
+                        actorId,
+                        actorName,
+                        targetId: leadId,
+                        targetType: 'LEAD',
+                        metadata: JSON.stringify({
+                            leadName: getLeadAuditName(updatedData),
+                            changes: buildAuditChanges(currentData, updatedData, data),
+                            ...data,
+                        }),
+                        performedAt: new Date().toISOString(),
+                    }
+                );
+            } catch (error) {
+                console.error('Failed to log lead update action', error);
+            }
+        }
+
+        return lead as unknown as Lead;
+    } catch (error: any) {
+        console.error('Error updating lead (action):', error);
+        throw new Error(error.message || 'Failed to update lead');
+    }
+}
+
 export async function reopenLeadAction(
     leadId: string,
     actorId?: string,
@@ -530,7 +818,7 @@ export async function listLeadsAction(
       queries.push(Query.or(orConditions));
     } else if (userRole === 'lead_generation') {
       queries.push(Query.equal('ownerId', userId));
-    } else if (userRole === 'admin') {
+    } else if (userRole === 'admin' || userRole === 'developer') {
       // Admins and Managers see all leads across all branches — no branch/owner filter
       if (filters.teamLeadId) {
         const agents = await listAllDocuments<{ $id: string }>({

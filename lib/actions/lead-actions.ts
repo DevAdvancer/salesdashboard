@@ -17,18 +17,18 @@ async function getHierarchyPermissionsServer(userId: string, databases: AdminDat
     try {
         let currentId = userId;
         const visited = new Set<string>();
-        
+
         // Walk up the hierarchy (max 5 levels to prevent loops)
         while (currentId && !visited.has(currentId) && visited.size < 5) {
             visited.add(currentId);
-            
+
             try {
                 const user = await databases.getDocument(
                     DATABASE_ID,
                     COLLECTIONS.USERS,
                     currentId
                 ) as unknown as User;
-                
+
                 // Add supervisors
                 const supervisors = new Set<string>();
                 if (user.teamLeadId) supervisors.add(user.teamLeadId);
@@ -36,7 +36,7 @@ async function getHierarchyPermissionsServer(userId: string, databases: AdminDat
                 if (user.managerIds && user.managerIds.length > 0) {
                     user.managerIds.forEach(mid => supervisors.add(mid));
                 }
-                
+
                 // Add permissions for supervisors
                 for (const supId of supervisors) {
                     if (!visited.has(supId)) {
@@ -45,7 +45,7 @@ async function getHierarchyPermissionsServer(userId: string, databases: AdminDat
                         permissions.push(Permission.delete(Role.user(supId)));
                     }
                 }
-                
+
                 // Move up to the next level
                 if (user.teamLeadId) {
                     currentId = user.teamLeadId;
@@ -132,7 +132,7 @@ function getVisibleHierarchyUserIds(viewerId: string, users: HierarchyUserDocume
 }
 
 async function getVisibleUserIdsForActor(actor: User, databases: AdminDatabases): Promise<string[]> {
-    if (actor.role === 'admin') return [];
+    if (actor.role === 'admin' || actor.role === 'developer') return [];
 
     if (actor.role === 'team_lead') {
         const subordinates = await databases.listDocuments(
@@ -158,12 +158,12 @@ async function getVisibleUserIdsForActor(actor: User, databases: AdminDatabases)
 }
 
 async function assertAssignmentAllowed(actor: User, agent: User, lead: Lead, databases: AdminDatabases) {
-    if (agent.role !== 'agent') {
-        throw new Error('Leads can only be assigned to agents.');
+    if (actor.role === 'admin' || actor.role === 'developer') {
+        return;
     }
 
-    if (actor.role === 'admin') {
-        return;
+    if (agent.role !== 'agent') {
+        throw new Error('Leads can only be assigned to agents.');
     }
 
     if (actor.role === 'team_lead') {
@@ -172,6 +172,22 @@ async function assertAssignmentAllowed(actor: User, agent: User, lead: Lead, dat
         }
     } else if ((actor.role === 'manager' || actor.role === 'assistant_manager') && !hasBranchOverlap(actor, agent)) {
         throw new Error('Permission denied');
+    }
+
+    const visibleUserIds = await getVisibleUserIdsForActor(actor, databases);
+    const leadInScope =
+        visibleUserIds.includes(lead.ownerId) ||
+        (lead.assignedToId ? visibleUserIds.includes(lead.assignedToId) : false) ||
+        Boolean(lead.branchId && getUserBranchIds(actor).includes(lead.branchId));
+
+    if (!leadInScope) {
+        throw new Error('Permission denied');
+    }
+}
+
+async function assertLeadAccessAllowed(actor: User, lead: Lead, databases: AdminDatabases) {
+    if (actor.role === 'admin' || actor.role === 'developer') {
+        return;
     }
 
     const visibleUserIds = await getVisibleUserIdsForActor(actor, databases);
@@ -244,7 +260,7 @@ export async function assignLeadAction(
             actorId
         ) as unknown as User;
 
-        if (!['admin', 'manager', 'assistant_manager', 'team_lead'].includes(actorDoc.role)) {
+        if (!['admin', 'developer', 'manager', 'assistant_manager', 'team_lead'].includes(actorDoc.role)) {
             throw new Error('Permission denied');
         }
 
@@ -270,7 +286,7 @@ export async function assignLeadAction(
             Permission.update(Role.user(currentLead.ownerId)),
             Permission.delete(Role.user(currentLead.ownerId)),
         ];
-        
+
         // Add owner's hierarchy permissions
         const ownerHierarchyPerms = await getHierarchyPermissionsServer(currentLead.ownerId, databases);
         permissions.push(...ownerHierarchyPerms);
@@ -285,7 +301,7 @@ export async function assignLeadAction(
             // For closed leads, agent gets read-only access
             permissions.push(Permission.read(Role.user(agentId)));
         }
-        
+
         // Add assigned agent's hierarchy permissions
         const assignedHierarchyPerms = await getHierarchyPermissionsServer(agentId, databases);
         permissions.push(...assignedHierarchyPerms);
@@ -363,15 +379,7 @@ export async function backoutLeadAction(
     leadId,
   )) as unknown as Lead;
 
-  const allowedByRole = ["admin", "manager", "assistant_manager", "team_lead", "agent"].includes(
-    actorDoc.role,
-  );
-  const allowedByOwnership =
-    currentLead.ownerId === actorId ||
-    (currentLead.assignedToId ? currentLead.assignedToId === actorId : false);
-  if (!allowedByRole && !allowedByOwnership) {
-    throw new Error("Permission denied");
-  }
+  await assertLeadAccessAllowed(actorDoc, currentLead, databases);
 
   const unassignedOwnerId =
     process.env.NEXT_PUBLIC_APPWRITE_UNASSIGNED_OWNER_ID ||
@@ -450,15 +458,7 @@ export async function notInterestedLeadAction(
     leadId,
   )) as unknown as Lead;
 
-  const allowedByRole = ["admin", "manager", "assistant_manager", "team_lead", "agent"].includes(
-    actorDoc.role,
-  );
-  const allowedByOwnership =
-    currentLead.ownerId === actorId ||
-    (currentLead.assignedToId ? currentLead.assignedToId === actorId : false);
-  if (!allowedByRole && !allowedByOwnership) {
-    throw new Error("Permission denied");
-  }
+  await assertLeadAccessAllowed(actorDoc, currentLead, databases);
 
   const unassignedOwnerId =
     process.env.NEXT_PUBLIC_APPWRITE_UNASSIGNED_OWNER_ID ||

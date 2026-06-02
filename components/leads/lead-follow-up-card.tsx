@@ -97,7 +97,12 @@ export function LeadFollowUpCard({ lead, user, disabled = false, onUpdated }: Le
             <DateTimePicker
               id="nextFollowUpAt"
               value={nextFollowUpAt}
-              onChange={setNextFollowUpAt}
+              onChange={(value) => {
+                setNextFollowUpAt(value);
+                if ((lead.followUpStatus ?? 'pending') === 'completed' && value.trim()) {
+                  setFollowUpStatus('pending');
+                }
+              }}
               disabled={disabled || saving}
             />
           </div>

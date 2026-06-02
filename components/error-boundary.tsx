@@ -3,6 +3,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { SUPPORT_EMAIL } from '@/lib/constants/support';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -24,7 +25,6 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // Log error to console (in production, this would go to a logging service)
     console.error('Error caught by boundary:', error, errorInfo);
   }
 
@@ -41,17 +41,22 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
             <CardHeader>
               <CardTitle>Something went wrong</CardTitle>
               <CardDescription>
-                An unexpected error occurred. Please try reloading the page.
+                Something didn't load correctly. Please reload the page.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {this.state.error && (
-                <div className="p-3 bg-destructive/10 rounded-md">
-                  <p className="text-sm text-destructive font-mono">
-                    {this.state.error.message}
-                  </p>
+              <p className="text-sm text-muted-foreground">
+                If the problem continues, contact{" "}
+                <a className="underline" href={`mailto:${SUPPORT_EMAIL}`}>
+                  {SUPPORT_EMAIL}
+                </a>{" "}
+                for instant help.
+              </p>
+              {process.env.NODE_ENV !== "production" && this.state.error?.message ? (
+                <div className="rounded-md border border-[var(--hairline-soft)] bg-[var(--canvas)] p-3">
+                  <p className="text-sm">{this.state.error.message}</p>
                 </div>
-              )}
+              ) : null}
               <Button onClick={this.handleReload} className="w-full">
                 Reload Page
               </Button>

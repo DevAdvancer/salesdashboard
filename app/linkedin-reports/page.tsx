@@ -47,7 +47,10 @@ type ReportRow = {
   idName: string;
   accountType: string;
   sent: number;
+  coldCalls: number;
   accepted: number;
+  leadsGenerated: number;
+  closures: number;
   notAccepted: number;
   withdrawn: number;
 };
@@ -173,7 +176,14 @@ function LinkedinReportsContent() {
         startDate,
         endDate,
       });
-      setRows(result.rows as unknown as ReportRow[]);
+      const nextRows = result.rows as unknown as ReportRow[];
+      setRows(
+        Array.from(
+          new Map(
+            nextRows.map((r) => [`${r.agentId}-${r.accountId}`, r] as const),
+          ).values(),
+        ),
+      );
     } catch (error: unknown) {
       toast({
         title: "Failed to load report",
@@ -202,7 +212,7 @@ function LinkedinReportsContent() {
         status: requestStatus,
         agentId: requestAgentId || undefined,
       });
-      setRequests(next);
+      setRequests(Array.from(new Map(next.map((r) => [r.$id, r] as const)).values()));
     } catch (error: unknown) {
       toast({
         title: "Failed to load requests",
@@ -244,12 +254,23 @@ function LinkedinReportsContent() {
     return rows.reduce(
       (acc, r) => {
         acc.sent += r.sent;
+        acc.coldCalls += r.coldCalls;
         acc.accepted += r.accepted;
+        acc.leadsGenerated += r.leadsGenerated;
+        acc.closures += r.closures;
         acc.notAccepted += r.notAccepted;
         acc.withdrawn += r.withdrawn;
         return acc;
       },
-      { sent: 0, accepted: 0, notAccepted: 0, withdrawn: 0 },
+      {
+        sent: 0,
+        coldCalls: 0,
+        accepted: 0,
+        leadsGenerated: 0,
+        closures: 0,
+        notAccepted: 0,
+        withdrawn: 0,
+      },
     );
   }, [rows]);
 
@@ -322,8 +343,10 @@ function LinkedinReportsContent() {
               {loading ? "Loading..." : "Refresh"}
             </Button>
             <div className="text-sm text-muted-foreground">
-              Sent: {totals.sent} · Accepted: {totals.accepted} · Not Accepted:{" "}
-              {totals.notAccepted} · Withdrawn: {totals.withdrawn}
+              Cold Calls: {totals.coldCalls} ·
+              Connections Sent: {totals.sent} · Connections Accepted: {totals.accepted} ·
+              Leads Generated: {totals.leadsGenerated} · Closures (Won): {totals.closures} ·
+              Not Accepted: {totals.notAccepted} · Withdrawn: {totals.withdrawn}
             </div>
           </div>
         </CardContent>
@@ -341,17 +364,23 @@ function LinkedinReportsContent() {
                 <TableHead>Company</TableHead>
                 <TableHead>Account</TableHead>
                 <TableHead>Type</TableHead>
-                <TableHead>Sent</TableHead>
-                <TableHead>Accepted</TableHead>
+                <TableHead>Connections Sent</TableHead>
+                <TableHead>Cold Calls</TableHead>
+                <TableHead>Connections Accepted</TableHead>
+                <TableHead>Leads Generated</TableHead>
+                <TableHead>Closures (Won)</TableHead>
                 <TableHead>Not Accepted</TableHead>
                 <TableHead>Withdrawn</TableHead>
+                <TableHead>Sent / Lead</TableHead>
+                <TableHead>Accepted / Lead</TableHead>
+                <TableHead>Closure / Lead</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={14}
                     className="text-sm text-muted-foreground">
                     Loading...
                   </TableCell>
@@ -359,7 +388,7 @@ function LinkedinReportsContent() {
               ) : rows.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={14}
                     className="text-sm text-muted-foreground">
                     No data for this date range.
                   </TableCell>
@@ -369,6 +398,11 @@ function LinkedinReportsContent() {
                   const previousAgentId =
                     index > 0 ? sortedRows[index - 1].agentId : null;
                   const shouldShowAgent = previousAgentId !== r.agentId;
+                  const leadsGenerated = r.leadsGenerated;
+                  const sentPerLead = leadsGenerated > 0 ? r.sent / leadsGenerated : 0;
+                  const acceptedPerLead =
+                    leadsGenerated > 0 ? r.accepted / leadsGenerated : 0;
+                  const closurePerLead = leadsGenerated > 0 ? r.closures / leadsGenerated : 0;
                   return (
                     <TableRow key={`${r.agentId}-${r.accountId}`}>
                       <TableCell>
@@ -382,9 +416,15 @@ function LinkedinReportsContent() {
                         {r.accountType}
                       </TableCell>
                       <TableCell>{r.sent}</TableCell>
+                      <TableCell>{r.coldCalls}</TableCell>
                       <TableCell>{r.accepted}</TableCell>
+                      <TableCell>{r.leadsGenerated}</TableCell>
+                      <TableCell>{r.closures}</TableCell>
                       <TableCell>{r.notAccepted}</TableCell>
                       <TableCell>{r.withdrawn}</TableCell>
+                      <TableCell>{sentPerLead.toFixed(2)}</TableCell>
+                      <TableCell>{acceptedPerLead.toFixed(2)}</TableCell>
+                      <TableCell>{closurePerLead.toFixed(2)}</TableCell>
                     </TableRow>
                   );
                 })

@@ -22,7 +22,7 @@ export type ComponentKey =
   | 'linkedin-account-management'
   | 'linkedin-reports';
 
-export type UserRole = 'admin' | 'manager' | 'assistant_manager' | 'team_lead' | 'agent' | 'lead_generation';
+export type UserRole = 'admin' | 'developer' | 'manager' | 'assistant_manager' | 'team_lead' | 'agent' | 'lead_generation';
 
 export interface AccessRule {
   componentKey: ComponentKey;
@@ -54,6 +54,29 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'linkedin-requests', role: 'admin', allowed: false },
   { componentKey: 'linkedin-account-management', role: 'admin', allowed: true },
   { componentKey: 'linkedin-reports', role: 'admin', allowed: true },
+  // Developer rules — identical to admin
+  { componentKey: 'dashboard', role: 'developer', allowed: true },
+  { componentKey: 'chat', role: 'developer', allowed: true },
+  { componentKey: 'leads', role: 'developer', allowed: true },
+  { componentKey: 'history', role: 'developer', allowed: true },
+  { componentKey: 'user-management', role: 'developer', allowed: true },
+  { componentKey: 'field-management', role: 'developer', allowed: false },
+  { componentKey: 'settings', role: 'developer', allowed: true },
+  { componentKey: 'branch-management', role: 'developer', allowed: true },
+  { componentKey: 'audit-logs', role: 'developer', allowed: true },
+  { componentKey: 'mock', role: 'developer', allowed: true },
+  { componentKey: 'assessment-support', role: 'developer', allowed: true },
+  { componentKey: 'interview-support', role: 'developer', allowed: true },
+  { componentKey: 'hierarchy', role: 'developer', allowed: true },
+  { componentKey: 'work-queue', role: 'developer', allowed: true },
+  { componentKey: 'reports', role: 'developer', allowed: true },
+  { componentKey: 'coaching-notes', role: 'developer', allowed: true },
+  { componentKey: 'review-queue', role: 'developer', allowed: true },
+  { componentKey: 'notifications', role: 'developer', allowed: true },
+  { componentKey: 'attendance', role: 'developer', allowed: true },
+  { componentKey: 'linkedin-requests', role: 'developer', allowed: false },
+  { componentKey: 'linkedin-account-management', role: 'developer', allowed: true },
+  { componentKey: 'linkedin-reports', role: 'developer', allowed: true },
   // Manager rules
   { componentKey: 'dashboard', role: 'manager', allowed: true },
   { componentKey: 'chat', role: 'manager', allowed: true },

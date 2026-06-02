@@ -48,7 +48,7 @@ export default function UserManagementPage() {
 
 function UserManagementContent() {
   const searchParams = useSearchParams();
-  const { user, isManager, isAdmin, isTeamLead, isAssistantManager } =
+  const { user, isManager, isAdmin, isDeveloper, isTeamLead, isAssistantManager } =
     useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [search, setSearch] = useState("");
@@ -92,6 +92,7 @@ function UserManagementContent() {
   const isMgr = user?.role === "manager";
   const [createRole, setCreateRole] = useState<
     | "admin"
+    | "developer"
     | "manager"
     | "assistant_manager"
     | "team_lead"
@@ -104,15 +105,15 @@ function UserManagementContent() {
 
   // Initialize createRole when dialog opens or user changes
   useEffect(() => {
-    if (isAdmin) setCreateRole("admin");
+    if (isAdmin || isDeveloper) setCreateRole("admin");
     else if (isMgr) setCreateRole("assistant_manager");
     else if (isAssistantManager) setCreateRole("team_lead");
     else if (isTeamLead) setCreateRole("agent");
-  }, [isAdmin, isMgr, isAssistantManager, isTeamLead, showCreateDialog]);
+  }, [isAdmin, isDeveloper, isMgr, isAssistantManager, isTeamLead, showCreateDialog]);
 
   useEffect(() => {
     async function loadManagers() {
-      if (isAdmin) {
+      if (isAdmin || isDeveloper) {
         try {
           const { getAllManagers } =
             await import("@/lib/services/user-service");
@@ -124,18 +125,20 @@ function UserManagementContent() {
       }
     }
     loadManagers();
-  }, [isAdmin]);
+  }, [isAdmin, isDeveloper]);
 
   // Determine which role the current user can create
-  const canCreateAdmin = isAdmin;
-  const canCreateManager = isAdmin;
-  const canCreateAssistantManager = isAdmin || isMgr;
-  const canCreateTeamLead = isAdmin || isMgr || isAssistantManager;
-  const canCreateAgent = isAdmin || isMgr || isAssistantManager || isTeamLead;
+  const canCreateAdmin = isAdmin || isDeveloper;
+  const canCreateDeveloper = isAdmin || isDeveloper;
+  const canCreateManager = isAdmin || isDeveloper;
+  const canCreateAssistantManager = isAdmin || isDeveloper || isMgr;
+  const canCreateTeamLead = isAdmin || isDeveloper || isMgr || isAssistantManager;
+  const canCreateAgent = isAdmin || isDeveloper || isMgr || isAssistantManager || isTeamLead;
   const canCreateLeadGeneration =
-    isAdmin || isMgr || isAssistantManager || isTeamLead;
+    isAdmin || isDeveloper || isMgr || isAssistantManager || isTeamLead;
   const canCreate =
     canCreateAdmin ||
+    canCreateDeveloper ||
     canCreateManager ||
     canCreateAssistantManager ||
     canCreateTeamLead ||
@@ -150,14 +153,14 @@ function UserManagementContent() {
 
   // The branches available for assignment (subset of current user's branchIds)
   const availableBranches = allBranches.filter(
-    (b) => b.isActive && (isAdmin || (user?.branchIds ?? []).includes(b.$id)),
+    (b) => b.isActive && (isAdmin || isDeveloper || (user?.branchIds ?? []).includes(b.$id)),
   );
 
   const fetchUsers = useCallback(async () => {
     if (!user) return;
     try {
       setIsLoading(true);
-      if (isAdmin) {
+      if (isAdmin || isDeveloper) {
         // Admin sees all users regardless of branches
         const { Query } = await import("appwrite");
         const response = await databases.listDocuments(
@@ -184,11 +187,13 @@ function UserManagementContent() {
 
         // Sort by hierarchy: Manager -> Assistant Manager -> Team Lead -> Agent
         const roleOrder: Record<string, number> = {
-          manager: 0,
-          assistant_manager: 1,
-          team_lead: 2,
-          lead_generation: 3,
-          agent: 4,
+          admin: 0,
+          developer: 0,
+          manager: 1,
+          assistant_manager: 2,
+          team_lead: 3,
+          lead_generation: 4,
+          agent: 5,
         };
 
         allUsers.sort((a: User, b: User) => {
@@ -259,7 +264,7 @@ function UserManagementContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, isAdmin]);
+  }, [user, isAdmin, isDeveloper]);
 
   useEffect(() => {
     if (user) {
@@ -356,7 +361,7 @@ function UserManagementContent() {
     if (!formPassword) errs.password = "Password is required";
     else if (formPassword.length < 8)
       errs.password = "Password must be at least 8 characters";
-    if (createRole !== "admin" && selectedBranchIds.length === 0)
+    if (createRole !== "admin" && createRole !== "developer" && selectedBranchIds.length === 0)
       errs.branches = "At least one branch must be selected";
     setFormErrors(errs);
     return Object.keys(errs).length === 0;
@@ -544,7 +549,7 @@ function UserManagementContent() {
   };
 
   const handleDeleteUser = async (userToDelete: User) => {
-    if (!user || !isAdmin || userToDelete.$id === user.$id) return;
+    if (!user || (!isAdmin && !isDeveloper) || userToDelete.$id === user.$id) return;
 
     const confirmed = await confirm({
       title: `Delete ${userToDelete.name}?`,
@@ -577,7 +582,7 @@ function UserManagementContent() {
   const handleSetAgentActive = async (agent: User, isActive: boolean) => {
     if (
       !user ||
-      !isAdmin ||
+      !isAdmin && !isDeveloper ||
       (agent.role !== "agent" && agent.role !== "lead_generation")
     )
       return;
@@ -626,9 +631,17 @@ function UserManagementContent() {
       setIsCreating(true);
       setError(null);
 
-      if (isAdmin) {
+      if (isAdmin || isDeveloper) {
         if (createRole === "admin") {
           await createAdminAction({
+            name: formName.trim(),
+            email: formEmail.trim(),
+            password: formPassword,
+            currentUserId: user.$id,
+          });
+        } else if (createRole === "developer") {
+          const { createDeveloperAction } = await import("@/app/actions/user");
+          await createDeveloperAction({
             name: formName.trim(),
             email: formEmail.trim(),
             password: formPassword,
@@ -752,6 +765,7 @@ function UserManagementContent() {
 
   const roleLabels: Record<string, string> = {
     admin: "Admin",
+    developer: "Developer",
     manager: "Manager",
     assistant_manager: "Assistant Manager",
     team_lead: "Team Lead",
@@ -769,6 +783,8 @@ function UserManagementContent() {
     switch (role) {
       case "admin":
         return "Admin";
+      case "developer":
+        return "Developer";
       case "manager":
         return "Manager";
       case "assistant_manager":
@@ -1082,7 +1098,7 @@ function UserManagementContent() {
                 </div>
 
                 {/* Manager Selection (For Admin Creating AM/TL/Agent) */}
-                {isAdmin &&
+                {(isAdmin || isDeveloper) &&
                   (createRole === "assistant_manager" ||
                     createRole === "team_lead" ||
                     createRole === "agent" ||
@@ -1359,7 +1375,7 @@ function UserManagementContent() {
                   )}
 
                 {/* Branch multi-select */}
-                {createRole !== "admin" && (
+                {createRole !== "admin" && createRole !== "developer" && (
                   <div>
                     <Label>Branches</Label>
                     {availableBranches.length === 0 ? (
@@ -1392,7 +1408,7 @@ function UserManagementContent() {
                   </div>
                 )}
 
-                {(isAdmin || isMgr || isAssistantManager || isTeamLead) && (
+                {(isAdmin || isDeveloper || isMgr || isAssistantManager || isTeamLead) && (
                   <div className="flex flex-wrap items-center gap-2">
                     {canCreateAdmin && (
                       <Button
@@ -1401,6 +1417,15 @@ function UserManagementContent() {
                         onClick={() => setCreateRole("admin")}
                         size="sm">
                         Admin
+                      </Button>
+                    )}
+                    {canCreateDeveloper && (
+                      <Button
+                        type="button"
+                        variant={createRole === "developer" ? "default" : "outline"}
+                        onClick={() => setCreateRole("developer")}
+                        size="sm">
+                        Developer
                       </Button>
                     )}
                     {canCreateManager && (
@@ -1532,8 +1557,9 @@ function UserManagementContent() {
                       // If user is already Team Lead, Manager can see them but maybe not change role back?
                       // Requirement says "manager can manage the agent can be prooted to a team lead".
                     >
-                      {isAdmin && <option value="admin">Admin</option>}
-                      {isAdmin && <option value="manager">Manager</option>}
+                      {(isAdmin || isDeveloper) && <option value="admin">Admin</option>}
+                      {(isAdmin || isDeveloper) && <option value="developer">Developer</option>}
+                      {(isAdmin || isDeveloper) && <option value="manager">Manager</option>}
                       <option value="assistant_manager">
                         Assistant Manager
                       </option>

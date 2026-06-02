@@ -28,8 +28,8 @@ export function getVisibleUserBranches(
   viewerBranchIds: string[],
   logger?: (message: string, meta?: any) => void
 ): BranchVisibilityCheck {
-  // 1. Admins see everything
-  if (viewerRole === 'admin') {
+  // 1. Admins/Developers see everything
+  if (viewerRole === 'admin' || viewerRole === 'developer') {
     return {
       visibleBranchIds: [...targetUserBranchIds],
       hiddenBranchCount: 0,

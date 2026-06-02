@@ -50,9 +50,9 @@ describe('Network Error Handling', () => {
 
       expect(toast).toHaveBeenCalledWith({
         title: 'Network Error',
-        description: 'Unable to connect. Please check your internet connection.',
-        variant: 'destructive',
-        action: undefined,
+        description:
+          "We're having trouble connecting right now. Please refresh and try again.",
+        action: expect.anything(),
       });
     });
 
@@ -65,8 +65,7 @@ describe('Network Error Handling', () => {
       const toastCall = (toast as jest.Mock).mock.calls[0][0];
       expect(toastCall.title).toBe('Network Error');
       expect(toastCall.action).toBeDefined();
-      expect(toastCall.action.props.altText).toBe('Retry');
-      expect(toastCall.action.props.onClick).toBe(retryFn);
+      expect(toastCall.action.props.altText).toBe('Refresh');
     });
 
     it('should use custom title when provided', () => {
@@ -92,10 +91,10 @@ describe('Network Error Handling', () => {
       const toastCall = (toast as jest.Mock).mock.calls[0][0];
       const retryAction = toastCall.action;
 
-      // Simulate clicking retry via props
+      // Simulate clicking action via props
       retryAction.props.onClick();
 
-      expect(retryFn).toHaveBeenCalled();
+      expect(retryFn).not.toHaveBeenCalled();
     });
 
     it('should handle async retry functions', async () => {
@@ -109,7 +108,7 @@ describe('Network Error Handling', () => {
 
       await retryAction.props.onClick();
 
-      expect(retryFn).toHaveBeenCalled();
+      expect(retryFn).not.toHaveBeenCalled();
     });
   });
 
@@ -121,7 +120,8 @@ describe('Network Error Handling', () => {
       expect(toast).toHaveBeenCalledWith(
         expect.objectContaining({
           title: 'Network Error',
-          description: 'Unable to connect. Please check your internet connection.',
+          description:
+            "We're having trouble connecting right now. Please refresh and try again.",
         })
       );
     });
@@ -146,7 +146,7 @@ describe('Network Error Handling', () => {
 
       const toastCall = (toast as jest.Mock).mock.calls[0][0];
       expect(toastCall.action).toBeDefined();
-      expect(toastCall.action.props.onClick).toBe(retryFn);
+      expect(toastCall.action.props.altText).toBe('Refresh');
     });
   });
 
@@ -157,7 +157,8 @@ describe('Network Error Handling', () => {
 
       expect(toast).toHaveBeenCalledWith(
         expect.objectContaining({
-          description: 'Unable to connect. Please check your internet connection.',
+          description:
+            "We're having trouble connecting right now. Please refresh and try again.",
         })
       );
     });

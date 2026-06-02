@@ -205,7 +205,7 @@ export async function reserveMockAttempt(userId: string, leadId: string) {
             USERS_COLLECTION_ID,
             userId
         ) as unknown as UserDocument;
-        const isAdmin = user.role === 'admin';
+        const isAdmin = user.role === 'admin' || user.role === 'developer';
         let allAttempts = await listAttemptsForLead(databases, leadId);
 
         if (isAdmin) {

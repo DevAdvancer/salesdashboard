@@ -1,0 +1,3 @@
+# Threat Model
+
+Salesdashboard is a Next.js/Appwrite CRM handling authenticated user records, leads, LinkedIn workflow data, payments, reports, audit logs, and role-scoped dashboards. Primary trust boundaries are browser-to-server actions, authenticated Appwrite identity versus caller-supplied IDs/roles, Appwrite document permissions, and JSON data stored in document fields. Important invariants: server actions must re-check authenticated users, role/component access must be derived server-side, report parsing must not crash on malformed stored optional data, and dependency overrides must be reflected in the installed production tree.

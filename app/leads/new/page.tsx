@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createLead } from "@/lib/services/lead-action-service";
@@ -22,6 +22,15 @@ import { ProtectedRoute } from "@/components/protected-route";
 import { ID, Permission, Role } from "appwrite";
 import { storage } from "@/lib/appwrite";
 import { BUCKETS } from "@/lib/constants/appwrite";
+import {
+  buildLeadGenerationLeadData,
+  getMissingLeadGenerationFields,
+} from "@/lib/utils/lead-generation-form";
+import {
+  getLinkedinProfileValue,
+  isLinkedinProfileField,
+} from "@/lib/utils/lead-linkedin-field";
+import { getLeadCreateStatusOptions } from "@/lib/utils/lead-status-workflow";
 
 export default function NewLeadPage() {
   return (
@@ -29,6 +38,18 @@ export default function NewLeadPage() {
       <NewLeadContent />
     </ProtectedRoute>
   );
+}
+
+function toUsPhoneDigits(value: string) {
+  return value.replace(/\D/g, "").slice(0, 10);
+}
+
+function formatUsPhone(value: string) {
+  const digits = toUsPhoneDigits(value);
+  if (!digits) return "";
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
 function NewLeadContent() {
@@ -51,10 +72,10 @@ function LeadGenerationNewLeadContent() {
   const [firstName, setFirstName] = useState("");
   const [middleName, setMiddleName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [visaStatus, setVisaStatus] = useState("");
-  const [linkedinId, setLinkedinId] = useState("");
+  const [linkedinProfileUrl, setLinkedinProfileUrl] = useState("");
   const [resumeFileId, setResumeFileId] = useState<string | null>(null);
   const [resumeFileName, setResumeFileName] = useState<string | null>(null);
   const [isUploadingResume, setIsUploadingResume] = useState(false);
@@ -64,11 +85,16 @@ function LeadGenerationNewLeadContent() {
     if (currentUser.teamLeadId) readUserIds.add(currentUser.teamLeadId);
     if (currentUser.managerId) readUserIds.add(currentUser.managerId);
     currentUser.managerIds?.forEach((managerId) => readUserIds.add(managerId));
-    if (currentUser.assistantManagerId) readUserIds.add(currentUser.assistantManagerId);
-    currentUser.assistantManagerIds?.forEach((assistantManagerId) => readUserIds.add(assistantManagerId));
+    if (currentUser.assistantManagerId)
+      readUserIds.add(currentUser.assistantManagerId);
+    currentUser.assistantManagerIds?.forEach((assistantManagerId) =>
+      readUserIds.add(assistantManagerId),
+    );
 
     return [
-      ...Array.from(readUserIds).map((userId) => Permission.read(Role.user(userId))),
+      ...Array.from(readUserIds).map((userId) =>
+        Permission.read(Role.user(userId)),
+      ),
       Permission.update(Role.user(currentUser.$id)),
       Permission.delete(Role.user(currentUser.$id)),
     ];
@@ -149,17 +175,22 @@ function LeadGenerationNewLeadContent() {
     const trimmedLastName = lastName.trim();
     const trimmedPhone = phone.trim();
     const trimmedVisaStatus = visaStatus.trim();
+    const trimmedLinkedinProfileUrl = linkedinProfileUrl.trim();
 
-    if (
-      !trimmedFirstName ||
-      !trimmedLastName ||
-      !trimmedPhone ||
-      !trimmedVisaStatus
-    ) {
+    const missingFields = getMissingLeadGenerationFields({
+      firstName: trimmedFirstName,
+      lastName: trimmedLastName,
+      phone: trimmedPhone,
+      visaStatus: trimmedVisaStatus,
+      linkedinProfileUrl: trimmedLinkedinProfileUrl,
+    });
+
+    if (missingFields.length > 0) {
       toast({
         title: "Missing required fields",
-        description:
-          "First Name, Last Name, Phone No., and Visa Status are required.",
+        description: `${missingFields.join(", ")} ${
+          missingFields.length === 1 ? "is" : "are"
+        } required.`,
         variant: "destructive",
       });
       return;
@@ -169,25 +200,29 @@ function LeadGenerationNewLeadContent() {
       setIsSaving(true);
       setDuplicateError(null);
 
-      const leadData = {
+      const leadData = buildLeadGenerationLeadData({
         firstName: trimmedFirstName,
-        middleName: middleName.trim() || undefined,
+        middleName,
         lastName: trimmedLastName,
-        email: email.trim() || undefined,
+        email,
         phone: trimmedPhone,
         visaStatus: trimmedVisaStatus,
-        sourceName: "LinkedIN/Lead",
-        source: "LinkedIN/Lead",
-        generatedById: user.$id,
-        generatedByName: user.name,
-        linkedinId: linkedinId.trim() || undefined,
-        resumeFileId: resumeFileId || undefined,
-        resumeFileName: resumeFileName || undefined,
-      };
+        linkedinProfileUrl: trimmedLinkedinProfileUrl,
+        resumeFileId,
+        resumeFileName,
+        userId: user.$id,
+        userName: user.name,
+      });
 
       const validation = await validateLeadUniqueness(leadData);
       if (!validation.isValid) {
-        setDuplicateError("A lead with this phone number already exists.");
+        const fieldLabel =
+          validation.duplicateField === "email"
+            ? "email address"
+            : validation.duplicateField === "phone"
+              ? "phone number"
+              : "LinkedIn URL";
+        setDuplicateError(`A lead with this ${fieldLabel} already exists.`);
         setIsSaving(false);
         return;
       }
@@ -219,7 +254,8 @@ function LeadGenerationNewLeadContent() {
       console.error("Error generating lead:", err);
       toast({
         title: "Error",
-        description: err instanceof Error ? err.message : "Failed to generate lead",
+        description:
+          err instanceof Error ? err.message : "Failed to generate lead",
         variant: "destructive",
       });
     } finally {
@@ -256,6 +292,11 @@ function LeadGenerationNewLeadContent() {
           <CardTitle>Basic Lead Details</CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
+          <p className="text-sm text-muted-foreground">
+            <span className="text-red-500 font-semibold">*</span> Required
+            Fields
+          </p>
+
           {duplicateError && (
             <div className="p-3 text-sm text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-md">
               {duplicateError}
@@ -264,7 +305,9 @@ function LeadGenerationNewLeadContent() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="firstName">First Name *</Label>
+              <Label htmlFor="firstName">
+                First Name <span className="text-red-500">*</span>
+              </Label>
               <input
                 id="firstName"
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -284,7 +327,9 @@ function LeadGenerationNewLeadContent() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="lastName">Last Name *</Label>
+              <Label htmlFor="lastName">
+                Last Name <span className="text-red-500">*</span>
+              </Label>
               <input
                 id="lastName"
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -305,7 +350,9 @@ function LeadGenerationNewLeadContent() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="phone">Phone No. *</Label>
+              <Label htmlFor="phone">
+                Phone No. <span className="text-red-500">*</span>
+              </Label>
               <input
                 id="phone"
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -316,7 +363,9 @@ function LeadGenerationNewLeadContent() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="visaStatus">Visa Status *</Label>
+            <Label htmlFor="visaStatus">
+              Visa Status <span className="text-red-500">*</span>
+            </Label>
             <select
               id="visaStatus"
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -334,12 +383,14 @@ function LeadGenerationNewLeadContent() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="linkedinId">LinkedIn ID</Label>
+              <Label htmlFor="linkedinProfileUrl">
+                LinkedIn profile link <span className="text-red-500">*</span>
+              </Label>
               <input
-                id="linkedinId"
+                id="linkedinProfileUrl"
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                value={linkedinId}
-                onChange={(e) => setLinkedinId(e.target.value)}
+                value={linkedinProfileUrl}
+                onChange={(e) => setLinkedinProfileUrl(e.target.value)}
               />
             </div>
 
@@ -413,6 +464,8 @@ function LegacyNewLeadContent() {
 
   const LINKEDIN_INITIAL_STATUS = "Connection Accepted";
   const LINKEDIN_SOURCE = "LinkedIN/Lead";
+  const COLD_CALL_SOURCE = "Cold Calls";
+  const CREATE_STATUS_OPTIONS = getLeadCreateStatusOptions();
 
   const [formFields, setFormFields] = useState<FormField[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -421,14 +474,29 @@ function LegacyNewLeadContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
+  const duplicateErrorRef = useRef<HTMLDivElement | null>(null);
   const [linkedinRequestCompanyResolved, setLinkedinRequestCompanyResolved] =
     useState<string>("");
 
-  const linkedinRequestId = (searchParams.get("linkedinRequestId") ?? "").trim();
-  const linkedinTargetUrl = (searchParams.get("linkedinTargetUrl") ?? "").trim();
+  const linkedinRequestId = (
+    searchParams.get("linkedinRequestId") ?? ""
+  ).trim();
+  const linkedinTargetUrl = (
+    searchParams.get("linkedinTargetUrl") ?? ""
+  ).trim();
   const linkedinCompany = (searchParams.get("linkedinCompany") ?? "").trim();
+  const coldCallEnabled = (searchParams.get("coldCall") ?? "").trim() === "1";
+  const coldCallPhoneParam = (searchParams.get("coldCallPhone") ?? "").trim();
+  const coldCallPhone = coldCallPhoneParam
+    ? formatUsPhone(coldCallPhoneParam)
+    : "";
   const isLinkedinRequestLead = Boolean(linkedinRequestId);
-  const isDirectLinkedinLead = Boolean(linkedinTargetUrl) && !isLinkedinRequestLead;
+  const isDirectLinkedinLead =
+    Boolean(linkedinTargetUrl) && !isLinkedinRequestLead;
+  const isColdCallLinkedinRequest = isLinkedinRequestLead && coldCallEnabled;
+  const resolvedLinkedinSource = isColdCallLinkedinRequest
+    ? COLD_CALL_SOURCE
+    : LINKEDIN_SOURCE;
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -453,7 +521,8 @@ function LegacyNewLeadContent() {
           currentUserId: user.$id,
           requestId: linkedinRequestId,
         });
-        const company = typeof result.company === "string" ? result.company.trim() : "";
+        const company =
+          typeof result.company === "string" ? result.company.trim() : "";
         if (company) setLinkedinRequestCompanyResolved(company);
       } catch {}
     })();
@@ -472,13 +541,22 @@ function LegacyNewLeadContent() {
         if (result.leadId) {
           toast({
             title: "Backed-out lead found",
-            description: "Opening the existing lead instead of creating a new one.",
+            description:
+              "Opening the existing lead instead of creating a new one.",
           });
           router.push(`/leads/${encodeURIComponent(result.leadId)}`);
         }
       } catch {}
     })();
   }, [linkedinCompany, linkedinTargetUrl, router, toast, user]);
+
+  useEffect(() => {
+    if (!duplicateError) return;
+    duplicateErrorRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, [duplicateError]);
 
   const loadFormConfig = async () => {
     try {
@@ -491,8 +569,6 @@ function LegacyNewLeadContent() {
         ? sorted.map((field) =>
             field.key === "status"
               ? { ...field, options: [LINKEDIN_INITIAL_STATUS] }
-              : field.key === "linkedinProfileUrl"
-                ? { ...field, required: true }
               : field.key === "company" ||
                   field.key === "source" ||
                   field.key === "sourceName"
@@ -502,13 +578,50 @@ function LegacyNewLeadContent() {
         : isDirectLinkedinLead
           ? sorted.map((field) =>
               field.key === "status"
-                ? { ...field, options: ["Interested", "Not Interested"] }
-                : field.key === "linkedinProfileUrl"
-                  ? { ...field, required: true }
-                  : field,
+                ? { ...field, options: CREATE_STATUS_OPTIONS }
+                : field,
             )
-          : sorted;
-      setFormFields(adjusted);
+          : sorted.map((field) =>
+              field.key === "status"
+                ? { ...field, options: CREATE_STATUS_OPTIONS }
+                : field,
+            );
+      const withRequiredOverrides = adjusted.map((field) => {
+        const normalizedLabel = field.label.trim().toLowerCase();
+        const isLegalNameField =
+          field.key === "legalName" || normalizedLabel === "legal name";
+
+        if (isLinkedinProfileField(field) || isLegalNameField) {
+          return { ...field, required: true };
+        }
+
+        return field;
+      });
+
+      const hasLinkedinField = withRequiredOverrides.some((field) =>
+        isLinkedinProfileField(field),
+      );
+
+      setFormFields(
+        hasLinkedinField
+          ? withRequiredOverrides
+          : [
+              ...withRequiredOverrides,
+              {
+                id: "static-linkedin-profile-url",
+                type: "text",
+                label: "LinkedIn profile link",
+                key: "linkedinProfileUrl",
+                required: true,
+                visible: true,
+                order:
+                  Math.max(
+                    0,
+                    ...withRequiredOverrides.map((field) => Number(field.order) || 0),
+                  ) + 1,
+              },
+            ],
+      );
     } catch (err: any) {
       console.error("Error loading form config:", err);
       setError(err.message || "Failed to load form configuration");
@@ -532,6 +645,20 @@ function LegacyNewLeadContent() {
     try {
       setIsSaving(true);
       setDuplicateError(null);
+
+      const rawLinkedinValue = getLinkedinProfileValue(data, formFields);
+      if (!rawLinkedinValue) {
+        toast({
+          title: "Missing LinkedIn profile link",
+          description: "LinkedIn profile link is required.",
+          variant: "destructive",
+        });
+        setIsSaving(false);
+        return;
+      }
+
+      data.linkedinProfileUrl = rawLinkedinValue;
+      if (!data.linkedinProfile) data.linkedinProfile = rawLinkedinValue;
 
       // Validate lead uniqueness before creating
       const validation = await validateLeadUniqueness(data);
@@ -564,8 +691,7 @@ function LegacyNewLeadContent() {
       } & Record<string, any>;
 
       const effectiveLinkedinCompany = (
-        linkedinRequestCompanyResolved ||
-        linkedinCompany
+        linkedinRequestCompanyResolved || linkedinCompany
       ).trim();
       if (isLinkedinRequestLead && !effectiveLinkedinCompany) {
         toast({
@@ -578,14 +704,28 @@ function LegacyNewLeadContent() {
         return;
       }
       const finalData = isLinkedinRequestLead
-        ? {
-            ...sanitizedData,
-            status: LINKEDIN_INITIAL_STATUS,
-            linkedinRequestId,
-            ...(effectiveLinkedinCompany ? { company: effectiveLinkedinCompany } : {}),
-            sourceName: LINKEDIN_SOURCE,
-            source: LINKEDIN_SOURCE,
-          }
+        ? (() => {
+            const resolvedSource = isColdCallLinkedinRequest
+              ? COLD_CALL_SOURCE
+              : LINKEDIN_SOURCE;
+            return {
+              ...sanitizedData,
+              ...(isColdCallLinkedinRequest &&
+              coldCallPhone &&
+              (!("phone" in sanitizedData) ||
+                (typeof sanitizedData.phone === "string" &&
+                  !sanitizedData.phone.trim()))
+                ? { phone: coldCallPhone }
+                : {}),
+              status: LINKEDIN_INITIAL_STATUS,
+              linkedinRequestId,
+              ...(effectiveLinkedinCompany
+                ? { company: effectiveLinkedinCompany }
+                : {}),
+              sourceName: resolvedSource,
+              source: resolvedSource,
+            };
+          })()
         : sanitizedData;
 
       // Auto-assign to creator if no one is selected
@@ -682,7 +822,9 @@ function LegacyNewLeadContent() {
         <CardContent>
           {/* Duplicate Error */}
           {duplicateError && (
-            <div className="mb-6 p-3 text-sm text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-md">
+            <div
+              ref={duplicateErrorRef}
+              className="mb-6 p-3 text-sm text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-md">
               {duplicateError}
             </div>
           )}
@@ -718,10 +860,12 @@ function LegacyNewLeadContent() {
                 ? {
                     status: LINKEDIN_INITIAL_STATUS,
                     company:
-                      (linkedinRequestCompanyResolved || linkedinCompany).trim() ||
-                      undefined,
-                    source: LINKEDIN_SOURCE,
-                    sourceName: LINKEDIN_SOURCE,
+                      (
+                        linkedinRequestCompanyResolved || linkedinCompany
+                      ).trim() || undefined,
+                    ...(coldCallPhone ? { phone: coldCallPhone } : {}),
+                    source: resolvedLinkedinSource,
+                    sourceName: resolvedLinkedinSource,
                   }
                 : isDirectLinkedinLead
                   ? {

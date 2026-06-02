@@ -9,15 +9,15 @@ import {
 } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter, useParams } from "next/navigation";
-import { getLead, updateLead, closeLead } from "@/lib/services/lead-service";
+import { getLead, closeLead } from "@/lib/services/lead-service";
 import { sendChatMessageAction } from "@/app/actions/chat";
-import { notifyDuplicateLinkedinUrlUpdateAttemptAction } from "@/app/actions/lead-duplicates";
 import {
   assignLead,
   backoutLead,
   clearLeadReadCache,
   notInterestedLead,
   reopenLead,
+  updateLead,
 } from "@/lib/services/lead-action-service";
 import {
   getAgentsByManager,
@@ -41,6 +41,12 @@ import { LeadFollowUpCard } from "@/components/leads/lead-follow-up-card";
 import { LeadNotesCard } from "@/components/leads/lead-notes-card";
 import { storage } from "@/lib/appwrite";
 import { BUCKETS } from "@/lib/constants/appwrite";
+import {
+  LEAD_WORKFLOW_STATUSES,
+  getLeadEditAllowedStatuses,
+  isAllowedLeadStatusTransition,
+  normalizeLeadStatus,
+} from "@/lib/utils/lead-status-workflow";
 
 function isBackoutStatus(value: unknown) {
   const text = typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -56,8 +62,7 @@ function isBackoutStatus(value: unknown) {
 }
 
 function normalizeStatusText(value: unknown) {
-  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
-  return text.replace(/[^a-z0-9]/g, "");
+  return normalizeLeadStatus(value);
 }
 
 function isNotInterestedStatus(value: unknown) {
@@ -67,52 +72,6 @@ function isNotInterestedStatus(value: unknown) {
 function isLinkedinRequestLead(data: LeadData) {
   const requestId = (data as any).linkedinRequestId;
   return typeof requestId === "string" && requestId.trim().length > 0;
-}
-
-function getLinkedinAllowedStatuses(currentStatus: unknown) {
-  const normalized = normalizeStatusText(currentStatus);
-  if (normalized === "connectionaccepted") {
-    return ["Connection Accepted", "Interested", "Not Interested"];
-  }
-  if (normalized === "interested") {
-    return ["Interested", "Pipeline / Follow up"];
-  }
-  if (normalized === "pipelinefollowup") {
-    return ["Pipeline / Follow up", "Signed/Closure", "Backed Out"];
-  }
-  const standardStatuses = [
-    "Connection Accepted",
-    "Interested",
-    "Not Interested",
-    "Pipeline / Follow up",
-    "Signed/Closure",
-    "Backed Out",
-  ];
-  const currentText =
-    typeof currentStatus === "string" ? currentStatus.trim() : "";
-  const canonicalByNormalized = new Map<string, string>([
-    ["connectionaccepted", "Connection Accepted"],
-    ["interested", "Interested"],
-    ["notinterested", "Not Interested"],
-    ["pipelinefollowup", "Pipeline / Follow up"],
-    ["signedclosure", "Signed/Closure"],
-    ["backout", "Backed Out"],
-    ["backedout", "Backed Out"],
-  ]);
-  const currentCanonical = currentText
-    ? (canonicalByNormalized.get(normalizeStatusText(currentText)) ??
-      currentText)
-    : "";
-
-  const seen = new Set<string>();
-  const output: string[] = [];
-  for (const value of [currentCanonical, ...standardStatuses]) {
-    const key = normalizeStatusText(value);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    output.push(value);
-  }
-  return output;
 }
 
 export default function LeadDetailPage() {
@@ -285,18 +244,16 @@ function LeadDetailContent() {
         normalizeStatusText(nextStatus) &&
         normalizeStatusText(previousStatus) !== normalizeStatusText(nextStatus);
 
-      if (isLinkedinRequestLead(leadData) && statusChanged) {
-        const allowed = new Set(
-          getLinkedinAllowedStatuses(previousStatus).map(normalizeStatusText),
-        );
-        if (!allowed.has(normalizeStatusText(nextStatus))) {
-          toast({
-            title: "Error",
-            description: "Invalid status transition for this lead.",
-            variant: "destructive",
-          });
-          return;
-        }
+      if (
+        statusChanged &&
+        !isAllowedLeadStatusTransition(previousStatus, nextStatus)
+      ) {
+        toast({
+          title: "Error",
+          description: "Invalid status transition for this lead.",
+          variant: "destructive",
+        });
+        return;
       }
 
       await updateLead(leadId, leadData, user.$id, user.name);
@@ -324,7 +281,6 @@ function LeadDetailContent() {
       }
       if (
         statusChanged &&
-        isLinkedinRequestLead(leadData) &&
         normalizeStatusText(nextStatus) === "signedclosure"
       ) {
         await closeLead(leadId, "Signed/Closure", user.$id, user.name);
@@ -346,27 +302,6 @@ function LeadDetailContent() {
       await loadLead();
     } catch (err: unknown) {
       console.error("Error saving lead:", err);
-      try {
-        if (user) {
-          const message = err instanceof Error ? err.message : "";
-          const match = message.match(
-            /Duplicate\s+linkedinProfileUrl\s+found\s+in\s+lead\s+([a-zA-Z0-9._-]+)/,
-          );
-          const existingLeadId = match?.[1];
-          const linkedinProfileUrl = String(
-            (leadData as any).linkedinProfileUrl ?? "",
-          ).trim();
-          if (existingLeadId && linkedinProfileUrl) {
-            void notifyDuplicateLinkedinUrlUpdateAttemptAction({
-              actorId: user.$id,
-              actorName: user.name,
-              leadId,
-              linkedinProfileUrl,
-              existingLeadId,
-            }).catch(() => null);
-          }
-        }
-      } catch {}
       toast({
         title: "Error",
         description: getErrorMessage(err, "Failed to save lead"),
@@ -562,20 +497,13 @@ function LeadDetailContent() {
         );
 
       case "dropdown":
-        if (field.key === "status" && isLinkedinRequestLead(leadData)) {
+        if (field.key === "status") {
+          const savedStatus = lead?.status ?? value;
           const allowed = new Set(
-            getLinkedinAllowedStatuses(value).map(normalizeStatusText),
+            getLeadEditAllowedStatuses(savedStatus).map(normalizeStatusText),
           );
-          const workflowOptions = [
-            "Connection Accepted",
-            "Interested",
-            "Not Interested",
-            "Pipeline / Follow up",
-            "Signed/Closure",
-            "Backed Out",
-          ];
           const mergedOptions = Array.from(
-            new Set([...(field.options ?? []), ...workflowOptions]),
+            new Set([...(field.options ?? []), ...LEAD_WORKFLOW_STATUSES]),
           );
           const options =
             value && !mergedOptions.includes(value)
