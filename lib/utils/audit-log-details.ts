@@ -96,6 +96,10 @@ function humanizeValue(value: MetadataValue | undefined, idToNameMap: Map<string
       return value;
     }
 
+    if (/^https?:\/\//i.test(value) || (value.includes('@') && !value.includes(' '))) {
+      return value;
+    }
+
     return value
       .replace(/_/g, ' ')
       .replace(/\b\w/g, (letter) => letter.toUpperCase());
