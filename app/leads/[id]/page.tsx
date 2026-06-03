@@ -45,6 +45,7 @@ import {
   getLeadEditAllowedStatuses,
   isAllowedLeadStatusTransition,
   normalizeLeadStatus,
+  canonicalizeLeadStatus,
 } from "@/lib/utils/lead-status-workflow";
 
 function isBackoutStatus(value: unknown) {
@@ -499,7 +500,10 @@ function LeadDetailContent() {
             getLeadEditAllowedStatuses(savedStatus).map(normalizeStatusText),
           );
           const mergedOptions = Array.from(
-            new Set([...(field.options ?? []), ...LEAD_WORKFLOW_STATUSES]),
+            new Set([
+              ...(field.options ?? []).map((opt) => canonicalizeLeadStatus(opt)),
+              ...LEAD_WORKFLOW_STATUSES,
+            ]),
           );
           const options =
             value && !mergedOptions.includes(value)
