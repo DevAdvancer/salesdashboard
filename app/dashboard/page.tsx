@@ -3,7 +3,6 @@
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,7 +19,6 @@ import { getAssessmentAttempts } from "@/app/actions/assessment";
 import { getBranchById } from "@/lib/services/branch-service";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Branch, User } from "@/lib/types";
-import { DollarSign, TrendingUp } from "lucide-react";
 import { appIcons } from "@/components/navigation-config";
 import { LeadershipDashboard } from "@/components/dashboard/leadership-dashboard";
 import { FollowUpQueueCard } from "@/components/dashboard/follow-up-queue";
@@ -30,79 +28,17 @@ import {
   resolveLeadUsersForInsights,
   type LeadershipDashboardInsights,
 } from "@/lib/utils/dashboard-insights";
+import { listAllPaymentInsightsAction, type PaymentInsightRecord } from "@/app/actions/client-payments";
+import { FinancialInsightsSection } from "@/components/dashboard/financial-insights-section";
 
-const FinancialInsightsChart = dynamic(
-  () =>
-    import("@/components/dashboard/financial-insights-chart").then(
-      (module) => module.FinancialInsightsChart
-    ),
-  {
-    loading: () => <Skeleton className="h-[300px] min-h-[300px] w-full" />,
-  }
-);
 
-type AmountChartDatum = {
-  name: string;
-  Total: number;
-  Net: number;
-};
+
 
 type AssignedAgent = User & {
   branchNames: string;
 };
 
-const currencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 2,
-});
 
-function parseCurrencyAmount(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value !== "string") {
-    return 0;
-  }
-
-  const normalizedValue = value.replace(/[^0-9.-]/g, "");
-  if (!normalizedValue) {
-    return 0;
-  }
-
-  const parsedValue = Number.parseFloat(normalizedValue);
-  return Number.isFinite(parsedValue) ? parsedValue : 0;
-}
-
-function getLeadAmount(leadData: Record<string, unknown>): number {
-  return parseCurrencyAmount(leadData.amount ?? leadData.dealValue ?? 0);
-}
-
-function getMetricDate(lead: {
-  isClosed: boolean;
-  closedAt: string | null;
-  $createdAt?: string;
-  $updatedAt?: string;
-}) {
-  const candidateDates = lead.isClosed
-    ? [lead.closedAt, lead.$updatedAt, lead.$createdAt]
-    : [lead.$createdAt, lead.$updatedAt];
-
-  for (const candidateDate of candidateDates) {
-    if (!candidateDate) {
-      continue;
-    }
-
-    const parsedDate = new Date(candidateDate);
-    if (!Number.isNaN(parsedDate.getTime())) {
-      return parsedDate;
-    }
-  }
-
-  return new Date();
-}
 
 function LegacyDashboardContent() {
   const { user, isAdmin, isManager, isAssistantManager, isAgent, isTeamLead } =
@@ -114,11 +50,9 @@ function LegacyDashboardContent() {
     createdMocks: 0,
     createdInterviewSupport: 0,
     createdAssessmentSupport: 0,
-    totalAmount: 0,
-    netAmount: 0,
     loading: true,
   });
-  const [amountData, setAmountData] = useState<AmountChartDatum[]>([]);
+
   const [managerName, setManagerName] = useState<string | null>(null);
   const [assistantManagerName, setAssistantManagerName] = useState<
     string | null
@@ -126,14 +60,13 @@ function LegacyDashboardContent() {
   const [teamLeadName, setTeamLeadName] = useState<string | null>(null);
   const [assignedAgents, setAssignedAgents] = useState<AssignedAgent[]>([]);
   const [isOutlookChecking, setIsOutlookChecking] = useState(true);
-  const [financialView, setFinancialView] = useState<"total" | "monthly">(
-    "total",
-  );
-  const [selectedMonth, setSelectedMonth] = useState("");
   const [dashboardInsights, setDashboardInsights] =
     useState<LeadershipDashboardInsights | null>(null);
   const [dashboardInsightsLoading, setDashboardInsightsLoading] =
     useState(false);
+  const [paymentInsights, setPaymentInsights] = useState<PaymentInsightRecord[]>([]);
+  const [paymentInsightsLoading, setPaymentInsightsLoading] = useState(false);
+
 
   // Check Outlook connection status
   useEffect(() => {
@@ -294,81 +227,28 @@ function LegacyDashboardContent() {
             return total + (Number.isFinite(count) ? count : 0);
           }, 0);
 
-        // Calculate Amounts (Total and Net)
-        let totalAmount = 0;
-        let netAmount = 0;
-        const monthlyData: Record<
-          string,
-          { total: number; net: number; monthStart: number }
-        > = {};
-
-        // Total deal value includes both open leads and closed clients.
-        // Net revenue only includes closed clients.
-        [...activeLeads, ...closedLeads].forEach((lead) => {
-          let leadData: Record<string, unknown>;
-          try {
-            leadData = JSON.parse(lead.data) as Record<string, unknown>;
-          } catch {
-            return;
-          }
-
-          const amount = getLeadAmount(leadData);
-
-          if (amount <= 0) {
-            return;
-          }
-
-          totalAmount += amount;
-
-          const metricDate = getMetricDate(lead);
-          const monthKey = metricDate.toLocaleString("default", {
-            month: "short",
-            year: "numeric",
-          });
-          const monthStart = new Date(
-            metricDate.getFullYear(),
-            metricDate.getMonth(),
-            1,
-          ).getTime();
-
-          if (!monthlyData[monthKey]) {
-            monthlyData[monthKey] = { total: 0, net: 0, monthStart };
-          }
-
-          monthlyData[monthKey].total += amount;
-
-          if (lead.isClosed) {
-            netAmount += amount;
-            monthlyData[monthKey].net += amount;
-          }
-        });
-
-        // Format chart data
-        const chartData = Object.entries(monthlyData)
-          .map(([name, data]) => ({
-            name,
-            Total: data.total,
-            Net: data.net,
-            monthStart: data.monthStart,
-          }))
-          .sort((a, b) => a.monthStart - b.monthStart)
-          .map((data) => ({
-            name: data.name,
-            Total: data.Total,
-            Net: data.Net,
-          }));
-
         setMetrics({
           activeLeads: activeLeads.length,
           closedLeads: closedLeads.length,
           createdMocks: countCreatedRequests(mockAttempts),
           createdInterviewSupport: countCreatedRequests(interviewAttempts),
           createdAssessmentSupport: countCreatedRequests(assessmentAttempts),
-          totalAmount,
-          netAmount,
           loading: false,
         });
-        setAmountData(chartData);
+
+
+        // Fetch upfront payment insights (admin-only)
+        if (isAdmin) {
+          setPaymentInsightsLoading(true);
+          try {
+            const insights = await listAllPaymentInsightsAction(user.$id);
+            setPaymentInsights(insights);
+          } catch (err) {
+            console.error("Error fetching payment insights:", err);
+          } finally {
+            setPaymentInsightsLoading(false);
+          }
+        }
       } catch (error) {
         console.error("Error fetching metrics:", error);
         setMetrics((prev) => ({ ...prev, loading: false }));
@@ -381,6 +261,7 @@ function LegacyDashboardContent() {
       fetchMetrics();
     }
   }, [user, isAdmin, isAssistantManager, isManager]);
+
 
   useEffect(() => {
     async function fetchUserNames() {
@@ -497,41 +378,12 @@ function LegacyDashboardContent() {
     }
   }, [user]);
 
-  useEffect(() => {
-    if (amountData.length === 0) {
-      setSelectedMonth("");
-      return;
-    }
-
-    const monthStillExists = amountData.some(
-      (dataPoint) => dataPoint.name === selectedMonth,
-    );
-    if (!selectedMonth || !monthStillExists) {
-      setSelectedMonth(amountData[amountData.length - 1].name);
-    }
-  }, [amountData, selectedMonth]);
-
-  const selectedMonthData =
-    amountData.find((dataPoint) => dataPoint.name === selectedMonth) ?? null;
-  const isMonthlyView = financialView === "monthly";
-  const displayedTotalAmount =
-    isMonthlyView && selectedMonthData
-      ? selectedMonthData.Total
-      : metrics.totalAmount;
-  const displayedNetAmount =
-    isMonthlyView && selectedMonthData
-      ? selectedMonthData.Net
-      : metrics.netAmount;
-  const displayedChartData =
-    isMonthlyView && selectedMonthData ? [selectedMonthData] : amountData;
-  const displayedPeriodLabel = isMonthlyView
-    ? (selectedMonthData?.name ?? "Selected month")
-    : "All time";
   const LeadsIcon = appIcons.leads;
   const ClientsIcon = appIcons.clients;
   const MockIcon = appIcons.mock;
   const InterviewSupportIcon = appIcons.interviewSupport;
   const AssessmentSupportIcon = appIcons.assessmentSupport;
+
 
   if (!user || isOutlookChecking) {
     return (
@@ -709,93 +561,15 @@ function LegacyDashboardContent() {
         />
       </div>
 
-      {/* Amount Insights Graph (Admin Only) */}
+      {/* Financial Insights (Admin Only) */}
       {isAdmin && (
-        <Card id="tour-financial-insights">
-          <CardHeader>
-            <CardTitle>Financial Insights</CardTitle>
-            <CardDescription>
-              Total deal value includes leads and clients. Net revenue includes
-              clients only.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col gap-4 mb-6 md:flex-row md:items-center md:justify-between">
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant={financialView === "total" ? "default" : "outline"}
-                  onClick={() => setFinancialView("total")}
-                  type="button">
-                  Total
-                </Button>
-                <Button
-                  variant={financialView === "monthly" ? "default" : "outline"}
-                  onClick={() => setFinancialView("monthly")}
-                  type="button">
-                  Monthly
-                </Button>
-              </div>
-
-              {financialView === "monthly" && (
-                <div className="flex items-center gap-2">
-                  <label
-                    htmlFor="financial-month"
-                    className="text-sm text-muted-foreground">
-                    Month
-                  </label>
-                  <select
-                    id="financial-month"
-                    className="flex h-10 rounded-[1.5rem] border border-transparent bg-[var(--soft-cloud)] px-4 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ink)] focus-visible:ring-offset-[12px] focus-visible:ring-offset-[var(--soft-cloud)]"
-                    value={selectedMonth}
-                    onChange={(event) => setSelectedMonth(event.target.value)}
-                    disabled={amountData.length === 0}>
-                    {amountData.length === 0 ? (
-                      <option value="">No data</option>
-                    ) : (
-                      amountData.map((dataPoint) => (
-                        <option key={dataPoint.name} value={dataPoint.name}>
-                          {dataPoint.name}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              <div className="flex flex-col gap-1 border bg-[var(--soft-cloud)] p-4">
-                <span className="text-sm font-medium text-muted-foreground">
-                  Period
-                </span>
-                <span className="text-2xl font-bold">
-                  {displayedPeriodLabel}
-                </span>
-              </div>
-              <div className="flex flex-col gap-1 border bg-[var(--soft-cloud)] p-4">
-                <span className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <DollarSign className="h-4 w-4" />{" "}
-                  {isMonthlyView ? "Monthly Deal Value" : "Total Deal Value"}
-                </span>
-                <span className="text-2xl font-bold">
-                  {currencyFormatter.format(displayedTotalAmount)}
-                </span>
-              </div>
-              <div className="flex flex-col gap-1 border bg-[var(--soft-cloud)] p-4">
-                <span className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4" />{" "}
-                  {isMonthlyView ? "Monthly Net Revenue" : "Net Revenue"}
-                </span>
-                <span className="text-2xl font-bold text-[var(--success)]">
-                  {currencyFormatter.format(displayedNetAmount)}
-                </span>
-              </div>
-            </div>
-
-            <FinancialInsightsChart data={displayedChartData} />
-          </CardContent>
-        </Card>
+        <FinancialInsightsSection
+          paymentRecords={paymentInsights}
+          isLoading={paymentInsightsLoading}
+        />
       )}
+
+
 
       <div
         id="tour-user-quick-actions"

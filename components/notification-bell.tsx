@@ -57,17 +57,18 @@ export function NotificationBell({ className }: { className?: string }) {
       const next = await listNotifications(user.$id, { forceRefresh });
       setNotifications(next);
 
-      const unassigned = next.filter(
+      const visibleToasts = next.filter(
         (notification) =>
           !notification.readAt &&
-          notification.type === 'lead_unassigned' &&
+          (notification.type === 'lead_unassigned' ||
+            notification.type === 'linkedin_withdrawal_due') &&
           !toastedIdsRef.current.has(notification.$id)
       );
 
-      unassigned.forEach((notification) => {
+      visibleToasts.forEach((notification) => {
         toastedIdsRef.current.add(notification.$id);
         toast({
-          title: notification.title || 'Unassigned lead generated',
+          title: notification.title || 'Notification',
           description: notification.body,
         });
       });

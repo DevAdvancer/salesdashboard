@@ -130,8 +130,8 @@ function UserManagementContent() {
   // Determine which role the current user can create
   const canCreateAdmin = isAdmin || isDeveloper;
   const canCreateDeveloper = isAdmin || isDeveloper;
-  const canCreateManager = isAdmin || isDeveloper;
-  const canCreateAssistantManager = isAdmin || isDeveloper || isMgr;
+  const canCreateManager = false;
+  const canCreateAssistantManager = false;
   const canCreateTeamLead = isAdmin || isDeveloper || isMgr || isAssistantManager;
   const canCreateAgent = isAdmin || isDeveloper || isMgr || isAssistantManager || isTeamLead;
   const canCreateLeadGeneration =
@@ -183,7 +183,9 @@ function UserManagementContent() {
           branchId: doc.branchId || null,
           $createdAt: doc.$createdAt,
           $updatedAt: doc.$updatedAt,
-        }));
+        })).filter((mappedUser: User) => (
+          mappedUser.role !== "manager" && mappedUser.role !== "assistant_manager"
+        ));
 
         // Sort by hierarchy: Manager -> Assistant Manager -> Team Lead -> Agent
         const roleOrder: Record<string, number> = {

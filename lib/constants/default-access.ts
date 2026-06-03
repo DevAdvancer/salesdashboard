@@ -18,11 +18,12 @@ export type ComponentKey =
   | 'review-queue'
   | 'notifications'
   | 'attendance'
+  | 'lead-requests'
   | 'linkedin-requests'
   | 'linkedin-account-management'
   | 'linkedin-reports';
 
-export type UserRole = 'admin' | 'developer' | 'manager' | 'assistant_manager' | 'team_lead' | 'agent' | 'lead_generation';
+export type UserRole = 'admin' | 'developer' | 'team_lead' | 'agent' | 'lead_generation';
 
 export interface AccessRule {
   componentKey: ComponentKey;
@@ -51,6 +52,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'review-queue', role: 'admin', allowed: true },
   { componentKey: 'notifications', role: 'admin', allowed: true },
   { componentKey: 'attendance', role: 'admin', allowed: true },
+  { componentKey: 'lead-requests', role: 'admin', allowed: true },
   { componentKey: 'linkedin-requests', role: 'admin', allowed: false },
   { componentKey: 'linkedin-account-management', role: 'admin', allowed: true },
   { componentKey: 'linkedin-reports', role: 'admin', allowed: true },
@@ -74,55 +76,10 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'review-queue', role: 'developer', allowed: true },
   { componentKey: 'notifications', role: 'developer', allowed: true },
   { componentKey: 'attendance', role: 'developer', allowed: true },
+  { componentKey: 'lead-requests', role: 'developer', allowed: true },
   { componentKey: 'linkedin-requests', role: 'developer', allowed: false },
   { componentKey: 'linkedin-account-management', role: 'developer', allowed: true },
   { componentKey: 'linkedin-reports', role: 'developer', allowed: true },
-  // Manager rules
-  { componentKey: 'dashboard', role: 'manager', allowed: true },
-  { componentKey: 'chat', role: 'manager', allowed: true },
-  { componentKey: 'leads', role: 'manager', allowed: true },
-  { componentKey: 'history', role: 'manager', allowed: true },
-  { componentKey: 'user-management', role: 'manager', allowed: true },
-  { componentKey: 'field-management', role: 'manager', allowed: false },
-  { componentKey: 'settings', role: 'manager', allowed: true },
-  { componentKey: 'branch-management', role: 'manager', allowed: false },
-  { componentKey: 'audit-logs', role: 'manager', allowed: false },
-  { componentKey: 'mock', role: 'manager', allowed: true },
-  { componentKey: 'assessment-support', role: 'manager', allowed: true },
-  { componentKey: 'interview-support', role: 'manager', allowed: true },
-  { componentKey: 'hierarchy', role: 'manager', allowed: true },
-  { componentKey: 'work-queue', role: 'manager', allowed: true },
-  { componentKey: 'reports', role: 'manager', allowed: true },
-  { componentKey: 'coaching-notes', role: 'manager', allowed: true },
-  { componentKey: 'review-queue', role: 'manager', allowed: true },
-  { componentKey: 'notifications', role: 'manager', allowed: true },
-  { componentKey: 'attendance', role: 'manager', allowed: true },
-  { componentKey: 'linkedin-requests', role: 'manager', allowed: true },
-  { componentKey: 'linkedin-account-management', role: 'manager', allowed: false },
-  { componentKey: 'linkedin-reports', role: 'manager', allowed: false },
-  // Assistant Manager rules
-  { componentKey: 'dashboard', role: 'assistant_manager', allowed: true },
-  { componentKey: 'chat', role: 'assistant_manager', allowed: true },
-  { componentKey: 'leads', role: 'assistant_manager', allowed: true },
-  { componentKey: 'history', role: 'assistant_manager', allowed: true },
-  { componentKey: 'user-management', role: 'assistant_manager', allowed: true },
-  { componentKey: 'field-management', role: 'assistant_manager', allowed: false },
-  { componentKey: 'settings', role: 'assistant_manager', allowed: true },
-  { componentKey: 'branch-management', role: 'assistant_manager', allowed: false },
-  { componentKey: 'audit-logs', role: 'assistant_manager', allowed: false },
-  { componentKey: 'mock', role: 'assistant_manager', allowed: true },
-  { componentKey: 'assessment-support', role: 'assistant_manager', allowed: true },
-  { componentKey: 'interview-support', role: 'assistant_manager', allowed: true },
-  { componentKey: 'hierarchy', role: 'assistant_manager', allowed: true },
-  { componentKey: 'work-queue', role: 'assistant_manager', allowed: true },
-  { componentKey: 'reports', role: 'assistant_manager', allowed: true },
-  { componentKey: 'coaching-notes', role: 'assistant_manager', allowed: true },
-  { componentKey: 'review-queue', role: 'assistant_manager', allowed: true },
-  { componentKey: 'notifications', role: 'assistant_manager', allowed: true },
-  { componentKey: 'attendance', role: 'assistant_manager', allowed: true },
-  { componentKey: 'linkedin-requests', role: 'assistant_manager', allowed: true },
-  { componentKey: 'linkedin-account-management', role: 'assistant_manager', allowed: false },
-  { componentKey: 'linkedin-reports', role: 'assistant_manager', allowed: false },
   // Team Lead rules
   { componentKey: 'dashboard', role: 'team_lead', allowed: true },
   { componentKey: 'chat', role: 'team_lead', allowed: true },
@@ -143,6 +100,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'review-queue', role: 'team_lead', allowed: true },
   { componentKey: 'notifications', role: 'team_lead', allowed: true },
   { componentKey: 'attendance', role: 'team_lead', allowed: true },
+  { componentKey: 'lead-requests', role: 'team_lead', allowed: false },
   { componentKey: 'linkedin-requests', role: 'team_lead', allowed: false },
   { componentKey: 'linkedin-account-management', role: 'team_lead', allowed: true },
   { componentKey: 'linkedin-reports', role: 'team_lead', allowed: true },
@@ -166,6 +124,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'review-queue', role: 'agent', allowed: false },
   { componentKey: 'notifications', role: 'agent', allowed: true },
   { componentKey: 'attendance', role: 'agent', allowed: false },
+  { componentKey: 'lead-requests', role: 'agent', allowed: false },
   { componentKey: 'linkedin-requests', role: 'agent', allowed: true },
   { componentKey: 'linkedin-account-management', role: 'agent', allowed: false },
   { componentKey: 'linkedin-reports', role: 'agent', allowed: false },
@@ -189,6 +148,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'review-queue', role: 'lead_generation', allowed: false },
   { componentKey: 'notifications', role: 'lead_generation', allowed: true },
   { componentKey: 'attendance', role: 'lead_generation', allowed: false },
+  { componentKey: 'lead-requests', role: 'lead_generation', allowed: false },
   { componentKey: 'linkedin-requests', role: 'lead_generation', allowed: false },
   { componentKey: 'linkedin-account-management', role: 'lead_generation', allowed: false },
   { componentKey: 'linkedin-reports', role: 'lead_generation', allowed: false },

@@ -14,10 +14,9 @@ export interface LeadershipDashboardSummary {
 }
 
 export interface DashboardRoleCounts {
-  managers: number;
-  assistantManagers: number;
   teamLeads: number;
   agents: number;
+  leadGeneration: number;
 }
 
 export interface BranchDashboardSummary {
@@ -65,6 +64,30 @@ export interface FollowUpQueue {
   upcoming: FollowUpQueueItem[];
 }
 
+export interface DashboardLeadDetailRow {
+  leadId: string;
+  leadName: string;
+  company: string;
+  email: string;
+  status: string;
+  branchName: string;
+  ownerName: string;
+  assignedToName: string;
+  amount: number;
+  isClosed: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  nextFollowUpAt: string | null;
+}
+
+export interface LeadershipDashboardDetails {
+  activeLeads: DashboardLeadDetailRow[];
+  closedLeads: DashboardLeadDetailRow[];
+  unassignedLeads: DashboardLeadDetailRow[];
+  staleLeads: DashboardLeadDetailRow[];
+  pipelineValue: DashboardLeadDetailRow[];
+}
+
 export interface LeadershipDashboardInsights {
   summary: LeadershipDashboardSummary;
   roleCounts: DashboardRoleCounts;
@@ -72,6 +95,7 @@ export interface LeadershipDashboardInsights {
   assigneeWorkload: AssigneeWorkloadSummary[];
   statusBreakdown: StatusBreakdownItem[];
   followUpQueue: FollowUpQueue;
+  details: LeadershipDashboardDetails;
 }
 
 interface BuildLeadershipDashboardInsightsInput {
@@ -159,6 +183,16 @@ function getLeadName(lead: Lead): string {
   return fullName || company || email || 'Unassigned lead';
 }
 
+function getLeadCompany(lead: Lead): string {
+  const leadData = parseLeadData(lead);
+  return String(leadData.company ?? '').trim();
+}
+
+function getLeadEmail(lead: Lead): string {
+  const leadData = parseLeadData(lead);
+  return String(leadData.email ?? '').trim();
+}
+
 function getLeadAmount(lead: Lead): number {
   const leadData = parseLeadData(lead);
   return parseCurrencyAmount(leadData.amount ?? leadData.dealValue ?? 0);
@@ -239,10 +273,9 @@ export function buildLeadershipDashboardInsights({
   now = new Date(),
 }: BuildLeadershipDashboardInsightsInput): LeadershipDashboardInsights {
   const roleCounts: DashboardRoleCounts = {
-    managers: 0,
-    assistantManagers: 0,
     teamLeads: 0,
     agents: 0,
+    leadGeneration: 0,
   };
   const branchMap = new Map(branches.map((branch) => [branch.$id, createBranchSummary(branch)]));
   const userMap = new Map(users.map((currentUser) => [currentUser.$id, currentUser]));
@@ -263,6 +296,13 @@ export function buildLeadershipDashboardInsights({
     dueToday: [],
     upcoming: [],
   };
+  const details: LeadershipDashboardDetails = {
+    activeLeads: [],
+    closedLeads: [],
+    unassignedLeads: [],
+    staleLeads: [],
+    pipelineValue: [],
+  };
 
   const normalizeStatus = (value: unknown) => {
     const text = typeof value === 'string' ? value : '';
@@ -272,10 +312,9 @@ export function buildLeadershipDashboardInsights({
   };
 
   for (const currentUser of users) {
-    if (currentUser.role === 'manager') roleCounts.managers += 1;
-    if (currentUser.role === 'assistant_manager') roleCounts.assistantManagers += 1;
     if (currentUser.role === 'team_lead') roleCounts.teamLeads += 1;
     if (currentUser.role === 'agent') roleCounts.agents += 1;
+    if (currentUser.role === 'lead_generation') roleCounts.leadGeneration += 1;
 
     if (currentUser.role !== 'admin') {
       workloadMap.set(currentUser.$id, createWorkloadSummary(currentUser));
@@ -293,23 +332,47 @@ export function buildLeadershipDashboardInsights({
     const branchId = currentLead.branchId ?? 'unassigned-branch';
     const branchSummary = branchMap.get(branchId);
     const branchName = branchSummary?.branchName ?? 'No branch';
+    const owner = userMap.get(currentLead.ownerId);
+    const assignee = currentLead.assignedToId ? userMap.get(currentLead.assignedToId) : null;
+    const detailRow: DashboardLeadDetailRow = {
+      leadId: currentLead.$id,
+      leadName: getLeadName(currentLead),
+      company: getLeadCompany(currentLead),
+      email: getLeadEmail(currentLead),
+      status,
+      branchName,
+      ownerName: owner?.name ?? 'Unknown owner',
+      assignedToName: assignee?.name ?? 'Unassigned',
+      amount,
+      isClosed: currentLead.isClosed,
+      createdAt: currentLead.$createdAt ?? null,
+      updatedAt: currentLead.$updatedAt ?? null,
+      nextFollowUpAt: currentLead.nextFollowUpAt ?? null,
+    };
 
     statusCounts.set(status, (statusCounts.get(status) ?? 0) + 1);
     summary.totalPipelineValue += amount;
+    if (amount > 0) {
+      details.pipelineValue.push(detailRow);
+    }
 
     if (currentLead.isClosed) {
       summary.closedLeads += 1;
       summary.closedRevenue += amount;
+      details.closedLeads.push(detailRow);
     } else {
       summary.activeLeads += 1;
+      details.activeLeads.push(detailRow);
     }
 
     if (!currentLead.assignedToId && !currentLead.isClosed) {
       summary.unassignedLeads += 1;
+      details.unassignedLeads.push(detailRow);
     }
 
     if (leadIsStale) {
       summary.staleLeads += 1;
+      details.staleLeads.push(detailRow);
     }
 
     if (followUpIsOverdue) {
@@ -342,10 +405,10 @@ export function buildLeadershipDashboardInsights({
       }
     }
 
-    const assigneeId = currentLead.assignedToId ?? currentLead.ownerId;
-    const assignee = userMap.get(assigneeId);
-    if (assignee) {
-      const workload = workloadMap.get(assignee.$id) ?? createWorkloadSummary(assignee);
+    const workloadAssigneeId = currentLead.assignedToId ?? currentLead.ownerId;
+    const workloadAssignee = userMap.get(workloadAssigneeId);
+    if (workloadAssignee) {
+      const workload = workloadMap.get(workloadAssignee.$id) ?? createWorkloadSummary(workloadAssignee);
       workload.totalValue += amount;
       if (currentLead.isClosed) {
         workload.closedLeads += 1;
@@ -355,12 +418,10 @@ export function buildLeadershipDashboardInsights({
       if (leadIsStale) {
         workload.staleLeads += 1;
       }
-      workloadMap.set(assignee.$id, workload);
+      workloadMap.set(workloadAssignee.$id, workload);
     }
 
     if (hasPendingFollowUp && followUpDate) {
-      const assignee = currentLead.assignedToId ? userMap.get(currentLead.assignedToId) : null;
-      const owner = userMap.get(currentLead.ownerId);
       const queueItem: FollowUpQueueItem = {
         leadId: currentLead.$id,
         leadName: getLeadName(currentLead),
@@ -385,6 +446,7 @@ export function buildLeadershipDashboardInsights({
   followUpQueue.overdue.sort((a, b) => a.nextFollowUpAt.localeCompare(b.nextFollowUpAt));
   followUpQueue.dueToday.sort((a, b) => a.nextFollowUpAt.localeCompare(b.nextFollowUpAt));
   followUpQueue.upcoming.sort((a, b) => a.nextFollowUpAt.localeCompare(b.nextFollowUpAt));
+  details.pipelineValue.sort((a, b) => b.amount - a.amount || a.leadName.localeCompare(b.leadName));
 
   return {
     summary,
@@ -410,5 +472,6 @@ export function buildLeadershipDashboardInsights({
       .map(([status, count]) => ({ status, count }))
       .sort((a, b) => a.status.localeCompare(b.status)),
     followUpQueue,
+    details,
   };
 }

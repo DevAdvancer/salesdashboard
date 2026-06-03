@@ -12,7 +12,7 @@ import {
 import { upsertAppwritePresence } from '@/lib/utils/appwrite-presences';
 import { AttendanceSelfToggle } from '@/components/attendance-self-toggle';
 
-const PUBLIC_ROUTES = ['/login'];
+const PUBLIC_ROUTES = ['/login', '/referral'];
 const ADMIN_ATTENDANCE_PING_COOLDOWN_MS = 30 * 60 * 1000;
 const ADMIN_ATTENDANCE_PING_STORAGE_KEY = 'crm:last-admin-attendance-ping-at';
 const PRESENCE_PING_COOLDOWN_MS = 60 * 1000;

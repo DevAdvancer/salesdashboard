@@ -363,3 +363,112 @@ export async function listClientPaymentSummariesAction(input: {
   }
   return results;
 }
+
+export interface PaymentInsightRecord {
+  leadId: string;
+  company: string;
+  upfrontAmount: number;
+  months: number;
+  percent: number;
+  status: PaymentStatus;
+  /** ISO timestamp when the payment record was created */
+  createdAt: string;
+  /** Whether the client transitioned from partially_paid to fully_paid at some point */
+  wasPartiallyPaid: boolean;
+}
+
+/**
+ * Admin-only action: fetches all client payment records with full payment plan details
+ * for use in the Financial Insights dashboard.
+ */
+export async function listAllPaymentInsightsAction(
+  actorId: string
+): Promise<PaymentInsightRecord[]> {
+  const actor = await getActor(actorId);
+
+  if (actor.role !== "admin" && actor.role !== "developer") {
+    throw new Error("Not authorized");
+  }
+
+  const { databases } = await createAdminClient();
+
+  // Fetch all payment records (admin sees everything)
+  const paymentsResponse = await databases.listDocuments(
+    DATABASE_ID,
+    COLLECTIONS.CLIENT_PAYMENTS,
+    [Query.limit(5000)]
+  );
+
+  if (paymentsResponse.documents.length === 0) return [];
+
+  // Batch-fetch all lead documents to get company names
+  const leadIds = Array.from(
+    new Set(
+      paymentsResponse.documents
+        .map((doc: any) => (typeof doc.leadId === "string" ? doc.leadId : ""))
+        .filter(Boolean)
+    )
+  );
+
+  const leadsResponse =
+    leadIds.length > 0
+      ? await databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS, [
+          Query.equal("$id", leadIds),
+          Query.limit(Math.min(5000, leadIds.length)),
+        ])
+      : { documents: [] };
+
+  const leadDataMap = new Map<string, string>(); // leadId -> company name
+  for (const lead of leadsResponse.documents as any[]) {
+    let company = "";
+    try {
+      const parsed = JSON.parse(lead.data ?? "{}") as Record<string, unknown>;
+      company = typeof parsed.company === "string" ? parsed.company.trim() : "";
+      if (!company) {
+        const first = typeof parsed.firstName === "string" ? parsed.firstName.trim() : "";
+        const last = typeof parsed.lastName === "string" ? parsed.lastName.trim() : "";
+        company = [first, last].filter(Boolean).join(" ");
+      }
+      if (!company) {
+        company = typeof parsed.email === "string" ? parsed.email.trim() : "";
+      }
+    } catch {
+      // ignore parse errors
+    }
+    leadDataMap.set(lead.$id, company || "Unknown");
+  }
+
+  const results: PaymentInsightRecord[] = [];
+
+  for (const doc of paymentsResponse.documents as any[]) {
+    const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
+    if (!leadId) continue;
+
+    const paymentPlan = parseJsonOr<ClientPaymentPlan>(doc.paymentPlan ?? doc.paymentPlanJson, {
+      percent: 0,
+      months: 0,
+      upfrontAmount: 0,
+    });
+
+    const status = (doc.status as PaymentStatus) ?? "not_paid";
+
+    // Check if the record ever had a partially_paid status in its update history
+    const updates = parseJsonOr<ClientPaymentUpdate[]>(doc.updates ?? doc.updatesJson, []);
+    const wasPartiallyPaid =
+      status === "fully_paid" &&
+      updates.some((u) => u.status === "partially_paid");
+
+    results.push({
+      leadId,
+      company: leadDataMap.get(leadId) ?? "Unknown",
+      upfrontAmount: paymentPlan.upfrontAmount,
+      months: paymentPlan.months,
+      percent: paymentPlan.percent,
+      status,
+      createdAt: typeof doc.$createdAt === "string" ? doc.$createdAt : new Date().toISOString(),
+      wasPartiallyPaid,
+    });
+  }
+
+  return results;
+}

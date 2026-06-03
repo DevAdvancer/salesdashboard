@@ -3,38 +3,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { account, databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { User, UserRole, AuthContext as AuthContextType } from '@/lib/types';
-import { getSignupRoleForEmail } from '@/lib/utils/user-hierarchy';
-import { ID } from 'appwrite';
 import { deleteAppwritePresence } from '@/lib/utils/appwrite-presences';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const SERVER_SESSION_SYNC_COOLDOWN_MS = 5 * 60 * 1000;
-
-function isSessionAlreadyExistsError(error: unknown) {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    'type' in error &&
-    error.code === 401 &&
-    error.type === 'user_session_already_exists'
-  );
-}
-
-function getErrorDetails(error: unknown) {
-  if (typeof error === 'object' && error !== null) {
-    const details = error as Record<string, unknown>;
-
-    return {
-      message: details.message,
-      code: details.code,
-      type: details.type,
-      response: details.response,
-    };
-  }
-
-  return { message: String(error) };
-}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -91,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         name: userDoc.name as string,
         email: userDoc.email as string,
         role: userDoc.role as UserRole,
-        managerId: userDoc.managerId as string | null,
+        managerId: (userDoc.managerId as string) || null,
         managerIds: Array.isArray(userDoc.managerIds) ? (userDoc.managerIds as string[]) : [],
         assistantManagerId: (userDoc.assistantManagerId as string) || null,
         assistantManagerIds: Array.isArray(userDoc.assistantManagerIds)
@@ -204,100 +176,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [clearServerSession, user]);
 
-  // Signup function - creates manager account by default
-  const signup = useCallback(async (name: string, email: string, password: string) => {
-    try {
-      console.log('Starting signup process...');
-      console.log('Database ID:', DATABASE_ID);
-      console.log('Users Collection ID:', COLLECTIONS.USERS);
-
-      // Create account
-      console.log('Creating Appwrite account...');
-      const newAccount = await account.create(
-        ID.unique(),
-        email,
-        password,
-        name
-      );
-      console.log('Account created successfully:', newAccount.$id);
-
-      const signupRole = getSignupRoleForEmail(email);
-
-      // Create user document using the account ID
-      console.log('Creating user document with ID:', newAccount.$id);
-      const userDoc = await databases.createDocument(
-        DATABASE_ID,
-        COLLECTIONS.USERS,
-        newAccount.$id, // Use the account ID as the document ID
-        {
-          name,
-          email,
-          role: signupRole,
-          managerId: null,
-          managerIds: [],
-          assistantManagerIds: [],
-          teamLeadId: null,
-          isActive: true,
-          branchIds: [],
-        }
-      );
-      console.log('User document created successfully:', userDoc.$id);
-
-      // Create session
-      console.log('Creating session...');
-      try {
-        await account.createEmailPasswordSession(email, password);
-        console.log('Session created successfully');
-      } catch (sessionError: unknown) {
-        // If session already exists, delete it and try again
-        if (isSessionAlreadyExistsError(sessionError)) {
-          console.log('Existing session found, clearing it...');
-          await account.deleteSession('current');
-          console.log('Creating new session...');
-          await account.createEmailPasswordSession(email, password);
-          console.log('Session created successfully');
-        } else {
-          throw sessionError;
-        }
-      }
-
-      // Set user state
-      await syncServerSession({ force: true });
-
-      const userData: User = {
-        $id: userDoc.$id,
-        name: userDoc.name as string,
-        email: userDoc.email as string,
-        role: userDoc.role as UserRole,
-        managerId: userDoc.managerId as string | null,
-        managerIds: Array.isArray(userDoc.managerIds) ? (userDoc.managerIds as string[]) : [],
-        assistantManagerId: (userDoc.assistantManagerId as string) || null,
-        assistantManagerIds: Array.isArray(userDoc.assistantManagerIds)
-          ? (userDoc.assistantManagerIds as string[])
-          : [],
-        teamLeadId: (userDoc.teamLeadId as string) || null,
-        branchIds: Array.isArray(userDoc.branchIds) ? (userDoc.branchIds as string[]) : [],
-        isActive: userDoc.isActive !== false,
-        branchId: (userDoc.branchId as string) || null,
-        $createdAt: userDoc.$createdAt,
-        $updatedAt: userDoc.$updatedAt,
-      };
-      console.log('Setting user state:', userData);
-      setUser(userData);
-      console.log('Signup completed successfully');
-    } catch (error: unknown) {
-      console.error('Signup error details:', getErrorDetails(error));
-      throw error;
-    }
-  }, [syncServerSession]);
+  const signup = useCallback(async () => {
+    throw new Error('Signup is disabled. Ask an admin to create the user account.');
+  }, []);
 
   // Role-based helper properties
   const isAdmin = user?.role === 'admin' || user?.role === 'developer';
   const isDeveloper = user?.role === 'developer';
-  const isAssistantManager = user?.role === 'assistant_manager';
-  // Manager includes actual managers and assistant managers (since they share access)
-  // Admin and Developer are also considered managers for access purposes
-  const isManager = user?.role === 'manager' || user?.role === 'assistant_manager' || user?.role === 'admin' || user?.role === 'developer';
+  const isAssistantManager = false;
+  const isManager = false;
   const isTeamLead = user?.role === 'team_lead';
   const isAgent = user?.role === 'agent';
   const isLeadGeneration = user?.role === 'lead_generation';

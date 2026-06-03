@@ -1,5 +1,7 @@
 'use client';
 
+import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
   BarChart3,
@@ -16,8 +18,27 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { LeadershipDashboardInsights } from '@/lib/utils/dashboard-insights';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import type {
+  DashboardLeadDetailRow,
+  LeadershipDashboardInsights,
+} from '@/lib/utils/dashboard-insights';
 import type { UserRole } from '@/lib/types';
 
 interface LeadershipDashboardProps {
@@ -34,13 +55,144 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
 });
 
 function formatRoleName(role: UserRole) {
-  if (role === 'assistant_manager') return 'Assistant Manager';
   if (role === 'team_lead') return 'Team Lead';
+  if (role === 'lead_generation') return 'Lead Generation';
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
 function MetricValue({ value, isLoading }: { value: number | string; isLoading: boolean }) {
   return isLoading ? <Skeleton className="h-8 w-20" /> : value;
+}
+
+type DrillDownKey = keyof LeadershipDashboardInsights['details'];
+
+interface DrillDownConfig {
+  key: DrillDownKey;
+  title: string;
+  description: string;
+}
+
+const drillDownCopy: Record<DrillDownKey, Omit<DrillDownConfig, 'key'>> = {
+  activeLeads: {
+    title: 'Open Work',
+    description: 'Open lead records behind this dashboard number.',
+  },
+  closedLeads: {
+    title: 'Clients',
+    description: 'Closed client records behind this dashboard number.',
+  },
+  unassignedLeads: {
+    title: 'Unassigned',
+    description: 'Active leads that do not have an assigned user.',
+  },
+  staleLeads: {
+    title: 'Attention Needed',
+    description: 'Active leads without an update for 14 or more days.',
+  },
+  pipelineValue: {
+    title: 'Pipeline Value',
+    description: 'Lead and client records contributing to total value.',
+  },
+};
+
+function formatDate(value: string | null) {
+  if (!value) return 'N/A';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString();
+}
+
+function AdminLeadDrillDownDialog({
+  config,
+  rows,
+  onOpenChange,
+}: {
+  config: DrillDownConfig | null;
+  rows: DashboardLeadDetailRow[];
+  onOpenChange: (open: boolean) => void;
+}) {
+  const router = useRouter();
+  const [search, setSearch] = useState('');
+  const filteredRows = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return rows;
+
+    return rows.filter((row) => (
+      row.leadName.toLowerCase().includes(query) ||
+      row.company.toLowerCase().includes(query) ||
+      row.email.toLowerCase().includes(query) ||
+      row.status.toLowerCase().includes(query) ||
+      row.branchName.toLowerCase().includes(query) ||
+      row.ownerName.toLowerCase().includes(query) ||
+      row.assignedToName.toLowerCase().includes(query)
+    ));
+  }, [rows, search]);
+
+  return (
+    <Dialog open={Boolean(config)} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[86vh] max-w-6xl overflow-hidden p-0">
+        <DialogHeader className="border-b border-border px-6 pb-4 pt-6">
+          <DialogTitle>{config?.title ?? 'Dashboard Data'}</DialogTitle>
+          <DialogDescription>
+            {config?.description ?? 'Full dashboard records.'}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 overflow-hidden px-6 pb-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search records..."
+              className="max-w-sm"
+            />
+            <p className="text-sm text-muted-foreground">
+              {filteredRows.length} of {rows.length} records
+            </p>
+          </div>
+          <div className="max-h-[58vh] overflow-auto border border-border">
+            <Table>
+              <TableHeader>
+                <TableRow className="cursor-default hover:bg-transparent">
+                  <TableHead>Lead</TableHead>
+                  <TableHead>Company</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Branch</TableHead>
+                  <TableHead>Owner</TableHead>
+                  <TableHead>Assigned</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead>Updated</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredRows.length === 0 ? (
+                  <TableRow className="cursor-default hover:bg-transparent">
+                    <TableCell colSpan={8} className="text-muted-foreground">
+                      No matching records.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredRows.map((row) => (
+                    <TableRow
+                      key={row.leadId}
+                      onClick={() => router.push(row.isClosed ? `/client/${row.leadId}` : `/leads/${row.leadId}`)}
+                    >
+                      <TableCell className="font-medium">{row.leadName}</TableCell>
+                      <TableCell>{row.company || 'N/A'}</TableCell>
+                      <TableCell>{row.status}</TableCell>
+                      <TableCell>{row.branchName}</TableCell>
+                      <TableCell>{row.ownerName}</TableCell>
+                      <TableCell>{row.assignedToName}</TableCell>
+                      <TableCell className="text-right">{currencyFormatter.format(row.amount)}</TableCell>
+                      <TableCell>{formatDate(row.updatedAt ?? row.createdAt)}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function ListSkeleton() {
@@ -78,17 +230,20 @@ export function LeadershipDashboard({
   insights,
   isLoading,
 }: LeadershipDashboardProps) {
+  const [selectedDrillDown, setSelectedDrillDown] = useState<DrillDownConfig | null>(null);
   const summary = insights?.summary;
   const roleCounts = insights?.roleCounts;
   const branchSummaries = insights?.branchSummaries ?? [];
   const assigneeWorkload = insights?.assigneeWorkload ?? [];
   const statusBreakdown = insights?.statusBreakdown ?? [];
   const roleName = formatRoleName(role);
-  const scopeLabel = role === 'admin'
+  const scopeLabel = role === 'admin' || role === 'developer'
     ? 'all CRM activity'
-    : role === 'assistant_manager'
-      ? 'your assigned scope'
-      : 'your team and branch activity';
+    : 'your team and branch activity';
+  const openDrillDown = (key: DrillDownKey) => {
+    if (isLoading || !insights) return;
+    setSelectedDrillDown({ key, ...drillDownCopy[key] });
+  };
 
   return (
     <div className="space-y-6">
@@ -100,7 +255,8 @@ export function LeadershipDashboard({
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card>
+        <button type="button" onClick={() => openDrillDown('activeLeads')} className="block w-full text-left">
+        <Card className="h-full transition-colors hover:border-foreground/40 hover:bg-accent">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Open Work</CardTitle>
             <BriefcaseBusiness className="h-4 w-4 text-muted-foreground" />
@@ -112,8 +268,10 @@ export function LeadershipDashboard({
             <p className="text-xs text-muted-foreground mt-1">Active leads in scope</p>
           </CardContent>
         </Card>
+        </button>
 
-        <Card>
+        <button type="button" onClick={() => openDrillDown('staleLeads')} className="block w-full text-left">
+        <Card className="h-full transition-colors hover:border-foreground/40 hover:bg-accent">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Attention Needed</CardTitle>
             <AlertTriangle className="h-4 w-4 text-muted-foreground" />
@@ -125,8 +283,10 @@ export function LeadershipDashboard({
             <p className="text-xs text-muted-foreground mt-1">No update for 14+ days</p>
           </CardContent>
         </Card>
+        </button>
 
-        <Card>
+        <button type="button" onClick={() => openDrillDown('unassignedLeads')} className="block w-full text-left">
+        <Card className="h-full transition-colors hover:border-foreground/40 hover:bg-accent">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Unassigned</CardTitle>
             <ClipboardList className="h-4 w-4 text-muted-foreground" />
@@ -138,8 +298,10 @@ export function LeadershipDashboard({
             <p className="text-xs text-muted-foreground mt-1">Active leads without owner action</p>
           </CardContent>
         </Card>
+        </button>
 
-        <Card>
+        <button type="button" onClick={() => openDrillDown('pipelineValue')} className="block w-full text-left">
+        <Card className="h-full transition-colors hover:border-foreground/40 hover:bg-accent">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pipeline Value</CardTitle>
             <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
@@ -153,6 +315,7 @@ export function LeadershipDashboard({
             </p>
           </CardContent>
         </Card>
+        </button>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-3">
@@ -207,10 +370,9 @@ export function LeadershipDashboard({
           </CardHeader>
           <CardContent className="space-y-3">
             {[
-              ['Managers', roleCounts?.managers ?? 0],
-              ['Assistant Managers', roleCounts?.assistantManagers ?? 0],
               ['Team Leads', roleCounts?.teamLeads ?? 0],
               ['Agents', roleCounts?.agents ?? 0],
+              ['Lead Generation', roleCounts?.leadGeneration ?? 0],
             ].map(([label, value]) => (
               <div key={label} className="flex items-center justify-between border border-border bg-[var(--soft-cloud)] px-3 py-2">
                 <span className="text-sm text-muted-foreground">{label}</span>
@@ -291,6 +453,13 @@ export function LeadershipDashboard({
           </CardContent>
         </Card>
       </div>
+      <AdminLeadDrillDownDialog
+        config={selectedDrillDown}
+        rows={selectedDrillDown && insights ? insights.details[selectedDrillDown.key] : []}
+        onOpenChange={(open) => {
+          if (!open) setSelectedDrillDown(null);
+        }}
+      />
     </div>
   );
 }

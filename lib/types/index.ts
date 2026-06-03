@@ -1,7 +1,7 @@
 // User types
 export type UserRole = 'admin' | 'developer' | 'manager' | 'assistant_manager' | 'team_lead' | 'agent' | 'lead_generation';
 
-export const VALID_ROLES: UserRole[] = ['admin', 'developer', 'manager', 'assistant_manager', 'team_lead', 'agent', 'lead_generation'];
+export const VALID_ROLES: UserRole[] = ['admin', 'developer', 'team_lead', 'agent', 'lead_generation'];
 
 export function isValidRole(value: string): value is UserRole {
   return VALID_ROLES.includes(value as UserRole);
@@ -25,6 +25,19 @@ export interface User {
   $updatedAt?: string;
 }
 
+export interface CreateUserInput {
+  name: string;
+  email: string;
+  password: string;
+  role: UserRole;
+  managerId?: string;
+  managerIds?: string[];
+  assistantManagerId?: string;
+  assistantManagerIds?: string[];
+  teamLeadId?: string;
+  branchIds: string[];
+}
+
 export interface CreateManagerInput {
   name: string;
   email: string;
@@ -37,19 +50,6 @@ export interface CreateAssistantManagerInput {
   email: string;
   password: string;
   managerIds?: string[];
-  branchIds: string[];
-}
-
-export interface CreateUserInput {
-  name: string;
-  email: string;
-  password: string;
-  role: UserRole;
-  managerId?: string;
-  managerIds?: string[];
-  assistantManagerId?: string;
-  assistantManagerIds?: string[];
-  teamLeadId?: string;
   branchIds: string[];
 }
 
@@ -71,7 +71,7 @@ export interface CreateAgentInput {
   role?: Extract<UserRole, 'agent' | 'lead_generation'>;
   teamLeadId?: string;
   managerId?: string;
-  managerIds?: string[]; // Added managerIds
+  managerIds?: string[];
   assistantManagerId?: string;
   assistantManagerIds?: string[];
   branchIds: string[];
@@ -142,6 +142,35 @@ export interface CreateLeadInput {
   branchId?: string | null;
 }
 
+export type LeadRequestStatus = 'pending' | 'moved' | 'rejected';
+
+export interface LeadRequest {
+  $id: string;
+  name: string;
+  email: string;
+  phone: string;
+  linkedinProfileUrl: string;
+  city: string;
+  interestedService: string;
+  referrerName: string;
+  notes: string;
+  referrerCompany?: string;
+  bonusAmount?: string;
+  paymentDate?: string;
+  paymentMode?: string;
+  salesPerson?: string;
+  data: string;
+  status: LeadRequestStatus | string;
+  duplicateMessage?: string | null;
+  movedLeadId?: string | null;
+  movedById?: string | null;
+  movedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  $createdAt?: string;
+  $updatedAt?: string;
+}
+
 export interface LeadListFilters {
   status?: string;
   assignedToId?: string;
@@ -204,6 +233,7 @@ export type ComponentKey =
   | 'review-queue'
   | 'notifications'
   | 'attendance'
+  | 'lead-requests'
   | 'linkedin-requests'
   | 'linkedin-account-management'
   | 'linkedin-reports';

@@ -55,6 +55,7 @@ export const appIcons = {
   linkedinRequests: Link2,
   linkedinAccounts: UserCog,
   linkedinReports: ChartColumn,
+  leadRequests: ClipboardList,
 } satisfies Record<string, AppIcon>;
 
 export const NAV_ITEMS: NavItem[] = [
@@ -63,6 +64,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'chat', label: 'Chatting', href: '/chat/announcement', icon: appIcons.chat },
   { key: 'branch-management', label: 'Branches', href: '/branches', icon: appIcons.branches },
   { key: 'leads', label: 'Leads', href: '/leads', icon: appIcons.leads },
+  { key: 'lead-requests', label: 'Lead Requests', href: '/lead-requests', icon: appIcons.leadRequests },
   { key: 'history', label: 'Client', href: '/client', icon: appIcons.clients },
   { key: 'work-queue', label: 'Work Queue', href: '/work-queue', icon: appIcons.workQueue },
   { key: 'reports', label: 'Reports', href: '/reports', icon: appIcons.reports },

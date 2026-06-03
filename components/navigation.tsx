@@ -67,254 +67,28 @@ export function Navigation({
     ? []
     : NAV_ITEMS.filter((item) => canAccess(item.key as ComponentKey));
 
-  const linkedinItemKeys = new Set([
-    "linkedin-requests",
-    "linkedin-account-management",
-    "linkedin-reports",
-  ]);
-  const technicalItemKeys = new Set([
-    "mock",
-    "interview-support",
-    "assessment-support",
-  ]);
-  const linkedinItems = visibleItems.filter((item) =>
-    linkedinItemKeys.has(item.key),
-  );
-  const technicalItems = visibleItems.filter((item) =>
-    technicalItemKeys.has(item.key),
-  );
-  const mainItems = visibleItems.filter(
-    (item) =>
-      !technicalItemKeys.has(item.key) && !linkedinItemKeys.has(item.key),
-  );
+  // Define section grouping
+  const agentItemKeys = new Set(["dashboard", "leads", "history", "work-queue", "attendance"]);
+  const teamLeadItemKeys = new Set(["user-management", "reports", "coaching-notes", "review-queue"]);
+  const adminItemKeys = new Set(["branch-management", "hierarchy", "lead-requests", "audit-logs", "settings"]);
+  const technicalItemKeys = new Set(["mock", "interview-support", "assessment-support"]);
+  const linkedinItemKeys = new Set(["linkedin-requests", "linkedin-account-management", "linkedin-reports"]);
+
+  // Filter items by section
+  const agentItems = visibleItems.filter((item) => agentItemKeys.has(item.key));
+  const teamLeadItems = visibleItems.filter((item) => teamLeadItemKeys.has(item.key));
+  const adminItems = visibleItems.filter((item) => adminItemKeys.has(item.key));
+  const technicalItems = visibleItems.filter((item) => technicalItemKeys.has(item.key));
+  const linkedinItems = visibleItems.filter((item) => linkedinItemKeys.has(item.key));
   const chatItem = visibleItems.find((item) => item.key === "chat") ?? null;
-  const technicalInsertBeforeKey = mainItems.some(
-    (item) => item.key === "audit-logs",
-  )
-    ? "audit-logs"
-    : "settings";
 
-  const linkedinSection =
-    linkedinItems.length > 0 ? (
-      <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
-        <button
-          type="button"
-          onClick={() => setLinkedinOpen((v) => !v)}
-          className="nav-item"
-          aria-expanded={linkedinOpen}
-          title="Linkedin Leads"
-          style={{
-            justifyContent: isCollapsed ? "center" : "flex-start",
-          }}>
-          <Map size={16} />
-          <span className={isCollapsed ? "lg:sr-only" : ""} style={{ flex: 1 }}>
-            Linkedin Leads
-          </span>
-          {!isCollapsed && (
-            <ChevronDown
-              size={16}
-              style={{
-                transform: linkedinOpen ? "rotate(180deg)" : "rotate(0deg)",
-                transition: "transform 0.12s ease",
-              }}
-            />
-          )}
-        </button>
-
-        {linkedinOpen && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "1px",
-              paddingLeft: isCollapsed ? 0 : "0.75rem",
-            }}>
-            {linkedinItems.map((item) => {
-              const Icon = item.icon;
-              const isActive =
-                pathname === item.href ||
-                (pathname?.startsWith(item.href) &&
-                  pathname.charAt(item.href.length) === "/");
-              return (
-                <button
-                  key={item.key}
-                  id={`nav-${item.key}`}
-                  onClick={() => {
-                    router.push(item.href);
-                    setMobileMenuOpen(false);
-                  }}
-                  className={`nav-item${isActive ? " active" : ""}`}
-                  title={item.label}
-                  style={{
-                    paddingLeft: isCollapsed ? undefined : "1.25rem",
-                  }}>
-                  <Icon size={16} />
-                  <span className={isCollapsed ? "lg:sr-only" : ""}>
-                    {item.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    ) : null;
-
-  const chatSection =
-    chatItem ? (
-      <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
-        <button
-          type="button"
-          onClick={() => setChatOpen((v) => !v)}
-          className="nav-item"
-          aria-expanded={chatOpen}
-          title="Chatting"
-          style={{
-            justifyContent: isCollapsed ? "center" : "flex-start",
-          }}>
-          <MessageSquare size={16} />
-          <span className={isCollapsed ? "lg:sr-only" : ""} style={{ flex: 1 }}>
-            Chatting
-          </span>
-          {!isCollapsed && (
-            <ChevronDown
-              size={16}
-              style={{
-                transform: chatOpen ? "rotate(180deg)" : "rotate(0deg)",
-                transition: "transform 0.12s ease",
-              }}
-            />
-          )}
-        </button>
-
-        {chatOpen && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "1px",
-              paddingLeft: isCollapsed ? 0 : "0.75rem",
-            }}>
-            {[
-              { key: "chat-announcement", label: "Announcement", href: "/chat/announcement", icon: Bell },
-              { key: "chat-general", label: "General", href: "/chat/general", icon: MessageSquare },
-            ].map((item) => {
-              const Icon = item.icon;
-              const isActive =
-                pathname === item.href ||
-                (pathname?.startsWith(item.href) &&
-                  pathname.charAt(item.href.length) === "/");
-              return (
-                <button
-                  key={item.key}
-                  id={`nav-${item.key}`}
-                  onClick={() => {
-                    router.push(item.href);
-                    setMobileMenuOpen(false);
-                  }}
-                  className={`nav-item${isActive ? " active" : ""}`}
-                  title={item.label}
-                  style={{
-                    paddingLeft: isCollapsed ? undefined : "1.25rem",
-                  }}>
-                  <Icon size={16} />
-                  <span className={isCollapsed ? "lg:sr-only" : ""}>
-                    {item.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    ) : null;
-
-  const technicalSection =
-    technicalItems.length > 0 ? (
-      <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
-        <button
-          type="button"
-          onClick={() => setTechnicalOpen((v) => !v)}
-          className="nav-item"
-          aria-expanded={technicalOpen}
-          title="Technical Section"
-          style={{
-            justifyContent: isCollapsed ? "center" : "flex-start",
-          }}>
-          <Wrench size={16} />
-          <span className={isCollapsed ? "lg:sr-only" : ""} style={{ flex: 1 }}>
-            Technical Section
-          </span>
-          {!isCollapsed && (
-            <ChevronDown
-              size={16}
-              style={{
-                transform: technicalOpen ? "rotate(180deg)" : "rotate(0deg)",
-                transition: "transform 0.12s ease",
-              }}
-            />
-          )}
-        </button>
-
-        {technicalOpen && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "1px",
-              paddingLeft: isCollapsed ? 0 : "0.75rem",
-            }}>
-            {technicalItems.map((item) => {
-              const Icon = item.icon;
-              const isActive =
-                pathname === item.href ||
-                (pathname?.startsWith(item.href) &&
-                  pathname.charAt(item.href.length) === "/");
-              return (
-                <button
-                  key={item.key}
-                  id={`nav-${item.key}`}
-                  onClick={() => {
-                    router.push(item.href);
-                    setMobileMenuOpen(false);
-                  }}
-                  className={`nav-item${isActive ? " active" : ""}`}
-                  title={item.label}
-                  style={{
-                    paddingLeft: isCollapsed ? undefined : "1.25rem",
-                  }}>
-                  <Icon size={16} />
-                  <span className={isCollapsed ? "lg:sr-only" : ""}>
-                    {item.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    ) : null;
-
-  const renderedItems = mainItems.reduce<ReactNode[]>((acc, item) => {
-    if (technicalSection && item.key === technicalInsertBeforeKey) {
-      if (linkedinSection) {
-        acc.push(<div key="nav-linkedin-section">{linkedinSection}</div>);
-      }
-      acc.push(<div key="nav-technical-section">{technicalSection}</div>);
-    }
-
-    if (chatSection && item.key === "chat") {
-      acc.push(<div key="nav-chat-section">{chatSection}</div>);
-      return acc;
-    }
-
+  // Helper to render a standard nav button
+  const renderNavButton = (item: typeof NAV_ITEMS[0]) => {
     const Icon = item.icon;
     const isActive =
       pathname === item.href ||
-      (pathname?.startsWith(item.href) &&
-        pathname.charAt(item.href.length) === "/");
-
-    acc.push(
+      (pathname?.startsWith(item.href) && pathname.charAt(item.href.length) === "/");
+    return (
       <button
         key={item.key}
         id={`nav-${item.key}`}
@@ -323,30 +97,222 @@ export function Navigation({
           setMobileMenuOpen(false);
         }}
         className={`nav-item${isActive ? " active" : ""}`}
-        title={item.label}>
+        title={item.label}
+      >
         <Icon size={16} />
         <span className={isCollapsed ? "lg:sr-only" : ""}>{item.label}</span>
-      </button>,
+      </button>
     );
+  };
 
-    return acc;
-  }, []);
+  // Helper to render a section header
+  const renderSectionHeader = (title: string) => {
+    if (isCollapsed) {
+      return <div className="my-2 border-t border-border/50 mx-2" />;
+    }
+    return (
+      <div className="px-3 py-2 mt-2 mb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+        {title}
+      </div>
+    );
+  };
 
-  if (
-    (linkedinSection || technicalSection) &&
-    !mainItems.some((item) => item.key === technicalInsertBeforeKey)
-  ) {
-    if (linkedinSection) {
-      renderedItems.push(
-        <div key="nav-linkedin-section">{linkedinSection}</div>,
-      );
-    }
-    if (technicalSection) {
-      renderedItems.push(
-        <div key="nav-technical-section">{technicalSection}</div>,
-      );
-    }
+  // Collapsible Sections
+  const renderCollapsibleSection = (
+    title: string,
+    icon: any,
+    items: typeof NAV_ITEMS,
+    isOpen: boolean,
+    setIsOpen: React.Dispatch<React.SetStateAction<boolean>>
+  ) => {
+    if (items.length === 0) return null;
+    const Icon = icon;
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
+        <button
+          type="button"
+          onClick={() => setIsOpen((v) => !v)}
+          className="nav-item"
+          aria-expanded={isOpen}
+          title={title}
+          style={{ justifyContent: isCollapsed ? "center" : "flex-start" }}
+        >
+          <Icon size={16} />
+          <span className={isCollapsed ? "lg:sr-only" : ""} style={{ flex: 1 }}>
+            {title}
+          </span>
+          {!isCollapsed && (
+            <ChevronDown
+              size={16}
+              style={{
+                transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
+                transition: "transform 0.12s ease",
+              }}
+            />
+          )}
+        </button>
+
+        {isOpen && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "1px",
+              paddingLeft: isCollapsed ? 0 : "0.75rem",
+            }}
+          >
+            {items.map((item) => {
+              const ItemIcon = item.icon;
+              const isActive =
+                pathname === item.href ||
+                (pathname?.startsWith(item.href) && pathname.charAt(item.href.length) === "/");
+              return (
+                <button
+                  key={item.key}
+                  id={`nav-${item.key}`}
+                  onClick={() => {
+                    router.push(item.href);
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`nav-item${isActive ? " active" : ""}`}
+                  title={item.label}
+                  style={{ paddingLeft: isCollapsed ? undefined : "1.25rem" }}
+                >
+                  <ItemIcon size={16} />
+                  <span className={isCollapsed ? "lg:sr-only" : ""}>{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const chatSection = chatItem ? (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
+      <button
+        type="button"
+        onClick={() => setChatOpen((v) => !v)}
+        className="nav-item"
+        aria-expanded={chatOpen}
+        title="Chatting"
+        style={{ justifyContent: isCollapsed ? "center" : "flex-start" }}
+      >
+        <MessageSquare size={16} />
+        <span className={isCollapsed ? "lg:sr-only" : ""} style={{ flex: 1 }}>
+          Chatting
+        </span>
+        {!isCollapsed && (
+          <ChevronDown
+            size={16}
+            style={{
+              transform: chatOpen ? "rotate(180deg)" : "rotate(0deg)",
+              transition: "transform 0.12s ease",
+            }}
+          />
+        )}
+      </button>
+
+      {chatOpen && (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "1px",
+            paddingLeft: isCollapsed ? 0 : "0.75rem",
+          }}
+        >
+          {[
+            { key: "chat-announcement", label: "Announcement", href: "/chat/announcement", icon: Bell },
+            { key: "chat-general", label: "General", href: "/chat/general", icon: MessageSquare },
+          ].map((item) => {
+            const ItemIcon = item.icon;
+            const isActive =
+              pathname === item.href ||
+              (pathname?.startsWith(item.href) && pathname.charAt(item.href.length) === "/");
+            return (
+              <button
+                key={item.key}
+                id={`nav-${item.key}`}
+                onClick={() => {
+                  router.push(item.href);
+                  setMobileMenuOpen(false);
+                }}
+                className={`nav-item${isActive ? " active" : ""}`}
+                title={item.label}
+                style={{ paddingLeft: isCollapsed ? undefined : "1.25rem" }}
+              >
+                <ItemIcon size={16} />
+                <span className={isCollapsed ? "lg:sr-only" : ""}>{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  ) : null;
+
+  const renderedItems: ReactNode[] = [];
+
+  // Determine section titles based on role
+  let coreWorkspaceTitle = "My Workspace";
+  let managementTitle = "Team Management";
+  let adminTitle = "System Admin";
+
+  if (user.role === "admin" || user.role === "developer") {
+    coreWorkspaceTitle = "Main Menu";
+    managementTitle = "Management";
+    adminTitle = "System Administration";
+  } else if (user.role === "team_lead") {
+    coreWorkspaceTitle = "Main Menu";
+    managementTitle = "Team Management";
+  } else {
+    coreWorkspaceTitle = "My Workspace";
   }
+
+  // 1. Agent Workspace
+  if (agentItems.length > 0 || chatItem) {
+    renderedItems.push(
+      <div key="section-agent">
+        {renderSectionHeader(coreWorkspaceTitle)}
+        {agentItems.map(renderNavButton)}
+        {chatSection}
+      </div>
+    );
+  }
+
+  // 2. Team Lead Dashboard
+  if (teamLeadItems.length > 0) {
+    renderedItems.push(
+      <div key="section-tl">
+        {renderSectionHeader(managementTitle)}
+        {teamLeadItems.map(renderNavButton)}
+      </div>
+    );
+  }
+
+  // 3. Admin Console
+  if (adminItems.length > 0) {
+    renderedItems.push(
+      <div key="section-admin">
+        {renderSectionHeader(adminTitle)}
+        {adminItems.map(renderNavButton)}
+      </div>
+    );
+  }
+
+  // 4. Add-ons & Support
+  if (technicalItems.length > 0 || linkedinItems.length > 0) {
+    renderedItems.push(
+      <div key="section-addons">
+        {renderSectionHeader("Add-ons")}
+        {renderCollapsibleSection("Technical Support", Wrench, technicalItems, technicalOpen, setTechnicalOpen)}
+        {renderCollapsibleSection("Linkedin Tools", Map, linkedinItems, linkedinOpen, setLinkedinOpen)}
+      </div>
+    );
+  }
+
 
   return (
     <>

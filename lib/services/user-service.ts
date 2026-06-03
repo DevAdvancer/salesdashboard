@@ -30,6 +30,7 @@ function mapDocToUser(doc: any): User {
  * Admin can assign any combination of active branches.
  */
 export async function createManager(input: CreateManagerInput, currentUser: User): Promise<User> {
+  throw new Error('Manager role has been retired. Create an admin, team lead, agent, or lead generation user instead.');
   const { name, email, password, branchIds } = input;
 
   if (!branchIds.length) {
@@ -82,6 +83,7 @@ export async function createManager(input: CreateManagerInput, currentUser: User
  * Create a new assistant manager under a manager.
  */
 export async function createAssistantManager(input: CreateAssistantManagerInput, currentUser: User): Promise<User> {
+  throw new Error('Assistant manager role has been retired. Create a team lead or agent instead.');
   const { name, email, password, managerIds, branchIds } = input;
 
   if (!branchIds.length) {

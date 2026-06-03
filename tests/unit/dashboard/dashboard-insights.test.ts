@@ -99,11 +99,10 @@ describe('buildLeadershipDashboardInsights', () => {
 
   it('summarizes role counts, branch health, workload, and stale leads', () => {
     const users = [
-      user({ $id: 'manager-1', name: 'Mina Manager', role: 'manager', branchIds: ['branch-1'] }),
-      user({ $id: 'am-1', name: 'Ava AM', role: 'assistant_manager', branchIds: ['branch-1'] }),
       user({ $id: 'tl-1', name: 'Tara TL', role: 'team_lead', branchIds: ['branch-1'] }),
       user({ $id: 'agent-1', name: 'Alex Agent', role: 'agent', branchIds: ['branch-1'] }),
       user({ $id: 'agent-2', name: 'Casey Agent', role: 'agent', branchIds: ['branch-2'] }),
+      user({ $id: 'lg-1', name: 'Lane LG', role: 'lead_generation', branchIds: ['branch-2'] }),
     ];
 
     const leads = [
@@ -157,10 +156,9 @@ describe('buildLeadershipDashboardInsights', () => {
 
     expect(STALE_LEAD_DAYS).toBe(14);
     expect(insights.roleCounts).toEqual({
-      managers: 1,
-      assistantManagers: 1,
       teamLeads: 1,
       agents: 2,
+      leadGeneration: 1,
     });
     expect(insights.summary).toMatchObject({
       activeLeads: 3,
@@ -221,5 +219,82 @@ describe('buildLeadershipDashboardInsights', () => {
       { status: 'Prospect', count: 1 },
       { status: 'Signed', count: 1 },
     ]);
+  });
+
+  it('builds lead detail rows for admin dashboard drill-downs', () => {
+    const users = [
+      user({ $id: 'admin-1', name: 'Ari Admin', role: 'admin' }),
+      user({ $id: 'tl-1', name: 'Tara TL', role: 'team_lead', branchIds: ['branch-1'] }),
+      user({ $id: 'agent-1', name: 'Alex Agent', role: 'agent', branchIds: ['branch-1'] }),
+    ];
+
+    const leads = [
+      lead({
+        $id: 'lead-active',
+        data: JSON.stringify({
+          amount: '$2,500',
+          firstName: 'Nina',
+          lastName: 'North',
+          company: 'Northstar',
+          email: 'nina@example.com',
+        }),
+        ownerId: 'tl-1',
+        assignedToId: 'agent-1',
+        branchId: 'branch-1',
+        status: 'Pipeline',
+        isClosed: false,
+        $updatedAt: '2026-04-20T12:00:00.000Z',
+      }),
+      lead({
+        $id: 'lead-unassigned',
+        data: JSON.stringify({ dealValue: '1500', company: 'Open Co' }),
+        ownerId: 'tl-1',
+        assignedToId: null,
+        branchId: 'branch-2',
+        status: 'Prospect',
+        isClosed: false,
+      }),
+      lead({
+        $id: 'lead-client',
+        data: JSON.stringify({ amount: 5000, firstName: 'Cora', lastName: 'Client' }),
+        ownerId: 'admin-1',
+        assignedToId: 'agent-1',
+        branchId: 'branch-1',
+        status: 'Signed',
+        isClosed: true,
+        closedAt: '2026-05-01T12:00:00.000Z',
+      }),
+    ];
+
+    const insights = buildLeadershipDashboardInsights({
+      leads,
+      users,
+      branches,
+      now,
+    });
+
+    expect(insights.details.activeLeads.map((item) => item.leadId)).toEqual([
+      'lead-active',
+      'lead-unassigned',
+    ]);
+    expect(insights.details.closedLeads.map((item) => item.leadId)).toEqual([
+      'lead-client',
+    ]);
+    expect(insights.details.unassignedLeads.map((item) => item.leadId)).toEqual([
+      'lead-unassigned',
+    ]);
+    expect(insights.details.staleLeads.map((item) => item.leadId)).toEqual([
+      'lead-active',
+    ]);
+    expect(insights.details.pipelineValue[0]).toMatchObject({
+      leadId: 'lead-client',
+      leadName: 'Cora Client',
+      branchName: 'New York',
+      ownerName: 'Ari Admin',
+      assignedToName: 'Alex Agent',
+      status: 'Signed',
+      amount: 5000,
+      isClosed: true,
+    });
   });
 });
