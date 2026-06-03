@@ -20,8 +20,7 @@ import {
   updateLead,
 } from "@/lib/services/lead-action-service";
 import {
-  getAgentsByManager,
-  getAgentsByTeamLead,
+  getAssignableUsers,
 } from "@/lib/services/user-service";
 import {
   getClosureFormConfig,
@@ -183,12 +182,9 @@ function LeadDetailContent() {
     if (!user) return;
 
     try {
-      if (user.role !== "manager" && user.role !== "team_lead") return;
+      if (user.role !== "manager" && user.role !== "team_lead" && user.role !== "admin") return;
 
-      const fetchedAgents =
-        user.role === "manager"
-          ? await getAgentsByManager(user.$id)
-          : await getAgentsByTeamLead(user.$id);
+      const fetchedAgents = await getAssignableUsers(user.role, user.branchIds || [], user.$id);
       setAgents(fetchedAgents);
     } catch (err: unknown) {
       console.error("Error loading agents:", err);
@@ -204,7 +200,7 @@ function LeadDetailContent() {
     if (user && leadId) {
       loadLead();
       loadFormConfig();
-      if (user.role === "manager" || user.role === "team_lead") {
+      if (user.role === "manager" || user.role === "team_lead" || user.role === "admin") {
         loadAgents();
       }
     }
@@ -695,7 +691,7 @@ function LeadDetailContent() {
     "email",
     "phone",
     "visaStatus",
-    "linkedinId",
+    "linkedinProfileUrl",
   ]);
 
   const isLeadGeneration = user.role === "lead_generation";
@@ -872,8 +868,8 @@ function LeadDetailContent() {
           </CardContent>
         </Card>
 
-        {/* Assignment Section (Manager Only) */}
-        {(user?.role === "manager" || user?.role === "team_lead") && (
+        {/* Assignment Section (Manager/TL/Admin Only) */}
+        {(user?.role === "manager" || user?.role === "team_lead" || user?.role === "admin") && (
           <Card id="tour-lead-assignment">
             <CardHeader>
               <CardTitle>Assignment</CardTitle>

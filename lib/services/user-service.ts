@@ -501,6 +501,10 @@ export async function getAssignableUsers(
       queries.push(Query.contains('branchIds', creatorBranchIds));
     }
 
+    if (creatorRole === 'team_lead' && creatorId) {
+      queries.push(Query.equal('teamLeadId', creatorId));
+    }
+
     queries.push(Query.limit(5000));
 
     const response = await databases.listDocuments(
@@ -509,8 +513,8 @@ export async function getAssignableUsers(
       queries
     );
 
-    // Filter out the creator themselves
-    const users = response.documents.map(mapDocToUser);
+    // Filter out inactive users and the creator themselves
+    const users = response.documents.map(mapDocToUser).filter(u => u.isActive);
     return creatorId ? users.filter(u => u.$id !== creatorId) : users;
   } catch (error: any) {
     console.error('Error fetching assignable users:', error);
