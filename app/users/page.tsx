@@ -5,15 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/contexts/auth-context";
 import {
   createAdminAction,
-  createManagerAction,
   createTeamLeadAction,
   createAgentAction,
-  createAssistantManagerAction,
 } from "@/app/actions/user";
-import {
-  getUsersByBranches,
-  getAgentsByManager,
-} from "@/lib/services/user-service";
 import { getVisibleUserBranches } from "@/lib/utils/branch-visibility";
 import { listBranches } from "@/lib/services/branch-service";
 import { User, Branch, UserRole } from "@/lib/types";
@@ -48,7 +42,7 @@ export default function UserManagementPage() {
 
 function UserManagementContent() {
   const searchParams = useSearchParams();
-  const { user, isManager, isAdmin, isDeveloper, isTeamLead, isAssistantManager } =
+  const { user, isAdmin, isDeveloper, isTeamLead } =
     useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [search, setSearch] = useState("");
@@ -74,76 +68,40 @@ function UserManagementContent() {
   const [selectedTeamLeadId, setSelectedTeamLeadId] = useState<string | null>(
     null,
   );
-  const [selectedManagerId, setSelectedManagerId] = useState<string | null>(
-    null,
-  ); // Shared for Create & Edit
-  const [selectedAssistantManagerIds, setSelectedAssistantManagerIds] =
-    useState<string[]>([]); // New field for Multiple Assistant Managers
-  const [selectedManagerIds, setSelectedManagerIds] = useState<string[]>([]); // For Team Leads with multiple managers
-  const [availableManagers, setAvailableManagers] = useState<User[]>([]);
-  const [availableAssistantManagers, setAvailableAssistantManagers] = useState<
-    User[]
-  >([]);
   const [editRole, setEditRole] = useState<UserRole | null>(null); // Only for Edit
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [availableTeamLeads, setAvailableTeamLeads] = useState<User[]>([]);
 
   // Create Role State
-  const isMgr = user?.role === "manager";
   const [createRole, setCreateRole] = useState<
     | "admin"
     | "developer"
-    | "manager"
-    | "assistant_manager"
     | "team_lead"
     | "agent"
     | "lead_generation"
+    | "monitor"
   >("team_lead");
-  const [assignmentType, setAssignmentType] = useState<
-    "direct" | "assistant_manager" | "team_lead"
-  >("direct");
-
   // Initialize createRole when dialog opens or user changes
   useEffect(() => {
     if (isAdmin || isDeveloper) setCreateRole("admin");
-    else if (isMgr) setCreateRole("assistant_manager");
-    else if (isAssistantManager) setCreateRole("team_lead");
     else if (isTeamLead) setCreateRole("agent");
-  }, [isAdmin, isDeveloper, isMgr, isAssistantManager, isTeamLead, showCreateDialog]);
-
-  useEffect(() => {
-    async function loadManagers() {
-      if (isAdmin || isDeveloper) {
-        try {
-          const { getAllManagers } =
-            await import("@/lib/services/user-service");
-          const mgrs = await getAllManagers();
-          setAvailableManagers(mgrs);
-        } catch (err) {
-          console.error(err);
-        }
-      }
-    }
-    loadManagers();
-  }, [isAdmin, isDeveloper]);
+  }, [isAdmin, isDeveloper, isTeamLead, showCreateDialog]);
 
   // Determine which role the current user can create
   const canCreateAdmin = isAdmin || isDeveloper;
   const canCreateDeveloper = isAdmin || isDeveloper;
-  const canCreateManager = false;
-  const canCreateAssistantManager = false;
-  const canCreateTeamLead = isAdmin || isDeveloper || isMgr || isAssistantManager;
-  const canCreateAgent = isAdmin || isDeveloper || isMgr || isAssistantManager || isTeamLead;
+  const canCreateTeamLead = isAdmin || isDeveloper;
+  const canCreateAgent = isAdmin || isDeveloper || isTeamLead;
   const canCreateLeadGeneration =
-    isAdmin || isDeveloper || isMgr || isAssistantManager || isTeamLead;
+    isAdmin || isDeveloper || isTeamLead;
+  const canCreateMonitor = isAdmin || isDeveloper;
   const canCreate =
     canCreateAdmin ||
     canCreateDeveloper ||
-    canCreateManager ||
-    canCreateAssistantManager ||
     canCreateTeamLead ||
     canCreateAgent ||
-    canCreateLeadGeneration;
+    canCreateLeadGeneration ||
+    canCreateMonitor;
 
   useEffect(() => {
     if (searchParams.get("action") === "create" && canCreate) {
@@ -187,15 +145,13 @@ function UserManagementContent() {
           mappedUser.role !== "manager" && mappedUser.role !== "assistant_manager"
         ));
 
-        // Sort by hierarchy: Manager -> Assistant Manager -> Team Lead -> Agent
         const roleOrder: Record<string, number> = {
           admin: 0,
           developer: 0,
-          manager: 1,
-          assistant_manager: 2,
-          team_lead: 3,
-          lead_generation: 4,
-          agent: 5,
+          team_lead: 1,
+          lead_generation: 2,
+          monitor: 3,
+          agent: 3,
         };
 
         allUsers.sort((a: User, b: User) => {
@@ -206,48 +162,9 @@ function UserManagementContent() {
         });
 
         setUsers(allUsers);
-        setAvailableManagers(
-          allUsers.filter(
-            (u: User) => u.isActive !== false && u.role === "manager",
-          ),
-        );
-        setAvailableAssistantManagers(
-          allUsers.filter(
-            (u: User) => u.isActive !== false && u.role === "assistant_manager",
-          ),
-        );
         setAvailableTeamLeads(
           allUsers.filter(
             (u: User) => u.isActive !== false && u.role === "team_lead",
-          ),
-        );
-      } else if (user.role === "manager" && user.branchIds.length > 0) {
-        const usersList = await getUsersByBranches(user.branchIds);
-        // Managers should not see other managers (except themselves)
-        const filteredUsers = usersList.filter(
-          (u) => u.role !== "manager" || u.$id === user.$id,
-        );
-        setUsers(filteredUsers);
-        setAvailableAssistantManagers(
-          filteredUsers.filter(
-            (u) => u.isActive !== false && u.role === "assistant_manager",
-          ),
-        );
-        setAvailableTeamLeads(
-          filteredUsers.filter(
-            (u) => u.isActive !== false && u.role === "team_lead",
-          ),
-        );
-        // Populate available managers with self
-        setAvailableManagers([user]);
-      } else if (user.role === "assistant_manager") {
-        // Assistant Manager sees only their subordinates
-        const { getSubordinates } = await import("@/lib/services/user-service");
-        const subordinates = await getSubordinates(user.$id);
-        setUsers(subordinates);
-        setAvailableTeamLeads(
-          subordinates.filter(
-            (u) => u.isActive !== false && u.role === "team_lead",
           ),
         );
       } else if (user.role === "team_lead") {
@@ -313,20 +230,19 @@ function UserManagementContent() {
       // Load Team Leads when Admin/Manager is creating Agent/TL or editing Agent/TL
       const isAgentTarget =
         (showCreateDialog &&
-          (createRole === "agent" || createRole === "lead_generation")) ||
+          (createRole === "agent" || createRole === "lead_generation" || createRole === "monitor")) ||
         editingUser?.role === "agent" ||
-        editingUser?.role === "lead_generation";
+        editingUser?.role === "lead_generation" ||
+        editingUser?.role === "monitor";
       // For Admin, also load if creating Team Lead? No, Team Lead doesn't report to Team Lead.
 
-      if ((isAdmin || isManager) && isAgentTarget) {
+      if (isAdmin && isAgentTarget) {
         try {
           const { getTeamLeads } = await import("@/lib/services/user-service");
 
           let teamLeads: User[] = [];
           if (isAdmin) {
             teamLeads = await getTeamLeads();
-          } else if (isManager && user?.branchIds) {
-            teamLeads = await getTeamLeads(user.branchIds);
           }
 
           setAvailableTeamLeads(teamLeads);
@@ -339,7 +255,7 @@ function UserManagementContent() {
     if (showCreateDialog || editingUser) {
       loadTeamLeads();
     }
-  }, [showCreateDialog, editingUser, createRole, isAdmin, isManager, user]);
+  }, [showCreateDialog, editingUser, createRole, isAdmin, user]);
 
   const resetForm = () => {
     setFormName("");
@@ -347,9 +263,6 @@ function UserManagementContent() {
     setFormPassword("");
     setSelectedBranchIds([]);
     setSelectedTeamLeadId(null);
-    setSelectedManagerId(null);
-    setSelectedAssistantManagerIds([]);
-    setSelectedManagerIds([]);
     setFormErrors({});
     setError(null);
   };
@@ -363,7 +276,7 @@ function UserManagementContent() {
     if (!formPassword) errs.password = "Password is required";
     else if (formPassword.length < 8)
       errs.password = "Password must be at least 8 characters";
-    if (createRole !== "admin" && createRole !== "developer" && selectedBranchIds.length === 0)
+    if (createRole !== "admin" && createRole !== "developer" && createRole !== "monitor" && selectedBranchIds.length === 0)
       errs.branches = "At least one branch must be selected";
     setFormErrors(errs);
     return Object.keys(errs).length === 0;
@@ -377,85 +290,10 @@ function UserManagementContent() {
     );
   };
 
-  const toggleManager = (managerId: string) => {
-    setSelectedManagerIds((prev) =>
-      prev.includes(managerId)
-        ? prev.filter((id) => id !== managerId)
-        : [...prev, managerId],
-    );
-  };
-
-  const toggleAssistantManager = (amId: string) => {
-    setSelectedAssistantManagerIds((prev) =>
-      prev.includes(amId) ? prev.filter((id) => id !== amId) : [...prev, amId],
-    );
-  };
-
   const handleEdit = (userToEdit: User) => {
     setEditingUser(userToEdit);
     setSelectedBranchIds(userToEdit.branchIds || []);
     setSelectedTeamLeadId(userToEdit.teamLeadId || null);
-    setSelectedManagerId(userToEdit.managerId || null);
-
-    // Handle multiple Assistant Managers
-    if (
-      userToEdit.assistantManagerIds &&
-      userToEdit.assistantManagerIds.length > 0
-    ) {
-      setSelectedAssistantManagerIds(userToEdit.assistantManagerIds);
-    } else if (userToEdit.managerIds && userToEdit.managerIds.length > 0) {
-      // Fallback: Find which of these IDs belong to Assistant Managers
-      // We need the full user objects to know roles. 'users' state has them.
-      const amIds = userToEdit.managerIds.filter((id) => {
-        const u = users.find((u) => u.$id === id);
-        return u && u.role === "assistant_manager";
-      });
-
-      // If we found some AMs via managerIds, use them.
-      // Otherwise, check legacy field.
-      if (amIds.length > 0) {
-        setSelectedAssistantManagerIds(amIds);
-      } else {
-        setSelectedAssistantManagerIds(
-          userToEdit.assistantManagerId ? [userToEdit.assistantManagerId] : [],
-        );
-      }
-    } else {
-      setSelectedAssistantManagerIds(
-        userToEdit.assistantManagerId ? [userToEdit.assistantManagerId] : [],
-      );
-    }
-
-    // Populate multiple managers for Team Lead and Assistant Manager
-    if (
-      userToEdit.role === "team_lead" ||
-      userToEdit.role === "assistant_manager"
-    ) {
-      // If managerIds exists, use it. If not, use managerId (legacy).
-      const existingIds =
-        userToEdit.managerIds && userToEdit.managerIds.length > 0
-          ? userToEdit.managerIds
-          : userToEdit.managerId
-            ? [userToEdit.managerId]
-            : [];
-      setSelectedManagerIds(existingIds);
-
-      // For Team Lead editing: Set selectedManagerId from the primary manager in the list (usually first or not AM)
-      if (userToEdit.role === "team_lead") {
-        // Find the manager that is NOT an assistant manager
-        // We use the users list to check roles of IDs in managerIds
-        const primaryManager = existingIds.find((id) => {
-          const u = users.find((user) => user.$id === id);
-          return u && u.role === "manager";
-        });
-
-        if (primaryManager) setSelectedManagerId(primaryManager);
-        else if (userToEdit.managerId)
-          setSelectedManagerId(userToEdit.managerId); // Fallback
-      }
-    } else {
-      setSelectedManagerIds([]);
-    }
     setEditRole(userToEdit.role);
     setError(null);
   };
@@ -471,70 +309,22 @@ function UserManagementContent() {
 
       const role = (editRole as UserRole) || undefined;
 
-      // Validate hierarchy consistency
-      // Team Leads and Assistant Managers use selectedManagerIds (multiple)
       if (
-        role === "assistant_manager" &&
-        (!selectedManagerIds || selectedManagerIds.length === 0)
-      ) {
-        setError("Assistant Managers must have at least one Manager assigned");
-        setIsUpdating(false);
-        return;
-      }
-
-      if (
-        role === "team_lead" &&
-        !selectedManagerId &&
-        (availableManagers.length > 0 || !isAdmin)
-      ) {
-        setError(
-          "Team Leads must have a primary Manager assigned unless no Managers exist",
-        );
-        setIsUpdating(false);
-        return;
-      }
-
-      if (
-        role === "agent" &&
-        availableManagers.length === 0 &&
+        (role === "agent" || role === "lead_generation") &&
         !selectedTeamLeadId
       ) {
-        setError(
-          "Agents must be assigned to a Team Lead when no Managers exist",
-        );
+        setError("Agents must be assigned to a Team Lead");
         setIsUpdating(false);
         return;
-      }
-
-      // Construct managerIds for Team Lead update
-      let finalManagerIds = selectedManagerIds;
-      if (role === "team_lead") {
-        finalManagerIds = [];
-        if (selectedManagerId) finalManagerIds.push(selectedManagerId);
-        // Add all selected Assistant Managers
-        finalManagerIds.push(...selectedAssistantManagerIds);
       }
 
       await updateUserAction({
         userId: editingUser.$id,
         role,
-        managerId:
-          role === "team_lead" || role === "assistant_manager"
-            ? role === "team_lead"
-              ? selectedManagerId
-              : selectedManagerIds[0]
-            : selectedManagerId,
-        managerIds:
-          role === "team_lead" || role === "assistant_manager"
-            ? finalManagerIds
-            : undefined,
-        assistantManagerId:
-          role === "team_lead" && selectedAssistantManagerIds.length > 0
-            ? selectedAssistantManagerIds[0]
-            : undefined, // Deprecated single field, use first one
-        assistantManagerIds:
-          role === "team_lead" ? selectedAssistantManagerIds : undefined, // New array field
-        teamLeadId: selectedTeamLeadId,
+        teamLeadId:
+          role === "agent" || role === "lead_generation"
+            ? selectedTeamLeadId
+            : null,
         branchIds: selectedBranchIds,
         currentUserId: user.$id,
       });
@@ -585,7 +375,7 @@ function UserManagementContent() {
     if (
       !user ||
       !isAdmin && !isDeveloper ||
-      (agent.role !== "agent" && agent.role !== "lead_generation")
+      (agent.role !== "agent" && agent.role !== "lead_generation" && agent.role !== "monitor")
     )
       return;
 
@@ -649,56 +439,18 @@ function UserManagementContent() {
             password: formPassword,
             currentUserId: user.$id,
           });
-        } else if (createRole === "manager") {
-          await createManagerAction({
-            name: formName.trim(),
-            email: formEmail.trim(),
-            password: formPassword,
-            branchIds: selectedBranchIds,
-            currentUserId: user.$id,
-          });
-        } else if (createRole === "assistant_manager") {
-          await createAssistantManagerAction({
-            name: formName.trim(),
-            email: formEmail.trim(),
-            password: formPassword,
-            managerIds: selectedManagerIds, // Now using multiple IDs
-            branchIds: selectedBranchIds,
-            currentUserId: user.$id,
-          });
         } else if (createRole === "team_lead") {
-          // Construct managerIds for Team Lead
-          const tlManagerIds: string[] = [];
-          if (selectedManagerId) tlManagerIds.push(selectedManagerId);
-          if (selectedAssistantManagerIds.length > 0)
-            tlManagerIds.push(...selectedAssistantManagerIds);
-
-          if (tlManagerIds.length === 0 && availableManagers.length > 0) {
-            setError(
-              "Team Lead must have at least one Manager assigned unless no Managers exist",
-            );
-            setIsCreating(false);
-            return;
-          }
-
           await createTeamLeadAction({
             name: formName.trim(),
             email: formEmail.trim(),
             password: formPassword,
-            // Use managerIds for Team Lead
-            managerIds: tlManagerIds,
-            assistantManagerId:
-              selectedAssistantManagerIds.length > 0
-                ? selectedAssistantManagerIds[0]
-                : undefined,
-            assistantManagerIds: selectedAssistantManagerIds,
             branchIds: selectedBranchIds,
             currentUserId: user.$id,
           });
         } else {
-          if (availableManagers.length === 0 && !selectedTeamLeadId) {
+          if (createRole !== "monitor" && !selectedTeamLeadId) {
             setError(
-              "Agents must be assigned to a Team Lead when no Managers exist",
+              "Agents must be assigned to a Team Lead",
             );
             setIsCreating(false);
             return;
@@ -709,35 +461,12 @@ function UserManagementContent() {
             email: formEmail.trim(),
             password: formPassword,
             role:
-              createRole === "lead_generation" ? "lead_generation" : "agent",
-            teamLeadId: selectedTeamLeadId || undefined,
-            managerId: selectedManagerId || undefined, // Admin can assign manager
-            branchIds: selectedBranchIds,
-            currentUserId: user.$id,
-          });
-        }
-      } else if (canCreateTeamLead) {
-        if (
-          (user.role === "manager" || user.role === "assistant_manager") &&
-          (createRole === "agent" || createRole === "lead_generation")
-        ) {
-          await createAgentAction({
-            name: formName.trim(),
-            email: formEmail.trim(),
-            password: formPassword,
-            role:
-              createRole === "lead_generation" ? "lead_generation" : "agent",
-            branchIds: selectedBranchIds,
-            teamLeadId: selectedTeamLeadId || undefined,
-            managerId: selectedManagerId || undefined,
-            currentUserId: user.$id,
-          });
-        } else {
-          await createTeamLeadAction({
-            name: formName.trim(),
-            email: formEmail.trim(),
-            password: formPassword,
-            managerIds: [user.$id], // Updated from managerId to managerIds
+              createRole === "lead_generation"
+                ? "lead_generation"
+                : createRole === "monitor"
+                  ? "monitor"
+                  : "agent",
+            teamLeadId: createRole === "monitor" ? undefined : selectedTeamLeadId || undefined,
             branchIds: selectedBranchIds,
             currentUserId: user.$id,
           });
@@ -768,11 +497,10 @@ function UserManagementContent() {
   const roleLabels: Record<string, string> = {
     admin: "Admin",
     developer: "Developer",
-    manager: "Manager",
-    assistant_manager: "Assistant Manager",
     team_lead: "Team Lead",
     agent: "Agent",
     lead_generation: "Lead Generation",
+    monitor: "Monitor",
   };
   const createButtonLabel = `Create ${roleLabels[createRole] || "User"}`;
   const dialogTitle = `Create New ${roleLabels[createRole] || "User"}`;
@@ -787,16 +515,14 @@ function UserManagementContent() {
         return "Admin";
       case "developer":
         return "Developer";
-      case "manager":
-        return "Manager";
-      case "assistant_manager":
-        return "Assistant Manager";
       case "team_lead":
         return "Team Lead";
       case "agent":
         return "Agent";
       case "lead_generation":
         return "Lead Generation";
+      case "monitor":
+        return "Monitor";
       default:
         return role;
     }
@@ -817,7 +543,7 @@ function UserManagementContent() {
       .map((id) => branchMap.get(id) || id)
       .join(", ");
 
-    if (hasVisibilityMismatch && (isAdmin || isMgr)) {
+    if (hasVisibilityMismatch && isAdmin) {
       return branchNames || "—";
     }
 
@@ -883,7 +609,7 @@ function UserManagementContent() {
               <p className="text-gray-500 dark:text-gray-400">
                 No users found.{" "}
                 {canCreate
-                  ? `Create your first ${canCreateManager ? "manager" : canCreateTeamLead ? "team lead" : "agent"} to get started.`
+                  ? `Create your first ${canCreateTeamLead ? "team lead" : "agent"} to get started.`
                   : ""}
               </p>
             </div>
@@ -931,7 +657,7 @@ function UserManagementContent() {
                         <th className="text-left py-3 px-4 font-semibold">
                           Created
                         </th>
-                        {(isAdmin || isManager) && (
+                        {isAdmin && (
                           <th className="text-left py-3 px-4 font-semibold">
                             Actions
                           </th>
@@ -968,15 +694,14 @@ function UserManagementContent() {
                               ? new Date(u.$createdAt).toLocaleDateString()
                               : "N/A"}
                           </td>
-                          {(isAdmin || isManager) && (
+                          {isAdmin && (
                             <td className="py-3 px-4">
                               <div className="flex flex-wrap gap-2">
                                 {(isAdmin ||
                                   u.role === "team_lead" ||
                                   u.role === "agent" ||
                                   u.role === "lead_generation" ||
-                                  (user?.role === "manager" &&
-                                    u.role === "assistant_manager")) && (
+                                  false) && (
                                   <Button
                                     variant="outline"
                                     size="sm"
@@ -987,7 +712,8 @@ function UserManagementContent() {
                                 {isAdmin && u.$id !== user?.$id && (
                                   <>
                                     {(u.role === "agent" ||
-                                      u.role === "lead_generation") && (
+                                      u.role === "lead_generation" ||
+                                      u.role === "monitor") && (
                                       <Button
                                         variant="outline"
                                         size="sm"
@@ -1099,132 +825,6 @@ function UserManagementContent() {
                   )}
                 </div>
 
-                {/* Manager Selection (For Admin Creating AM/TL/Agent) */}
-                {(isAdmin || isDeveloper) &&
-                  (createRole === "assistant_manager" ||
-                    createRole === "team_lead" ||
-                    createRole === "agent" ||
-                    createRole === "lead_generation") && (
-                    <div>
-                      <Label htmlFor="create-manager">Assign Manager</Label>
-                      <div className="mt-1">
-                        {createRole === "assistant_manager" ? (
-                          // AMs can be assigned to Managers (Multiple)
-                          <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md p-2">
-                            {availableManagers.length === 0 ? (
-                              <p className="text-sm text-muted-foreground">
-                                No managers available.
-                              </p>
-                            ) : (
-                              <>
-                                {availableManagers.map((m) => (
-                                  <label
-                                    key={m.$id}
-                                    className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 p-1 rounded">
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedManagerIds.includes(
-                                        m.$id,
-                                      )}
-                                      onChange={() => toggleManager(m.$id)}
-                                      className="rounded border-gray-300 dark:border-gray-600"
-                                    />
-                                    <span className="text-sm">
-                                      {m.name} (Manager)
-                                    </span>
-                                  </label>
-                                ))}
-                              </>
-                            )}
-                          </div>
-                        ) : createRole === "team_lead" ? (
-                          // Team Leads: Assign Manager (Required) + Assistant Manager (Optional)
-                          <div className="space-y-4">
-                            <div>
-                              <Label
-                                htmlFor="create-tl-manager"
-                                className="text-xs text-muted-foreground mb-1 block">
-                                Primary Manager{" "}
-                                {availableManagers.length > 0
-                                  ? "(Required)"
-                                  : "(Optional until a Manager exists)"}
-                              </Label>
-                              <select
-                                id="create-tl-manager"
-                                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                                value={selectedManagerId || ""}
-                                onChange={(e) =>
-                                  setSelectedManagerId(e.target.value || null)
-                                }>
-                                <option value="">
-                                  {availableManagers.length > 0
-                                    ? "Select Manager"
-                                    : "No Manager"}
-                                </option>
-                                {availableManagers.map((m) => (
-                                  <option key={m.$id} value={m.$id}>
-                                    {m.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            <div>
-                              <Label
-                                htmlFor="create-tl-am"
-                                className="text-xs text-muted-foreground mb-1 block">
-                                Assistant Managers (Optional)
-                              </Label>
-                              {availableAssistantManagers.length === 0 ? (
-                                <p className="text-sm text-gray-500">
-                                  No Assistant Managers available
-                                </p>
-                              ) : (
-                                <div className="mt-1 space-y-2 max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md p-2">
-                                  {availableAssistantManagers.map((am) => (
-                                    <label
-                                      key={am.$id}
-                                      className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 p-1 rounded">
-                                      <input
-                                        type="checkbox"
-                                        checked={selectedAssistantManagerIds.includes(
-                                          am.$id,
-                                        )}
-                                        onChange={() =>
-                                          toggleAssistantManager(am.$id)
-                                        }
-                                        className="rounded border-gray-300 dark:border-gray-600"
-                                      />
-                                      <span className="text-sm">{am.name}</span>
-                                    </label>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          // Agent can be assigned to a Manager (if direct report)
-                          <select
-                            id="create-manager"
-                            className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            value={selectedManagerId || ""}
-                            onChange={(e) =>
-                              setSelectedManagerId(e.target.value || null)
-                            }>
-                            <option value="">
-                              Select a Manager (Optional)
-                            </option>
-                            {availableManagers.map((m) => (
-                              <option key={m.$id} value={m.$id}>
-                                {m.name}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
                 {/* Team Lead Selection (for Agents created by Admin) */}
                 {isAdmin &&
                   (createRole === "agent" ||
@@ -1249,130 +849,6 @@ function UserManagementContent() {
                           ))}
                         </select>
                       </div>
-                    </div>
-                  )}
-
-                {/* Manager Assignment Logic (Direct, AM, or TL) */}
-                {(isMgr || isAssistantManager) &&
-                  (createRole === "agent" ||
-                    createRole === "lead_generation") && (
-                    <div className="space-y-4 pt-2 pb-2 border-t border-b border-gray-100 dark:border-gray-800">
-                      <Label className="text-base font-medium">
-                        Assignment Type
-                      </Label>
-                      <div className="flex flex-col space-y-3 pl-1">
-                        <label className="flex items-center space-x-3 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="assignmentType"
-                            value="direct"
-                            checked={assignmentType === "direct"}
-                            onChange={() => {
-                              setAssignmentType("direct");
-                              setSelectedManagerId(null);
-                              setSelectedTeamLeadId(null);
-                            }}
-                            className="h-4 w-4 border-gray-300 text-primary focus:ring-primary"
-                          />
-                          <span className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                            Direct Report (Assign to Me)
-                          </span>
-                        </label>
-                        {isMgr && (
-                          <label className="flex items-center space-x-3 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="assignmentType"
-                              value="assistant_manager"
-                              checked={assignmentType === "assistant_manager"}
-                              onChange={() => {
-                                setAssignmentType("assistant_manager");
-                                setSelectedManagerId(null);
-                                setSelectedTeamLeadId(null);
-                              }}
-                              className="h-4 w-4 border-gray-300 text-primary focus:ring-primary"
-                            />
-                            <span className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                              Assign to Assistant Manager
-                            </span>
-                          </label>
-                        )}
-                        <label className="flex items-center space-x-3 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="assignmentType"
-                            value="team_lead"
-                            checked={assignmentType === "team_lead"}
-                            onChange={() => {
-                              setAssignmentType("team_lead");
-                              setSelectedManagerId(null);
-                              setSelectedTeamLeadId(null);
-                            }}
-                            className="h-4 w-4 border-gray-300 text-primary focus:ring-primary"
-                          />
-                          <span className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                            Assign to Team Lead
-                          </span>
-                        </label>
-                      </div>
-
-                      {assignmentType === "assistant_manager" && (
-                        <div className="pl-7">
-                          <Label
-                            htmlFor="assign-am"
-                            className="text-xs text-muted-foreground mb-1 block">
-                            Select Assistant Manager
-                          </Label>
-                          <select
-                            id="assign-am"
-                            className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            value={selectedManagerId || ""}
-                            onChange={(e) =>
-                              setSelectedManagerId(e.target.value || null)
-                            }>
-                            <option value="">Select Assistant Manager</option>
-                            {availableAssistantManagers.length === 0 ? (
-                              <option disabled>
-                                No Assistant Managers available
-                              </option>
-                            ) : (
-                              availableAssistantManagers.map((am) => (
-                                <option key={am.$id} value={am.$id}>
-                                  {am.name}
-                                </option>
-                              ))
-                            )}
-                          </select>
-                        </div>
-                      )}
-
-                      {assignmentType === "team_lead" && (
-                        <div className="pl-7">
-                          <Label
-                            htmlFor="assign-tl"
-                            className="text-xs text-muted-foreground mb-1 block">
-                            Select Team Lead
-                          </Label>
-                          <select
-                            id="assign-tl"
-                            className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            value={selectedTeamLeadId || ""}
-                            onChange={(e) =>
-                              setSelectedTeamLeadId(e.target.value || null)
-                            }>
-                            <option value="">Select Team Lead</option>
-                            {availableTeamLeads.length === 0 ? (
-                              <option disabled>No Team Leads available</option>
-                            ) : (
-                              availableTeamLeads.map((tl) => (
-                                <option key={tl.$id} value={tl.$id}>
-                                  {tl.name}
-                                </option>
-                              ))
-                            )}
-                          </select>
-                        </div>
-                      )}
                     </div>
                   )}
 
@@ -1410,7 +886,7 @@ function UserManagementContent() {
                   </div>
                 )}
 
-                {(isAdmin || isDeveloper || isMgr || isAssistantManager || isTeamLead) && (
+                {(isAdmin || isDeveloper || isTeamLead) && (
                   <div className="flex flex-wrap items-center gap-2">
                     {canCreateAdmin && (
                       <Button
@@ -1428,30 +904,6 @@ function UserManagementContent() {
                         onClick={() => setCreateRole("developer")}
                         size="sm">
                         Developer
-                      </Button>
-                    )}
-                    {canCreateManager && (
-                      <Button
-                        type="button"
-                        variant={
-                          createRole === "manager" ? "default" : "outline"
-                        }
-                        onClick={() => setCreateRole("manager")}
-                        size="sm">
-                        Manager
-                      </Button>
-                    )}
-                    {canCreateAssistantManager && (
-                      <Button
-                        type="button"
-                        variant={
-                          createRole === "assistant_manager"
-                            ? "default"
-                            : "outline"
-                        }
-                        onClick={() => setCreateRole("assistant_manager")}
-                        size="sm">
-                        Asst. Mgr
                       </Button>
                     )}
                     {canCreateTeamLead && (
@@ -1487,6 +939,15 @@ function UserManagementContent() {
                         Lead Gen
                       </Button>
                     )}
+                    {canCreateMonitor && (
+                      <Button
+                        type="button"
+                        variant={createRole === "monitor" ? "default" : "outline"}
+                        onClick={() => setCreateRole("monitor")}
+                        size="sm">
+                        Monitor
+                      </Button>
+                    )}
                   </div>
                 )}
 
@@ -1509,13 +970,7 @@ function UserManagementContent() {
                     className="w-full sm:w-auto">
                     {isCreating
                       ? "Creating..."
-                      : isMgr
-                        ? createRole === "team_lead"
-                          ? "Create Team Lead"
-                          : createRole === "lead_generation"
-                            ? "Create Lead Gen"
-                            : "Create Agent"
-                        : isTeamLead
+                      : isTeamLead
                           ? createRole === "lead_generation"
                             ? "Create Lead Gen"
                             : "Create Agent"
@@ -1541,30 +996,18 @@ function UserManagementContent() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {/* Role Selection (Admin or Manager promoting Agent) */}
-                {(isAdmin || (isManager && editingUser.role === "agent")) && (
+                {/* Role Selection */}
+                {isAdmin && (
                   <div>
                     <Label>Role</Label>
                     <select
                       className="w-full h-10 px-3 rounded-md border border-input bg-background"
                       value={editRole || ""}
                       onChange={(e) => setEditRole(e.target.value as UserRole)}
-                      disabled={
-                        isManager &&
-                        editRole === "team_lead" &&
-                        editingUser.role === "team_lead"
-                      } // Prevent Manager from demoting TL back to Agent if not desired? Or just allow switching.
-                      // Actually, for Manager: can only promote Agent to Team Lead.
-                      // If user is already Agent, allow switching to Team Lead.
-                      // If user is already Team Lead, Manager can see them but maybe not change role back?
-                      // Requirement says "manager can manage the agent can be prooted to a team lead".
                     >
                       {(isAdmin || isDeveloper) && <option value="admin">Admin</option>}
                       {(isAdmin || isDeveloper) && <option value="developer">Developer</option>}
-                      {(isAdmin || isDeveloper) && <option value="manager">Manager</option>}
-                      <option value="assistant_manager">
-                        Assistant Manager
-                      </option>
+                      {(isAdmin || isDeveloper) && <option value="monitor">Monitor</option>}
                       <option value="team_lead">Team Lead</option>
                       <option value="agent">Agent</option>
                       <option value="lead_generation">Lead Generation</option>
@@ -1572,182 +1015,8 @@ function UserManagementContent() {
                   </div>
                 )}
 
-                {/* Manager Selection (For Assistant Managers/Team Leads/Agents when Admin is editing) */}
-                {(isAdmin || isManager) &&
-                  (editRole === "assistant_manager" ||
-                    editRole === "team_lead" ||
-                    editRole === "agent" ||
-                    editRole === "lead_generation") && (
-                    <div>
-                      <Label>Assign Manager</Label>
-                      {editRole === "assistant_manager" ? (
-                        <div className="mt-1 space-y-2 max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md p-2">
-                          {availableManagers.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">
-                              No managers available.
-                            </p>
-                          ) : (
-                            <>
-                              {availableManagers.map((m) => (
-                                <label
-                                  key={m.$id}
-                                  className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 p-1 rounded">
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedManagerIds.includes(m.$id)}
-                                    onChange={() => toggleManager(m.$id)}
-                                    className="rounded border-gray-300 dark:border-gray-600"
-                                  />
-                                  <span className="text-sm">
-                                    {m.name} (Manager)
-                                  </span>
-                                </label>
-                              ))}
-                            </>
-                          )}
-                        </div>
-                      ) : editRole === "team_lead" ? (
-                        // Team Leads: Assign Manager (Required) + Assistant Manager (Optional)
-                        <div className="space-y-4 mt-1">
-                          <div>
-                            <Label
-                              htmlFor="edit-tl-manager"
-                              className="text-xs text-muted-foreground mb-1 block">
-                              Primary Manager{" "}
-                              {availableManagers.length > 0
-                                ? "(Required)"
-                                : "(Optional until a Manager exists)"}
-                            </Label>
-                            <select
-                              id="edit-tl-manager"
-                              className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                              value={selectedManagerId || ""}
-                              onChange={(e) =>
-                                setSelectedManagerId(e.target.value || null)
-                              }>
-                              <option value="">
-                                {availableManagers.length > 0
-                                  ? "Select Manager"
-                                  : "No Manager"}
-                              </option>
-                              {availableManagers.map((m) => (
-                                <option key={m.$id} value={m.$id}>
-                                  {m.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div>
-                            <Label
-                              htmlFor="edit-tl-am"
-                              className="text-xs text-muted-foreground mb-1 block">
-                              Assistant Managers (Optional)
-                            </Label>
-                            {availableAssistantManagers.length === 0 ? (
-                              <p className="text-sm text-gray-500">
-                                No Assistant Managers available
-                              </p>
-                            ) : (
-                              <div className="mt-1 space-y-2 max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md p-2">
-                                {availableAssistantManagers.map((am) => (
-                                  <label
-                                    key={am.$id}
-                                    className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 p-1 rounded">
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedAssistantManagerIds.includes(
-                                        am.$id,
-                                      )}
-                                      onChange={() =>
-                                        toggleAssistantManager(am.$id)
-                                      }
-                                      className="rounded border-gray-300 dark:border-gray-600"
-                                    />
-                                    <span className="text-sm">{am.name}</span>
-                                  </label>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        // For Agent (assigned to Manager)
-                        // If it's an Agent, allow selecting Manager OR Assistant Manager
-                        <div className="mt-1">
-                          {(editRole === "agent" ||
-                            editRole === "lead_generation") &&
-                          isManager ? (
-                            // Manager editing Agent: Can assign to self (Manager) or Assistant Manager
-                            <select
-                              className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                              value={selectedManagerId || ""}
-                              onChange={(e) =>
-                                setSelectedManagerId(e.target.value || null)
-                              }>
-                              <option value="">
-                                Select Manager / Asst. Manager
-                              </option>
-                              {/* Option for current manager (Self) */}
-                              <option value={user?.$id}>
-                                Direct Report (Me)
-                              </option>
-
-                              {/* Other Managers (if admin/visible) - usually filtered out for Manager role but good to have if data exists */}
-                              {availableManagers
-                                .filter((m) => m.$id !== user?.$id)
-                                .map((m) => (
-                                  <option key={m.$id} value={m.$id}>
-                                    {m.name} (Manager)
-                                  </option>
-                                ))}
-
-                              {/* Assistant Managers */}
-                              {availableAssistantManagers.length > 0 && (
-                                <optgroup label="Assistant Managers">
-                                  {availableAssistantManagers.map((am) => (
-                                    <option key={am.$id} value={am.$id}>
-                                      {am.name}
-                                    </option>
-                                  ))}
-                                </optgroup>
-                              )}
-                            </select>
-                          ) : (
-                            // Admin editing or other cases
-                            <select
-                              className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                              value={selectedManagerId || ""}
-                              onChange={(e) =>
-                                setSelectedManagerId(e.target.value || null)
-                              }>
-                              <option value="">Select Manager</option>
-                              {availableManagers.map((m) => (
-                                <option key={m.$id} value={m.$id}>
-                                  {m.name}
-                                </option>
-                              ))}
-                              {/* Also allow Assistant Managers for Agents if Admin is editing */}
-                              {(editRole === "agent" ||
-                                editRole === "lead_generation") &&
-                                availableAssistantManagers.length > 0 && (
-                                  <optgroup label="Assistant Managers">
-                                    {availableAssistantManagers.map((am) => (
-                                      <option key={am.$id} value={am.$id}>
-                                        {am.name}
-                                      </option>
-                                    ))}
-                                  </optgroup>
-                                )}
-                            </select>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
                 {/* Team Lead Selection */}
-                {(isAdmin || isMgr || isAssistantManager) &&
+                {isAdmin &&
                   (editingUser.role === "agent" ||
                     editingUser.role === "lead_generation" ||
                     editRole === "agent" ||

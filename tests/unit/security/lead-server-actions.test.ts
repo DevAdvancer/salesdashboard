@@ -1,3 +1,5 @@
+export {};
+
 const mockAssertAuthenticatedUserId = jest.fn();
 const mockCreateAdminClient = jest.fn();
 const mockListDocuments = jest.fn();
@@ -103,6 +105,58 @@ describe('lead server action authorization', () => {
     expect(Query.contains).not.toHaveBeenCalledWith('data', ['viewer-1']);
   });
 
+  it('lets monitors list active leads without owner or assignment scoping', async () => {
+    mockGetDocument.mockResolvedValueOnce({
+      $id: 'monitor-1',
+      email: 'monitor@example.com',
+      role: 'monitor',
+      branchIds: [],
+    });
+
+    const { listLeadsAction } = await import('@/app/actions/lead');
+    const { Query } = await import('node-appwrite');
+
+    await listLeadsAction({}, 'monitor-1', 'agent', []);
+
+    expect(Query.equal).not.toHaveBeenCalledWith('ownerId', expect.anything());
+    expect(Query.equal).not.toHaveBeenCalledWith('assignedToId', expect.anything());
+    expect(Query.equal).toHaveBeenCalledWith('isClosed', false);
+  });
+
+  it('rejects monitor lead edits even when the monitor owns the lead', async () => {
+    mockGetDocument
+      .mockResolvedValueOnce({
+        $id: 'monitor-1',
+        email: 'monitor@example.com',
+        role: 'monitor',
+        branchIds: [],
+      })
+      .mockResolvedValueOnce({
+        $id: 'lead-1',
+        data: JSON.stringify({
+          firstName: 'Current',
+          lastName: 'Lead',
+          email: 'current@example.com',
+          phone: '5551112222',
+          status: 'Interested',
+        }),
+        ownerId: 'monitor-1',
+        assignedToId: null,
+        branchId: 'branch-1',
+        isClosed: false,
+        closedAt: null,
+        status: 'Interested',
+      });
+
+    const { updateLeadAction } = await import('@/app/actions/lead');
+
+    await expect(
+      updateLeadAction('lead-1', { firstName: 'Changed' }, 'monitor-1', 'Monitor')
+    ).rejects.toThrow('Permission denied');
+
+    expect(mockUpdateDocument).not.toHaveBeenCalled();
+  });
+
   it('rejects reopen attempts from non-manager users before updating with the admin client', async () => {
     mockGetDocument.mockResolvedValueOnce({
       $id: 'agent-1',
@@ -163,7 +217,7 @@ describe('lead server action authorization', () => {
       .mockResolvedValueOnce({
         $id: 'lead-1',
         data: '{}',
-        ownerId: 'manager-1',
+        ownerId: 'leadgen-1',
         assignedToId: null,
         branchId: 'branch-1',
         isClosed: false,
@@ -266,6 +320,63 @@ describe('lead server action authorization', () => {
     );
   });
 
+  it('allows a lead owner to assign their own lead to any active agent', async () => {
+    const documentsById = new Map<string, Record<string, unknown>>([
+      ['owner-1', {
+        $id: 'owner-1',
+        email: 'owner@example.com',
+        role: 'agent',
+        branchIds: ['branch-1'],
+        managerId: null,
+        managerIds: [],
+        teamLeadId: null,
+      }],
+      ['lead-1', {
+        $id: 'lead-1',
+        data: '{}',
+        ownerId: 'owner-1',
+        assignedToId: null,
+        branchId: 'branch-1',
+        isClosed: false,
+        closedAt: null,
+        status: 'Generated',
+      }],
+      ['agent-2', {
+        $id: 'agent-2',
+        email: 'agent2@example.com',
+        role: 'agent',
+        branchIds: ['branch-9'],
+        managerId: null,
+        managerIds: [],
+        teamLeadId: 'tl-9',
+        isActive: true,
+      }],
+    ]);
+
+    mockGetDocument.mockImplementation((_databaseId, _collectionId, documentId: string) => {
+      const doc = documentsById.get(documentId);
+      if (!doc) throw new Error(`Missing document ${documentId}`);
+      return Promise.resolve(doc);
+    });
+    mockUpdateDocument.mockResolvedValueOnce({
+      ...(documentsById.get('lead-1') ?? {}),
+      assignedToId: 'agent-2',
+    });
+
+    const { assignLeadAction } = await import('@/lib/actions/lead-actions');
+
+    await expect(assignLeadAction('lead-1', 'agent-2', 'owner-1', 'Owner')).resolves.toMatchObject({
+      success: true,
+    });
+    expect(mockUpdateDocument).toHaveBeenCalledWith(
+      'database',
+      'leads',
+      'lead-1',
+      { assignedToId: 'agent-2' },
+      expect.arrayContaining(['read:user:agent-2', 'update:user:agent-2'])
+    );
+  });
+
   it('blocks duplicate lead edits and notifies admins and team leads only', async () => {
     mockGetDocument
       .mockResolvedValueOnce({
@@ -330,9 +441,9 @@ describe('lead server action authorization', () => {
       expect.anything(),
       ['admin-1', 'tl-1', 'tl-2', 'tl-3'],
       expect.objectContaining({
-        type: 'LEAD_DUPLICATE_UPDATE',
+        type: 'LEAD_DUPLICATE_ATTEMPT',
         title: 'Duplicate lead update blocked',
-        targetId: 'lead-1',
+        targetId: 'lead-2',
         targetType: 'LEAD',
       })
     );

@@ -60,12 +60,13 @@ export function DynamicLeadForm({
   submitLabel = "Submit",
   isLoading = false,
 }: DynamicLeadFormProps) {
-  const { user, isAgent } = useAuth();
+  const { user, isAgent, isMonitor } = useAuth();
+  const isAgentLike = isAgent || isMonitor;
 
   // State for the lead assignment dropdown (Requirement 4.2, 4.3, 4.4)
   // Agents auto-assign to themselves; managers/team leads default to creator
   const [assignedToId, setAssignedToId] = useState<string | null>(
-    isAgent && user ? user.$id : user ? user.$id : null,
+    isAgentLike && user ? user.$id : user ? user.$id : null,
   );
 
   // Filter out ownerId, assignedToId, and lastName from configurable form fields (Requirement 4.5)
@@ -104,7 +105,7 @@ export function DynamicLeadForm({
 
   // Filter visible fields for agents (Requirement 3.8)
   // Managers see all fields in form builder, but in lead forms, we filter for agents
-  const visibleFields = isAgent
+  const visibleFields = isAgentLike
     ? getVisibleFields(effectiveConfig)
     : effectiveConfig
         .filter((f) => f.visible)

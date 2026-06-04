@@ -23,7 +23,7 @@ export type ComponentKey =
   | 'linkedin-account-management'
   | 'linkedin-reports';
 
-export type UserRole = 'admin' | 'developer' | 'team_lead' | 'agent' | 'lead_generation';
+export type UserRole = 'admin' | 'developer' | 'team_lead' | 'agent' | 'lead_generation' | 'monitor';
 
 export interface AccessRule {
   componentKey: ComponentKey;
@@ -80,6 +80,30 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'linkedin-requests', role: 'developer', allowed: false },
   { componentKey: 'linkedin-account-management', role: 'developer', allowed: true },
   { componentKey: 'linkedin-reports', role: 'developer', allowed: true },
+  // Monitor rules - admin-level visibility without mutation privileges
+  { componentKey: 'dashboard', role: 'monitor', allowed: true },
+  { componentKey: 'chat', role: 'monitor', allowed: true },
+  { componentKey: 'leads', role: 'monitor', allowed: true },
+  { componentKey: 'history', role: 'monitor', allowed: true },
+  { componentKey: 'user-management', role: 'monitor', allowed: true },
+  { componentKey: 'field-management', role: 'monitor', allowed: false },
+  { componentKey: 'settings', role: 'monitor', allowed: true },
+  { componentKey: 'branch-management', role: 'monitor', allowed: true },
+  { componentKey: 'audit-logs', role: 'monitor', allowed: true },
+  { componentKey: 'mock', role: 'monitor', allowed: true },
+  { componentKey: 'assessment-support', role: 'monitor', allowed: true },
+  { componentKey: 'interview-support', role: 'monitor', allowed: true },
+  { componentKey: 'hierarchy', role: 'monitor', allowed: true },
+  { componentKey: 'work-queue', role: 'monitor', allowed: true },
+  { componentKey: 'reports', role: 'monitor', allowed: true },
+  { componentKey: 'coaching-notes', role: 'monitor', allowed: true },
+  { componentKey: 'review-queue', role: 'monitor', allowed: true },
+  { componentKey: 'notifications', role: 'monitor', allowed: true },
+  { componentKey: 'attendance', role: 'monitor', allowed: true },
+  { componentKey: 'lead-requests', role: 'monitor', allowed: true },
+  { componentKey: 'linkedin-requests', role: 'monitor', allowed: false },
+  { componentKey: 'linkedin-account-management', role: 'monitor', allowed: true },
+  { componentKey: 'linkedin-reports', role: 'monitor', allowed: true },
   // Team Lead rules
   { componentKey: 'dashboard', role: 'team_lead', allowed: true },
   { componentKey: 'chat', role: 'team_lead', allowed: true },

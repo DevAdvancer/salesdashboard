@@ -239,13 +239,19 @@ export async function createLead(
     // Serialize lead data to JSON
     const dataJson = JSON.stringify(input.data);
 
+    const ownerDoc = await getUserById(finalOwnerId);
+    const ownerIsMonitor = ownerDoc.role === 'monitor';
+
     // Build permissions array
     const permissions: string[] = [
-      // Owner (creator) has full access
       Permission.read(Role.user(finalOwnerId)),
-      Permission.update(Role.user(finalOwnerId)),
-      Permission.delete(Role.user(finalOwnerId)),
     ];
+    if (!ownerIsMonitor) {
+      permissions.push(
+        Permission.update(Role.user(finalOwnerId)),
+        Permission.delete(Role.user(finalOwnerId)),
+      );
+    }
 
     // Add owner's hierarchy permissions
     const ownerHierarchyPerms = await getHierarchyPermissions(finalOwnerId);
@@ -254,10 +260,10 @@ export async function createLead(
     // If assigned to an agent, grant them read and update access
     if (input.assignedToId) {
       if (isValidId(input.assignedToId)) {
-          permissions.push(
-            Permission.read(Role.user(input.assignedToId)),
-            Permission.update(Role.user(input.assignedToId))
-          );
+          permissions.push(Permission.read(Role.user(input.assignedToId)));
+          if (!ownerIsMonitor || input.assignedToId !== finalOwnerId) {
+            permissions.push(Permission.update(Role.user(input.assignedToId)));
+          }
 
           // Add assigned user's hierarchy permissions too (Managers of the assigned agent)
           const assignedHierarchyPerms = await getHierarchyPermissions(input.assignedToId);
@@ -492,8 +498,8 @@ export async function listLeads(
       queries.push(Query.or(orConditions));
     } else if (userRole === 'lead_generation') {
       queries.push(Query.equal('ownerId', userId));
-    } else if (userRole === 'admin' || userRole === 'developer') {
-      // Admins and Managers see all leads across all branches — no branch/owner filter
+    } else if (userRole === 'admin' || userRole === 'developer' || userRole === 'monitor') {
+      // Admins, developers, and monitors see all leads across all branches - no branch/owner filter
     } else if (userRole === 'manager') {
       const visibleUserIds = await getLeadVisibilityUserIds(userId, userRole);
       appendHierarchyLeadVisibilityQuery(queries, visibleUserIds, specialBranchId);
@@ -684,6 +690,10 @@ export async function closeLead(
     actorRole?: import('@/lib/types').UserRole
 ): Promise<Lead> {
   try {
+    if (actorRole === 'monitor') {
+      throw new Error('Permission denied');
+    }
+
     // Get the current lead to preserve owner and assigned agent
     const currentLead = await getLead(leadId);
     let leadData: LeadData = {};

@@ -188,6 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isTeamLead = user?.role === 'team_lead';
   const isAgent = user?.role === 'agent';
   const isLeadGeneration = user?.role === 'lead_generation';
+  const isMonitor = user?.role === 'monitor';
 
   const value: AuthContextType = {
     user,
@@ -198,6 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isTeamLead,
     isAgent,
     isLeadGeneration,
+    isMonitor,
     loading,
     login,
     logout,

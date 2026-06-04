@@ -9,12 +9,15 @@ import {
 } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter, useParams } from "next/navigation";
-import { getLead, closeLead } from "@/lib/services/lead-service";
+import { getLead } from "@/lib/services/lead-service";
+import { getLeadAction } from "@/app/actions/lead";
 import { sendChatMessageAction } from "@/app/actions/chat";
 import {
   assignLead,
   backoutLead,
   clearLeadReadCache,
+  closeLead,
+  listLeadAssignableAgents,
   notInterestedLead,
   reopenLead,
   updateLead,
@@ -114,10 +117,15 @@ function LeadDetailContent() {
   >({});
 
   const loadLead = useCallback(async () => {
+    if (!user) return;
+
     try {
       setIsLoading(true);
       setError(null);
-      const fetchedLead = await getLead(leadId);
+      const fetchedLead =
+        user.role === "monitor"
+          ? await getLeadAction(leadId, user.$id)
+          : await getLead(leadId);
       setLead(fetchedLead);
       setLeadData(JSON.parse(fetchedLead.data));
     } catch (err: unknown) {
@@ -126,7 +134,7 @@ function LeadDetailContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [leadId]);
+  }, [leadId, user]);
 
   const loadFormConfig = useCallback(async () => {
     try {
@@ -183,14 +191,23 @@ function LeadDetailContent() {
     if (!user) return;
 
     try {
-      if (user.role !== "manager" && user.role !== "team_lead" && user.role !== "admin") return;
-
-      const fetchedAgents = await getAssignableUsers(user.role, user.branchIds || [], user.$id);
-      setAgents(fetchedAgents);
+      const isLeadOwner = lead?.ownerId === user.$id;
+      if (
+        isLeadOwner ||
+        user.role === "manager" ||
+        user.role === "team_lead" ||
+        user.role === "admin" ||
+        user.role === "developer"
+      ) {
+        const fetchedAgents = isLeadOwner
+          ? await listLeadAssignableAgents(leadId, user.$id)
+          : await getAssignableUsers(user.role, user.branchIds || [], user.$id);
+        setAgents(fetchedAgents.filter((candidate) => candidate.role === "agent"));
+      }
     } catch (err: unknown) {
       console.error("Error loading agents:", err);
     }
-  }, [user]);
+  }, [lead?.ownerId, leadId, user]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -201,11 +218,21 @@ function LeadDetailContent() {
     if (user && leadId) {
       loadLead();
       loadFormConfig();
-      if (user.role === "manager" || user.role === "team_lead" || user.role === "admin") {
-        loadAgents();
-      }
     }
   }, [user, authLoading, leadId, router, loadLead, loadFormConfig, loadAgents]);
+
+  useEffect(() => {
+    if (!user || !lead) return;
+    if (
+      lead.ownerId === user.$id ||
+      user.role === "manager" ||
+      user.role === "team_lead" ||
+      user.role === "admin" ||
+      user.role === "developer"
+    ) {
+      void loadAgents();
+    }
+  }, [lead, loadAgents, user]);
 
   useEffect(() => {
     if (!showCloseDialog) return;
@@ -215,6 +242,7 @@ function LeadDetailContent() {
 
   const handleSave = async () => {
     if (!lead || !user) return;
+    if (user.role === "monitor") return;
 
     try {
       setIsSaving(true);
@@ -311,6 +339,7 @@ function LeadDetailContent() {
 
   const handleCloseLead = async () => {
     if (!lead || !user) return;
+    if (user.role === "monitor") return;
 
     try {
       setIsSaving(true);
@@ -431,6 +460,7 @@ function LeadDetailContent() {
 
   const handleReopenLead = async () => {
     if (!lead || !user) return;
+    if (user.role === "monitor") return;
 
     try {
       setIsSaving(true);
@@ -454,6 +484,7 @@ function LeadDetailContent() {
 
   const handleAssignAgent = async (agentId: string) => {
     if (!lead || !user) return;
+    if (user.role === "monitor") return;
 
     try {
       await assignLead(leadId, agentId, user.$id, user.name);
@@ -478,7 +509,7 @@ function LeadDetailContent() {
 
   const renderField = (field: FormField) => {
     const value = String(leadData[field.key] ?? "");
-    const isReadOnly = !isEditing || lead?.isClosed;
+    const isReadOnly = !isEditing || lead?.isClosed || user?.role === "monitor";
 
     switch (field.type) {
       case "textarea":
@@ -699,6 +730,17 @@ function LeadDetailContent() {
   ]);
 
   const isLeadGeneration = user.role === "lead_generation";
+  const isMonitor = user.role === "monitor";
+  const canModifyLead = !isMonitor;
+  const isLeadOwner = lead.ownerId === user.$id;
+  const canAssignLead =
+    canModifyLead &&
+    Boolean(lead) &&
+    (isLeadOwner ||
+      user.role === "manager" ||
+      user.role === "team_lead" ||
+      user.role === "admin" ||
+      user.role === "developer");
   const headerFirstName =
     typeof leadData.firstName === "string" ? leadData.firstName : "";
   const headerLastName =
@@ -726,12 +768,12 @@ function LeadDetailContent() {
           </p>
         </div>
         <div id="tour-lead-actions" className="flex flex-wrap gap-2">
-          {!lead.isClosed && (
+          {canModifyLead && !lead.isClosed && (
             <>
               {!isEditing ? (
                 <>
                   <Button onClick={() => setIsEditing(true)}>Edit</Button>
-                  {!isLeadGeneration && (
+                  {(!isLeadGeneration || isLeadOwner) && (
                     <Button
                       variant="destructive"
                       onClick={() => {
@@ -764,6 +806,7 @@ function LeadDetailContent() {
             </>
           )}
           {lead.isClosed &&
+            canModifyLead &&
             (user?.role === "manager" ||
               user?.role === "admin" ||
               user?.role === "team_lead") && (
@@ -872,8 +915,8 @@ function LeadDetailContent() {
           </CardContent>
         </Card>
 
-        {/* Assignment Section (Manager/TL/Admin Only) */}
-        {(user?.role === "manager" || user?.role === "team_lead" || user?.role === "admin") && (
+        {/* Assignment Section */}
+        {canAssignLead && (
           <Card id="tour-lead-assignment">
             <CardHeader>
               <CardTitle>Assignment</CardTitle>
@@ -914,13 +957,13 @@ function LeadDetailContent() {
             <LeadFollowUpCard
               lead={lead}
               user={user}
-              disabled={lead.isClosed}
+              disabled={lead.isClosed || isMonitor}
               onUpdated={loadLead}
             />
           </div>
         )}
 
-        {user && (
+        {user && !isMonitor && (
           <div id="tour-lead-notes">
             <LeadNotesCard leadId={lead.$id} user={user} />
           </div>

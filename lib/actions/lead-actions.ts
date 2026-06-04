@@ -162,8 +162,17 @@ async function assertAssignmentAllowed(actor: User, agent: User, lead: Lead, dat
         return;
     }
 
+    const actorOwnsLead = lead.ownerId === actor.$id;
+
     if (agent.role !== 'agent') {
         throw new Error('Leads can only be assigned to agents.');
+    }
+
+    if (actorOwnsLead) {
+        if (agent.isActive === false) {
+            throw new Error('Inactive agents cannot be assigned leads.');
+        }
+        return;
     }
 
     if (actor.role === 'team_lead') {
@@ -186,6 +195,10 @@ async function assertAssignmentAllowed(actor: User, agent: User, lead: Lead, dat
 }
 
 async function assertLeadAccessAllowed(actor: User, lead: Lead, databases: AdminDatabases) {
+    if (actor.role === 'monitor') {
+        throw new Error('Permission denied');
+    }
+
     if (actor.role === 'admin' || actor.role === 'developer') {
         return;
     }
@@ -260,16 +273,19 @@ export async function assignLeadAction(
             actorId
         ) as unknown as User;
 
-        if (!['admin', 'developer', 'manager', 'assistant_manager', 'team_lead'].includes(actorDoc.role)) {
-            throw new Error('Permission denied');
-        }
-
         // Get the current lead to check owner and status
         const currentLead = await databases.getDocument(
             DATABASE_ID,
             COLLECTIONS.LEADS,
             leadId
         ) as unknown as Lead;
+
+        if (
+            !['admin', 'developer', 'manager', 'assistant_manager', 'team_lead'].includes(actorDoc.role) &&
+            currentLead.ownerId !== actorDoc.$id
+        ) {
+            throw new Error('Permission denied');
+        }
 
         const agentDoc = await databases.getDocument(
             DATABASE_ID,
@@ -357,6 +373,66 @@ export async function assignLeadAction(
         console.error('Error assigning lead (server action):', error);
         throw new Error(error instanceof Error ? error.message : 'Failed to assign lead');
     }
+}
+
+export async function listLeadAssignableAgentsAction(
+    leadId: string,
+    actorId: string
+): Promise<User[]> {
+    await assertAuthenticatedUserId(actorId);
+    const { databases } = await createAdminClient();
+
+    const actorDoc = await databases.getDocument(
+        DATABASE_ID,
+        COLLECTIONS.USERS,
+        actorId
+    ) as unknown as User;
+
+    if (actorDoc.role === 'monitor') {
+        throw new Error('Permission denied');
+    }
+
+    const currentLead = await databases.getDocument(
+        DATABASE_ID,
+        COLLECTIONS.LEADS,
+        leadId
+    ) as unknown as Lead;
+
+    const canListForLead =
+        currentLead.ownerId === actorDoc.$id ||
+        ['admin', 'developer', 'manager', 'assistant_manager', 'team_lead'].includes(actorDoc.role);
+
+    if (!canListForLead) {
+        throw new Error('Permission denied');
+    }
+
+    const response = await databases.listDocuments(
+        DATABASE_ID,
+        COLLECTIONS.USERS,
+        [
+            Query.equal('role', 'agent'),
+            Query.limit(5000),
+        ]
+    );
+
+    return response.documents
+        .map((doc: any) => ({
+            $id: doc.$id,
+            name: doc.name,
+            email: doc.email,
+            role: doc.role,
+            managerId: doc.managerId || null,
+            managerIds: doc.managerIds || [],
+            assistantManagerId: doc.assistantManagerId || null,
+            assistantManagerIds: doc.assistantManagerIds || [],
+            teamLeadId: doc.teamLeadId || null,
+            branchIds: doc.branchIds || [],
+            branchId: doc.branchId || null,
+            isActive: doc.isActive !== false,
+            $createdAt: doc.$createdAt,
+            $updatedAt: doc.$updatedAt,
+        } as User))
+        .filter((candidate) => candidate.isActive && candidate.$id !== actorId);
 }
 
 export async function backoutLeadAction(
@@ -515,4 +591,105 @@ export async function notInterestedLeadAction(
   } catch {}
 
   return { success: true, lead: updated as unknown as Lead };
+}
+
+export async function closeLeadAction(
+    leadId: string,
+    closedStatus: string,
+    actorId: string,
+    actorName: string,
+    actorRole?: import('@/lib/types').UserRole
+) {
+    await assertAuthenticatedUserId(actorId);
+    const { databases } = await createAdminClient();
+
+    try {
+        if (actorRole === 'monitor') {
+            throw new Error('Permission denied');
+        }
+
+        const currentLead = await databases.getDocument(
+            DATABASE_ID,
+            COLLECTIONS.LEADS,
+            leadId
+        ) as unknown as Lead;
+
+        const shouldAssignClosingAgent =
+            actorRole === 'agent' && Boolean(actorId) && !currentLead.assignedToId;
+        const nextAssignedToId = shouldAssignClosingAgent ? actorId : currentLead.assignedToId;
+
+        const permissions: string[] = [
+            Permission.read(Role.user(currentLead.ownerId)),
+            Permission.update(Role.user(currentLead.ownerId)),
+            Permission.delete(Role.user(currentLead.ownerId)),
+        ];
+
+        if (nextAssignedToId) {
+            permissions.push(Permission.read(Role.user(nextAssignedToId)));
+        }
+
+        if (actorId && actorId !== currentLead.ownerId && actorId !== nextAssignedToId) {
+            permissions.push(Permission.read(Role.user(actorId)));
+        }
+
+        const hierarchyPerms = await getHierarchyPermissionsServer(currentLead.ownerId, databases);
+        permissions.push(...hierarchyPerms);
+        
+        if (nextAssignedToId) {
+            const assignedHierarchyPerms = await getHierarchyPermissionsServer(nextAssignedToId, databases);
+            permissions.push(...assignedHierarchyPerms);
+        }
+
+        const lead = await databases.updateDocument(
+            DATABASE_ID,
+            COLLECTIONS.LEADS,
+            leadId,
+            {
+                isClosed: true,
+                closedAt: new Date().toISOString(),
+                status: closedStatus,
+                ...(shouldAssignClosingAgent ? { assignedToId: actorId } : {}),
+            },
+            [...new Set(permissions)]
+        );
+
+        if (actorId && actorName) {
+            try {
+                await databases.createDocument(
+                    DATABASE_ID,
+                    COLLECTIONS.AUDIT_LOGS,
+                    ID.unique(),
+                    {
+                        action: 'LEAD_UPDATE',
+                        actorId: actorId,
+                        actorName: actorName,
+                        targetId: leadId,
+                        targetType: 'LEAD',
+                        metadata: JSON.stringify({
+                            isClosed: true,
+                            status: closedStatus,
+                            leadId,
+                            leadName: getLeadDisplayName(currentLead),
+                            ownerId: currentLead.ownerId,
+                            assignedToId: currentLead.assignedToId,
+                            branchId: currentLead.branchId,
+                            closedAt: lead.closedAt,
+                            changes: {
+                                status: { from: currentLead.status, to: closedStatus },
+                                isClosed: { from: false, to: true },
+                            },
+                        }),
+                        performedAt: new Date().toISOString(),
+                    }
+                );
+            } catch (auditErr) {
+                // Ignore audit log failure
+            }
+        }
+
+        return { success: true, lead: lead as unknown as Lead };
+    } catch (error: unknown) {
+        console.error('Error closing lead (action):', error);
+        throw new Error(error instanceof Error ? error.message : 'Failed to close lead');
+    }
 }

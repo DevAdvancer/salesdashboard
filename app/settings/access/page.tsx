@@ -142,9 +142,8 @@ function AccessConfigContent() {
   const [rules, setRules] = useState<Map<string, AccessRule>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const isManagerRole = user?.role === "manager";
   const canManageAccess =
-    user?.role === "admin" || user?.role === "developer" || user?.role === "manager";
+    user?.role === "admin" || user?.role === "developer";
 
   useEffect(() => {
     if (user && !canManageAccess) {
@@ -249,18 +248,13 @@ function AccessConfigContent() {
     return getDefaultComponentAccess(componentKey, role);
   };
 
-  // Admin/Developer sees all components (including branch-management)
-  // Manager sees all except branch-management
   const isAdminOrDev = isAdmin || isDeveloper;
-  const visibleComponents = isAdminOrDev
-    ? ALL_COMPONENTS
-    : ALL_COMPONENTS.filter((c) => c.key !== "branch-management");
+  const visibleComponents = ALL_COMPONENTS;
 
-  // Admin/Developer can toggle: manager + team_lead + lead_generation + agent columns
-  // Manager can toggle: team_lead + lead_generation + agent columns only
-  const canEditTeamLead = isAdminOrDev || isManagerRole;
-  const canEditAgent = isAdminOrDev || isManagerRole;
-  const canEditLeadGeneration = isAdminOrDev || isManagerRole;
+  const canEditMonitor = isAdminOrDev;
+  const canEditTeamLead = isAdminOrDev;
+  const canEditAgent = isAdminOrDev;
+  const canEditLeadGeneration = isAdminOrDev;
 
   if (!canManageAccess) {
     return null;
@@ -284,23 +278,18 @@ function AccessConfigContent() {
             Access Control Configuration
           </CardTitle>
           <CardDescription>
-            {isAdminOrDev
-              ? 'Configure which components are visible to managers, team leads, lead generation users, and agents. Admin and Developer always have full access.'
-              : 'Configure which components are visible to team leads, lead generation users, and agents. Managers always have full access.'}
+            Configure which components are visible to monitors, team leads, lead
+            generation users, and agents. Admin and Developer always have full
+            access.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
             {/* Header Row */}
             <div
-              className={`hidden sm:grid gap-4 pb-4 border-b ${isAdminOrDev ? "grid-cols-7" : "grid-cols-5"}`}>
+              className="hidden sm:grid gap-4 pb-4 border-b grid-cols-6">
               <div className="font-semibold">Component</div>
-              {isAdminOrDev && (
-                <div className="font-semibold text-center">Manager</div>
-              )}
-              {isAdminOrDev && (
-                <div className="font-semibold text-center">Asst. Manager</div>
-              )}
+              <div className="font-semibold text-center">Monitor</div>
               <div className="font-semibold text-center">Team Lead</div>
               <div className="font-semibold text-center">Lead Gen</div>
               <div className="font-semibold text-center">Agent</div>
@@ -311,11 +300,7 @@ function AccessConfigContent() {
             {visibleComponents.map((component) => (
               <div
                 key={component.key}
-                className={`grid grid-cols-1 gap-2 items-center border-b sm:border-b-0 pb-4 sm:pb-0 ${
-                  isAdminOrDev
-                    ? "sm:grid-cols-7 sm:gap-4"
-                    : "sm:grid-cols-5 sm:gap-4"
-                }`}>
+                className="grid grid-cols-1 gap-2 items-center border-b sm:border-b-0 pb-4 sm:pb-0 sm:grid-cols-6 sm:gap-4">
                 <div>
                   <Label className="font-medium">{component.label}</Label>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -327,16 +312,17 @@ function AccessConfigContent() {
                 {isAdminOrDev && (
                   <div className="flex sm:justify-center items-center gap-2 sm:gap-0">
                     <span className="text-sm text-muted-foreground sm:hidden">
-                      Manager:
+                      Monitor:
                     </span>
                     <input
                       type="checkbox"
-                      checked={isAllowed(component.key, "manager")}
-                      onChange={() => toggleAccess(component.key, "manager")}
+                      checked={isAllowed(component.key, "monitor")}
+                      onChange={() => toggleAccess(component.key, "monitor")}
                       disabled={
                         isSaving ||
                         component.key === "settings" ||
-                        !isRoleEligibleForComponent(component.key, "manager")
+                        !canEditMonitor ||
+                        !isRoleEligibleForComponent(component.key, "monitor")
                       }
                       className="h-5 w-5 rounded border-input disabled:opacity-50 cursor-pointer"
                     />
@@ -344,30 +330,6 @@ function AccessConfigContent() {
                 )}
 
                 {/* Assistant Manager column — only visible to admin/developer */}
-                {isAdminOrDev && (
-                  <div className="flex sm:justify-center items-center gap-2 sm:gap-0">
-                    <span className="text-sm text-muted-foreground sm:hidden">
-                      Asst. Manager:
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={isAllowed(component.key, "assistant_manager")}
-                      onChange={() =>
-                        toggleAccess(component.key, "assistant_manager")
-                      }
-                      disabled={
-                        isSaving ||
-                        component.key === "settings" ||
-                        !isRoleEligibleForComponent(
-                          component.key,
-                          "assistant_manager",
-                        )
-                      }
-                      className="h-5 w-5 rounded border-input disabled:opacity-50 cursor-pointer"
-                    />
-                  </div>
-                )}
-
                 {/* Team Lead column */}
                 <div className="flex sm:justify-center items-center gap-2 sm:gap-0">
                   <span className="text-sm text-muted-foreground sm:hidden">
@@ -437,20 +399,10 @@ function AccessConfigContent() {
 
           <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
             <p className="text-sm text-blue-800 dark:text-blue-200">
-              {isAdminOrDev ? (
-                <>
-                  <strong>Note:</strong> Changes are saved immediately. Admin
-                  and Developer always have full access to all components. Toggle
-                  the checkboxes to control what managers, team leads, and
-                  agents can see.
-                </>
-              ) : (
-                <>
-                  <strong>Note:</strong> Changes are saved immediately. Managers
-                  always have access to all components. Team leads and agents
-                  will only see components that are checked in their columns.
-                </>
-              )}
+              <strong>Note:</strong> Changes are saved immediately. Admin and
+              Developer always have full access to all components. Toggle the
+              checkboxes to control what monitors, team leads, lead generation
+              users, and agents can see.
             </p>
           </div>
         </CardContent>

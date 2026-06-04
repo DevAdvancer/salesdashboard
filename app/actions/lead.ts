@@ -317,11 +317,23 @@ type UserDocument = {
   branchId?: string | null;
 };
 
+function isMonitorRole(role: UserRole) {
+  return role === 'monitor';
+}
+
+function isAdminLikeReadAllRole(role: UserRole) {
+  return role === 'admin' || role === 'developer' || role === 'monitor';
+}
+
 async function assertLeadReopenAllowed(
   databases: Awaited<ReturnType<typeof createAdminClient>>['databases'],
   actorDoc: UserDocument,
   lead: Lead
 ) {
+  if (isMonitorRole(actorDoc.role)) {
+    throw new Error('Permission denied');
+  }
+
   if (actorDoc.role === 'admin' || actorDoc.role === 'developer') return;
 
   if (actorDoc.role !== 'manager' && actorDoc.role !== 'team_lead') {
@@ -347,6 +359,10 @@ async function assertLeadUpdateAllowed(
   actorDoc: UserDocument,
   lead: Lead
 ) {
+  if (isMonitorRole(actorDoc.role)) {
+    throw new Error('Permission denied');
+  }
+
   if (actorDoc.role === 'admin' || actorDoc.role === 'developer') return;
 
   const specialBranchId = getSpecialBranchLeadAccess(actorDoc.email);
@@ -485,13 +501,23 @@ export async function createLeadAction(
         }
 
         const dataJson = JSON.stringify(input.data);
+        const creatorDoc = await databases.getDocument(
+            DATABASE_ID,
+            COLLECTIONS.USERS,
+            finalOwnerId
+        ) as unknown as UserDocument;
+        const creatorIsMonitor = isMonitorRole(creatorDoc.role);
 
         // Permissions
         const permissions: string[] = [
             Permission.read(Role.user(finalOwnerId)),
-            Permission.update(Role.user(finalOwnerId)),
-            Permission.delete(Role.user(finalOwnerId)),
         ];
+        if (!creatorIsMonitor) {
+            permissions.push(
+                Permission.update(Role.user(finalOwnerId)),
+                Permission.delete(Role.user(finalOwnerId)),
+            );
+        }
 
         // Add hierarchy permissions
         const hierarchyPerms = await getHierarchyPermissions(finalOwnerId);
@@ -500,10 +526,10 @@ export async function createLeadAction(
         // Assigned agent permissions
         if (input.assignedToId) {
              if (isValidId(input.assignedToId)) {
-                 permissions.push(
-                     Permission.read(Role.user(input.assignedToId)),
-                     Permission.update(Role.user(input.assignedToId))
-                 );
+                 permissions.push(Permission.read(Role.user(input.assignedToId)));
+                 if (!creatorIsMonitor || input.assignedToId !== finalOwnerId) {
+                     permissions.push(Permission.update(Role.user(input.assignedToId)));
+                 }
                  // Add assigned agent's managers too
                  const assignedHierarchyPerms = await getHierarchyPermissions(input.assignedToId);
                  permissions.push(...assignedHierarchyPerms);
@@ -789,6 +815,59 @@ export async function reopenLeadAction(
         throw new Error(error.message || 'Failed to reopen lead');
     }
 }
+
+export async function getLeadAction(
+  leadId: string,
+  viewerId: string
+): Promise<Lead> {
+  await assertAuthenticatedUserId(viewerId);
+  const { databases } = await createAdminClient();
+
+  try {
+    const viewerDoc = await databases.getDocument(
+      DATABASE_ID,
+      COLLECTIONS.USERS,
+      viewerId
+    ) as unknown as UserDocument;
+
+    const lead = await databases.getDocument(
+      DATABASE_ID,
+      LEADS_COLLECTION_ID,
+      leadId
+    ) as unknown as Lead;
+
+    if (isAdminLikeReadAllRole(viewerDoc.role)) {
+      return lead;
+    }
+
+    const specialBranchId = getSpecialBranchLeadAccess(viewerDoc.email);
+    if (specialBranchId && lead.branchId === specialBranchId) {
+      return lead;
+    }
+
+    if (lead.ownerId === viewerId || lead.assignedToId === viewerId) {
+      return lead;
+    }
+
+    if (viewerDoc.role === 'lead_generation') {
+      throw new Error('Permission denied');
+    }
+
+    const visibleUserIds = await getLeadVisibilityUserIds(databases, viewerId, viewerDoc.role);
+    if (
+      visibleUserIds.includes(lead.ownerId) ||
+      (lead.assignedToId ? visibleUserIds.includes(lead.assignedToId) : false)
+    ) {
+      return lead;
+    }
+
+    throw new Error('Permission denied');
+  } catch (error: any) {
+    console.error('Error fetching lead (action):', error);
+    throw new Error(error.message || 'Failed to fetch lead');
+  }
+}
+
 export async function listLeadsAction(
   filters: LeadListFilters,
   userId: string,
@@ -818,7 +897,7 @@ export async function listLeadsAction(
       queries.push(Query.or(orConditions));
     } else if (userRole === 'lead_generation') {
       queries.push(Query.equal('ownerId', userId));
-    } else if (userRole === 'admin' || userRole === 'developer') {
+    } else if (isAdminLikeReadAllRole(userRole)) {
       // Admins and Managers see all leads across all branches — no branch/owner filter
       if (filters.teamLeadId) {
         const agents = await listAllDocuments<{ $id: string }>({

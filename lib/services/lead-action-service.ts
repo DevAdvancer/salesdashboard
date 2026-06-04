@@ -7,10 +7,12 @@ import {
 import {
   assignLeadAction,
   backoutLeadAction,
+  closeLeadAction,
+  listLeadAssignableAgentsAction,
   notInterestedLeadAction,
 } from "@/lib/actions/lead-actions";
 import { cacheClientRead, clearClientReadCache } from "@/lib/utils/client-read-cache";
-import type { CreateLeadInput, Lead, LeadData, LeadListFilters, UserRole } from "@/lib/types";
+import type { CreateLeadInput, Lead, LeadData, LeadListFilters, User, UserRole } from "@/lib/types";
 
 const LEAD_READ_SCOPE_PREFIX = "lead:";
 const LEAD_LIST_TTL_MS = 60 * 1000;
@@ -70,6 +72,13 @@ export function assignLead(
   return assignLeadAction(leadId, agentId, actorId, actorName).finally(clearLeadReadCache);
 }
 
+export function listLeadAssignableAgents(
+  leadId: string,
+  actorId: string
+): Promise<User[]> {
+  return listLeadAssignableAgentsAction(leadId, actorId);
+}
+
 export function backoutLead(
   leadId: string,
   actorId: string,
@@ -84,4 +93,14 @@ export function notInterestedLead(
   actorName: string
 ): Promise<{ success: boolean; lead: Lead }> {
   return notInterestedLeadAction(leadId, actorId, actorName).finally(clearLeadReadCache);
+}
+
+export function closeLead(
+  leadId: string,
+  closedStatus: string,
+  actorId: string,
+  actorName: string,
+  actorRole?: UserRole
+): Promise<{ success: boolean; lead: Lead }> {
+  return closeLeadAction(leadId, closedStatus, actorId, actorName, actorRole).finally(clearLeadReadCache);
 }

@@ -110,6 +110,49 @@ describe('Access Control System', () => {
       });
     });
 
+    it('should grant monitor broad read access by default', async () => {
+      mockUseAuth.mockReturnValue({
+        user: { $id: 'monitor-1', role: 'monitor', email: 'monitor@test.com' },
+        isManager: false,
+        isAdmin: false,
+      });
+
+      (databases.listDocuments as jest.Mock).mockResolvedValue({
+        documents: [],
+        total: 0,
+      });
+
+      const { result } = renderHook(() => useAccess(), { wrapper });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      const visibleComponents: ComponentKey[] = [
+        'dashboard',
+        'leads',
+        'history',
+        'user-management',
+        'branch-management',
+        'audit-logs',
+        'hierarchy',
+        'work-queue',
+        'reports',
+        'review-queue',
+        'attendance',
+        'lead-requests',
+        'linkedin-account-management',
+        'linkedin-reports',
+      ];
+
+      visibleComponents.forEach((component) => {
+        expect(result.current.canAccess(component)).toBe(true);
+      });
+
+      expect(result.current.canAccess('field-management')).toBe(false);
+      expect(result.current.canAccess('linkedin-requests')).toBe(false);
+    });
+
     it('should return false when user is not authenticated', async () => {
       // Setup: No user
       mockUseAuth.mockReturnValue({
