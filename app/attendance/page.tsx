@@ -39,13 +39,6 @@ function AttendanceContent() {
   const { toast } = useToast();
   const [overviewLoading, setOverviewLoading] = useState(true);
   const [teamLoading, setTeamLoading] = useState(true);
-  const [isAssigningForUserId, setIsAssigningForUserId] = useState<
-    string | null
-  >(null);
-  const [remarkDialog, setRemarkDialog] = useState<null | {
-    kind: "assign_agent" | "assign_team_lead" | "mark_present";
-    userId: string;
-  }>(null);
   const [remarkText, setRemarkText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [dateKey, setDateKey] = useState<string>("");
@@ -64,6 +57,8 @@ function AttendanceContent() {
   >>(null);
   const [pendingDelegateByAbsentUserId, setPendingDelegateByAbsentUserId] =
     useState<Record<string, string>>({});
+  const [pendingMarkPresent, setPendingMarkPresent] = useState<Set<string>>(new Set());
+  const [isSavingAll, setIsSavingAll] = useState(false);
 
   const delegateNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -235,41 +230,72 @@ function AttendanceContent() {
     }
   }, [loadOverview, selectedDateKey, selectedTeamLeadId, user]);
 
-  const handleAssign = async (absentUserId: string, remark: string) => {
-    if (!user) return;
-    const delegateUserIdRaw = pendingDelegateByAbsentUserId[absentUserId] ?? "";
-    const delegateUserId = delegateUserIdRaw ? delegateUserIdRaw : null;
+  const getModifiedActions = useCallback((target: "team_leads" | "team_attendance" | "all" = "all") => {
+    const actions: {
+      kind: "mark_present" | "assign";
+      userId: string;
+      delegateUserId: string | null;
+      isTeamLeadTarget: boolean;
+    }[] = [];
 
-    setIsAssigningForUserId(absentUserId);
-    try {
-      await assignAttendanceDelegateAction({
-        currentUserId: user.$id,
-        absentUserId,
-        delegateUserId,
-        dateKey: selectedDateKey || undefined,
-        remark,
+    if (target === "team_leads" || target === "all") {
+      teamLeadRows.forEach((row) => {
+        if (row.present) return;
+        if (pendingMarkPresent.has(row.userId)) {
+          actions.push({
+            kind: "mark_present",
+            userId: row.userId,
+            delegateUserId: null,
+            isTeamLeadTarget: true,
+          });
+        } else {
+          const currentAssign = teamLeadPendingDelegateByUserId[row.userId] || "";
+          const originalAssign = row.delegateUserId || "";
+          if (currentAssign !== originalAssign) {
+            actions.push({
+              kind: "assign",
+              userId: row.userId,
+              delegateUserId: currentAssign ? currentAssign : null,
+              isTeamLeadTarget: true,
+            });
+          }
+        }
       });
-      toast({
-        title: "Success",
-        description: delegateUserId
-          ? `Assigned ${delegateNameById.get(delegateUserId) ?? "agent"} to cover. Remark: ${remark}`
-          : `Assignment cleared. Remark: ${remark}`,
-      });
-      if (user.role === "admin") {
-        await loadTeamAttendanceOnly();
-      } else {
-        await loadOverview();
-      }
-    } catch (e: unknown) {
-      toast({
-        title: "Error",
-        description: e instanceof Error ? e.message : "Failed to assign",
-        variant: "destructive",
-      });
-    } finally {
-      setIsAssigningForUserId(null);
     }
-  };
+
+    if (target === "team_attendance" || target === "all") {
+      teamAttendance?.rows.forEach((row) => {
+        if (row.present) return;
+        if (pendingMarkPresent.has(row.userId)) {
+          actions.push({
+            kind: "mark_present",
+            userId: row.userId,
+            delegateUserId: null,
+            isTeamLeadTarget: false,
+          });
+        } else {
+          const currentAssign = pendingDelegateByAbsentUserId[row.userId] || "";
+          const originalAssign = row.delegateUserId || "";
+          if (currentAssign !== originalAssign) {
+            actions.push({
+              kind: "assign",
+              userId: row.userId,
+              delegateUserId: currentAssign ? currentAssign : null,
+              isTeamLeadTarget: false,
+            });
+          }
+        }
+      });
+    }
+
+    return actions;
+  }, [
+    pendingMarkPresent,
+    teamLeadRows,
+    teamLeadPendingDelegateByUserId,
+    teamAttendance,
+    pendingDelegateByAbsentUserId,
+  ]);
 
   useEffect(() => {
     if (!user) return;
@@ -278,45 +304,10 @@ function AttendanceContent() {
     void loadTeamAttendanceOnly();
   }, [loadTeamAttendanceOnly, selectedTeamLeadId, user]);
 
-  const handleAssignTeamLead = async (teamLeadId: string, remark: string) => {
-    if (!user) return;
-    const delegateUserIdRaw = teamLeadPendingDelegateByUserId[teamLeadId] ?? "";
-    const delegateUserId = delegateUserIdRaw ? delegateUserIdRaw : null;
-
-    setIsAssigningForUserId(teamLeadId);
-    try {
-      await assignAttendanceDelegateAction({
-        currentUserId: user.$id,
-        absentUserId: teamLeadId,
-        delegateUserId,
-        dateKey: selectedDateKey || undefined,
-        remark,
-      });
-      toast({
-        title: "Success",
-        description: delegateUserId
-          ? `Assigned ${teamLeadNameById.get(delegateUserId) ?? "team lead"} to cover. Remark: ${remark}`
-          : `Assignment cleared. Remark: ${remark}`,
-      });
-      await loadOverview();
-    } catch (e: unknown) {
-      toast({
-        title: "Error",
-        description: e instanceof Error ? e.message : "Failed to assign",
-        variant: "destructive",
-      });
-    } finally {
-      setIsAssigningForUserId(null);
-    }
-  };
-
-  const openRemarkDialog = (next: {
-    kind: "assign_agent" | "assign_team_lead" | "mark_present";
-    userId: string;
-  }) => {
-    setRemarkText("");
-    setRemarkDialog(next);
-  };
+  const [remarkDialog, setRemarkDialog] = useState<null | {
+    bulkActions: ReturnType<typeof getModifiedActions>;
+    target: "team_leads" | "team_attendance" | "all";
+  }>(null);
 
   const submitRemarkDialog = async () => {
     if (!user || !remarkDialog) return;
@@ -330,85 +321,76 @@ function AttendanceContent() {
       return;
     }
 
-    const userId = remarkDialog.userId;
-    const isTeamLeadTarget =
-      user.role === "admin" &&
-      teamLeadRows.some((row) => row.userId === userId);
-    setIsAssigningForUserId(userId);
+    setIsSavingAll(true);
     try {
-      if (remarkDialog.kind === "mark_present") {
-        await markAttendancePresentByTeamLeadAction({
-          currentUserId: user.$id,
-          userId,
-          dateKey: selectedDateKey || undefined,
-          remark,
-        });
-        toast({
-          title: "Success",
-          description: `Marked as present. Remark: ${remark}`,
-        });
-      } else if (remarkDialog.kind === "assign_team_lead") {
-        const delegateUserIdRaw = teamLeadPendingDelegateByUserId[userId] ?? "";
-        const delegateUserId = delegateUserIdRaw ? delegateUserIdRaw : null;
-        await assignAttendanceDelegateAction({
-          currentUserId: user.$id,
-          absentUserId: userId,
-          delegateUserId,
-          dateKey: selectedDateKey || undefined,
-          remark,
-        });
-        toast({
-          title: "Success",
-          description: delegateUserId
-            ? `Assigned ${teamLeadNameById.get(delegateUserId) ?? "team lead"} to cover. Remark: ${remark}`
-            : `Assignment cleared. Remark: ${remark}`,
-        });
-      } else {
-        const delegateUserIdRaw = pendingDelegateByAbsentUserId[userId] ?? "";
-        const delegateUserId = delegateUserIdRaw ? delegateUserIdRaw : null;
-        await assignAttendanceDelegateAction({
-          currentUserId: user.$id,
-          absentUserId: userId,
-          delegateUserId,
-          dateKey: selectedDateKey || undefined,
-          remark,
-        });
-        toast({
-          title: "Success",
-          description: delegateUserId
-            ? `Assigned ${delegateNameById.get(delegateUserId) ?? "agent"} to cover. Remark: ${remark}`
-            : `Assignment cleared. Remark: ${remark}`,
-        });
-      }
+      const promises = remarkDialog.bulkActions.map((action) => {
+        if (action.kind === "mark_present") {
+          return markAttendancePresentByTeamLeadAction({
+            currentUserId: user.$id,
+            userId: action.userId,
+            dateKey: selectedDateKey || undefined,
+            remark,
+          });
+        } else {
+          return assignAttendanceDelegateAction({
+            currentUserId: user.$id,
+            absentUserId: action.userId,
+            delegateUserId: action.delegateUserId,
+            dateKey: selectedDateKey || undefined,
+            remark,
+          });
+        }
+      });
+      await Promise.all(promises);
+      toast({
+        title: "Success",
+        description: "All changes saved successfully.",
+      });
       setRemarkDialog(null);
       setRemarkText("");
-      if (user.role === "admin" && isTeamLeadTarget) {
-        await loadOverview();
+      setPendingMarkPresent((prev) => {
+        const next = new Set(prev);
+        remarkDialog.bulkActions.forEach((action) => {
+          if (action.kind === "mark_present") {
+            next.delete(action.userId);
+          }
+        });
+        return next;
+      });
+
+      if (user.role === "admin") {
+        const { target } = remarkDialog;
+        if (target === "team_leads" || target === "all") {
+          await loadOverview();
+        }
+        if ((target === "team_attendance" || target === "all") && selectedTeamLeadId) {
+          await loadTeamAttendanceOnly();
+        }
       } else {
-        await loadTeamAttendanceOnly();
+        await loadOverview();
       }
     } catch (e: unknown) {
       toast({
         title: "Error",
-        description: e instanceof Error ? e.message : "Failed to save",
+        description: e instanceof Error ? e.message : "Failed to save some changes",
         variant: "destructive",
       });
     } finally {
-      setIsAssigningForUserId(null);
+      setIsSavingAll(false);
     }
   };
 
   if (!user) return null;
 
   return (
-    <div className="container mx-auto">
+    <div className="container mx-auto pb-24">
       <div className="flex flex-col gap-2 mb-6">
         <h1 className="text-2xl md:text-3xl font-bold">Attendance</h1>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div className="flex flex-col gap-1">
-            <p className="text-muted-foreground">Date (ET): {dateKey || "—"}</p>
-            <div className="max-w-xs">
-              <Label htmlFor="attendance-date">Select Date</Label>
+        <div className="flex flex-col sm:flex-row sm:items-end gap-4 justify-between w-full">
+          <div className="flex flex-col gap-1 w-full sm:w-auto">
+            <p className="text-muted-foreground text-sm">Date (ET): {dateKey || "—"}</p>
+            <div className="w-full sm:w-64 flex flex-col gap-1">
+              <Label htmlFor="attendance-date" className="sr-only">Select Date</Label>
               <DatePicker
                 id="attendance-date"
                 value={selectedDateKey}
@@ -417,14 +399,72 @@ function AttendanceContent() {
               />
             </div>
           </div>
-          <Button
-            variant="outline"
-            onClick={loadTeamAttendanceOnly}
-            disabled={
-              teamLoading || (user.role === "admin" && !selectedTeamLeadId)
-            }>
-            {teamLoading ? "Refreshing..." : "Refresh"}
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+            <Button
+              variant="outline"
+              className="w-full sm:w-auto"
+              onClick={loadTeamAttendanceOnly}
+              disabled={
+                teamLoading || (user.role === "admin" && !selectedTeamLeadId)
+              }>
+              {teamLoading ? "Refreshing..." : "Refresh"}
+            </Button>
+            {user.role === "admin" ? (
+              <>
+                <Button
+                  className="w-full sm:w-auto"
+                  disabled={isSavingAll || isPastSelectedDate}
+                  onClick={() => {
+                    const actions = getModifiedActions("team_leads");
+                    if (actions.length === 0) {
+                      toast({
+                        title: "No modifications",
+                        description: "There are no changes to save for Team Leads.",
+                      });
+                      return;
+                    }
+                    setRemarkDialog({ bulkActions: actions, target: "team_leads" });
+                  }}>
+                  {isSavingAll ? "Saving..." : "Save Team Leads"}
+                </Button>
+                <Button
+                  className="w-full sm:w-auto"
+                  disabled={isSavingAll || isPastSelectedDate}
+                  onClick={() => {
+                    const actions = getModifiedActions("team_attendance");
+                    if (actions.length === 0) {
+                      toast({
+                        title: "No modifications",
+                        description: "There are no changes to save for Team Attendance.",
+                      });
+                      return;
+                    }
+                    setRemarkDialog({ bulkActions: actions, target: "team_attendance" });
+                  }}>
+                  {isSavingAll ? "Saving..." : "Save Team Attendance"}
+                </Button>
+              </>
+            ) : (
+              !teamLoading && (
+                <Button
+                  className="w-full sm:w-auto"
+                  disabled={isSavingAll || isPastSelectedDate}
+                  onClick={() => {
+                    const actions = getModifiedActions("all");
+                    if (actions.length === 0) {
+                      toast({
+                        title: "No modifications",
+                        description: "There are no changes to save.",
+                      });
+                      return;
+                    }
+                    setRemarkDialog({ bulkActions: actions, target: "all" });
+                  }}>
+                  {isSavingAll ? "Saving..." : "Save All Changes"}
+                </Button>
+              )
+            )}
+          </div>
         </div>
       </div>
 
@@ -464,7 +504,6 @@ function AttendanceContent() {
                         const status = row.present ? "Present" : "Absent";
                         const assignedValue =
                           teamLeadPendingDelegateByUserId[row.userId] ?? "";
-                        const isAssigning = isAssigningForUserId === row.userId;
                         return (
                           <tr key={row.userId} className="border-b">
                             <td className="p-3">{row.userName}</td>
@@ -486,17 +525,23 @@ function AttendanceContent() {
                             <td className="p-3">
                               <div className="flex flex-col gap-2 min-w-[240px]">
                                 {!row.present && (
-                                  <Button
-                                    onClick={() =>
-                                      openRemarkDialog({
-                                        kind: "mark_present",
-                                        userId: row.userId,
-                                      })
-                                    }
-                                    disabled={isAssigning || isPastSelectedDate}
-                                    variant="outline">
-                                    {isAssigning ? "Saving..." : "Mark Present"}
-                                  </Button>
+                                  <label className="flex items-center gap-2 text-sm cursor-pointer border p-2 rounded-md hover:bg-muted/50 transition-colors w-fit">
+                                    <input
+                                      type="checkbox"
+                                      className="rounded border-input text-primary focus:ring-primary w-4 h-4"
+                                      checked={pendingMarkPresent.has(row.userId)}
+                                      onChange={(e) => {
+                                        setPendingMarkPresent((prev) => {
+                                          const next = new Set(prev);
+                                          if (e.target.checked) next.add(row.userId);
+                                          else next.delete(row.userId);
+                                          return next;
+                                        });
+                                      }}
+                                      disabled={isPastSelectedDate}
+                                    />
+                                    Mark Present
+                                  </label>
                                 )}
                                 <select
                                   className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -511,8 +556,8 @@ function AttendanceContent() {
                                   }
                                   disabled={
                                     row.present ||
-                                    isAssigning ||
-                                    isPastSelectedDate
+                                    isPastSelectedDate ||
+                                    pendingMarkPresent.has(row.userId)
                                   }>
                                   <option value="">No delegate</option>
                                   {teamLeadDelegateOptions
@@ -523,23 +568,6 @@ function AttendanceContent() {
                                       </option>
                                     ))}
                                 </select>
-                                <Button
-                                  onClick={() =>
-                                    openRemarkDialog({
-                                      kind: "assign_team_lead",
-                                      userId: row.userId,
-                                    })
-                                  }
-                                  disabled={
-                                    row.present ||
-                                    isAssigning ||
-                                    isPastSelectedDate
-                                  }
-                                  variant="outline">
-                                  {isAssigning
-                                    ? "Assigning..."
-                                    : "Save Assignment"}
-                                </Button>
                               </div>
                             </td>
                           </tr>
@@ -613,7 +641,6 @@ function AttendanceContent() {
                       : "Absent";
                     const assignedValue =
                       pendingDelegateByAbsentUserId[row.userId] ?? "";
-                    const isAssigning = isAssigningForUserId === row.userId;
 
                     return (
                       <tr key={row.userId} className="border-b">
@@ -636,17 +663,23 @@ function AttendanceContent() {
                         <td className="p-3">
                           <div className="flex flex-col gap-2 min-w-[240px]">
                             {!row.present && (
-                              <Button
-                                onClick={() =>
-                                  openRemarkDialog({
-                                    kind: "mark_present",
-                                    userId: row.userId,
-                                  })
-                                }
-                                disabled={isAssigning || isPastSelectedDate}
-                                variant="outline">
-                                {isAssigning ? "Saving..." : "Mark Present"}
-                              </Button>
+                              <label className="flex items-center gap-2 text-sm cursor-pointer border p-2 rounded-md hover:bg-muted/50 transition-colors w-fit">
+                                <input
+                                  type="checkbox"
+                                  className="rounded border-input text-primary focus:ring-primary w-4 h-4"
+                                  checked={pendingMarkPresent.has(row.userId)}
+                                  onChange={(e) => {
+                                    setPendingMarkPresent((prev) => {
+                                      const next = new Set(prev);
+                                      if (e.target.checked) next.add(row.userId);
+                                      else next.delete(row.userId);
+                                      return next;
+                                    });
+                                  }}
+                                  disabled={isPastSelectedDate}
+                                />
+                                Mark Present
+                              </label>
                             )}
                             <select
                               className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -658,7 +691,7 @@ function AttendanceContent() {
                                 }))
                               }
                               disabled={
-                                row.present || isAssigning || isPastSelectedDate
+                                row.present || isPastSelectedDate || pendingMarkPresent.has(row.userId)
                               }>
                               <option value="">No delegate</option>
                               {teamAttendance.delegateOptions
@@ -669,19 +702,6 @@ function AttendanceContent() {
                                   </option>
                                 ))}
                             </select>
-                            <Button
-                              onClick={() =>
-                                openRemarkDialog({
-                                  kind: "assign_agent",
-                                  userId: row.userId,
-                                })
-                              }
-                              disabled={
-                                row.present || isAssigning || isPastSelectedDate
-                              }
-                              variant="outline">
-                              {isAssigning ? "Assigning..." : "Save Assignment"}
-                            </Button>
                           </div>
                         </td>
                         <td className="p-3 text-muted-foreground">
@@ -727,20 +747,20 @@ function AttendanceContent() {
                   setRemarkDialog(null);
                   setRemarkText("");
                 }}
-                disabled={isAssigningForUserId === remarkDialog.userId}>
+                disabled={isSavingAll}>
                 Cancel
               </Button>
               <Button
                 onClick={submitRemarkDialog}
-                disabled={isAssigningForUserId === remarkDialog.userId}>
-                {isAssigningForUserId === remarkDialog.userId
-                  ? "Saving..."
-                  : "Save"}
+                disabled={isSavingAll}>
+                {isSavingAll ? "Saving..." : "Save All"}
               </Button>
             </div>
           </div>
         </div>
       )}
+
+
     </div>
   );
 }
