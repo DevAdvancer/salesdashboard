@@ -192,23 +192,19 @@ function LeadDetailContent() {
     if (!user) return;
 
     try {
-      const isLeadOwner = lead?.ownerId === user.$id;
       if (
-        isLeadOwner ||
         user.role === "manager" ||
         user.role === "team_lead" ||
         user.role === "admin" ||
         user.role === "developer"
       ) {
-        const fetchedAgents = isLeadOwner
-          ? await listLeadAssignableAgents(leadId, user.$id)
-          : await getAssignableUsers(user.role, user.branchIds || [], user.$id);
+        const fetchedAgents = await getAssignableUsers(user.role, user.branchIds || [], user.$id);
         setAgents(fetchedAgents.filter((candidate) => candidate.role === "agent"));
       }
     } catch (err: unknown) {
       console.error("Error loading agents:", err);
     }
-  }, [lead?.ownerId, leadId, user]);
+  }, [user]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -737,8 +733,7 @@ function LeadDetailContent() {
   const canAssignLead =
     canModifyLead &&
     Boolean(lead) &&
-    (isLeadOwner ||
-      user.role === "manager" ||
+    (user.role === "manager" ||
       user.role === "team_lead" ||
       user.role === "admin" ||
       user.role === "developer");
