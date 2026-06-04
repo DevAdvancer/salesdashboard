@@ -27,7 +27,9 @@ import {
   listMyLinkedinRequestsForAccountAction,
   markLinkedinRequestAcceptedAction,
   withdrawLinkedinRequestAction,
+  linkLeadToLinkedinRequestAction,
 } from "@/app/actions/linkedin";
+import { createLead } from "@/lib/services/lead-action-service";
 import type { LinkedinAccount, LinkedinRequest } from "@/lib/types";
 import { validateLeadUniqueness } from "@/lib/services/lead-validator";
 
@@ -370,19 +372,51 @@ function LinkedinRequestsContent() {
     }
   };
 
-  const markAccepted = async (requestId: string) => {
+  const markAccepted = async (request: LinkedinRequest) => {
     if (!user) return;
     try {
-      setAcceptingId(requestId);
+      setAcceptingId(request.$id);
       await markLinkedinRequestAcceptedAction({
         currentUserId: user.$id,
-        requestId,
+        requestId: request.$id,
       });
-      toast({
-        title: "Accepted",
-        description: "Marked as accepted.",
-        variant: "success",
-      });
+      
+      if (user.role === "lead_generation") {
+        const leadData = {
+          linkedinProfileUrl: request.targetUrl,
+          sourceName: request.coldCall ? "Cold Calls" : "LinkedIN/Lead",
+          source: request.coldCall ? "Cold Calls" : "LinkedIN/Lead",
+          company: request.company,
+          ...(request.coldCallPhone ? { phone: request.coldCallPhone } : {}),
+        };
+        const branchId = user.branchId || (user.branchIds && user.branchIds.length > 0 ? user.branchIds[0] : undefined);
+        const created = await createLead(
+          user.$id,
+          {
+            data: leadData,
+            status: "Connection Accepted",
+            branchId,
+          },
+          user.$id,
+          user.name
+        );
+        await linkLeadToLinkedinRequestAction({
+          currentUserId: user.$id,
+          requestId: request.$id,
+          leadId: created.$id,
+        });
+        toast({
+          title: "Accepted & Lead Created",
+          description: "Marked as accepted and auto-created lead.",
+          variant: "success",
+        });
+      } else {
+        toast({
+          title: "Accepted",
+          description: "Marked as accepted.",
+          variant: "success",
+        });
+      }
       await loadRequests();
     } catch (error: unknown) {
       toast({
@@ -695,6 +729,8 @@ function LinkedinRequestsContent() {
                                   Open Lead
                                 </Button>
                               )
+                            ) : user.role === "lead_generation" ? (
+                              <span className="text-sm text-muted-foreground">Auto-creating...</span>
                             ) : (
                               <Button
                                 variant="outline"
@@ -735,7 +771,7 @@ function LinkedinRequestsContent() {
                               disabled={
                                 acceptingId === r.$id || withdrawingId === r.$id
                               }
-                              onClick={() => markAccepted(r.$id)}>
+                              onClick={() => markAccepted(r)}>
                               {acceptingId === r.$id
                                 ? "Updating..."
                                 : "Connection Accepted"}

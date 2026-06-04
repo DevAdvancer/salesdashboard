@@ -31,7 +31,7 @@ import {
   getPaymentPlanFormConfig,
 } from "@/lib/services/form-config-service";
 import { upsertClientPaymentRecord } from "@/lib/services/client-payment-service";
-import { Lead, User, FormField, LeadData, LeadDataValue } from "@/lib/types";
+import { Lead, User, FormField, LeadData, LeadDataValue, PaymentStatus } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

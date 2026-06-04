@@ -526,7 +526,7 @@ function LeadsContent() {
               {isExporting ? "Exporting..." : "Export CSV"}
             </Button>
           )}
-          <Button onClick={() => router.push("/leads/new")}>{isLeadGeneration ? "Generate Lead" : "Create Lead"}</Button>
+          {!isLeadGeneration && <Button onClick={() => router.push("/leads/new")}>Create Lead</Button>}
         </div>
       </div>
 

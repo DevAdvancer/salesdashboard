@@ -69,16 +69,27 @@ function LeadGenerationNewLeadContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
 
+  const searchParams = useSearchParams();
+  const linkedinRequestId = (searchParams.get("linkedinRequestId") ?? "").trim();
+  const linkedinTargetUrl = (searchParams.get("linkedinTargetUrl") ?? "").trim();
+  const linkedinCompany = (searchParams.get("linkedinCompany") ?? "").trim();
+  const coldCallEnabled = (searchParams.get("coldCall") ?? "").trim() === "1";
+  const coldCallPhoneParam = (searchParams.get("coldCallPhone") ?? "").trim();
+  const isLinkedinRequestLead = Boolean(linkedinRequestId);
+  
   const [firstName, setFirstName] = useState("");
   const [middleName, setMiddleName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState(
+    coldCallEnabled && coldCallPhoneParam ? formatUsPhone(coldCallPhoneParam) : ""
+  );
   const [visaStatus, setVisaStatus] = useState("");
-  const [linkedinProfileUrl, setLinkedinProfileUrl] = useState("");
+  const [linkedinProfileUrl, setLinkedinProfileUrl] = useState(linkedinTargetUrl);
   const [resumeFileId, setResumeFileId] = useState<string | null>(null);
   const [resumeFileName, setResumeFileName] = useState<string | null>(null);
   const [isUploadingResume, setIsUploadingResume] = useState(false);
+  const [linkedinRequestCompanyResolved, setLinkedinRequestCompanyResolved] = useState<string>("");
 
   const buildResumePermissions = (currentUser: User) => {
     const readUserIds = new Set<string>([currentUser.$id]);
@@ -105,6 +116,42 @@ function LeadGenerationNewLeadContent() {
       router.push("/login");
     }
   }, [authLoading, router, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (!linkedinRequestId) return;
+    (async () => {
+      try {
+        const result = await getLinkedinRequestCompanyAction({
+          currentUserId: user.$id,
+          requestId: linkedinRequestId,
+        });
+        const company = typeof result.company === "string" ? result.company.trim() : "";
+        if (company) setLinkedinRequestCompanyResolved(company);
+      } catch {}
+    })();
+  }, [linkedinRequestId, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (!linkedinTargetUrl) return;
+    (async () => {
+      try {
+        const result = await findBackedOutLeadForLinkedinTargetUrlAction({
+          currentUserId: user.$id,
+          targetUrl: linkedinTargetUrl,
+          company: linkedinCompany || undefined,
+        });
+        if (result.leadId) {
+          toast({
+            title: "Backed-out lead found",
+            description: "Opening the existing lead instead of creating a new one.",
+          });
+          router.push(`/leads/${encodeURIComponent(result.leadId)}`);
+        }
+      } catch {}
+    })();
+  }, [linkedinCompany, linkedinTargetUrl, router, toast, user]);
 
   const handleResumeUpload = async (file: File) => {
     if (!user) return;
@@ -177,30 +224,41 @@ function LeadGenerationNewLeadContent() {
     const trimmedVisaStatus = visaStatus.trim();
     const trimmedLinkedinProfileUrl = linkedinProfileUrl.trim();
 
-    const missingFields = getMissingLeadGenerationFields({
-      firstName: trimmedFirstName,
-      lastName: trimmedLastName,
-      phone: trimmedPhone,
-      visaStatus: trimmedVisaStatus,
-      linkedinProfileUrl: trimmedLinkedinProfileUrl,
-    });
-
-    if (missingFields.length > 0) {
-      toast({
-        title: "Missing required fields",
-        description: `${missingFields.join(", ")} ${
-          missingFields.length === 1 ? "is" : "are"
-        } required.`,
-        variant: "destructive",
+    if (!isLinkedinRequestLead) {
+      const missingFields = getMissingLeadGenerationFields({
+        firstName: trimmedFirstName,
+        lastName: trimmedLastName,
+        phone: trimmedPhone,
+        visaStatus: trimmedVisaStatus,
+        linkedinProfileUrl: trimmedLinkedinProfileUrl,
       });
-      return;
+
+      if (missingFields.length > 0) {
+        toast({
+          title: "Missing required fields",
+          description: `${missingFields.join(", ")} ${
+            missingFields.length === 1 ? "is" : "are"
+          } required.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    } else {
+      if (!trimmedLinkedinProfileUrl) {
+        toast({
+          title: "Missing required fields",
+          description: `LinkedIn profile link is required.`,
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     try {
       setIsSaving(true);
       setDuplicateError(null);
 
-      const leadData = buildLeadGenerationLeadData({
+      const baseLeadData = buildLeadGenerationLeadData({
         firstName: trimmedFirstName,
         middleName,
         lastName: trimmedLastName,
@@ -213,6 +271,32 @@ function LeadGenerationNewLeadContent() {
         userId: user.$id,
         userName: user.name,
       });
+
+      const effectiveLinkedinCompany = (
+        linkedinRequestCompanyResolved || linkedinCompany
+      ).trim();
+
+      if (isLinkedinRequestLead && !effectiveLinkedinCompany) {
+        toast({
+          title: "Missing company",
+          description:
+            "Company could not be resolved from the LinkedIn request. Please go back and retry from LinkedIn Requests.",
+          variant: "destructive",
+        });
+        setIsSaving(false);
+        return;
+      }
+
+      const leadData = isLinkedinRequestLead
+        ? {
+            ...baseLeadData,
+            status: "Connection Accepted",
+            linkedinRequestId,
+            ...(effectiveLinkedinCompany ? { company: effectiveLinkedinCompany } : {}),
+            sourceName: coldCallEnabled ? "Cold Calls" : "LinkedIN/Lead",
+            source: coldCallEnabled ? "Cold Calls" : "LinkedIN/Lead",
+          }
+        : baseLeadData;
 
       const validation = await validateLeadUniqueness(leadData);
       if (!validation.isValid) {
@@ -233,16 +317,26 @@ function LeadGenerationNewLeadContent() {
           ? user.branchIds[0]
           : undefined);
 
-      await createLead(
+      const created = await createLead(
         user.$id,
         {
           data: leadData,
-          status: "Generated",
+          status: isLinkedinRequestLead ? "Connection Accepted" : "Generated",
           branchId,
         },
         user.$id,
         user.name,
       );
+
+      if (linkedinRequestId) {
+        try {
+          await linkLeadToLinkedinRequestAction({
+            currentUserId: user.$id,
+            requestId: linkedinRequestId,
+            leadId: created.$id,
+          });
+        } catch {}
+      }
 
       toast({
         title: "Success",
@@ -306,7 +400,7 @@ function LeadGenerationNewLeadContent() {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="firstName">
-                First Name <span className="text-red-500">*</span>
+                First Name {!isLinkedinRequestLead && <span className="text-red-500">*</span>}
               </Label>
               <input
                 id="firstName"
@@ -328,7 +422,7 @@ function LeadGenerationNewLeadContent() {
 
             <div className="space-y-2">
               <Label htmlFor="lastName">
-                Last Name <span className="text-red-500">*</span>
+                Last Name {!isLinkedinRequestLead && <span className="text-red-500">*</span>}
               </Label>
               <input
                 id="lastName"
@@ -351,7 +445,7 @@ function LeadGenerationNewLeadContent() {
 
             <div className="space-y-2">
               <Label htmlFor="phone">
-                Phone No. <span className="text-red-500">*</span>
+                Phone No. {!isLinkedinRequestLead && <span className="text-red-500">*</span>}
               </Label>
               <input
                 id="phone"
@@ -364,7 +458,7 @@ function LeadGenerationNewLeadContent() {
 
           <div className="space-y-2">
             <Label htmlFor="visaStatus">
-              Visa Status <span className="text-red-500">*</span>
+              Visa Status {!isLinkedinRequestLead && <span className="text-red-500">*</span>}
             </Label>
             <select
               id="visaStatus"

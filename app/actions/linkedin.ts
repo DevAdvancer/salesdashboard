@@ -121,8 +121,8 @@ async function assertAgentIsInTeam(teamLeadId: string, agentId: string) {
     agentId,
   )) as unknown as User;
 
-  if (agent.role !== "agent") {
-    throw new Error("Only agents can be assigned Linkedin IDs");
+  if (agent.role !== "agent" && agent.role !== "lead_generation") {
+    throw new Error("Only agents and lead generation users can be assigned Linkedin IDs");
   }
 
   if (agent.teamLeadId !== teamLeadId) {
@@ -924,7 +924,7 @@ export async function listAgentsForTeamLeadLinkedinAction(input: {
 
   const { databases } = await createAdminClient();
   const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
-    Query.equal("role", "agent"),
+    Query.equal("role", ["agent", "lead_generation"]),
     Query.equal("teamLeadId", teamLeadId),
     Query.limit(1000),
     Query.orderAsc("name"),
@@ -972,8 +972,8 @@ export async function upsertLinkedinAccountAction(input: {
       COLLECTIONS.USERS,
       input.assignedUserId,
     )) as unknown as User;
-    if (agent.role !== "agent") {
-      throw new Error("Only agents can be assigned Linkedin IDs");
+    if (agent.role !== "agent" && agent.role !== "lead_generation") {
+      throw new Error("Only agents and lead generation users can be assigned Linkedin IDs");
     }
   }
 
