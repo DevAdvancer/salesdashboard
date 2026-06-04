@@ -31,6 +31,7 @@ export type ComponentKey =
   | 'review-queue'
   | 'notifications'
   | 'attendance'
+  | 'attendance-report'
   | 'lead-requests'
   | 'linkedin-requests'
   | 'linkedin-account-management'
@@ -94,6 +95,12 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
 
     if (isAdmin) {
       return true;
+    }
+
+    // Monitor always uses default component-access — DB override rules are ignored
+    // so admins cannot accidentally lock monitor out of hierarchy, audit-logs, etc.
+    if (user.role === 'monitor') {
+      return getDefaultComponentAccess(componentKey, user.role);
     }
 
     if (componentKey === 'settings') {

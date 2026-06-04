@@ -16,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { NAV_ITEMS } from "./navigation-config";
+import { NAV_ITEMS, appIcons } from "./navigation-config";
 import { NotificationBell } from "./notification-bell";
 import {
   startDashboardTour,
@@ -52,6 +52,7 @@ export function Navigation({
   const [chatOpen, setChatOpen] = useState(false);
   const [linkedinOpen, setLinkedinOpen] = useState(false);
   const [technicalOpen, setTechnicalOpen] = useState(false);
+  const [attendanceOpen, setAttendanceOpen] = useState(true);
 
   const handleLogout = async () => {
     try {
@@ -69,7 +70,8 @@ export function Navigation({
     : NAV_ITEMS.filter((item) => canAccess(item.key as ComponentKey));
 
   // Define section grouping
-  const agentItemKeys = new Set(["dashboard", "leads", "history", "work-queue", "attendance"]);
+  const agentItemKeys = new Set(["dashboard", "leads", "history", "work-queue"]);
+  const attendanceItemKeys = new Set(["attendance", "attendance-report"]);
   const teamLeadItemKeys = new Set(["user-management", "reports", "coaching-notes", "review-queue"]);
   const adminItemKeys = new Set(["branch-management", "hierarchy", "lead-requests", "audit-logs", "settings"]);
   const technicalItemKeys = new Set(["mock", "interview-support", "assessment-support"]);
@@ -77,6 +79,7 @@ export function Navigation({
 
   // Filter items by section
   const agentItems = visibleItems.filter((item) => agentItemKeys.has(item.key));
+  const attendanceItems = visibleItems.filter((item) => attendanceItemKeys.has(item.key));
   const teamLeadItems = visibleItems.filter((item) => teamLeadItemKeys.has(item.key));
   const adminItems = visibleItems.filter((item) => adminItemKeys.has(item.key));
   const technicalItems = visibleItems.filter((item) => technicalItemKeys.has(item.key));
@@ -279,6 +282,17 @@ export function Navigation({
         {renderSectionHeader(coreWorkspaceTitle)}
         {agentItems.map(renderNavButton)}
         {chatSection}
+      </div>
+    );
+  }
+
+  // 1b. Attendance Section
+  if (attendanceItems.length > 0) {
+    const CalendarIcon = appIcons.attendance;
+    renderedItems.push(
+      <div key="section-attendance">
+        {renderSectionHeader("Attendance")}
+        {renderCollapsibleSection("Attendance", CalendarIcon, attendanceItems, attendanceOpen, setAttendanceOpen)}
       </div>
     );
   }

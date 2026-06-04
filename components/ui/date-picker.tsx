@@ -369,7 +369,7 @@ export function DateRangePicker({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-[min(42rem,calc(100vw-2rem))] rounded-2xl border border-border bg-popover p-4 text-popover-foreground shadow-xl">
+        <div className="absolute left-0 z-50 mt-2 w-[min(42rem,calc(100vw-2rem))] rounded-2xl border border-border bg-popover p-4 text-popover-foreground shadow-xl">
           <div className="mb-3 flex items-center justify-between gap-2">
             <button
               type="button"

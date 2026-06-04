@@ -22,7 +22,7 @@ export default function CoachingNotesPage() {
 }
 
 function CoachingNotesContent() {
-  const { user } = useAuth();
+  const { user, isMonitor } = useAuth();
   const { toast } = useToast();
   const [users, setUsers] = useState<User[]>([]);
   const [notes, setNotes] = useState<CoachingNote[]>([]);
@@ -91,41 +91,44 @@ function CoachingNotesContent() {
         <h1 className="text-2xl md:text-3xl font-bold">Coaching Notes</h1>
         <p className="text-muted-foreground">Leadership-only coaching notes for users in your scope.</p>
       </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>Add Coaching Note</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {error && (
-            <p className="rounded-md border border-destructive p-3 text-sm text-muted-foreground">
-              {error}
-            </p>
-          )}
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <Label htmlFor="targetUser">User</Label>
-              <select
-                id="targetUser"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
-                value={targetUserId}
-                onChange={(event) => setTargetUserId(event.target.value)}
-              >
-                <option value="">Select user</option>
-                {users.map((item) => (
-                  <option key={item.$id} value={item.$id}>{item.name} - {item.role.replace('_', ' ')}</option>
-                ))}
-              </select>
+      {/* Add Coaching Note form — hidden for Monitor (view-only role) */}
+      {!isMonitor && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Add Coaching Note</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {error && (
+              <p className="rounded-md border border-destructive p-3 text-sm text-muted-foreground">
+                {error}
+              </p>
+            )}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <Label htmlFor="targetUser">User</Label>
+                <select
+                  id="targetUser"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                  value={targetUserId}
+                  onChange={(event) => setTargetUserId(event.target.value)}
+                >
+                  <option value="">Select user</option>
+                  {users.map((item) => (
+                    <option key={item.$id} value={item.$id}>{item.name} - {item.role.replace('_', ' ')}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
-          <div>
-            <Label htmlFor="note">Note</Label>
-            <Textarea id="note" value={note} onChange={(event) => setNote(event.target.value)} />
-          </div>
-          <Button onClick={submitNote} disabled={saving || !targetUserId || !note.trim()}>
-            {saving ? 'Saving...' : 'Save Note'}
-          </Button>
-        </CardContent>
-      </Card>
+            <div>
+              <Label htmlFor="note">Note</Label>
+              <Textarea id="note" value={note} onChange={(event) => setNote(event.target.value)} />
+            </div>
+            <Button onClick={submitNote} disabled={saving || !targetUserId || !note.trim()}>
+              {saving ? 'Saving...' : 'Save Note'}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
       <Card>
         <CardHeader>
           <CardTitle>Recent Coaching Notes</CardTitle>

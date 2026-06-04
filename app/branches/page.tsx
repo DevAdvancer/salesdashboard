@@ -60,7 +60,7 @@ export default function BranchManagementPage() {
 }
 
 function BranchManagementContent() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isMonitor } = useAuth();
   const [branches, setBranches] = useState<BranchWithStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -226,15 +226,17 @@ function BranchManagementContent() {
                 Create and manage organizational branches
               </CardDescription>
             </div>
-            <Button
-              onClick={() => {
-                setShowCreateDialog(true);
-                setError(null);
-              }}
-              type="button"
-              className="cursor-pointer">
-              Create Branch
-            </Button>
+            {!isMonitor && (
+              <Button
+                onClick={() => {
+                  setShowCreateDialog(true);
+                  setError(null);
+                }}
+                type="button"
+                className="cursor-pointer">
+                Create Branch
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -280,8 +282,9 @@ function BranchManagementContent() {
                       <td className="py-3 px-4">{branch.name}</td>
                       <td className="py-3 px-4">
                         <button
-                          onClick={() => handleToggleStatus(branch)}
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer ${
+                          onClick={() => !isMonitor && handleToggleStatus(branch)}
+                          disabled={isMonitor}
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isMonitor ? 'cursor-default' : 'cursor-pointer'} ${
                             branch.isActive
                               ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
                               : "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
@@ -329,21 +332,23 @@ function BranchManagementContent() {
                       </td>
                       <td className="py-3 px-4">{branch.leadCount}</td>
                       <td className="py-3 px-4">
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openEditDialog(branch)}>
-                            Edit
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDelete(branch.$id)}
-                            className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
-                            Delete
-                          </Button>
-                        </div>
+                        {!isMonitor && (
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openEditDialog(branch)}>
+                              Edit
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDelete(branch.$id)}
+                              className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+                              Delete
+                            </Button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}

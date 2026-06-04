@@ -139,9 +139,9 @@ export function handleApiError(
       message === 'An unexpected error occurred');
 
   if (isTemporary) {
-    message = 'This looks like a temporary issue. Please refresh and try again.';
+    message = `This looks like a temporary issue. Please refresh to check, and if the issue is not solved, please contact support at ${SUPPORT_EMAIL}.`;
   } else if (needsSupport) {
-    message = `We couldn't complete that right now. Please refresh and try again. If it keeps happening, contact ${SUPPORT_EMAIL} for instant help.`;
+    message = `We couldn't complete that right now. Please refresh to check, and if the issue is not solved, please contact support at ${SUPPORT_EMAIL}.`;
   }
 
   if (showToast) {
@@ -198,7 +198,7 @@ export function handleNetworkError(
   const { title = 'Network Error', showToast = true, retry } = options;
 
   const message =
-    "We're having trouble connecting right now. Please refresh and try again.";
+    `We're having trouble connecting right now. Please refresh to check, and if the issue is not solved, please contact support at ${SUPPORT_EMAIL}.`;
 
   if (showToast) {
     toast({

@@ -1214,3 +1214,223 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
 
   return { dateKey, teamLeadAbsentNotified, agentAbsentNotified, agentEscalated };
 }
+
+export async function getAttendanceReportAction(input: {
+  currentUserId: string;
+  startDateKey?: string;
+  endDateKey?: string;
+  teamLeadId?: string; // for admin/monitor to filter by specific team
+}) {
+  await assertAuthenticatedUserId(input.currentUserId);
+  const user = await getAuthenticatedUserDoc();
+
+  const isAdminLike = user.role === "admin" || user.role === "developer" || user.role === "monitor";
+  if (!isAdminLike && user.role !== "team_lead") {
+    throw new Error("Unauthorized");
+  }
+
+  const now = new Date();
+  const startDateKey = input.startDateKey ? assertDateKey(input.startDateKey) : getEtDateKey(now);
+  const endDateKey = input.endDateKey ? assertDateKey(input.endDateKey) : startDateKey;
+  const { databases } = await createAdminClient();
+
+  // Always fetch the full sorted list of active team leads (for the filter dropdown)
+  let allTeamLeadOptions: Array<{ userId: string; userName: string }> = [];
+  let teamLeads: User[] = [];
+
+  if (isAdminLike) {
+    const teamLeadsResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
+      Query.equal("role", "team_lead"),
+      Query.limit(2000),
+    ]);
+    const allTLs = (teamLeadsResponse.documents as unknown as User[])
+      .filter((tl) => (tl as unknown as { isActive?: unknown }).isActive !== false)
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+    allTeamLeadOptions = allTLs.map((tl) => ({ userId: tl.$id, userName: tl.name }));
+
+    if (input.teamLeadId) {
+      // Filter to a specific team lead
+      teamLeads = allTLs.filter((tl) => tl.$id === input.teamLeadId);
+    } else {
+      teamLeads = allTLs;
+    }
+  } else {
+    // Team lead: only their own team
+    const tlDoc = (await databases.getDocument(
+      DATABASE_ID,
+      COLLECTIONS.USERS,
+      user.$id,
+    )) as unknown as User;
+    teamLeads = [tlDoc];
+    allTeamLeadOptions = []; // TL doesn't need a filter dropdown
+  }
+
+  // Build report per team lead
+  const teams = await Promise.all(
+    teamLeads.map(async (tl) => {
+      // TL's own attendance records
+      const tlAttendanceResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
+        Query.equal("userId", tl.$id),
+        Query.greaterThanEqual("dateKey", startDateKey),
+        Query.lessThanEqual("dateKey", endDateKey),
+        Query.limit(100),
+      ]);
+      const tlAttRecords = tlAttendanceResponse.documents as unknown as AttendanceRecord[];
+      const latestTlAtt = tlAttRecords.length > 0 ? tlAttRecords.sort((a,b) => b.dateKey.localeCompare(a.dateKey))[0] : null;
+      
+      const tlDelegateUserId = latestTlAtt?.delegateUserId ?? null;
+      let tlDelegateName: string | null = null;
+      if (tlDelegateUserId) {
+        try {
+          const dlDoc = (await databases.getDocument(
+            DATABASE_ID,
+            COLLECTIONS.USERS,
+            tlDelegateUserId,
+          )) as unknown as User;
+          tlDelegateName = dlDoc.name;
+        } catch {
+          // ignore
+        }
+      }
+
+      // Agents in this team
+      const agentsResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
+        Query.equal("role", ["agent", "lead_generation"]),
+        Query.equal("teamLeadId", tl.$id),
+        Query.limit(2000),
+      ]);
+      const agents = (agentsResponse.documents as unknown as User[])
+        .filter((a) => (a as unknown as { isActive?: unknown }).isActive !== false)
+        .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+      // Attendance records for this team on the selected date range
+      const attendanceResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
+        Query.greaterThanEqual("dateKey", startDateKey),
+        Query.lessThanEqual("dateKey", endDateKey),
+        Query.equal("teamLeadId", tl.$id),
+        Query.limit(2000),
+      ]);
+      const attendanceDocs = attendanceResponse.documents as unknown as AttendanceRecord[];
+      const attendanceByUserId = new Map<string, AttendanceRecord[]>();
+      attendanceDocs.forEach((doc) => {
+        const existing = attendanceByUserId.get(doc.userId) || [];
+        existing.push(doc);
+        attendanceByUserId.set(doc.userId, existing);
+      });
+
+      // Collect all user IDs we need to resolve (delegates + assignedBy)
+      const allDelegateIds = new Set<string>();
+      attendanceDocs.forEach((doc) => {
+        if (typeof doc.delegateUserId === "string" && doc.delegateUserId) {
+          allDelegateIds.add(doc.delegateUserId);
+        }
+        if (typeof doc.assignedById === "string" && doc.assignedById) {
+          allDelegateIds.add(doc.assignedById);
+        }
+      });
+
+      const delegateById = new Map<string, User>();
+      if (allDelegateIds.size > 0) {
+        const ids = Array.from(allDelegateIds);
+        const chunkSize = 100;
+        for (let i = 0; i < ids.length; i += chunkSize) {
+          const chunk = ids.slice(i, i + chunkSize);
+          const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
+            Query.equal("$id", chunk),
+            Query.limit(2000),
+          ]);
+          (response.documents as unknown as User[]).forEach((u) => delegateById.set(u.$id, u));
+        }
+      }
+
+      // LinkedIn accounts for all agents
+      const accountsByUserId = await getActiveLinkedinAccountsForUsers(
+        databases,
+        agents.map((a) => a.$id),
+      );
+
+      const agentRows = agents.map((agent) => {
+        const attRecords = attendanceByUserId.get(agent.$id) ?? [];
+        const latestAtt = attRecords.length > 0 ? attRecords.sort((a,b) => b.dateKey.localeCompare(a.dateKey))[0] : null;
+        const presentDays = attRecords.filter(r => r.present).length;
+        
+        const isRange = startDateKey !== endDateKey;
+
+        // Aggregate delegates over the date range
+        const delegateCounts = new Map<string, number>();
+        for (const r of attRecords) {
+          const id = r.delegateUserId;
+          if (typeof id === "string" && id.trim().length > 0) {
+            delegateCounts.set(id, (delegateCounts.get(id) || 0) + 1);
+          }
+        }
+        const delegateNameStr = delegateCounts.size > 0 
+          ? Array.from(delegateCounts.entries())
+            .map(([id, count]) => {
+              const name = delegateById.get(id)?.name;
+              if (!name) return null;
+              return isRange ? `${name} (${count})` : name;
+            })
+            .filter(Boolean)
+            .join(", ")
+          : null;
+
+        // Aggregate assignedBy over the date range
+        const assignedByCounts = new Map<string, number>();
+        for (const r of attRecords) {
+          const id = r.assignedById;
+          if (typeof id === "string" && id.trim().length > 0) {
+            assignedByCounts.set(id, (assignedByCounts.get(id) || 0) + 1);
+          }
+        }
+        const assignedByNameStr = assignedByCounts.size > 0 
+          ? Array.from(assignedByCounts.entries())
+            .map(([id, count]) => {
+              const name = delegateById.get(id)?.name;
+              if (!name) return null;
+              return isRange ? `${name} (${count})` : name;
+            })
+            .filter(Boolean)
+            .join(", ")
+          : null;
+
+        const accounts = accountsByUserId.get(agent.$id) ?? [];
+        return {
+          userId: agent.$id,
+          userName: agent.name,
+          role: agent.role,
+          present: latestAtt?.present === true,
+          presentAt: latestAtt?.presentAt ?? null,
+          presentWithDelegateFlag: latestAtt?.presentWithDelegateFlag === true,
+          presentDays,
+          totalRecords: attRecords.length,
+          delegateUserId: latestAtt?.delegateUserId ?? null,
+          delegateUserName: delegateNameStr,
+          assignedById: latestAtt?.assignedById ?? null,
+          assignedByName: assignedByNameStr,
+          linkedinAccounts: accounts.map((a) => ({
+            id: a.$id,
+            company: a.company,
+            idName: a.idName,
+            accountType: a.accountType,
+          })),
+        };
+      });
+
+      return {
+        teamLeadId: tl.$id,
+        teamLeadName: tl.name,
+        teamLeadPresent: latestTlAtt?.present === true,
+        teamLeadPresentAt: latestTlAtt?.presentAt ?? null,
+        teamLeadPresentDays: tlAttRecords.filter(r => r.present).length,
+        teamLeadTotalRecords: tlAttRecords.length,
+        teamLeadDelegateUserId: tlDelegateUserId,
+        teamLeadDelegateName: tlDelegateName,
+        agents: agentRows,
+      };
+    }),
+  );
+
+  return { startDateKey, endDateKey, teams, allTeamLeadOptions };
+}

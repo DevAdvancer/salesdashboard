@@ -22,6 +22,7 @@ export const COMPONENT_ACCESS: RoleAccessMap = {
   'review-queue': ['admin', 'developer', 'monitor', 'team_lead'],
   notifications: ['admin', 'developer', 'monitor', 'team_lead', 'agent', 'lead_generation'],
   attendance: ['admin', 'developer', 'monitor', 'team_lead'],
+  'attendance-report': ['admin', 'developer', 'monitor', 'team_lead'],
   'lead-requests': ['admin', 'developer', 'monitor'],
   'linkedin-requests': ['agent', 'lead_generation'],
   'linkedin-account-management': ['admin', 'developer', 'monitor', 'team_lead'],

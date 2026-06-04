@@ -42,7 +42,7 @@ export default function UserManagementPage() {
 
 function UserManagementContent() {
   const searchParams = useSearchParams();
-  const { user, isAdmin, isDeveloper, isTeamLead } =
+  const { user, isAdmin, isDeveloper, isTeamLead, isMonitor } =
     useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [search, setSearch] = useState("");
@@ -97,6 +97,7 @@ function UserManagementContent() {
   const canCreateMonitor = isAdmin || isDeveloper;
   const canCreate =
     canCreateAdmin ||
+    canCreateAdmin ||
     canCreateDeveloper ||
     canCreateTeamLead ||
     canCreateAgent ||
@@ -111,15 +112,15 @@ function UserManagementContent() {
 
   // The branches available for assignment (subset of current user's branchIds)
   const availableBranches = allBranches.filter(
-    (b) => b.isActive && (isAdmin || isDeveloper || (user?.branchIds ?? []).includes(b.$id)),
+    (b) => b.isActive && (isAdmin || isDeveloper || isMonitor || (user?.branchIds ?? []).includes(b.$id)),
   );
 
   const fetchUsers = useCallback(async () => {
     if (!user) return;
     try {
       setIsLoading(true);
-      if (isAdmin || isDeveloper) {
-        // Admin sees all users regardless of branches
+      if (isAdmin || isDeveloper || isMonitor) {
+        // Admin/Monitor sees all users
         const { Query } = await import("appwrite");
         const response = await databases.listDocuments(
           process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
@@ -183,7 +184,7 @@ function UserManagementContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, isAdmin, isDeveloper]);
+  }, [user, isAdmin, isDeveloper, isMonitor]);
 
   useEffect(() => {
     if (user) {

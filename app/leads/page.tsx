@@ -50,6 +50,7 @@ function deletedUserPlaceholder(userId: string): User {
 
 function LeadsContent() {
   const { user, loading } = useAuth();
+  const isMonitor = user?.role === 'monitor';
   const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [agents, setAgents] = useState<User[]>([]);
@@ -526,7 +527,7 @@ function LeadsContent() {
               {isExporting ? "Exporting..." : "Export CSV"}
             </Button>
           )}
-          {!isLeadGeneration && <Button onClick={() => router.push("/leads/new")}>Create Lead</Button>}
+          {!isLeadGeneration && !isMonitor && <Button onClick={() => router.push("/leads/new")}>Create Lead</Button>}
         </div>
       </div>
 

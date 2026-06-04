@@ -51,7 +51,7 @@ describe('Network Error Handling', () => {
       expect(toast).toHaveBeenCalledWith({
         title: 'Network Error',
         description:
-          "We're having trouble connecting right now. Please refresh and try again.",
+          "We're having trouble connecting right now. Please refresh to check, and if the issue is not solved, please contact support at abhirup.kumar@vizvainc.com.",
         action: expect.anything(),
       });
     });
@@ -121,7 +121,7 @@ describe('Network Error Handling', () => {
         expect.objectContaining({
           title: 'Network Error',
           description:
-            "We're having trouble connecting right now. Please refresh and try again.",
+            "We're having trouble connecting right now. Please refresh to check, and if the issue is not solved, please contact support at abhirup.kumar@vizvainc.com.",
         })
       );
     });
@@ -158,7 +158,7 @@ describe('Network Error Handling', () => {
       expect(toast).toHaveBeenCalledWith(
         expect.objectContaining({
           description:
-            "We're having trouble connecting right now. Please refresh and try again.",
+            "We're having trouble connecting right now. Please refresh to check, and if the issue is not solved, please contact support at abhirup.kumar@vizvainc.com.",
         })
       );
     });

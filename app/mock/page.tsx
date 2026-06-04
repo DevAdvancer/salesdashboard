@@ -98,6 +98,7 @@ const lockedPrefilledInputClassName = "h-8 bg-muted text-muted-foreground";
 
 function MockContent() {
   const { user, loading } = useAuth();
+  const isMonitor = user?.role === 'monitor';
   const { toast } = useToast();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
@@ -634,12 +635,11 @@ function MockContent() {
       </div>
     );
   }
-
   return (
     <div className="container mx-auto p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Mock Interview Setup</h1>
-        {!isOutlookConnected ? (
+        {!isMonitor && (!isOutlookConnected ? (
           <Button onClick={handleConnectOutlook} disabled={isAuthLoading}>
             {isAuthLoading ? "Connecting..." : "Connect Outlook"}
           </Button>
@@ -650,7 +650,7 @@ function MockContent() {
             className="text-green-600 border-green-600">
             Outlook Connected
           </Button>
-        )}
+        ))}
       </div>
 
       <Card>
@@ -728,7 +728,7 @@ function MockContent() {
                             Mock Created
                           </span>
                         )}
-                        {attemptsCount === 0 ? (
+                        {!isMonitor && (attemptsCount === 0 ? (
                           <Button
                             size="sm"
                             onClick={() => handleCreateMock(lead)}
@@ -769,7 +769,7 @@ function MockContent() {
                               </span>
                             )}
                           </div>
-                        )}
+                        ))}
                       </td>
                     </tr>
                   );

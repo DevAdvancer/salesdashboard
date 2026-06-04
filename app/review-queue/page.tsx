@@ -32,7 +32,7 @@ export default function ReviewQueuePage() {
 }
 
 function ReviewQueueContent() {
-  const { user, isAdmin, isManager, isAssistantManager } = useAuth();
+  const { user, isAdmin, isManager, isAssistantManager, isMonitor } = useAuth();
   const { toast } = useToast();
   const [items, setItems] = useState<ReviewQueueItem[]>([]);
   const [type, setType] = useState('lead_reopen');
@@ -44,7 +44,7 @@ function ReviewQueueContent() {
   const [saving, setSaving] = useState(false);
   const [loadingItems, setLoadingItems] = useState(true);
   const [error, setError] = useState<string | null>(null);
-const canResolve = isAdmin || isManager || isAssistantManager;
+  const canResolve = isAdmin || isManager || isAssistantManager;
   const selectedTarget = findReviewTargetOption(targetOptions, targetInput);
 
   const loadItems = useCallback(async () => {
@@ -150,63 +150,68 @@ const canResolve = isAdmin || isManager || isAssistantManager;
         <h1 className="text-2xl md:text-3xl font-bold">Review Queue</h1>
         <p className="text-muted-foreground">Escalations, approvals, duplicate checks, and leadership review items.</p>
       </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>Create Review Request</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {error && (
-            <p className="rounded-md border border-destructive p-3 text-sm text-muted-foreground">
-              {error}
-            </p>
-          )}
-          <div className="grid gap-4 md:grid-cols-3">
-            <div>
-              <Label htmlFor="type">Type</Label>
-              <select id="type" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground" value={type} onChange={(e) => setType(e.target.value)}>
-                <option value="lead_reopen">Lead Reopen</option>
-                <option value="high_value_reassignment">High Value Reassignment</option>
-                <option value="duplicate_warning">Duplicate Warning</option>
-                <option value="closed_client_edit">Closed Client Edit</option>
-                <option value="field_change_review">Field Change Review</option>
-              </select>
-            </div>
-            <div>
-              <Label htmlFor="targetType">Target Type</Label>
-              <InputLikeSelect value={targetType} onChange={handleTargetTypeChange} />
-            </div>
-            <div>
-              <Label htmlFor="target">Target</Label>
-              <Input
-                id="target"
-                list="review-target-options"
-                value={targetInput}
-                onChange={(event) => setTargetInput(event.target.value)}
-                placeholder={targetOptionsLoading ? 'Loading targets...' : 'Search or paste an ID'}
-              />
-              <datalist id="review-target-options">
-                {targetOptions.map((option) => (
-                  <option key={`${option.type}-${option.id}`} value={option.value}>
-                    {option.description}
-                  </option>
-                ))}
-              </datalist>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {selectedTarget
-                  ? 'Target selected.'
-                  : targetInput.trim()
-                    ? 'Typed value will be saved.'
-                    : 'Choose from the dropdown.'}
+
+      {/* Create Request — hidden for Monitor (view-only role) */}
+      {!isMonitor && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Create Review Request</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {error && (
+              <p className="rounded-md border border-destructive p-3 text-sm text-muted-foreground">
+                {error}
               </p>
+            )}
+            <div className="grid gap-4 md:grid-cols-3">
+              <div>
+                <Label htmlFor="type">Type</Label>
+                <select id="type" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground" value={type} onChange={(e) => setType(e.target.value)}>
+                  <option value="lead_reopen">Lead Reopen</option>
+                  <option value="high_value_reassignment">High Value Reassignment</option>
+                  <option value="duplicate_warning">Duplicate Warning</option>
+                  <option value="closed_client_edit">Closed Client Edit</option>
+                  <option value="field_change_review">Field Change Review</option>
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="targetType">Target Type</Label>
+                <InputLikeSelect value={targetType} onChange={handleTargetTypeChange} />
+              </div>
+              <div>
+                <Label htmlFor="target">Target</Label>
+                <Input
+                  id="target"
+                  list="review-target-options"
+                  value={targetInput}
+                  onChange={(event) => setTargetInput(event.target.value)}
+                  placeholder={targetOptionsLoading ? 'Loading targets...' : 'Search or paste an ID'}
+                />
+                <datalist id="review-target-options">
+                  {targetOptions.map((option) => (
+                    <option key={`${option.type}-${option.id}`} value={option.value}>
+                      {option.description}
+                    </option>
+                  ))}
+                </datalist>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {selectedTarget
+                    ? 'Target selected.'
+                    : targetInput.trim()
+                      ? 'Typed value will be saved.'
+                      : 'Choose from the dropdown.'}
+                </p>
+              </div>
             </div>
-          </div>
-          <div>
-            <Label htmlFor="reason">Reason</Label>
-            <Textarea id="reason" value={reason} onChange={(e) => setReason(e.target.value)} />
-          </div>
-          <Button onClick={submitRequest} disabled={saving || !targetInput.trim()}>{saving ? 'Creating...' : 'Create Request'}</Button>
-        </CardContent>
-      </Card>
+            <div>
+              <Label htmlFor="reason">Reason</Label>
+              <Textarea id="reason" value={reason} onChange={(e) => setReason(e.target.value)} />
+            </div>
+            <Button onClick={submitRequest} disabled={saving || !targetInput.trim()}>{saving ? 'Creating...' : 'Create Request'}</Button>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Queue Items</CardTitle>

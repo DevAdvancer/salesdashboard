@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { ErrorBoundary } from '@/components/error-boundary';
 
 // Component that throws an error
@@ -44,7 +44,7 @@ describe('ErrorBoundary', () => {
 
     expect(screen.getByText('Something went wrong')).toBeInTheDocument();
     expect(
-      screen.getByText("Something didn't load correctly. Please reload the page.")
+      screen.getByText("Something didn't load correctly. Please refresh to check, and if the issue is not solved, please contact support.")
     ).toBeInTheDocument();
   });
 
@@ -69,7 +69,7 @@ describe('ErrorBoundary', () => {
     expect(reloadButton).toBeInTheDocument();
   });
 
-  it('should have a reload button', () => {
+  it('should have a reload button that is enabled', () => {
     render(
       <ErrorBoundary>
         <ThrowError shouldThrow={true} />

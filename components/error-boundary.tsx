@@ -41,16 +41,16 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
             <CardHeader>
               <CardTitle>Something went wrong</CardTitle>
               <CardDescription>
-                Something didn't load correctly. Please reload the page.
+                Something didn't load correctly. Please refresh to check, and if the issue is not solved, please contact support.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                If the problem continues, contact{" "}
+                If the problem is not solved, contact{" "}
                 <a className="underline" href={`mailto:${SUPPORT_EMAIL}`}>
                   {SUPPORT_EMAIL}
                 </a>{" "}
-                for instant help.
+                for support.
               </p>
               {process.env.NODE_ENV !== "production" && this.state.error?.message ? (
                 <div className="rounded-md border border-[var(--hairline-soft)] bg-[var(--canvas)] p-3">

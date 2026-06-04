@@ -13,6 +13,7 @@ import {
 import { ProtectedRoute } from '@/components/protected-route';
 import { Button } from '@/components/ui/button';
 import type { LeadRequest } from '@/lib/types';
+import { useAuth } from '@/lib/contexts/auth-context';
 
 type AssignmentState = Record<string, { assignedToId: string; branchId: string }>;
 type ErrorState = Record<string, string>;
@@ -26,6 +27,8 @@ export default function LeadRequestsPage() {
 }
 
 function LeadRequestsContent() {
+  const { user } = useAuth();
+  const isMonitor = user?.role === 'monitor';
   const [requests, setRequests] = useState<LeadRequest[]>([]);
   const [options, setOptions] = useState<LeadRequestAdminOptions>({ users: [], branches: [] });
   const [assignments, setAssignments] = useState<AssignmentState>({});
@@ -216,34 +219,38 @@ function LeadRequestsContent() {
                       </div>
                     </Td>
                     <Td>
-                      <div className="grid gap-2">
-                        <select
-                          className="h-9 rounded-md border border-[var(--border)] bg-[var(--background)] px-2 text-sm"
-                          value={assignments[request.$id]?.assignedToId ?? ''}
-                          onChange={(event) => updateAssignment(request.$id, 'assignedToId', event.target.value)}
-                          disabled={request.status !== 'pending' || busyId === request.$id}
-                        >
-                          <option value="">No assignee</option>
-                          {options.users.map((user) => (
-                            <option key={user.$id} value={user.$id}>
-                              {user.name} - {user.role}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          className="h-9 rounded-md border border-[var(--border)] bg-[var(--background)] px-2 text-sm"
-                          value={assignments[request.$id]?.branchId ?? ''}
-                          onChange={(event) => updateAssignment(request.$id, 'branchId', event.target.value)}
-                          disabled={request.status !== 'pending' || busyId === request.$id}
-                        >
-                          <option value="">No branch</option>
-                          {options.branches.map((branch) => (
-                            <option key={branch.$id} value={branch.$id}>
-                              {branch.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      {isMonitor ? (
+                        <span className="text-xs text-[var(--muted-foreground)]">View only</span>
+                      ) : (
+                        <div className="grid gap-2">
+                          <select
+                            className="h-9 rounded-md border border-[var(--border)] bg-[var(--background)] px-2 text-sm"
+                            value={assignments[request.$id]?.assignedToId ?? ''}
+                            onChange={(event) => updateAssignment(request.$id, 'assignedToId', event.target.value)}
+                            disabled={request.status !== 'pending' || busyId === request.$id}
+                          >
+                            <option value="">No assignee</option>
+                            {options.users.map((user) => (
+                              <option key={user.$id} value={user.$id}>
+                                {user.name} - {user.role}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            className="h-9 rounded-md border border-[var(--border)] bg-[var(--background)] px-2 text-sm"
+                            value={assignments[request.$id]?.branchId ?? ''}
+                            onChange={(event) => updateAssignment(request.$id, 'branchId', event.target.value)}
+                            disabled={request.status !== 'pending' || busyId === request.$id}
+                          >
+                            <option value="">No branch</option>
+                            {options.branches.map((branch) => (
+                              <option key={branch.$id} value={branch.$id}>
+                                {branch.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                     </Td>
                     <Td>
                       <div className="space-y-2">
@@ -259,7 +266,7 @@ function LeadRequestsContent() {
                       </div>
                     </Td>
                     <Td>
-                      {request.status === 'pending' ? (
+                      {!isMonitor && request.status === 'pending' ? (
                         <div className="flex flex-col gap-2">
                           <Button
                             type="button"
@@ -282,7 +289,7 @@ function LeadRequestsContent() {
                           </Button>
                         </div>
                       ) : (
-                        <span className="text-xs text-[var(--muted-foreground)]">No action</span>
+                        <span className="text-xs text-[var(--muted-foreground)]">{isMonitor ? 'View only' : 'No action'}</span>
                       )}
                     </Td>
                   </tr>

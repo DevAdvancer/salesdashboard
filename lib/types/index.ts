@@ -233,6 +233,7 @@ export type ComponentKey =
   | 'review-queue'
   | 'notifications'
   | 'attendance'
+  | 'attendance-report'
   | 'lead-requests'
   | 'linkedin-requests'
   | 'linkedin-account-management'

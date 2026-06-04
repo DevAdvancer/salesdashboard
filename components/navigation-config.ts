@@ -50,6 +50,7 @@ export const appIcons = {
   reviewQueue: ShieldCheck,
   notifications: Bell,
   attendance: CalendarClock,
+  attendanceReport: ClipboardList,
   chat: MessageSquare,
   settings: Settings,
   linkedinRequests: Link2,
@@ -61,6 +62,7 @@ export const appIcons = {
 export const NAV_ITEMS: NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', href: '/dashboard', icon: appIcons.dashboard },
   { key: 'attendance', label: 'Attendance', href: '/attendance', icon: appIcons.attendance },
+  { key: 'attendance-report', label: 'Attendance Report', href: '/attendance-report', icon: appIcons.attendanceReport },
   { key: 'chat', label: 'Chatting', href: '/chat/announcement', icon: appIcons.chat },
   { key: 'branch-management', label: 'Branches', href: '/branches', icon: appIcons.branches },
   { key: 'leads', label: 'Leads', href: '/leads', icon: appIcons.leads },

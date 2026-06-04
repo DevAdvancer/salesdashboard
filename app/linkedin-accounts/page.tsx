@@ -33,7 +33,7 @@ function RequiredMark() {
 }
 
 function LinkedinAccountsContent() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isMonitor } = useAuth();
   const { toast } = useToast();
 
   const [teamLeads, setTeamLeads] = useState<User[]>([]);
@@ -239,149 +239,152 @@ function LinkedinAccountsContent() {
 
   return (
     <div className="container mx-auto space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Manage Linkedin IDs</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {isAdmin && (
-            <div className="space-y-2">
-              <Label>Team Lead</Label>
-              <select
-                value={teamLeadId}
-                onChange={(e) => setTeamLeadId(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-                {teamLeads.map((tl) => (
-                  <option key={tl.$id} value={tl.$id}>
-                    {tl.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          <div className="grid gap-5 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label>
-                Agent <RequiredMark />
-              </Label>
-              <select
-                value={assignedUserId}
-                onChange={(e) => setAssignedUserId(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-                {agents.map((a) => (
-                  <option key={a.$id} value={a.$id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>
-                Account Type <RequiredMark />
-              </Label>
-              <select
-                value={accountType}
-                onChange={(e) =>
-                  setAccountType(e.target.value as LinkedinAccountType)
-                }
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-                <option value="main">Main</option>
-                <option value="sudo">Sudo</option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>
-                Company <RequiredMark />
-              </Label>
-              <select
-                value={company}
-                onChange={(e) => setCompany(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <option value="">Select company</option>
-                {companyOptions.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>
-                ID Name <RequiredMark />
-              </Label>
-              <Input
-                value={idName}
-                onChange={(e) => setIdName(e.target.value)}
-                placeholder="Linkedin ID name"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>
-                License Type <RequiredMark />
-              </Label>
-              <select
-                value={licenseType}
-                onChange={(e) => setLicenseType(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <option value="">Select license type</option>
-                {licenseTypeOptions.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>
-                Daily Connection Limit <RequiredMark />
-              </Label>
-              <Input
-                type="number"
-                min={0}
-                value={connectionLimit}
-                onChange={(e) => setConnectionLimit(e.target.value)}
-                placeholder="0"
-              />
-            </div>
-
-            {accountType === "sudo" && (
-              <div className="space-y-2 md:col-span-2">
-                <Label>
-                  Main ID <RequiredMark />
-                </Label>
+      {/* Create / Edit form — hidden for Monitor (view-only role) */}
+      {!isMonitor && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Manage Linkedin IDs</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {isAdmin && (
+              <div className="space-y-2">
+                <Label>Team Lead</Label>
                 <select
-                  value={mainAccountId}
-                  onChange={(e) => setMainAccountId(e.target.value)}
+                  value={teamLeadId}
+                  onChange={(e) => setTeamLeadId(e.target.value)}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-                  <option value="">Select Main ID</option>
-                  {mainAccountsForSelectedAgent.map((a) => (
-                    <option key={a.$id} value={a.$id}>
-                      {a.idName} · {a.company}
+                  {teamLeads.map((tl) => (
+                    <option key={tl.$id} value={tl.$id}>
+                      {tl.name}
                     </option>
                   ))}
                 </select>
               </div>
             )}
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={onSave} disabled={saving}>
-              {saving ? "Saving..." : editingId ? "Update" : "Create"}
-            </Button>
-            <Button variant="outline" onClick={resetForm} disabled={saving}>
-              Reset
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+            <div className="grid gap-5 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>
+                  Agent <RequiredMark />
+                </Label>
+                <select
+                  value={assignedUserId}
+                  onChange={(e) => setAssignedUserId(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                  {agents.map((a) => (
+                    <option key={a.$id} value={a.$id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>
+                  Account Type <RequiredMark />
+                </Label>
+                <select
+                  value={accountType}
+                  onChange={(e) =>
+                    setAccountType(e.target.value as LinkedinAccountType)
+                  }
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                  <option value="main">Main</option>
+                  <option value="sudo">Sudo</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>
+                  Company <RequiredMark />
+                </Label>
+                <select
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="">Select company</option>
+                  {companyOptions.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>
+                  ID Name <RequiredMark />
+                </Label>
+                <Input
+                  value={idName}
+                  onChange={(e) => setIdName(e.target.value)}
+                  placeholder="Linkedin ID name"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>
+                  License Type <RequiredMark />
+                </Label>
+                <select
+                  value={licenseType}
+                  onChange={(e) => setLicenseType(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="">Select license type</option>
+                  {licenseTypeOptions.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>
+                  Daily Connection Limit <RequiredMark />
+                </Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={connectionLimit}
+                  onChange={(e) => setConnectionLimit(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+
+              {accountType === "sudo" && (
+                <div className="space-y-2 md:col-span-2">
+                  <Label>
+                    Main ID <RequiredMark />
+                  </Label>
+                  <select
+                    value={mainAccountId}
+                    onChange={(e) => setMainAccountId(e.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                    <option value="">Select Main ID</option>
+                    {mainAccountsForSelectedAgent.map((a) => (
+                      <option key={a.$id} value={a.$id}>
+                        {a.idName} - {a.company}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button onClick={onSave} disabled={saving}>
+                {saving ? "Saving..." : editingId ? "Update" : "Create"}
+              </Button>
+              <Button variant="outline" onClick={resetForm} disabled={saving}>
+                Reset
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -433,9 +436,11 @@ function LinkedinAccountsContent() {
                         : "-"}
                     </TableCell>
                     <TableCell>
-                      <Button variant="outline" onClick={() => startEdit(a)}>
-                        Edit
-                      </Button>
+                      {!isMonitor && (
+                        <Button variant="outline" onClick={() => startEdit(a)}>
+                          Edit
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))
