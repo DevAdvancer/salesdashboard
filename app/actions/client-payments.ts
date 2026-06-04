@@ -14,6 +14,7 @@ import type {
   PaymentStatus,
   User,
 } from "@/lib/types";
+import { getSpecialBranchLeadAccess } from "@/lib/constants/special-lead-access";
 
 async function getActor(userId: string): Promise<User> {
   await assertAuthenticatedUserId(userId);
@@ -61,9 +62,13 @@ async function canActorAccessLead(actor: User, leadId: string): Promise<boolean>
   const { databases } = await createAdminClient();
   const lead = (await databases.getDocument(DATABASE_ID, COLLECTIONS.LEADS, leadId)) as any;
 
-  if (actor.role === "admin") return true;
+  if (actor.role === "admin" || actor.role === "developer") return true;
 
   const branchId = typeof lead.branchId === "string" ? lead.branchId : null;
+  const specialBranchId = getSpecialBranchLeadAccess(actor.email);
+  if (specialBranchId && branchId === specialBranchId) {
+    return true;
+  }
   const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : null;
   const assignedToId = typeof lead.assignedToId === "string" ? lead.assignedToId : null;
   const permissions = Array.isArray(lead.$permissions) ? (lead.$permissions as string[]) : [];
@@ -296,7 +301,7 @@ export async function listClientPaymentSummariesAction(input: {
 
   let allowedLeadIds = new Set<string>();
 
-  if (actor.role === "admin") {
+  if (actor.role === "admin" || actor.role === "developer") {
     allowedLeadIds = new Set(leadsResponse.documents.map((doc: any) => doc.$id));
   } else if (actor.role === "agent" || actor.role === "lead_generation") {
     for (const lead of leadsResponse.documents as any[]) {

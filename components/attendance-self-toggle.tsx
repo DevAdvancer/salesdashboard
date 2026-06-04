@@ -19,7 +19,7 @@ export function AttendanceSelfToggle() {
   const [state, setState] = useState<ToggleState | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const visible = user?.role === "agent" || user?.role === "team_lead";
+  const visible = user?.role === "agent" || user?.role === "team_lead" || user?.role === "lead_generation";
 
   const refresh = useCallback(async () => {
     if (!user || !visible) return;

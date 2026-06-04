@@ -260,7 +260,7 @@ export async function markAttendancePresenceAction(input: {
   await assertAuthenticatedUserId(input.currentUserId);
   const user = await getAuthenticatedUserDoc();
 
-  if (user.role !== "agent" && user.role !== "team_lead") {
+  if (user.role !== "agent" && user.role !== "team_lead" && user.role !== "lead_generation") {
     return { dateKey: getEtDateKey(new Date()), marked: false };
   }
 
@@ -335,7 +335,7 @@ export async function getMyAttendanceToggleStateAction(input: {
   await assertAuthenticatedUserId(input.currentUserId);
   const user = await getAuthenticatedUserDoc();
 
-  if (user.role !== "agent" && user.role !== "team_lead") {
+  if (user.role !== "agent" && user.role !== "team_lead" && user.role !== "lead_generation") {
     return {
       dateKey: getEtDateKey(new Date()),
       present: false,
@@ -365,7 +365,7 @@ export async function markMyselfPresentAction(input: { currentUserId: string }) 
   await assertAuthenticatedUserId(input.currentUserId);
   const user = await getAuthenticatedUserDoc();
 
-  if (user.role !== "agent" && user.role !== "team_lead") {
+  if (user.role !== "agent" && user.role !== "team_lead" && user.role !== "lead_generation") {
     throw new Error("Unauthorized");
   }
 
@@ -440,12 +440,12 @@ export async function markAttendancePresentByTeamLeadAction(input: {
     input.userId,
   )) as unknown as User;
 
-  if (userDoc.role !== "agent" && userDoc.role !== "team_lead") {
-    throw new Error("Only agents and team leads can be marked present");
+  if (userDoc.role !== "agent" && userDoc.role !== "team_lead" && userDoc.role !== "lead_generation") {
+    throw new Error("Only agents, team leads, and lead generation can be marked present");
   }
 
   if (actor.role === "team_lead") {
-    if (userDoc.role === "agent") {
+    if (userDoc.role === "agent" || userDoc.role === "lead_generation") {
       const teamLeadId = typeof userDoc.teamLeadId === "string" ? userDoc.teamLeadId : "";
       if (!teamLeadId) {
         throw new Error("Agent is missing Team Lead");
@@ -539,7 +539,7 @@ export async function checkAndNotifyMyTeamAbsencesAction(input: {
   });
   const recipientTeamLeadId = teamLeadAttendance?.delegateUserId ?? user.$id;
   const agentsResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
-    Query.equal("role", "agent"),
+    Query.equal("role", ["agent", "lead_generation"]),
     Query.equal("teamLeadId", user.$id),
     Query.limit(2000),
   ]);
@@ -634,7 +634,7 @@ export async function listMyTeamAttendanceAction(input: {
   }
 
   const agentsResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
-    Query.equal("role", "agent"),
+    Query.equal("role", ["agent", "lead_generation"]),
     Query.equal("teamLeadId", effectiveTeamLeadId),
     Query.orderAsc("name"),
     Query.limit(2000),
@@ -816,10 +816,10 @@ export async function assignAttendanceDelegateAction(input: {
   const absentUser = absentUserDoc as User;
   const delegateUser = (delegateUserDoc as User | null) ?? null;
 
-  if (absentUser.role === "agent") {
+  if (absentUser.role === "agent" || absentUser.role === "lead_generation") {
     const teamLeadId = typeof absentUser.teamLeadId === "string" ? absentUser.teamLeadId : "";
     if (!teamLeadId) {
-      throw new Error("Agent is missing Team Lead");
+      throw new Error("User is missing Team Lead");
     }
 
     if (user.role === "team_lead") {
@@ -836,9 +836,9 @@ export async function assignAttendanceDelegateAction(input: {
 
     if (
       delegateUser &&
-      (delegateUser.role !== "agent" || delegateUser.teamLeadId !== teamLeadId)
+      (delegateUser.role !== "agent" && delegateUser.role !== "lead_generation" || delegateUser.teamLeadId !== teamLeadId)
     ) {
-      throw new Error("Delegate must be an agent in the same team");
+      throw new Error("Delegate must be an agent or lead generation in the same team");
     }
 
     const updated = await upsertAttendanceDoc(databases, {
@@ -1100,7 +1100,7 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
     const recipientTeamLeadId = teamLeadAttendance?.delegateUserId ?? teamLead.$id;
 
     const agentsResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
-      Query.equal("role", "agent"),
+      Query.equal("role", ["agent", "lead_generation"]),
       Query.equal("teamLeadId", teamLead.$id),
       Query.limit(2000),
     ]);
