@@ -24,8 +24,8 @@ export const COMPONENT_ACCESS: RoleAccessMap = {
   attendance: ['admin', 'developer', 'monitor', 'team_lead'],
   'attendance-report': ['admin', 'developer', 'monitor', 'team_lead'],
   'lead-requests': ['admin', 'developer', 'monitor'],
-  'linkedin-requests': ['agent', 'lead_generation'],
-  'linkedin-account-management': ['admin', 'developer', 'monitor', 'team_lead'],
+  'linkedin-requests': ['team_lead', 'agent', 'lead_generation'],
+  'linkedin-account-management': ['admin'],
   'linkedin-reports': ['admin', 'developer', 'monitor', 'team_lead'],
 };
 

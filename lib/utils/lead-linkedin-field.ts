@@ -37,3 +37,23 @@ export function getLinkedinProfileValue(
   const fallback = data.linkedinProfileUrl ?? data.linkedinProfile;
   return typeof fallback === "string" ? fallback.trim() : "";
 }
+
+export function getLinkedinProfileDefaultValues(
+  fields: Array<Pick<FormField, "key" | "label">>,
+  value: string,
+) {
+  const trimmed = value.trim();
+  if (!trimmed) return {};
+
+  const defaults: Record<string, string> = {
+    linkedinProfileUrl: trimmed,
+  };
+
+  for (const field of fields) {
+    if (isLinkedinProfileField(field)) {
+      defaults[field.key] = trimmed;
+    }
+  }
+
+  return defaults;
+}

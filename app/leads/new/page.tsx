@@ -27,6 +27,7 @@ import {
   getMissingLeadGenerationFields,
 } from "@/lib/utils/lead-generation-form";
 import {
+  getLinkedinProfileDefaultValues,
   getLinkedinProfileValue,
   isLinkedinProfileField,
 } from "@/lib/utils/lead-linkedin-field";
@@ -958,12 +959,20 @@ function LegacyNewLeadContent() {
                         linkedinRequestCompanyResolved || linkedinCompany
                       ).trim() || undefined,
                     ...(coldCallPhone ? { phone: coldCallPhone } : {}),
+                    ...getLinkedinProfileDefaultValues(
+                      formFields,
+                      linkedinTargetUrl,
+                    ),
                     source: resolvedLinkedinSource,
                     sourceName: resolvedLinkedinSource,
                   }
                 : isDirectLinkedinLead
                   ? {
                       status: "Interested",
+                      ...getLinkedinProfileDefaultValues(
+                        formFields,
+                        linkedinTargetUrl,
+                      ),
                     }
                   : undefined
             }

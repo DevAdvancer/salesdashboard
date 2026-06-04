@@ -100,7 +100,7 @@ async function logAuditAction(
 }
 
 function canManageLinkedinAccounts(user: User) {
-  return user.role === "admin" || user.role === "team_lead";
+  return user.role === "admin";
 }
 
 function canSeeLinkedinReports(user: User) {
@@ -972,8 +972,12 @@ export async function upsertLinkedinAccountAction(input: {
       COLLECTIONS.USERS,
       input.assignedUserId,
     )) as unknown as User;
-    if (agent.role !== "agent" && agent.role !== "lead_generation") {
-      throw new Error("Only agents and lead generation users can be assigned Linkedin IDs");
+    if (
+      agent.role !== "agent" &&
+      agent.role !== "lead_generation" &&
+      agent.role !== "team_lead"
+    ) {
+      throw new Error("Only team leads, agents, and lead generation users can be assigned Linkedin IDs");
     }
   }
 
@@ -1039,7 +1043,7 @@ export async function upsertLinkedinAccountAction(input: {
 
   const basePayload: LinkedinAccountUpsertPayload = {
     assignedUserId: input.assignedUserId,
-    teamLeadId: agent.teamLeadId || null,
+    teamLeadId: agent.role === "team_lead" ? agent.$id : agent.teamLeadId || null,
     company,
     idName,
     accountType: input.accountType,
@@ -1097,7 +1101,7 @@ export async function listLinkedinAccountsForManagementAction(input: {
 }) {
   await assertAuthenticatedUserId(input.currentUserId);
   const user = await getAuthenticatedUserDoc();
-  if (!canManageLinkedinAccounts(user)) {
+  if (!canManageLinkedinAccounts(user) && !canSeeLinkedinReports(user)) {
     throw new Error("Unauthorized");
   }
 

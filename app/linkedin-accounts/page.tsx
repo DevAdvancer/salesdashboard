@@ -108,9 +108,19 @@ function LinkedinAccountsContent() {
         currentUserId: user.$id,
         teamLeadId: isAdmin ? teamLeadId : undefined,
       });
-      setAgents(next);
-      if (!assignedUserId && next.length > 0) {
-        setAssignedUserId(next[0].$id);
+      const selectedTeamLead = isAdmin
+        ? teamLeads.find((tl) => tl.$id === teamLeadId)
+        : null;
+      const assignableUsers = selectedTeamLead
+        ? [selectedTeamLead, ...next]
+        : next;
+      setAgents(assignableUsers);
+      if (
+        assignableUsers.length > 0 &&
+        (!assignedUserId ||
+          !assignableUsers.some((assignable) => assignable.$id === assignedUserId))
+      ) {
+        setAssignedUserId(assignableUsers[0].$id);
       }
     } catch (error: unknown) {
       toast({
@@ -120,7 +130,7 @@ function LinkedinAccountsContent() {
       });
       setAgents([]);
     }
-  }, [assignedUserId, isAdmin, teamLeadId, toast, user]);
+  }, [assignedUserId, isAdmin, teamLeadId, teamLeads, toast, user]);
 
   const loadAccounts = useCallback(async () => {
     if (!user) return;
@@ -190,8 +200,8 @@ function LinkedinAccountsContent() {
     if (!user) return;
     if (!assignedUserId) {
       toast({
-        title: "Agent required",
-        description: "Select an agent first",
+        title: "User required",
+        description: "Select a team lead or agent first",
         variant: "destructive",
       });
       return;
@@ -265,7 +275,7 @@ function LinkedinAccountsContent() {
             <div className="grid gap-5 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>
-                  Agent <RequiredMark />
+                  User <RequiredMark />
                 </Label>
                 <select
                   value={assignedUserId}
@@ -394,7 +404,7 @@ function LinkedinAccountsContent() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Agent</TableHead>
+                <TableHead>User</TableHead>
                 <TableHead>Company</TableHead>
                 <TableHead>ID Name</TableHead>
                 <TableHead>Type</TableHead>

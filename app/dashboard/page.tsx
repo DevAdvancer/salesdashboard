@@ -706,6 +706,14 @@ function LegacyDashboardContent() {
               onClick={() => router.push("/leads")}>
               View Leads
             </Button>
+            {isTeamLead && (
+              <Button
+                className="w-full"
+                variant="outline"
+                onClick={() => router.push("/linkedin-requests")}>
+                Linkedin Request
+              </Button>
+            )}
             {(isAdmin || isManager || isTeamLead) && (
               <>
                 <Button

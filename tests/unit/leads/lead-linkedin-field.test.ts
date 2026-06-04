@@ -1,4 +1,5 @@
 import {
+  getLinkedinProfileDefaultValues,
   getLinkedinProfileValue,
   isLinkedinProfileField,
 } from "@/lib/utils/lead-linkedin-field";
@@ -26,5 +27,17 @@ describe("lead linkedin field helpers", () => {
         [linkedinProfileUrlField],
       ),
     ).toBe("https://linkedin.com/in/example");
+  });
+
+  it("builds default values for configured LinkedIn fields and canonical storage", () => {
+    expect(
+      getLinkedinProfileDefaultValues(
+        [linkedinProfileUrlField],
+        " https://linkedin.com/in/accepted-request ",
+      ),
+    ).toEqual({
+      linkedinProfileUrl: "https://linkedin.com/in/accepted-request",
+      linkedinUrl: "https://linkedin.com/in/accepted-request",
+    });
   });
 });

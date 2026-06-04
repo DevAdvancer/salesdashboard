@@ -81,7 +81,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'attendance-report', role: 'developer', allowed: true },
   { componentKey: 'lead-requests', role: 'developer', allowed: true },
   { componentKey: 'linkedin-requests', role: 'developer', allowed: false },
-  { componentKey: 'linkedin-account-management', role: 'developer', allowed: true },
+  { componentKey: 'linkedin-account-management', role: 'developer', allowed: false },
   { componentKey: 'linkedin-reports', role: 'developer', allowed: true },
   // Monitor rules - admin-level visibility without mutation privileges
   { componentKey: 'dashboard', role: 'monitor', allowed: true },
@@ -106,7 +106,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'attendance-report', role: 'monitor', allowed: true },
   { componentKey: 'lead-requests', role: 'monitor', allowed: true },
   { componentKey: 'linkedin-requests', role: 'monitor', allowed: false },
-  { componentKey: 'linkedin-account-management', role: 'monitor', allowed: true },
+  { componentKey: 'linkedin-account-management', role: 'monitor', allowed: false },
   { componentKey: 'linkedin-reports', role: 'monitor', allowed: true },
   // Team Lead rules
   { componentKey: 'dashboard', role: 'team_lead', allowed: true },
@@ -130,8 +130,8 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'attendance', role: 'team_lead', allowed: true },
   { componentKey: 'attendance-report', role: 'team_lead', allowed: true },
   { componentKey: 'lead-requests', role: 'team_lead', allowed: false },
-  { componentKey: 'linkedin-requests', role: 'team_lead', allowed: false },
-  { componentKey: 'linkedin-account-management', role: 'team_lead', allowed: true },
+  { componentKey: 'linkedin-requests', role: 'team_lead', allowed: true },
+  { componentKey: 'linkedin-account-management', role: 'team_lead', allowed: false },
   { componentKey: 'linkedin-reports', role: 'team_lead', allowed: true },
   // Agent rules
   { componentKey: 'dashboard', role: 'agent', allowed: true },
