@@ -105,8 +105,9 @@ function LeadDetailContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCloseDialog, setShowCloseDialog] = useState(false);
-  const [closeStatus, setCloseStatus] = useState("Closed");
   const [closeStep, setCloseStep] = useState(1);
+  const [closeStatus, setCloseStatus] = useState("Closed");
+  const [initialPaymentStatus, setInitialPaymentStatus] = useState<string>("");
   const [closureFields, setClosureFields] = useState<FormField[]>([]);
   const [paymentPlanFields, setPaymentPlanFields] = useState<FormField[]>([]);
   const [closureValues, setClosureValues] = useState<Record<string, unknown>>(
@@ -412,7 +413,7 @@ function LeadDetailContent() {
         leadId,
         personalDetails: closureValues,
         paymentPlan: { percent, months, upfrontAmount },
-        initialStatus: upfrontAmount > 0 ? "partially_paid" : "not_paid",
+        initialStatus: (initialPaymentStatus || (upfrontAmount > 0 ? "partially_paid" : "not_paid")) as PaymentStatus,
       });
 
       await closeLead(leadId, closeStatus, user.$id, user.name, user.role);
@@ -1114,12 +1115,17 @@ function LeadDetailContent() {
                       </select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Initial Payment Status</Label>
-                      <p className="text-sm text-muted-foreground">
-                        {Number(paymentPlanValues.upfrontAmount) > 0
-                          ? "partially_paid"
-                          : "not_paid"}
-                      </p>
+                      <Label htmlFor="initialPaymentStatus">Initial Payment Status</Label>
+                      <select
+                        id="initialPaymentStatus"
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        value={initialPaymentStatus || (Number(paymentPlanValues.upfrontAmount) > 0 ? "partially_paid" : "not_paid")}
+                        onChange={(e) => setInitialPaymentStatus(e.target.value)}
+                      >
+                        <option value="not_paid">Not Paid</option>
+                        <option value="partially_paid">Partially Paid</option>
+                        <option value="fully_paid">Fully Paid</option>
+                      </select>
                     </div>
                   </div>
                 </div>

@@ -196,11 +196,14 @@ async function getActiveLinkedinAccountsForUser(databases: Awaited<ReturnType<ty
   const accounts = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LINKEDIN_ACCOUNTS, [
     Query.equal("assignedUserId", userId),
     Query.equal("isActive", true),
-    Query.orderAsc("accountType"),
-    Query.orderAsc("idName"),
     Query.limit(200),
   ]);
-  return accounts.documents as unknown as LinkedinAccount[];
+  const docs = accounts.documents as unknown as LinkedinAccount[];
+  return docs.sort((a, b) => {
+    const cmpType = (a.accountType || "").localeCompare(b.accountType || "");
+    if (cmpType !== 0) return cmpType;
+    return (a.idName || "").localeCompare(b.idName || "");
+  });
 }
 
 async function getActiveLinkedinAccountsForUsers(
@@ -219,8 +222,6 @@ async function getActiveLinkedinAccountsForUsers(
       const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LINKEDIN_ACCOUNTS, [
         Query.equal("assignedUserId", chunk),
         Query.equal("isActive", true),
-        Query.orderAsc("accountType"),
-        Query.orderAsc("idName"),
         Query.limit(limit),
         Query.offset(offset),
       ]);
@@ -238,6 +239,14 @@ async function getActiveLinkedinAccountsForUsers(
       offset += limit;
       if (offset >= 5000) break;
     }
+  }
+
+  for (const list of map.values()) {
+    list.sort((a, b) => {
+      const cmpType = (a.accountType || "").localeCompare(b.accountType || "");
+      if (cmpType !== 0) return cmpType;
+      return (a.idName || "").localeCompare(b.idName || "");
+    });
   }
 
   return map;
@@ -636,12 +645,11 @@ export async function listMyTeamAttendanceAction(input: {
   const agentsResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
     Query.equal("role", ["agent", "lead_generation"]),
     Query.equal("teamLeadId", effectiveTeamLeadId),
-    Query.orderAsc("name"),
     Query.limit(2000),
   ]);
-  const agents = (agentsResponse.documents as unknown as User[]).filter(
-    (agent) => (agent as unknown as { isActive?: unknown }).isActive !== false,
-  );
+  const agents = (agentsResponse.documents as unknown as User[])
+    .filter((agent) => (agent as unknown as { isActive?: unknown }).isActive !== false)
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
   const attendanceResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
     Query.equal("dateKey", dateKey),
@@ -957,12 +965,11 @@ export async function listTeamLeadsAttendanceForAdminAction(input: {
 
   const teamLeadsResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
     Query.equal("role", "team_lead"),
-    Query.orderAsc("name"),
     Query.limit(2000),
   ]);
-  const teamLeads = (teamLeadsResponse.documents as unknown as User[]).filter(
-    (teamLead) => (teamLead as unknown as { isActive?: unknown }).isActive !== false,
-  );
+  const teamLeads = (teamLeadsResponse.documents as unknown as User[])
+    .filter((teamLead) => (teamLead as unknown as { isActive?: unknown }).isActive !== false)
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
   const teamLeadIds = teamLeads.map((t) => t.$id);
   const attendanceResponse =

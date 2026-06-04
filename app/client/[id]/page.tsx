@@ -81,6 +81,7 @@ function HistoryDetailContent() {
   const [clientIntakeValues, setClientIntakeValues] = useState<Record<string, unknown>>({});
   const [clientIntakeSaving, setClientIntakeSaving] = useState(false);
   const [clientIntakeInitializedForRecord, setClientIntakeInitializedForRecord] = useState<string | null>(null);
+  const [editUpfrontAmount, setEditUpfrontAmount] = useState<string>("");
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -285,7 +286,10 @@ function HistoryDetailContent() {
       setPaymentLoading(true);
       const record = await getClientPaymentRecord(user.$id, leadId);
       setPaymentRecord(record);
-      if (record) setPaymentStatus(record.status);
+      if (record) {
+        setPaymentStatus(record.status);
+        setEditUpfrontAmount(String(record.paymentPlan.upfrontAmount));
+      }
       setClientIntakeInitializedForRecord(null);
       if (!record) {
         setPaymentInitPlanValues({});
@@ -451,7 +455,7 @@ function HistoryDetailContent() {
           : JSON.stringify(valueRaw);
 
     const isLockedField = field.key === "salesperson" || field.key === "agreement" || field.key === "upfront";
-    const isDisabled = clientIntakeSaving || !paymentRecord || paymentRecord.status !== "fully_paid" || isLockedField;
+    const isDisabled = clientIntakeSaving || !paymentRecord || (paymentRecord.status !== "fully_paid" && paymentRecord.status !== "partially_paid") || isLockedField;
 
     if (field.type === "textarea") {
       return (
@@ -502,10 +506,10 @@ function HistoryDetailContent() {
     if (!user) return;
     if (!paymentRecord) return;
 
-    if (paymentRecord.status !== "fully_paid") {
+    if (paymentRecord.status !== "fully_paid" && paymentRecord.status !== "partially_paid") {
       toast({
         title: "Payment not completed",
-        description: "Client details can be completed only after payment status is Fully Paid.",
+        description: "Client details can be completed only after payment status is Partially or Fully Paid.",
         variant: "destructive",
       });
       return;
@@ -569,15 +573,40 @@ function HistoryDetailContent() {
   const handleAddPaymentUpdate = async () => {
     if (!user) return;
     if (!paymentRecord) return;
+    const note = paymentNote.trim();
+    if (!note) {
+      toast({
+        title: "Note required",
+        description: "Please add a note while updating the payment.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setPaymentSaving(true);
+      const newUpfront = Number(editUpfrontAmount);
+      let currentRecord = paymentRecord;
+
+      if (!isNaN(newUpfront) && newUpfront !== currentRecord.paymentPlan.upfrontAmount) {
+        currentRecord = await upsertClientPaymentRecord({
+          actorId: user.$id,
+          leadId,
+          personalDetails: currentRecord.personalDetails,
+          paymentPlan: { ...currentRecord.paymentPlan, upfrontAmount: newUpfront },
+        });
+      }
+
       const updated = await addClientPaymentUpdate({
         actorId: user.$id,
         leadId,
         status: paymentStatus,
-        note: paymentNote.trim() ? paymentNote.trim() : null,
+        note: note,
       });
       setPaymentRecord(updated);
+      if (updated) {
+         setEditUpfrontAmount(String(updated.paymentPlan.upfrontAmount));
+      }
       setPaymentNote("");
       toast({ title: "Success", description: "Payment update saved." });
     } catch (err: unknown) {
@@ -845,19 +874,26 @@ function HistoryDetailContent() {
                       .map((field) => (
                         <div key={field.id}>
                           <Label>{field.label}</Label>
-                          <Input
-                            value={renderReadOnlyValue(
-                              field.key === "paymentPercent"
-                                ? paymentRecord.paymentPlan.percent
-                                : field.key === "paymentMonths"
-                                  ? paymentRecord.paymentPlan.months
-                                  : field.key === "upfrontAmount"
-                                    ? paymentRecord.paymentPlan.upfrontAmount
+                          {field.key === "upfrontAmount" ? (
+                            <Input
+                              type="number"
+                              value={editUpfrontAmount}
+                              onChange={(e) => setEditUpfrontAmount(e.target.value)}
+                              disabled={paymentSaving}
+                            />
+                          ) : (
+                            <Input
+                              value={renderReadOnlyValue(
+                                field.key === "paymentPercent"
+                                  ? paymentRecord.paymentPlan.percent
+                                  : field.key === "paymentMonths"
+                                    ? paymentRecord.paymentPlan.months
                                     : (paymentRecord.paymentPlan as any)[field.key],
-                            )}
-                            disabled
-                            readOnly
-                          />
+                              )}
+                              disabled
+                              readOnly
+                            />
+                          )}
                         </div>
                       ))}
                   </div>
@@ -934,9 +970,9 @@ function HistoryDetailContent() {
           <CardHeader>
             <CardTitle>Client Details (After Payment)</CardTitle>
             <p className="text-sm text-muted-foreground">
-              {paymentRecord?.status === "fully_paid"
+              {paymentRecord?.status === "fully_paid" || paymentRecord?.status === "partially_paid"
                 ? "All fields are required."
-                : "Complete payment first (set status to Fully Paid) to fill client details."}
+                : "Complete payment first (set status to Partially or Fully Paid) to fill client details."}
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -965,7 +1001,7 @@ function HistoryDetailContent() {
                     disabled={
                       clientIntakeSaving ||
                       paymentLoading ||
-                      paymentRecord.status !== "fully_paid"
+                      (paymentRecord.status !== "fully_paid" && paymentRecord.status !== "partially_paid")
                     }
                   >
                     {clientIntakeSaving ? "Saving..." : "Save Client Details"}

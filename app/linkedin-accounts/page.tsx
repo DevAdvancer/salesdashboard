@@ -58,6 +58,7 @@ function LinkedinAccountsContent() {
   );
   const licenseTypeOptions = useMemo(
     () => [
+      "Normal",
       "LinkedIn Premium",
       "LinkedIn Recruiter Lite",
       "LinkedIn Recruiter Plus",
