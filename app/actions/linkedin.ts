@@ -107,7 +107,7 @@ function canSeeLinkedinReports(user: User) {
   return user.role === "admin" || user.role === "team_lead";
 }
 
-function assertLinkedinReportTeamScope(user: User, teamLeadId: string) {
+function assertLinkedinReportTeamScope(user: User, teamLeadId?: string | null) {
   if (user.role === "admin") return;
   if (user.role === "team_lead" && user.$id === teamLeadId) return;
   throw new Error("Unauthorized");
@@ -900,6 +900,24 @@ export async function listTeamLeadsForLinkedinAction(input: {
   return response.documents as unknown as User[];
 }
 
+export async function listAllUsersForLinkedinAction(input: {
+  currentUserId: string;
+}) {
+  await assertAuthenticatedUserId(input.currentUserId);
+  const user = await getAuthenticatedUserDoc();
+  if (user.role !== "admin") {
+    throw new Error("Unauthorized");
+  }
+
+  const { databases } = await createAdminClient();
+  const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
+    Query.limit(1000),
+    Query.orderAsc("name"),
+  ]);
+
+  return response.documents as unknown as User[];
+}
+
 export async function listAgentsForTeamLeadLinkedinAction(input: {
   currentUserId: string;
   teamLeadId?: string;
@@ -972,13 +990,7 @@ export async function upsertLinkedinAccountAction(input: {
       COLLECTIONS.USERS,
       input.assignedUserId,
     )) as unknown as User;
-    if (
-      agent.role !== "agent" &&
-      agent.role !== "lead_generation" &&
-      agent.role !== "team_lead"
-    ) {
-      throw new Error("Only team leads, agents, and lead generation users can be assigned Linkedin IDs");
-    }
+    // Admins can assign to anyone
   }
 
   const { databases } = await createAdminClient();
@@ -1131,7 +1143,7 @@ export async function listLinkedinAccountsForManagementAction(input: {
 
 export async function getLinkedinWeeklyReportAction(input: {
   currentUserId: string;
-  teamLeadId: string;
+  teamLeadId?: string | null;
   startDate: string;
   endDate: string;
 }) {
@@ -1152,12 +1164,14 @@ export async function getLinkedinWeeklyReportAction(input: {
 
   while (true) {
     const queries = [
-      Query.equal("teamLeadId", input.teamLeadId),
       Query.greaterThanEqual("dateSent", startDate),
       Query.lessThanEqual("dateSent", endDate),
       Query.limit(pageSize),
       Query.orderAsc("$id"),
     ];
+    if (input.teamLeadId && input.teamLeadId !== "all") {
+      queries.unshift(Query.equal("teamLeadId", input.teamLeadId));
+    }
     if (cursor) queries.push(Query.cursorAfter(cursor));
 
     const page = await databases.listDocuments(
@@ -1300,7 +1314,7 @@ export async function getLinkedinWeeklyReportAction(input: {
 
 export async function listLinkedinRequestsForAdminAction(input: {
   currentUserId: string;
-  teamLeadId: string;
+  teamLeadId?: string | null;
   startDate: string;
   endDate: string;
   status?: "all" | "sent" | "accepted" | "withdrawn";
@@ -1318,13 +1332,16 @@ export async function listLinkedinRequestsForAdminAction(input: {
   const end = toUtcDayEndIso(input.endDate);
 
   const queries = [
-    Query.equal("teamLeadId", input.teamLeadId),
     Query.greaterThanEqual("dateSent", start),
     Query.lessThanEqual("dateSent", end),
     Query.orderDesc("dateSent"),
     Query.orderDesc("$createdAt"),
     Query.limit(Math.min(Math.max(input.limit ?? 500, 1), 2000)),
   ];
+
+  if (input.teamLeadId && input.teamLeadId !== "all") {
+    queries.unshift(Query.equal("teamLeadId", input.teamLeadId));
+  }
 
   if (input.agentId) {
     queries.unshift(Query.equal("agentId", input.agentId));

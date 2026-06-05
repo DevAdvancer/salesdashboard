@@ -21,6 +21,7 @@ import {
   listLinkedinAccountsForManagementAction,
   listTeamLeadsForLinkedinAction,
   upsertLinkedinAccountAction,
+  listAllUsersForLinkedinAction,
 } from "@/app/actions/linkedin";
 import type { LinkedinAccount, LinkedinAccountType, User } from "@/lib/types";
 
@@ -37,7 +38,7 @@ function LinkedinAccountsContent() {
   const { toast } = useToast();
 
   const [teamLeads, setTeamLeads] = useState<User[]>([]);
-  const [teamLeadId, setTeamLeadId] = useState<string>("");
+  const [teamLeadId, setTeamLeadId] = useState<string>("all");
   const [agents, setAgents] = useState<User[]>([]);
   const [accounts, setAccounts] = useState<LinkedinAccount[]>([]);
   const [loading, setLoading] = useState(false);
@@ -87,8 +88,8 @@ function LinkedinAccountsContent() {
         currentUserId: user.$id,
       });
       setTeamLeads(next);
-      if (!teamLeadId && next.length > 0) {
-        setTeamLeadId(next[0].$id);
+      if (!teamLeadId) {
+        setTeamLeadId("all");
       }
     } catch (error: unknown) {
       toast({
@@ -104,11 +105,17 @@ function LinkedinAccountsContent() {
     if (!user) return;
     if (isAdmin && !teamLeadId) return;
     try {
-      const next = await listAgentsForTeamLeadLinkedinAction({
-        currentUserId: user.$id,
-        teamLeadId: isAdmin ? teamLeadId : undefined,
-      });
-      const selectedTeamLead = isAdmin
+      let next: User[];
+      if (isAdmin && teamLeadId === "all") {
+        next = await listAllUsersForLinkedinAction({ currentUserId: user.$id });
+      } else {
+        next = await listAgentsForTeamLeadLinkedinAction({
+          currentUserId: user.$id,
+          teamLeadId: isAdmin ? teamLeadId : undefined,
+        });
+      }
+      
+      const selectedTeamLead = isAdmin && teamLeadId !== "all"
         ? teamLeads.find((tl) => tl.$id === teamLeadId)
         : null;
       const assignableUsers = selectedTeamLead
@@ -139,7 +146,7 @@ function LinkedinAccountsContent() {
       setLoading(true);
       const next = await listLinkedinAccountsForManagementAction({
         currentUserId: user.$id,
-        teamLeadId: isAdmin ? teamLeadId : null,
+        teamLeadId: isAdmin && teamLeadId !== "all" ? teamLeadId : null,
       });
       setAccounts(next);
     } catch (error: unknown) {
@@ -263,6 +270,7 @@ function LinkedinAccountsContent() {
                   value={teamLeadId}
                   onChange={(e) => setTeamLeadId(e.target.value)}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                  <option value="all">All Users</option>
                   {teamLeads.map((tl) => (
                     <option key={tl.$id} value={tl.$id}>
                       {tl.name}
