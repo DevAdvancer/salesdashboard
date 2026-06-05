@@ -707,7 +707,7 @@ function LinkedinRequestsContent() {
                     <TableRow key={r.$id}>
                       <TableCell className="break-all">{r.targetUrl}</TableCell>
                       <TableCell>
-                        {new Date(r.dateSent).toLocaleDateString()}
+                        {new Date(r.dateSent).toLocaleDateString(undefined, { timeZone: 'UTC' })}
                       </TableCell>
                       <TableCell>{statusLabel}</TableCell>
                       <TableCell>

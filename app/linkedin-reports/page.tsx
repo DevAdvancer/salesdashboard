@@ -551,7 +551,7 @@ function LinkedinReportsContent() {
                       <TableCell>{account?.company ?? r.company}</TableCell>
                       <TableCell className="break-all">{r.targetUrl}</TableCell>
                       <TableCell>
-                        {new Date(r.dateSent).toLocaleDateString()}
+                        {new Date(r.dateSent).toLocaleDateString(undefined, { timeZone: 'UTC' })}
                       </TableCell>
                       <TableCell>{statusLabel}</TableCell>
                     </TableRow>
