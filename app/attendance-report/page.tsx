@@ -247,10 +247,10 @@ function TeamReportCard({ team, isRange }: { team: TeamReport; isRange: boolean 
           <div>
             <CardTitle className="text-base font-semibold">{team.teamLeadName}</CardTitle>
             <div className="flex flex-wrap items-center gap-2 mt-1">
-              <StatusBadge present={team.teamLeadPresent} />
+              {!isRange && <StatusBadge present={team.teamLeadPresent} />}
               {isRange ? (
-                <span className="text-xs text-muted-foreground">
-                  {team.teamLeadPresentDays}/{team.teamLeadTotalRecords} days present
+                <span className="text-xs font-medium">
+                  {team.teamLeadPresentDays} Present, {team.teamLeadTotalRecords - team.teamLeadPresentDays} Absent
                 </span>
               ) : (
                 team.teamLeadPresentAt && (
@@ -323,10 +323,12 @@ function AgentReportRow({ agent, isRange }: { agent: AgentRow; isRange: boolean 
       </td>
       <td className="p-3">
         <div className="flex flex-col gap-1 items-start">
-          <StatusBadge present={agent.present} flagged={agent.presentWithDelegateFlag} />
+          {!isRange && (
+            <StatusBadge present={agent.present} flagged={agent.presentWithDelegateFlag} />
+          )}
           {isRange && agent.totalRecords > 0 && (
-            <span className="text-[10px] text-muted-foreground">
-              {agent.presentDays}/{agent.totalRecords} days
+            <span className="text-sm font-medium">
+              {agent.presentDays} Present, {agent.totalRecords - agent.presentDays} Absent
             </span>
           )}
         </div>
