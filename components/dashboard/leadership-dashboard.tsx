@@ -93,6 +93,14 @@ const drillDownCopy: Record<DrillDownKey, Omit<DrillDownConfig, 'key'>> = {
     title: 'Pipeline Value',
     description: 'Lead and client records contributing to total value.',
   },
+  upfrontCollectedLeads: {
+    title: 'Upfront Collected',
+    description: 'Clients who have paid partially or fully upfront.',
+  },
+  fullyPaidLeads: {
+    title: 'Fully Paid',
+    description: 'Clients who have completed their full upfront payment.',
+  },
 };
 
 function formatDate(value: string | null) {
@@ -300,18 +308,26 @@ export function LeadershipDashboard({
         </Card>
         </button>
 
-        <button type="button" onClick={() => openDrillDown('pipelineValue')} className="block w-full text-left">
+        <button type="button" onClick={() => openDrillDown('upfrontCollectedLeads')} className="block w-full text-left">
         <Card className="h-full transition-colors hover:border-foreground/40 hover:bg-accent">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pipeline Value</CardTitle>
+            <CardTitle className="text-sm font-medium">Upfront Collected</CardTitle>
             <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              <MetricValue value={currencyFormatter.format(summary?.totalPipelineValue ?? 0)} isLoading={isLoading} />
+              <MetricValue value={currencyFormatter.format(summary?.totalUpfrontValue ?? 0)} isLoading={isLoading} />
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {currencyFormatter.format(summary?.closedRevenue ?? 0)} closed revenue
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openDrillDown('fullyPaidLeads');
+                }}
+                className="hover:text-foreground hover:underline transition-colors cursor-pointer"
+              >
+                {currencyFormatter.format(summary?.fullyPaidUpfrontValue ?? 0)} fully paid
+              </span>
             </p>
           </CardContent>
         </Card>

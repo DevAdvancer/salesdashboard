@@ -21,6 +21,7 @@ import {
   getUserByIdOrNull,
 } from "@/lib/services/user-service";
 import type { Branch, User } from "@/lib/types";
+import { listClientPaymentSummariesAction } from "@/app/actions/client-payments";
 
 export default function WorkQueuePage() {
   return (
@@ -139,11 +140,21 @@ function WorkQueueContent() {
         const branches: Branch[] = allBranches.filter((branch) =>
           branchIds.has(branch.$id),
         );
+
+        const visibleLeadIds = Array.from(
+          new Set([...activeLeads, ...closedLeads].map((lead) => lead.$id)),
+        );
+
+        const paymentSummaries = visibleLeadIds.length > 0
+          ? await listClientPaymentSummariesAction({ actorId: user.$id, leadIds: visibleLeadIds })
+          : [];
+
         setInsights(
           buildLeadershipDashboardInsights({
             leads: [...activeLeads, ...closedLeads],
             users: usersForInsights,
             branches,
+            paymentSummaries,
           }),
         );
       } catch (error) {

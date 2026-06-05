@@ -284,7 +284,7 @@ export async function updateClientPersonalDetailsAction(input: {
 export async function listClientPaymentSummariesAction(input: {
   actorId: string;
   leadIds: string[];
-}): Promise<Array<{ leadId: string; status: PaymentStatus; personalDetails: Record<string, unknown> }>> {
+}): Promise<Array<{ leadId: string; status: PaymentStatus; personalDetails: Record<string, unknown>; paymentPlan: ClientPaymentPlan }>> {
   const actor = await getActor(input.actorId);
   ensureComponentAccess(actor.role, "history");
 
@@ -294,17 +294,24 @@ export async function listClientPaymentSummariesAction(input: {
   if (leadIds.length === 0) return [];
 
   const { databases } = await createAdminClient();
-  const leadsResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS, [
-    Query.equal("$id", leadIds),
-    Query.limit(Math.min(5000, leadIds.length)),
-  ]);
+  const CHUNK_SIZE = 100;
+
+  const leadDocuments: any[] = [];
+  for (let i = 0; i < leadIds.length; i += CHUNK_SIZE) {
+    const chunk = leadIds.slice(i, i + CHUNK_SIZE);
+    const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS, [
+      Query.equal("$id", chunk),
+      Query.limit(chunk.length),
+    ]);
+    leadDocuments.push(...response.documents);
+  }
 
   let allowedLeadIds = new Set<string>();
 
   if (actor.role === "admin" || actor.role === "developer") {
-    allowedLeadIds = new Set(leadsResponse.documents.map((doc: any) => doc.$id));
+    allowedLeadIds = new Set(leadDocuments.map((doc: any) => doc.$id));
   } else if (actor.role === "agent" || actor.role === "lead_generation") {
-    for (const lead of leadsResponse.documents as any[]) {
+    for (const lead of leadDocuments) {
       const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : null;
       const assignedToId = typeof lead.assignedToId === "string" ? lead.assignedToId : null;
       const permissions = Array.isArray(lead.$permissions) ? (lead.$permissions as string[]) : [];
@@ -324,7 +331,7 @@ export async function listClientPaymentSummariesAction(input: {
     ]);
     const teamIds = new Set<string>([actor.$id, ...agents.documents.map((doc: any) => doc.$id)]);
 
-    for (const lead of leadsResponse.documents as any[]) {
+    for (const lead of leadDocuments) {
       const branchId = typeof lead.branchId === "string" ? lead.branchId : null;
       const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : null;
       const assignedToId = typeof lead.assignedToId === "string" ? lead.assignedToId : null;
@@ -337,7 +344,7 @@ export async function listClientPaymentSummariesAction(input: {
       }
     }
   } else if (actor.role === "manager" || actor.role === "assistant_manager") {
-    for (const lead of leadsResponse.documents as any[]) {
+    for (const lead of leadDocuments) {
       const branchId = typeof lead.branchId === "string" ? lead.branchId : null;
       const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : null;
       const assignedToId = typeof lead.assignedToId === "string" ? lead.assignedToId : null;
@@ -353,18 +360,25 @@ export async function listClientPaymentSummariesAction(input: {
 
   if (allowedLeadIds.size === 0) return [];
 
-  const paymentsResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.CLIENT_PAYMENTS, [
-    Query.equal("leadId", Array.from(allowedLeadIds)),
-    Query.limit(5000),
-  ]);
+  const paymentDocuments: any[] = [];
+  const allowedLeadIdsArray = Array.from(allowedLeadIds);
+  for (let i = 0; i < allowedLeadIdsArray.length; i += CHUNK_SIZE) {
+    const chunk = allowedLeadIdsArray.slice(i, i + CHUNK_SIZE);
+    const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.CLIENT_PAYMENTS, [
+      Query.equal("leadId", chunk),
+      Query.limit(chunk.length),
+    ]);
+    paymentDocuments.push(...response.documents);
+  }
 
-  const results: Array<{ leadId: string; status: PaymentStatus; personalDetails: Record<string, unknown> }> = [];
-  for (const doc of paymentsResponse.documents as any[]) {
+  const results: Array<{ leadId: string; status: PaymentStatus; personalDetails: Record<string, unknown>; paymentPlan: ClientPaymentPlan }> = [];
+  for (const doc of paymentDocuments) {
     const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
     if (!leadId || !allowedLeadIds.has(leadId)) continue;
     const personalDetails = parseJsonOr<Record<string, unknown>>(doc.personalDetails ?? doc.personalDetailsJson, {});
+    const paymentPlan = parseJsonOr<ClientPaymentPlan>(doc.paymentPlan ?? doc.paymentPlanJson, { percent: 0, months: 0, upfrontAmount: 0 });
     const status = (doc.status as PaymentStatus) ?? "not_paid";
-    results.push({ leadId, status, personalDetails });
+    results.push({ leadId, status, personalDetails, paymentPlan });
   }
   return results;
 }

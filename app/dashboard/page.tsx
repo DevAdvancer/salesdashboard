@@ -28,7 +28,7 @@ import {
   resolveLeadUsersForInsights,
   type LeadershipDashboardInsights,
 } from "@/lib/utils/dashboard-insights";
-import { listAllPaymentInsightsAction, type PaymentInsightRecord } from "@/app/actions/client-payments";
+import { listAllPaymentInsightsAction, listClientPaymentSummariesAction, type PaymentInsightRecord } from "@/app/actions/client-payments";
 import { FinancialInsightsSection } from "@/components/dashboard/financial-insights-section";
 
 
@@ -189,11 +189,20 @@ function LegacyDashboardContent() {
             (branch) => isAdmin || branchIdsInScope.has(branch.$id),
           );
 
+          const visibleLeadIds = Array.from(
+            new Set([...activeLeads, ...closedLeads].map((lead) => lead.$id)),
+          );
+
+          const paymentSummaries = visibleLeadIds.length > 0
+            ? await listClientPaymentSummariesAction({ actorId: user.$id, leadIds: visibleLeadIds })
+            : [];
+
           setDashboardInsights(
             buildLeadershipDashboardInsights({
               leads: [...activeLeads, ...closedLeads],
               users: usersForInsights,
               branches: branchesForInsights,
+              paymentSummaries,
             }),
           );
         } catch (error) {

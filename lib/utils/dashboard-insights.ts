@@ -1,4 +1,4 @@
-import type { Branch, Lead, User } from '@/lib/types';
+import type { Branch, Lead, User, ClientPaymentPlan } from '@/lib/types';
 
 export const STALE_LEAD_DAYS = 14;
 
@@ -10,6 +10,8 @@ export interface LeadershipDashboardSummary {
   overdueFollowUps: number;
   dueTodayFollowUps: number;
   totalPipelineValue: number;
+  totalUpfrontValue: number;
+  fullyPaidUpfrontValue: number;
   closedRevenue: number;
 }
 
@@ -86,6 +88,8 @@ export interface LeadershipDashboardDetails {
   unassignedLeads: DashboardLeadDetailRow[];
   staleLeads: DashboardLeadDetailRow[];
   pipelineValue: DashboardLeadDetailRow[];
+  upfrontCollectedLeads: DashboardLeadDetailRow[];
+  fullyPaidLeads: DashboardLeadDetailRow[];
 }
 
 export interface LeadershipDashboardInsights {
@@ -102,6 +106,7 @@ interface BuildLeadershipDashboardInsightsInput {
   leads: Lead[];
   users: User[];
   branches: Branch[];
+  paymentSummaries?: Array<{ leadId: string; status: string; paymentPlan: ClientPaymentPlan }>;
   now?: Date;
 }
 
@@ -270,6 +275,7 @@ export function buildLeadershipDashboardInsights({
   leads,
   users,
   branches,
+  paymentSummaries = [],
   now = new Date(),
 }: BuildLeadershipDashboardInsightsInput): LeadershipDashboardInsights {
   const roleCounts: DashboardRoleCounts = {
@@ -289,6 +295,8 @@ export function buildLeadershipDashboardInsights({
     overdueFollowUps: 0,
     dueTodayFollowUps: 0,
     totalPipelineValue: 0,
+    totalUpfrontValue: 0,
+    fullyPaidUpfrontValue: 0,
     closedRevenue: 0,
   };
   const followUpQueue: FollowUpQueue = {
@@ -302,6 +310,8 @@ export function buildLeadershipDashboardInsights({
     unassignedLeads: [],
     staleLeads: [],
     pipelineValue: [],
+    upfrontCollectedLeads: [],
+    fullyPaidLeads: [],
   };
 
   const normalizeStatus = (value: unknown) => {
@@ -311,18 +321,22 @@ export function buildLeadershipDashboardInsights({
     return text || 'Unknown';
   };
 
+  const paymentMap = new Map(paymentSummaries.map((p) => [p.leadId, p]));
   for (const currentUser of users) {
     if (currentUser.role === 'team_lead') roleCounts.teamLeads += 1;
     if (currentUser.role === 'agent') roleCounts.agents += 1;
     if (currentUser.role === 'lead_generation') roleCounts.leadGeneration += 1;
-
     if (currentUser.role !== 'admin') {
       workloadMap.set(currentUser.$id, createWorkloadSummary(currentUser));
     }
   }
 
   for (const currentLead of leads) {
-    const amount = getLeadAmount(currentLead);
+    let amount = 0;
+    const payment = paymentMap.get(currentLead.$id);
+    if (payment && payment.paymentPlan && payment.paymentPlan.percent > 0) {
+      amount = (payment.paymentPlan.upfrontAmount * 100) / payment.paymentPlan.percent;
+    }
     const leadIsStale = isStaleLead(currentLead, now);
     const followUpDate = getFollowUpDate(currentLead);
     const hasPendingFollowUp = Boolean(followUpDate && !currentLead.isClosed && currentLead.followUpStatus !== 'completed');
@@ -352,6 +366,16 @@ export function buildLeadershipDashboardInsights({
 
     statusCounts.set(status, (statusCounts.get(status) ?? 0) + 1);
     summary.totalPipelineValue += amount;
+    
+    if (payment && (payment.status === 'partially_paid' || payment.status === 'fully_paid')) {
+      summary.totalUpfrontValue += payment.paymentPlan.upfrontAmount;
+      details.upfrontCollectedLeads.push(detailRow);
+      if (payment.status === 'fully_paid') {
+        summary.fullyPaidUpfrontValue += payment.paymentPlan.upfrontAmount;
+        details.fullyPaidLeads.push(detailRow);
+      }
+    }
+
     if (amount > 0) {
       details.pipelineValue.push(detailRow);
     }
