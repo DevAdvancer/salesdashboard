@@ -9,11 +9,9 @@ import { getSpecialBranchLeadAccess } from '@/lib/constants/special-lead-access'
 import { logAction } from "@/lib/services/audit-service";
 import { assertAuthenticatedUserId } from "@/lib/server/current-user";
 import { createNotificationsForRecipients } from "@/lib/server/notifications";
-import { notifyDuplicateLeadCreateAttemptAction, notifyDuplicateLeadUpdateAttemptAction } from "@/app/actions/lead-duplicates";
+import { notifyDuplicateLeadUpdateAttemptAction } from "@/app/actions/lead-duplicates";
 import { normalizeLinkedinProfileUrl } from "@/lib/utils/linkedin";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
-import { cookies } from "next/headers";
-import { readErrorResponseMessage } from "@/lib/utils/http-error-response";
 import {
   isAllowedLeadStatusTransition,
   normalizeLeadStatus,
@@ -78,11 +76,6 @@ async function validateLeadUniqueness(
     duplicateField?: 'email' | 'phone' | 'linkedinProfileUrl';
     existingLeadId?: string;
     existingBranchId?: string;
-    duplicateWarnings?: Array<{
-      field: 'email' | 'phone' | 'linkedinProfileUrl';
-      existingLeadId: string;
-      existingBranchId?: string;
-    }>;
 }> {
     const { databases } = await createAdminClient();
     const email = data.email as string | undefined;
@@ -99,70 +92,66 @@ async function validateLeadUniqueness(
         maxPages: 500,
     });
 
-    const inputEmail = email ? normalizeDuplicateFieldValue('email', email) : '';
-    const inputPhone = phone ? normalizeDuplicateFieldValue('phone', phone) : '';
-    const inputLinkedin = linkedinValue ? (normalizeLinkedinProfileUrl(linkedinValue) ?? '') : '';
-
-    const warnings: Array<{
-      field: 'email' | 'phone' | 'linkedinProfileUrl';
-      existingLeadId: string;
-      existingBranchId?: string;
-    }> = [];
-
-    for (const doc of documents) {
-        if (excludeLeadId && doc.$id === excludeLeadId) continue;
-        try {
-            const leadData = JSON.parse(doc.data as string) as LeadData;
-
-            if (inputEmail && warnings.every((w) => w.field !== 'email')) {
-                if (normalizeDuplicateFieldValue('email', leadData.email) === inputEmail) {
-                    warnings.push({
-                        field: 'email',
+    if (email) {
+        const inputEmail = normalizeDuplicateFieldValue('email', email);
+        for (const doc of documents) {
+            if (excludeLeadId && doc.$id === excludeLeadId) continue;
+            try {
+                const leadData = JSON.parse(doc.data as string) as LeadData;
+                if (inputEmail && normalizeDuplicateFieldValue('email', leadData.email) === inputEmail) {
+                    return {
+                        isValid: false,
+                        duplicateField: 'email',
                         existingLeadId: doc.$id,
                         existingBranchId: (doc.branchId as string) || undefined,
-                    });
+                    };
                 }
-            }
-
-            if (inputPhone && warnings.every((w) => w.field !== 'phone')) {
-                if (normalizeDuplicateFieldValue('phone', leadData.phone) === inputPhone) {
-                    warnings.push({
-                        field: 'phone',
-                        existingLeadId: doc.$id,
-                        existingBranchId: (doc.branchId as string) || undefined,
-                    });
-                }
-            }
-
-            if (inputLinkedin && warnings.every((w) => w.field !== 'linkedinProfileUrl')) {
-                const docNormalized = normalizeLinkedinProfileUrl(
-                    (leadData as any).linkedinProfileUrl || (leadData as any).linkedinProfile,
-                );
-                if (docNormalized && docNormalized === inputLinkedin) {
-                    warnings.push({
-                        field: 'linkedinProfileUrl',
-                        existingLeadId: doc.$id,
-                        existingBranchId: (doc.branchId as string) || undefined,
-                    });
-                }
-            }
-
-            if (warnings.length === 3) break;
-        } catch {}
+            } catch {}
+        }
     }
 
-    if (warnings.length > 0) {
-        const first = warnings[0];
-        return {
-            isValid: false,
-            duplicateField: first.field,
-            existingLeadId: first.existingLeadId,
-            existingBranchId: first.existingBranchId,
-            duplicateWarnings: warnings,
-        };
+    if (phone) {
+        const inputPhone = normalizeDuplicateFieldValue('phone', phone);
+        for (const doc of documents) {
+            if (excludeLeadId && doc.$id === excludeLeadId) continue;
+            try {
+                const leadData = JSON.parse(doc.data as string) as LeadData;
+                if (inputPhone && normalizeDuplicateFieldValue('phone', leadData.phone) === inputPhone) {
+                    return {
+                        isValid: false,
+                        duplicateField: 'phone',
+                        existingLeadId: doc.$id,
+                        existingBranchId: (doc.branchId as string) || undefined,
+                    };
+                }
+            } catch {}
+        }
     }
 
-    return { isValid: true, duplicateWarnings: [] };
+    if (linkedinValue) {
+        const inputNormalized = normalizeLinkedinProfileUrl(linkedinValue);
+        if (inputNormalized) {
+            for (const doc of documents) {
+                if (excludeLeadId && doc.$id === excludeLeadId) continue;
+                try {
+                    const leadData = JSON.parse(doc.data as string) as LeadData;
+                    const docNormalized = normalizeLinkedinProfileUrl(
+                      (leadData as any).linkedinProfileUrl || (leadData as any).linkedinProfile,
+                    );
+                    if (docNormalized && docNormalized === inputNormalized) {
+                        return {
+                            isValid: false,
+                            duplicateField: 'linkedinProfileUrl',
+                            existingLeadId: doc.$id,
+                            existingBranchId: (doc.branchId as string) || undefined,
+                        };
+                    }
+                } catch {}
+            }
+        }
+    }
+
+    return { isValid: true };
 }
 
 // Helper to get hierarchy permissions (server-side)
@@ -451,60 +440,18 @@ export async function createLeadAction(
 
         assertRequiredLeadData(input.data);
 
-        const finalOwnerId = creatingUserId || ownerId;
-        if (!isValidId(finalOwnerId)) {
-             throw new Error(`Invalid owner ID format: "${finalOwnerId}"`);
-        }
-
-        const creatorDoc = await databases.getDocument(
-            DATABASE_ID,
-            COLLECTIONS.USERS,
-            finalOwnerId
-        ) as unknown as UserDocument;
         // Validate uniqueness
         const validation = await validateLeadUniqueness(input.data);
         if (!validation.isValid) {
-            // Fire email + in-app notifications when ≥2 duplicate fields are found
-            const warnings = validation.duplicateWarnings ?? [];
-            if (warnings.length >= 2) {
-                try {
-                    // Fetch actor email for Graph sendMail
-                    let actorEmail: string | undefined;
-                    const actorId = creatingUserId || ownerId;
-                    try {
-                        const actorDoc = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, actorId) as any;
-                        actorEmail = typeof actorDoc.email === 'string' ? actorDoc.email : undefined;
-                    } catch {}
-
-                    const leadData = input.data as any;
-                    const firstName = typeof leadData.firstName === 'string' ? leadData.firstName : '';
-                    const lastName  = typeof leadData.lastName  === 'string' ? leadData.lastName  : '';
-                    const clientName = [firstName, lastName].filter(Boolean).join(' ').trim() || undefined;
-
-                    await notifyDuplicateLeadCreateAttemptAction({
-                        actorId,
-                        actorName: creatingUserName || actorId,
-                        actorEmail,
-                        leadId: '',
-                        duplicateWarnings: warnings,
-                        clientName,
-                        clientEmail:       typeof leadData.email  === 'string' ? leadData.email  : undefined,
-                        clientPhone:       typeof leadData.phone  === 'string' ? leadData.phone  : undefined,
-                        clientLinkedinUrl: typeof leadData.linkedinProfileUrl === 'string'
-                            ? leadData.linkedinProfileUrl
-                            : typeof leadData.linkedinProfile === 'string'
-                                ? leadData.linkedinProfile
-                                : undefined,
-                    });
-                } catch (notifyErr) {
-                    console.error('Failed to send duplicate create notifications:', notifyErr);
-                }
-            }
-
             throw new Error(
                 `Duplicate ${validation.duplicateField} found in lead ${validation.existingLeadId}` +
                 (validation.existingBranchId ? ` (branch: ${validation.existingBranchId})` : '')
             );
+        }
+
+        const finalOwnerId = creatingUserId || ownerId;
+        if (!isValidId(finalOwnerId)) {
+             throw new Error(`Invalid owner ID format: "${finalOwnerId}"`);
         }
 
         const dataJson = JSON.stringify(input.data);
@@ -512,11 +459,9 @@ export async function createLeadAction(
         // Permissions
         const permissions: string[] = [
             Permission.read(Role.user(finalOwnerId)),
-        ];
-        permissions.push(
             Permission.update(Role.user(finalOwnerId)),
             Permission.delete(Role.user(finalOwnerId)),
-        );
+        ];
 
         // Add hierarchy permissions
         const hierarchyPerms = await getHierarchyPermissions(finalOwnerId);
@@ -525,8 +470,10 @@ export async function createLeadAction(
         // Assigned agent permissions
         if (input.assignedToId) {
              if (isValidId(input.assignedToId)) {
-                 permissions.push(Permission.read(Role.user(input.assignedToId)));
-                 permissions.push(Permission.update(Role.user(input.assignedToId)));
+                 permissions.push(
+                     Permission.read(Role.user(input.assignedToId)),
+                     Permission.update(Role.user(input.assignedToId))
+                 );
                  // Add assigned agent's managers too
                  const assignedHierarchyPerms = await getHierarchyPermissions(input.assignedToId);
                  permissions.push(...assignedHierarchyPerms);
@@ -679,32 +626,13 @@ export async function updateLeadAction(
         const validation = await validateLeadUniqueness(updatedData, leadId);
         if (!validation.isValid && validation.duplicateField && validation.existingLeadId) {
             try {
-                // Fetch actor email for Graph sendMail
-                let actorEmail: string | undefined;
-                try {
-                    const actorEmailDoc = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, actorId) as any;
-                    actorEmail = typeof actorEmailDoc.email === 'string' ? actorEmailDoc.email : undefined;
-                } catch {}
-
-                const firstName = typeof updatedData.firstName === 'string' ? updatedData.firstName : '';
-                const lastName  = typeof updatedData.lastName  === 'string' ? updatedData.lastName  : '';
-                const clientName = [firstName, lastName].filter(Boolean).join(' ').trim() || undefined;
-
                 await notifyDuplicateLeadUpdateAttemptAction({
                     actorId,
                     actorName: actorName || actorDoc.$id,
-                    actorEmail,
                     leadId,
                     duplicateField: validation.duplicateField,
                     duplicateValue: getDuplicateValue(updatedData, validation.duplicateField),
                     existingLeadId: validation.existingLeadId,
-                    clientName,
-                    clientPhone:       typeof updatedData.phone  === 'string' ? updatedData.phone  : undefined,
-                    clientLinkedinUrl: typeof (updatedData as any).linkedinProfileUrl === 'string'
-                        ? (updatedData as any).linkedinProfileUrl
-                        : typeof (updatedData as any).linkedinProfile === 'string'
-                            ? (updatedData as any).linkedinProfile
-                            : undefined,
                 });
             } catch (error) {
                 console.error('Failed to notify duplicate lead update attempt:', error);
