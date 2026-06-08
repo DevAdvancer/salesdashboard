@@ -32,8 +32,9 @@ export default function WorkQueuePage() {
 }
 
 function WorkQueueContent() {
-  const { user, isAdmin, isManager, isAssistantManager, isTeamLead } =
+  const { user, isAdmin, isManager, isAssistantManager, isTeamLead, isMonitor } =
     useAuth();
+  const canReadLikeAdmin = isAdmin || isMonitor;
   const [insights, setInsights] = useState<LeadershipDashboardInsights | null>(
     null,
   );
@@ -43,7 +44,7 @@ function WorkQueueContent() {
   const [selectedTeamLeadId, setSelectedTeamLeadId] = useState<string>("");
 
   useEffect(() => {
-    if (!user || !isAdmin) return;
+    if (!user || !canReadLikeAdmin) return;
     let cancelled = false;
 
     async function loadTeamLeads() {
@@ -66,7 +67,7 @@ function WorkQueueContent() {
     return () => {
       cancelled = true;
     };
-  }, [user, isAdmin]);
+  }, [user, canReadLikeAdmin]);
 
   useEffect(() => {
     async function loadQueue() {
@@ -74,8 +75,8 @@ function WorkQueueContent() {
       try {
         setLoading(true);
         setError(null);
-        const teamLeadId = isAdmin ? selectedTeamLeadId : undefined;
-        if (isAdmin && !teamLeadId) {
+        const teamLeadId = canReadLikeAdmin ? selectedTeamLeadId : undefined;
+        if (canReadLikeAdmin && !teamLeadId) {
           setInsights(null);
           setLoading(false);
           return;
@@ -95,7 +96,7 @@ function WorkQueueContent() {
           ),
         ]);
         let usersForInsights: User[] = [user];
-        if (isAdmin) {
+        if (canReadLikeAdmin) {
           const selectedTeamLead = teamLeads.find(
             (candidate) => candidate.$id === selectedTeamLeadId,
           );
@@ -169,7 +170,7 @@ function WorkQueueContent() {
     void loadQueue();
   }, [
     user,
-    isAdmin,
+    canReadLikeAdmin,
     isAssistantManager,
     isManager,
     isTeamLead,
@@ -177,7 +178,7 @@ function WorkQueueContent() {
     teamLeads,
   ]);
 
-  const selectedTeamLeadName = isAdmin
+  const selectedTeamLeadName = canReadLikeAdmin
     ? teamLeads.find((candidate) => candidate.$id === selectedTeamLeadId)?.name
     : null;
 
@@ -190,7 +191,7 @@ function WorkQueueContent() {
             Daily follow-ups, overdue work, and active lead pressure.
           </p>
         </div>
-        {isAdmin && (
+        {canReadLikeAdmin && (
           <div className="w-full max-w-xs space-y-2">
             <Label htmlFor="workQueueTeam">Team</Label>
             <select
@@ -230,7 +231,7 @@ function WorkQueueContent() {
       {user && (
         <div id="tour-work-queue-tabs">
           <RoleWorkDashboard
-            role={isAdmin ? "team_lead" : user.role}
+            role={canReadLikeAdmin ? "team_lead" : user.role}
             insights={insights}
             isLoading={loading}
           />

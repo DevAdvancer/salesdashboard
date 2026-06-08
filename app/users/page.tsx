@@ -149,10 +149,10 @@ function UserManagementContent() {
         const roleOrder: Record<string, number> = {
           admin: 0,
           developer: 0,
-          team_lead: 1,
-          lead_generation: 2,
-          monitor: 3,
-          agent: 3,
+          monitor: 1,
+          team_lead: 2,
+          lead_generation: 3,
+          agent: 4,
         };
 
         allUsers.sort((a: User, b: User) => {
@@ -503,8 +503,8 @@ function UserManagementContent() {
     lead_generation: "Lead Generation",
     monitor: "Monitor",
   };
-  const createButtonLabel = `Create ${roleLabels[createRole] || "User"}`;
-  const dialogTitle = `Create New ${roleLabels[createRole] || "User"}`;
+  const createButtonLabel = "Create User";
+  const dialogTitle = "Create User";
 
   const dialogDescription = isAdmin
     ? "Add a new user and assign them to branches"
@@ -609,9 +609,7 @@ function UserManagementContent() {
             <div className="text-center py-8">
               <p className="text-gray-500 dark:text-gray-400">
                 No users found.{" "}
-                {canCreate
-                  ? `Create your first ${canCreateTeamLead ? "team lead" : "agent"} to get started.`
-                  : ""}
+                {canCreate ? "Create your first user to get started." : ""}
               </p>
             </div>
           ) : (
@@ -969,13 +967,7 @@ function UserManagementContent() {
                     onClick={handleCreate}
                     disabled={isCreating}
                     className="w-full sm:w-auto">
-                    {isCreating
-                      ? "Creating..."
-                      : isTeamLead
-                          ? createRole === "lead_generation"
-                            ? "Create Lead Gen"
-                            : "Create Agent"
-                          : createButtonLabel}
+                    {isCreating ? "Creating..." : createButtonLabel}
                   </Button>
                 </div>
               </div>

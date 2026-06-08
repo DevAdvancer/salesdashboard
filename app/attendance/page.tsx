@@ -87,10 +87,13 @@ function AttendanceContent() {
     Boolean(selectedDateKey) &&
     selectedDateKey < todayKey &&
     user?.role !== "admin";
+  const isAdminLikeAttendance =
+    user?.role === "admin" || user?.role === "developer" || user?.role === "monitor";
+  const canEditAttendance = user?.role === "admin" || user?.role === "team_lead";
 
   const loadOverview = useCallback(async () => {
     if (!user) return;
-    if (user.role === "admin") {
+    if (isAdminLikeAttendance) {
       setOverviewLoading(true);
     } else {
       setTeamLoading(true);
@@ -126,10 +129,12 @@ function AttendanceContent() {
           });
           return next;
         });
-      } else if (user.role === "admin") {
-        void checkAndNotifyAdminAttendanceEscalationsAction({
-          currentUserId: user.$id,
-        }).catch(() => {});
+      } else if (isAdminLikeAttendance) {
+        if (user.role === "admin") {
+          void checkAndNotifyAdminAttendanceEscalationsAction({
+            currentUserId: user.$id,
+          }).catch(() => {});
+        }
         const overview = await listTeamLeadsAttendanceForAdminAction({
           currentUserId: user.$id,
           dateKey: selectedDateKey || undefined,
@@ -163,13 +168,13 @@ function AttendanceContent() {
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load attendance");
     } finally {
-      if (user.role === "admin") {
+      if (isAdminLikeAttendance) {
         setOverviewLoading(false);
       } else {
         setTeamLoading(false);
       }
     }
-  }, [selectedDateKey, user]);
+  }, [isAdminLikeAttendance, selectedDateKey, user]);
 
   useEffect(() => {
     loadOverview();
@@ -183,7 +188,7 @@ function AttendanceContent() {
       return;
     }
 
-    if (user.role !== "admin") {
+    if (!isAdminLikeAttendance) {
       return;
     }
 
@@ -228,7 +233,7 @@ function AttendanceContent() {
     } finally {
       setTeamLoading(false);
     }
-  }, [loadOverview, selectedDateKey, selectedTeamLeadId, user]);
+  }, [isAdminLikeAttendance, loadOverview, selectedDateKey, selectedTeamLeadId, user]);
 
   const getModifiedActions = useCallback((target: "team_leads" | "team_attendance" | "all" = "all") => {
     const actions: {
@@ -299,10 +304,10 @@ function AttendanceContent() {
 
   useEffect(() => {
     if (!user) return;
-    if (user.role !== "admin") return;
+    if (!isAdminLikeAttendance) return;
     if (!selectedTeamLeadId) return;
     void loadTeamAttendanceOnly();
-  }, [loadTeamAttendanceOnly, selectedTeamLeadId, user]);
+  }, [isAdminLikeAttendance, loadTeamAttendanceOnly, selectedTeamLeadId, user]);
 
   const [remarkDialog, setRemarkDialog] = useState<null | {
     bulkActions: ReturnType<typeof getModifiedActions>;
@@ -358,7 +363,7 @@ function AttendanceContent() {
         return next;
       });
 
-      if (user.role === "admin") {
+      if (isAdminLikeAttendance) {
         const { target } = remarkDialog;
         if (target === "team_leads" || target === "all") {
           await loadOverview();
@@ -405,44 +410,48 @@ function AttendanceContent() {
               className="w-full sm:w-auto"
               onClick={loadTeamAttendanceOnly}
               disabled={
-                teamLoading || (user.role === "admin" && !selectedTeamLeadId)
+                teamLoading || (isAdminLikeAttendance && !selectedTeamLeadId)
               }>
               {teamLoading ? "Refreshing..." : "Refresh"}
             </Button>
-            {user.role === "admin" ? (
+            {isAdminLikeAttendance ? (
               <>
-                <Button
-                  className="w-full sm:w-auto"
-                  disabled={isSavingAll || isPastSelectedDate}
-                  onClick={() => {
-                    const actions = getModifiedActions("team_leads");
-                    if (actions.length === 0) {
-                      toast({
-                        title: "No modifications",
-                        description: "There are no changes to save for Team Leads.",
-                      });
-                      return;
-                    }
-                    setRemarkDialog({ bulkActions: actions, target: "team_leads" });
-                  }}>
-                  {isSavingAll ? "Saving..." : "Save Team Leads"}
-                </Button>
-                <Button
-                  className="w-full sm:w-auto"
-                  disabled={isSavingAll || isPastSelectedDate}
-                  onClick={() => {
-                    const actions = getModifiedActions("team_attendance");
-                    if (actions.length === 0) {
-                      toast({
-                        title: "No modifications",
-                        description: "There are no changes to save for Team Attendance.",
-                      });
-                      return;
-                    }
-                    setRemarkDialog({ bulkActions: actions, target: "team_attendance" });
-                  }}>
-                  {isSavingAll ? "Saving..." : "Save Team Attendance"}
-                </Button>
+                {canEditAttendance && (
+                  <>
+                    <Button
+                      className="w-full sm:w-auto"
+                      disabled={isSavingAll || isPastSelectedDate}
+                      onClick={() => {
+                        const actions = getModifiedActions("team_leads");
+                        if (actions.length === 0) {
+                          toast({
+                            title: "No modifications",
+                            description: "There are no changes to save for Team Leads.",
+                          });
+                          return;
+                        }
+                        setRemarkDialog({ bulkActions: actions, target: "team_leads" });
+                      }}>
+                      {isSavingAll ? "Saving..." : "Save Team Leads"}
+                    </Button>
+                    <Button
+                      className="w-full sm:w-auto"
+                      disabled={isSavingAll || isPastSelectedDate}
+                      onClick={() => {
+                        const actions = getModifiedActions("team_attendance");
+                        if (actions.length === 0) {
+                          toast({
+                            title: "No modifications",
+                            description: "There are no changes to save for Team Attendance.",
+                          });
+                          return;
+                        }
+                        setRemarkDialog({ bulkActions: actions, target: "team_attendance" });
+                      }}>
+                      {isSavingAll ? "Saving..." : "Save Team Attendance"}
+                    </Button>
+                  </>
+                )}
               </>
             ) : (
               !teamLoading && (
@@ -468,7 +477,7 @@ function AttendanceContent() {
         </div>
       </div>
 
-      {user.role === "admin" && (
+      {isAdminLikeAttendance && (
         <Card className="mb-6">
           <CardHeader>
             <CardTitle>Team Leads</CardTitle>
@@ -538,7 +547,7 @@ function AttendanceContent() {
                                           return next;
                                         });
                                       }}
-                                      disabled={isPastSelectedDate}
+                                      disabled={!canEditAttendance || isPastSelectedDate}
                                     />
                                     Mark Present
                                   </label>
@@ -556,6 +565,7 @@ function AttendanceContent() {
                                   }
                                   disabled={
                                     row.present ||
+                                    !canEditAttendance ||
                                     isPastSelectedDate ||
                                     pendingMarkPresent.has(row.userId)
                                   }>
@@ -587,7 +597,7 @@ function AttendanceContent() {
           <CardTitle>Team Attendance</CardTitle>
         </CardHeader>
         <CardContent>
-          {user.role === "admin" && teamLeadDelegateOptions.length > 0 && (
+          {isAdminLikeAttendance && teamLeadDelegateOptions.length > 0 && (
             <div className="mb-4 max-w-sm">
               <Label htmlFor="team-lead-select">Select Team</Label>
               <select
@@ -676,7 +686,7 @@ function AttendanceContent() {
                                       return next;
                                     });
                                   }}
-                                  disabled={isPastSelectedDate}
+                                  disabled={!canEditAttendance || isPastSelectedDate}
                                 />
                                 Mark Present
                               </label>
@@ -691,7 +701,10 @@ function AttendanceContent() {
                                 }))
                               }
                               disabled={
-                                row.present || isPastSelectedDate || pendingMarkPresent.has(row.userId)
+                                row.present ||
+                                !canEditAttendance ||
+                                isPastSelectedDate ||
+                                pendingMarkPresent.has(row.userId)
                               }>
                               <option value="">No delegate</option>
                               {teamAttendance.delegateOptions

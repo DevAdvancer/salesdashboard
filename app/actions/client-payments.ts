@@ -49,6 +49,16 @@ function ensureComponentAccess(role: string, componentKey: Parameters<typeof isR
   }
 }
 
+function isAdminLikeReadRole(role: User["role"]) {
+  return role === "admin" || role === "developer" || role === "monitor";
+}
+
+function assertCanMutateClientPayments(actor: User) {
+  if (actor.role === "monitor") {
+    throw new Error("Not authorized");
+  }
+}
+
 function parseJsonOr<T>(value: unknown, fallback: T): T {
   if (typeof value !== "string") return fallback;
   try {
@@ -62,7 +72,7 @@ async function canActorAccessLead(actor: User, leadId: string): Promise<boolean>
   const { databases } = await createAdminClient();
   const lead = (await databases.getDocument(DATABASE_ID, COLLECTIONS.LEADS, leadId)) as any;
 
-  if (actor.role === "admin" || actor.role === "developer") return true;
+  if (isAdminLikeReadRole(actor.role)) return true;
 
   const branchId = typeof lead.branchId === "string" ? lead.branchId : null;
   const specialBranchId = getSpecialBranchLeadAccess(actor.email);
@@ -164,6 +174,7 @@ export async function upsertClientPaymentRecordAction(input: {
 }): Promise<ClientPaymentRecord> {
   const actor = await getActor(input.actorId);
   ensureComponentAccess(actor.role, "leads");
+  assertCanMutateClientPayments(actor);
 
   if (!(await canActorAccessLead(actor, input.leadId))) {
     throw new Error("Not authorized");
@@ -216,6 +227,7 @@ export async function addClientPaymentUpdateAction(input: {
 }): Promise<ClientPaymentRecord> {
   const actor = await getActor(input.actorId);
   ensureComponentAccess(actor.role, "history");
+  assertCanMutateClientPayments(actor);
 
   if (!(await canActorAccessLead(actor, input.leadId))) {
     throw new Error("Not authorized");
@@ -259,6 +271,7 @@ export async function updateClientPersonalDetailsAction(input: {
 }): Promise<ClientPaymentRecord> {
   const actor = await getActor(input.actorId);
   ensureComponentAccess(actor.role, "history");
+  assertCanMutateClientPayments(actor);
 
   if (!(await canActorAccessLead(actor, input.leadId))) {
     throw new Error("Not authorized");
@@ -308,7 +321,7 @@ export async function listClientPaymentSummariesAction(input: {
 
   let allowedLeadIds = new Set<string>();
 
-  if (actor.role === "admin" || actor.role === "developer") {
+  if (isAdminLikeReadRole(actor.role)) {
     allowedLeadIds = new Set(leadDocuments.map((doc: any) => doc.$id));
   } else if (actor.role === "agent" || actor.role === "lead_generation") {
     for (const lead of leadDocuments) {
@@ -405,7 +418,7 @@ export async function listAllPaymentInsightsAction(
 ): Promise<PaymentInsightRecord[]> {
   const actor = await getActor(actorId);
 
-  if (actor.role !== "admin" && actor.role !== "developer") {
+  if (!isAdminLikeReadRole(actor.role)) {
     throw new Error("Not authorized");
   }
 

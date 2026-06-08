@@ -63,7 +63,7 @@ function ensureComponentAccess(role: UserRole, componentKey: Parameters<typeof i
 }
 
 function ensureLeadership(role: UserRole) {
-  if (!["admin", "manager", "assistant_manager", "team_lead"].includes(role)) {
+  if (!["admin", "developer", "manager", "assistant_manager", "monitor", "team_lead"].includes(role)) {
     throw new Error("Not authorized");
   }
 }

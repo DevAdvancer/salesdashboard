@@ -4,6 +4,7 @@ const mockAssertAuthenticatedUserId = jest.fn();
 const mockCreateAdminClient = jest.fn();
 const mockListDocuments = jest.fn();
 const mockGetDocument = jest.fn();
+const mockCreateDocument = jest.fn();
 const mockUpdateDocument = jest.fn();
 const mockUpdateFile = jest.fn();
 
@@ -65,7 +66,7 @@ describe('lead server action authorization', () => {
         listDocuments: mockListDocuments,
         getDocument: mockGetDocument,
         updateDocument: mockUpdateDocument,
-        createDocument: jest.fn(),
+        createDocument: mockCreateDocument,
       },
       storage: {
         updateFile: mockUpdateFile,
@@ -123,7 +124,7 @@ describe('lead server action authorization', () => {
     expect(Query.equal).toHaveBeenCalledWith('isClosed', false);
   });
 
-  it('rejects monitor lead edits even when the monitor owns the lead', async () => {
+  it('allows monitor lead edits only when the monitor owns the lead', async () => {
     mockGetDocument
       .mockResolvedValueOnce({
         $id: 'monitor-1',
@@ -152,9 +153,105 @@ describe('lead server action authorization', () => {
 
     await expect(
       updateLeadAction('lead-1', { firstName: 'Changed' }, 'monitor-1', 'Monitor')
+    ).resolves.toBeTruthy();
+
+    expect(mockUpdateDocument).toHaveBeenCalledWith(
+      'database',
+      'leads',
+      'lead-1',
+      expect.objectContaining({
+        data: expect.stringContaining('Changed'),
+      }),
+    );
+  });
+
+  it('rejects monitor lead edits when the monitor does not own the lead', async () => {
+    mockGetDocument
+      .mockResolvedValueOnce({
+        $id: 'monitor-1',
+        email: 'monitor@example.com',
+        role: 'monitor',
+        branchIds: [],
+      })
+      .mockResolvedValueOnce({
+        $id: 'lead-1',
+        data: JSON.stringify({
+          firstName: 'Current',
+          lastName: 'Lead',
+          email: 'current@example.com',
+          phone: '5551112222',
+          status: 'Interested',
+        }),
+        ownerId: 'owner-1',
+        assignedToId: null,
+        branchId: 'branch-1',
+        isClosed: false,
+        closedAt: null,
+        status: 'Interested',
+      });
+
+    const { updateLeadAction } = await import('@/app/actions/lead');
+
+    await expect(
+      updateLeadAction('lead-1', { firstName: 'Changed' }, 'monitor-1', 'Monitor')
     ).rejects.toThrow('Permission denied');
 
     expect(mockUpdateDocument).not.toHaveBeenCalled();
+  });
+
+  it('allows monitor lead creation with the monitor as owner', async () => {
+    mockGetDocument.mockResolvedValueOnce({
+      $id: 'monitor-1',
+      email: 'monitor@example.com',
+      role: 'monitor',
+      branchIds: [],
+    });
+    mockCreateDocument.mockResolvedValueOnce({
+      $id: 'lead-1',
+      data: JSON.stringify({
+        firstName: 'New',
+        lastName: 'Lead',
+        email: 'new@example.com',
+        phone: '5551112222',
+      }),
+      ownerId: 'monitor-1',
+      assignedToId: 'monitor-1',
+      branchId: null,
+      isClosed: false,
+      closedAt: null,
+      status: 'Interested',
+    });
+
+    const { createLeadAction } = await import('@/app/actions/lead');
+
+    await expect(
+      createLeadAction(
+        'monitor-1',
+        {
+          data: {
+            firstName: 'New',
+            lastName: 'Lead',
+            email: 'new@example.com',
+            phone: '5551112222',
+          },
+          status: 'Interested',
+        },
+        'monitor-1',
+        'Monitor',
+      )
+    ).resolves.toMatchObject({
+      ownerId: 'monitor-1',
+    });
+
+    expect(mockCreateDocument).toHaveBeenCalledWith(
+      'database',
+      'leads',
+      expect.any(String),
+      expect.objectContaining({
+        ownerId: 'monitor-1',
+      }),
+      expect.arrayContaining(['read:user:monitor-1', 'update:user:monitor-1']),
+    );
   });
 
   it('rejects reopen attempts from non-manager users before updating with the admin client', async () => {
@@ -366,6 +463,63 @@ describe('lead server action authorization', () => {
     const { assignLeadAction } = await import('@/lib/actions/lead-actions');
 
     await expect(assignLeadAction('lead-1', 'agent-2', 'owner-1', 'Owner')).resolves.toMatchObject({
+      success: true,
+    });
+    expect(mockUpdateDocument).toHaveBeenCalledWith(
+      'database',
+      'leads',
+      'lead-1',
+      { assignedToId: 'agent-2' },
+      expect.arrayContaining(['read:user:agent-2', 'update:user:agent-2'])
+    );
+  });
+
+  it('allows a monitor owner to assign their own lead to any active agent', async () => {
+    const documentsById = new Map<string, Record<string, unknown>>([
+      ['monitor-1', {
+        $id: 'monitor-1',
+        email: 'monitor@example.com',
+        role: 'monitor',
+        branchIds: [],
+        managerId: null,
+        managerIds: [],
+        teamLeadId: null,
+      }],
+      ['lead-1', {
+        $id: 'lead-1',
+        data: '{}',
+        ownerId: 'monitor-1',
+        assignedToId: null,
+        branchId: 'branch-1',
+        isClosed: false,
+        closedAt: null,
+        status: 'Generated',
+      }],
+      ['agent-2', {
+        $id: 'agent-2',
+        email: 'agent2@example.com',
+        role: 'agent',
+        branchIds: ['branch-9'],
+        managerId: null,
+        managerIds: [],
+        teamLeadId: 'tl-9',
+        isActive: true,
+      }],
+    ]);
+
+    mockGetDocument.mockImplementation((_databaseId, _collectionId, documentId: string) => {
+      const doc = documentsById.get(documentId);
+      if (!doc) throw new Error(`Missing document ${documentId}`);
+      return Promise.resolve(doc);
+    });
+    mockUpdateDocument.mockResolvedValueOnce({
+      ...(documentsById.get('lead-1') ?? {}),
+      assignedToId: 'agent-2',
+    });
+
+    const { assignLeadAction } = await import('@/lib/actions/lead-actions');
+
+    await expect(assignLeadAction('lead-1', 'agent-2', 'monitor-1', 'Monitor')).resolves.toMatchObject({
       success: true,
     });
     expect(mockUpdateDocument).toHaveBeenCalledWith(

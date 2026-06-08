@@ -69,7 +69,8 @@ function getString(value: unknown, fallback = 'N/A'): string {
 }
 
 function AuditLogsContent() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isMonitor } = useAuth();
+  const canReadAuditLogs = isAdmin || isMonitor;
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -81,10 +82,10 @@ function AuditLogsContent() {
 
   // Redirect if not admin
   useEffect(() => {
-    if (!loading && user && !isAdmin) {
+    if (!loading && user && !canReadAuditLogs) {
       router.push('/dashboard');
     }
-  }, [user, isAdmin, loading, router]);
+  }, [user, canReadAuditLogs, loading, router]);
 
   const fetchNames = async () => {
     try {
@@ -144,13 +145,13 @@ function AuditLogsContent() {
   };
 
   useEffect(() => {
-    if (isAdmin) {
+    if (canReadAuditLogs) {
       fetchLogs();
       fetchNames();
     } else if (user) {
       setLoading(false); // Stop loading to trigger redirect
     }
-  }, [isAdmin, user]);
+  }, [canReadAuditLogs, user]);
 
   const totalPages = Math.ceil(logs.length / ITEMS_PER_PAGE);
   const paginatedLogs = logs.slice(
@@ -432,7 +433,7 @@ function AuditLogsContent() {
     );
   }
 
-  if (!isAdmin) {
+  if (!canReadAuditLogs) {
     return null; // Will redirect
   }
 

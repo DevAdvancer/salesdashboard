@@ -1,7 +1,7 @@
 import { isRoleEligibleForComponent } from "@/lib/constants/component-access";
 
 describe("component access eligibility", () => {
-  it("allows team leads to use Linkedin Requests but not manage Linkedin accounts", () => {
+  it("allows team leads to use Linkedin Requests and open Linkedin accounts", () => {
     expect(isRoleEligibleForComponent("linkedin-requests", "team_lead")).toBe(
       true,
     );
@@ -10,6 +10,40 @@ describe("component access eligibility", () => {
         "linkedin-account-management",
         "team_lead",
       ),
-    ).toBe(false);
+    ).toBe(true);
+  });
+
+  it("keeps monitor page visibility aligned with admin visibility", () => {
+    const adminVisibleComponents = [
+      "dashboard",
+      "chat",
+      "leads",
+      "history",
+      "user-management",
+      "settings",
+      "branch-management",
+      "audit-logs",
+      "mock",
+      "assessment-support",
+      "interview-support",
+      "hierarchy",
+      "work-queue",
+      "reports",
+      "coaching-notes",
+      "review-queue",
+      "notifications",
+      "attendance",
+      "attendance-report",
+      "lead-requests",
+      "linkedin-account-management",
+      "linkedin-reports",
+    ] as const;
+
+    adminVisibleComponents.forEach((component) => {
+      expect(isRoleEligibleForComponent(component, "monitor")).toBe(true);
+    });
+
+    expect(isRoleEligibleForComponent("field-management", "monitor")).toBe(false);
+    expect(isRoleEligibleForComponent("linkedin-requests", "monitor")).toBe(false);
   });
 });

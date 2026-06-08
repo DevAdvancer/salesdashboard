@@ -67,6 +67,7 @@ function RequiredMark() {
 function LinkedinReportsContent() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const canReadLikeAdmin = user?.role === "admin" || user?.role === "developer" || user?.role === "monitor";
   const [teamLeads, setTeamLeads] = useState<User[]>([]);
   const [teamLeadId, setTeamLeadId] = useState<string>("all");
   const initial = useMemo(() => sevenDayRange(), []);
@@ -142,7 +143,7 @@ function LinkedinReportsContent() {
     if (!user || !teamLeadId) return;
     try {
       let next: User[] = [];
-      if (user.role === "admin" && teamLeadId === "all") {
+      if (canReadLikeAdmin && teamLeadId === "all") {
         next = await listAllUsersForLinkedinAction({ currentUserId: user.$id });
       } else {
         next = await listAgentsForTeamLeadLinkedinAction({
@@ -154,7 +155,7 @@ function LinkedinReportsContent() {
     } catch {
       setAgents([]);
     }
-  }, [teamLeadId, user]);
+  }, [canReadLikeAdmin, teamLeadId, user]);
 
   const loadAccounts = useCallback(async () => {
     if (!user || !teamLeadId) return;
@@ -318,7 +319,7 @@ function LinkedinReportsContent() {
               <Label>
                 Team Lead <RequiredMark />
               </Label>
-              {user.role === "admin" ? (
+              {canReadLikeAdmin ? (
                 <select
                   value={teamLeadId}
                   onChange={(e) => setTeamLeadId(e.target.value)}

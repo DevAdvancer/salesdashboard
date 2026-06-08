@@ -52,7 +52,7 @@ export default function HistoryDetailPage() {
 }
 
 function HistoryDetailContent() {
-  const { user, loading: authLoading, isManager, isTeamLead } = useAuth();
+  const { user, loading: authLoading, isManager, isTeamLead, isMonitor } = useAuth();
   const router = useRouter();
   const params = useParams();
   const { toast } = useToast();
@@ -242,6 +242,7 @@ function HistoryDetailContent() {
 
   const handleCreatePaymentRecord = async () => {
     if (!user) return;
+    if (!canEditClientPayments) return;
 
     const percent = Number(paymentInitPlanValues.paymentPercent);
     const months = Number(paymentInitPlanValues.paymentMonths);
@@ -336,6 +337,7 @@ function HistoryDetailContent() {
   }, [paymentRecord, leadData, assignedTo, owner, clientIntakeInitializedForRecord]);
 
   const canReopen = Boolean(isManager || isTeamLead);
+  const canEditClientPayments = !isMonitor;
 
   const handleReopenLead = async () => {
     if (!lead || !canReopen || !user) return;
@@ -455,7 +457,12 @@ function HistoryDetailContent() {
           : JSON.stringify(valueRaw);
 
     const isLockedField = field.key === "salesperson" || field.key === "agreement" || field.key === "upfront";
-    const isDisabled = clientIntakeSaving || !paymentRecord || (paymentRecord.status !== "fully_paid" && paymentRecord.status !== "partially_paid") || isLockedField;
+    const isDisabled =
+      !canEditClientPayments ||
+      clientIntakeSaving ||
+      !paymentRecord ||
+      (paymentRecord.status !== "fully_paid" && paymentRecord.status !== "partially_paid") ||
+      isLockedField;
 
     if (field.type === "textarea") {
       return (
@@ -504,6 +511,7 @@ function HistoryDetailContent() {
 
   const handleSaveClientIntake = async () => {
     if (!user) return;
+    if (!canEditClientPayments) return;
     if (!paymentRecord) return;
 
     if (paymentRecord.status !== "fully_paid" && paymentRecord.status !== "partially_paid") {
@@ -572,6 +580,7 @@ function HistoryDetailContent() {
 
   const handleAddPaymentUpdate = async () => {
     if (!user) return;
+    if (!canEditClientPayments) return;
     if (!paymentRecord) return;
     const note = paymentNote.trim();
     if (!note) {
@@ -784,50 +793,56 @@ function HistoryDetailContent() {
             ) : !paymentRecord ? (
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  No payment record found for this client. Create one to track payment status.
+                  {canEditClientPayments
+                    ? "No payment record found for this client. Create one to track payment status."
+                    : "No payment record found for this client."}
                 </p>
 
-                {paymentPlanFields.length > 0 && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {paymentPlanFields
-                      .filter((field) => field.visible)
-                      .map((field) => (
-                        <div key={field.id}>
-                          <Label>{field.label}</Label>
-                          {renderPaymentInitField(
-                            field,
-                            paymentInitPlanValues,
-                            handlePaymentInitPlanChange,
-                            paymentInitSaving,
-                          )}
-                        </div>
-                      ))}
-                  </div>
-                )}
+                {canEditClientPayments && (
+                  <>
+                    {paymentPlanFields.length > 0 && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {paymentPlanFields
+                          .filter((field) => field.visible)
+                          .map((field) => (
+                            <div key={field.id}>
+                              <Label>{field.label}</Label>
+                              {renderPaymentInitField(
+                                field,
+                                paymentInitPlanValues,
+                                handlePaymentInitPlanChange,
+                                paymentInitSaving,
+                              )}
+                            </div>
+                          ))}
+                      </div>
+                    )}
 
-                {closureFields.length > 0 && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {closureFields
-                      .filter((field) => field.visible)
-                      .map((field) => (
-                        <div key={field.id} className={field.type === "textarea" ? "md:col-span-2" : undefined}>
-                          <Label>{field.label}</Label>
-                          {renderPaymentInitField(
-                            field,
-                            paymentInitPersonalValues,
-                            handlePaymentInitPersonalChange,
-                            paymentInitSaving,
-                          )}
-                        </div>
-                      ))}
-                  </div>
-                )}
+                    {closureFields.length > 0 && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {closureFields
+                          .filter((field) => field.visible)
+                          .map((field) => (
+                            <div key={field.id} className={field.type === "textarea" ? "md:col-span-2" : undefined}>
+                              <Label>{field.label}</Label>
+                              {renderPaymentInitField(
+                                field,
+                                paymentInitPersonalValues,
+                                handlePaymentInitPersonalChange,
+                                paymentInitSaving,
+                              )}
+                            </div>
+                          ))}
+                      </div>
+                    )}
 
-                <div className="flex justify-end">
-                  <Button onClick={handleCreatePaymentRecord} disabled={paymentInitSaving}>
-                    {paymentInitSaving ? "Creating..." : "Create Payment Record"}
-                  </Button>
-                </div>
+                    <div className="flex justify-end">
+                      <Button onClick={handleCreatePaymentRecord} disabled={paymentInitSaving}>
+                        {paymentInitSaving ? "Creating..." : "Create Payment Record"}
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
             ) : (
               <>
@@ -879,7 +894,7 @@ function HistoryDetailContent() {
                               type="number"
                               value={editUpfrontAmount}
                               onChange={(e) => setEditUpfrontAmount(e.target.value)}
-                              disabled={paymentSaving}
+                              disabled={!canEditClientPayments || paymentSaving}
                             />
                           ) : (
                             <Input
@@ -908,6 +923,7 @@ function HistoryDetailContent() {
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         value={paymentStatus}
                         onChange={(e) => setPaymentStatus(e.target.value as PaymentStatus)}
+                        disabled={!canEditClientPayments || paymentSaving}
                       >
                         <option value="not_paid">Not Paid</option>
                         <option value="partially_paid">Partially Paid</option>
@@ -921,13 +937,14 @@ function HistoryDetailContent() {
                         value={paymentNote}
                         onChange={(e) => setPaymentNote(e.target.value)}
                         placeholder="Add a follow-up update..."
+                        disabled={!canEditClientPayments || paymentSaving}
                       />
                     </div>
                   </div>
                   <div className="flex justify-end">
                     <Button
                       onClick={handleAddPaymentUpdate}
-                      disabled={paymentSaving}
+                      disabled={!canEditClientPayments || paymentSaving}
                     >
                       {paymentSaving ? "Saving..." : "Add Update"}
                     </Button>
@@ -1000,6 +1017,7 @@ function HistoryDetailContent() {
                     onClick={handleSaveClientIntake}
                     disabled={
                       clientIntakeSaving ||
+                      !canEditClientPayments ||
                       paymentLoading ||
                       (paymentRecord.status !== "fully_paid" && paymentRecord.status !== "partially_paid")
                     }

@@ -189,9 +189,15 @@ function LeadDetailContent() {
   }, [leadData]);
 
   const loadAgents = useCallback(async () => {
-    if (!user) return;
+    if (!user || !lead) return;
 
     try {
+      if (lead.ownerId === user.$id) {
+        const fetchedAgents = await listLeadAssignableAgents(lead.$id, user.$id);
+        setAgents(fetchedAgents.filter((candidate) => candidate.role === "agent"));
+        return;
+      }
+
       if (
         user.role === "manager" ||
         user.role === "team_lead" ||
@@ -204,7 +210,7 @@ function LeadDetailContent() {
     } catch (err: unknown) {
       console.error("Error loading agents:", err);
     }
-  }, [user]);
+  }, [lead, user]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -239,7 +245,7 @@ function LeadDetailContent() {
 
   const handleSave = async () => {
     if (!lead || !user) return;
-    if (user.role === "monitor") return;
+    if (user.role === "monitor" && lead.ownerId !== user.$id) return;
 
     try {
       setIsSaving(true);
@@ -336,7 +342,7 @@ function LeadDetailContent() {
 
   const handleCloseLead = async () => {
     if (!lead || !user) return;
-    if (user.role === "monitor") return;
+    if (user.role === "monitor" && lead.ownerId !== user.$id) return;
 
     try {
       setIsSaving(true);
@@ -457,7 +463,7 @@ function LeadDetailContent() {
 
   const handleReopenLead = async () => {
     if (!lead || !user) return;
-    if (user.role === "monitor") return;
+    if (user.role === "monitor" && lead.ownerId !== user.$id) return;
 
     try {
       setIsSaving(true);
@@ -481,7 +487,7 @@ function LeadDetailContent() {
 
   const handleAssignAgent = async (agentId: string) => {
     if (!lead || !user) return;
-    if (user.role === "monitor") return;
+    if (user.role === "monitor" && lead.ownerId !== user.$id) return;
 
     try {
       await assignLead(leadId, agentId, user.$id, user.name);
@@ -506,7 +512,10 @@ function LeadDetailContent() {
 
   const renderField = (field: FormField) => {
     const value = String(leadData[field.key] ?? "");
-    const isReadOnly = !isEditing || lead?.isClosed || user?.role === "monitor";
+    const isReadOnly =
+      !isEditing ||
+      lead?.isClosed ||
+      (user?.role === "monitor" && lead?.ownerId !== user.$id);
 
     switch (field.type) {
       case "textarea":
@@ -728,12 +737,13 @@ function LeadDetailContent() {
 
   const isLeadGeneration = user.role === "lead_generation";
   const isMonitor = user.role === "monitor";
-  const canModifyLead = !isMonitor;
   const isLeadOwner = lead.ownerId === user.$id;
+  const canModifyLead = !isMonitor || isLeadOwner;
   const canAssignLead =
     canModifyLead &&
     Boolean(lead) &&
-    (user.role === "manager" ||
+    (isLeadOwner ||
+      user.role === "manager" ||
       user.role === "team_lead" ||
       user.role === "admin" ||
       user.role === "developer");
@@ -803,7 +813,8 @@ function LeadDetailContent() {
           )}
           {lead.isClosed &&
             canModifyLead &&
-            (user?.role === "manager" ||
+            (isLeadOwner ||
+              user?.role === "manager" ||
               user?.role === "admin" ||
               user?.role === "team_lead") && (
               <>
@@ -953,13 +964,13 @@ function LeadDetailContent() {
             <LeadFollowUpCard
               lead={lead}
               user={user}
-              disabled={lead.isClosed || isMonitor}
+              disabled={lead.isClosed || (isMonitor && !isLeadOwner)}
               onUpdated={loadLead}
             />
           </div>
         )}
 
-        {user && !isMonitor && (
+        {user && (!isMonitor || isLeadOwner) && (
           <div id="tour-lead-notes">
             <LeadNotesCard leadId={lead.$id} user={user} />
           </div>

@@ -23,6 +23,10 @@ function getEtDateKey(now: Date) {
   return dateKey;
 }
 
+function isAttendanceAdminLikeReadRole(role: User["role"]) {
+  return role === "admin" || role === "developer" || role === "monitor";
+}
+
 function getEtHour(now: Date) {
   const hourText = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
@@ -622,7 +626,7 @@ export async function listMyTeamAttendanceAction(input: {
   const effectiveTeamLeadId =
     user.role === "team_lead"
       ? user.$id
-      : user.role === "admin"
+      : isAttendanceAdminLikeReadRole(user.role)
         ? (input.teamLeadId ?? "")
         : "";
   if (!effectiveTeamLeadId) {
@@ -732,7 +736,7 @@ export async function getAttendanceFlagSummaryAction(input: {
   const effectiveTeamLeadId =
     user.role === "team_lead"
       ? user.$id
-      : user.role === "admin"
+      : isAttendanceAdminLikeReadRole(user.role)
         ? (input.teamLeadId ?? "")
         : "";
   if (!effectiveTeamLeadId) {
@@ -955,7 +959,7 @@ export async function listTeamLeadsAttendanceForAdminAction(input: {
 }) {
   await assertAuthenticatedUserId(input.currentUserId);
   const user = await getAuthenticatedUserDoc();
-  if (user.role !== "admin") {
+  if (!isAttendanceAdminLikeReadRole(user.role)) {
     throw new Error("Unauthorized");
   }
 
@@ -1224,7 +1228,7 @@ export async function getAttendanceReportAction(input: {
   await assertAuthenticatedUserId(input.currentUserId);
   const user = await getAuthenticatedUserDoc();
 
-  const isAdminLike = user.role === "admin" || user.role === "developer" || user.role === "monitor";
+  const isAdminLike = isAttendanceAdminLikeReadRole(user.role);
   if (!isAdminLike && user.role !== "team_lead") {
     throw new Error("Unauthorized");
   }

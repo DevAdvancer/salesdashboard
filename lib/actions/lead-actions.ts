@@ -196,6 +196,9 @@ async function assertAssignmentAllowed(actor: User, agent: User, lead: Lead, dat
 
 async function assertLeadAccessAllowed(actor: User, lead: Lead, databases: AdminDatabases) {
     if (actor.role === 'monitor') {
+        if (lead.ownerId === actor.$id) {
+            return;
+        }
         throw new Error('Permission denied');
     }
 
@@ -387,10 +390,6 @@ export async function listLeadAssignableAgentsAction(
         COLLECTIONS.USERS,
         actorId
     ) as unknown as User;
-
-    if (actorDoc.role === 'monitor') {
-        throw new Error('Permission denied');
-    }
 
     const currentLead = await databases.getDocument(
         DATABASE_ID,
@@ -604,15 +603,23 @@ export async function closeLeadAction(
     const { databases } = await createAdminClient();
 
     try {
-        if (actorRole === 'monitor') {
-            throw new Error('Permission denied');
-        }
-
         const currentLead = await databases.getDocument(
             DATABASE_ID,
             COLLECTIONS.LEADS,
             leadId
         ) as unknown as Lead;
+
+        const actorDoc = actorId
+            ? await databases.getDocument(
+                DATABASE_ID,
+                COLLECTIONS.USERS,
+                actorId
+            ) as unknown as User
+            : null;
+
+        if (actorDoc?.role === 'monitor' && currentLead.ownerId !== actorDoc.$id) {
+            throw new Error('Permission denied');
+        }
 
         const shouldAssignClosingAgent =
             actorRole === 'agent' && Boolean(actorId) && !currentLead.assignedToId;

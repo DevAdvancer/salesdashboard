@@ -331,6 +331,7 @@ async function assertLeadReopenAllowed(
   lead: Lead
 ) {
   if (isMonitorRole(actorDoc.role)) {
+    if (lead.ownerId === actorDoc.$id) return;
     throw new Error('Permission denied');
   }
 
@@ -360,6 +361,7 @@ async function assertLeadUpdateAllowed(
   lead: Lead
 ) {
   if (isMonitorRole(actorDoc.role)) {
+    if (lead.ownerId === actorDoc.$id) return;
     throw new Error('Permission denied');
   }
 
@@ -449,6 +451,16 @@ export async function createLeadAction(
 
         assertRequiredLeadData(input.data);
 
+        const finalOwnerId = creatingUserId || ownerId;
+        if (!isValidId(finalOwnerId)) {
+             throw new Error(`Invalid owner ID format: "${finalOwnerId}"`);
+        }
+
+        const creatorDoc = await databases.getDocument(
+            DATABASE_ID,
+            COLLECTIONS.USERS,
+            finalOwnerId
+        ) as unknown as UserDocument;
         // Validate uniqueness
         const validation = await validateLeadUniqueness(input.data);
         if (!validation.isValid) {
@@ -495,29 +507,16 @@ export async function createLeadAction(
             );
         }
 
-        const finalOwnerId = creatingUserId || ownerId;
-        if (!isValidId(finalOwnerId)) {
-             throw new Error(`Invalid owner ID format: "${finalOwnerId}"`);
-        }
-
         const dataJson = JSON.stringify(input.data);
-        const creatorDoc = await databases.getDocument(
-            DATABASE_ID,
-            COLLECTIONS.USERS,
-            finalOwnerId
-        ) as unknown as UserDocument;
-        const creatorIsMonitor = isMonitorRole(creatorDoc.role);
 
         // Permissions
         const permissions: string[] = [
             Permission.read(Role.user(finalOwnerId)),
         ];
-        if (!creatorIsMonitor) {
-            permissions.push(
-                Permission.update(Role.user(finalOwnerId)),
-                Permission.delete(Role.user(finalOwnerId)),
-            );
-        }
+        permissions.push(
+            Permission.update(Role.user(finalOwnerId)),
+            Permission.delete(Role.user(finalOwnerId)),
+        );
 
         // Add hierarchy permissions
         const hierarchyPerms = await getHierarchyPermissions(finalOwnerId);
@@ -527,9 +526,7 @@ export async function createLeadAction(
         if (input.assignedToId) {
              if (isValidId(input.assignedToId)) {
                  permissions.push(Permission.read(Role.user(input.assignedToId)));
-                 if (!creatorIsMonitor || input.assignedToId !== finalOwnerId) {
-                     permissions.push(Permission.update(Role.user(input.assignedToId)));
-                 }
+                 permissions.push(Permission.update(Role.user(input.assignedToId)));
                  // Add assigned agent's managers too
                  const assignedHierarchyPerms = await getHierarchyPermissions(input.assignedToId);
                  permissions.push(...assignedHierarchyPerms);

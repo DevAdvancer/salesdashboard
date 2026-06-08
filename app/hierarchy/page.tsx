@@ -288,7 +288,8 @@ function TreeNode({
 }
 
 function HierarchyContent() {
-  const { user, isAdmin, isManager } = useAuth();
+  const { user, isAdmin, isManager, isMonitor } = useAuth();
+  const canReadAllHierarchy = isAdmin || isMonitor;
   const [users, setUsers] = useState<User[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -301,7 +302,7 @@ function HierarchyContent() {
       const { Query } = await import("appwrite");
       let allUsers: unknown[] = [];
 
-      if (isAdmin) {
+      if (canReadAllHierarchy) {
         const response = await databases.listDocuments(
           process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
           process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
@@ -316,7 +317,7 @@ function HierarchyContent() {
       const branchList = await listBranches();
       setBranches(
         branchList.filter(
-          (branch) => isAdmin || (user.branchIds || []).includes(branch.$id),
+          (branch) => canReadAllHierarchy || (user.branchIds || []).includes(branch.$id),
         ),
       );
 
@@ -351,7 +352,7 @@ function HierarchyContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, isAdmin, isManager]);
+  }, [user, canReadAllHierarchy, isManager]);
 
   useEffect(() => {
     void loadData();
@@ -389,7 +390,7 @@ function HierarchyContent() {
   // Determine root nodes for the tree
   let rootUsers: User[] = [];
 
-  if (isAdmin) {
+  if (canReadAllHierarchy) {
     rootUsers = sortUsersForHierarchy(
       users.filter((u) => u.role !== "admin" && !hasExistingParent(u, users)),
     );
@@ -430,7 +431,7 @@ function HierarchyContent() {
         <CardHeader>
           <CardTitle>Team Structure</CardTitle>
           <CardDescription>
-            {isAdmin ? "All Managers and their teams" : "Your team structure"}
+            {canReadAllHierarchy ? "All Managers and their teams" : "Your team structure"}
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -462,7 +463,7 @@ function HierarchyContent() {
         <CardHeader>
           <CardTitle>Branches</CardTitle>
           <CardDescription>
-            {isAdmin
+            {canReadAllHierarchy
               ? "All active and inactive branches in the hierarchy view"
               : "Branches assigned to you"}
           </CardDescription>

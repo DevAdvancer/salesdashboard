@@ -36,6 +36,7 @@ function RequiredMark() {
 function LinkedinAccountsContent() {
   const { user, isAdmin, isMonitor } = useAuth();
   const { toast } = useToast();
+  const canReadLikeAdmin = isAdmin || isMonitor;
 
   const [teamLeads, setTeamLeads] = useState<User[]>([]);
   const [teamLeadId, setTeamLeadId] = useState<string>("all");
@@ -82,7 +83,7 @@ function LinkedinAccountsContent() {
   }, [accounts, assignedUserId]);
 
   const loadTeamLeads = useCallback(async () => {
-    if (!user || !isAdmin) return;
+    if (!user || !canReadLikeAdmin) return;
     try {
       const next = await listTeamLeadsForLinkedinAction({
         currentUserId: user.$id,
@@ -99,23 +100,23 @@ function LinkedinAccountsContent() {
       });
       setTeamLeads([]);
     }
-  }, [isAdmin, teamLeadId, toast, user]);
+  }, [canReadLikeAdmin, teamLeadId, toast, user]);
 
   const loadAgents = useCallback(async () => {
     if (!user) return;
-    if (isAdmin && !teamLeadId) return;
+    if (canReadLikeAdmin && !teamLeadId) return;
     try {
       let next: User[];
-      if (isAdmin && teamLeadId === "all") {
+      if (canReadLikeAdmin && teamLeadId === "all") {
         next = await listAllUsersForLinkedinAction({ currentUserId: user.$id });
       } else {
         next = await listAgentsForTeamLeadLinkedinAction({
           currentUserId: user.$id,
-          teamLeadId: isAdmin ? teamLeadId : undefined,
+          teamLeadId: canReadLikeAdmin ? teamLeadId : undefined,
         });
       }
       
-      const selectedTeamLead = isAdmin && teamLeadId !== "all"
+      const selectedTeamLead = canReadLikeAdmin && teamLeadId !== "all"
         ? teamLeads.find((tl) => tl.$id === teamLeadId)
         : null;
       const assignableUsers = selectedTeamLead
@@ -137,16 +138,16 @@ function LinkedinAccountsContent() {
       });
       setAgents([]);
     }
-  }, [assignedUserId, isAdmin, teamLeadId, teamLeads, toast, user]);
+  }, [assignedUserId, canReadLikeAdmin, teamLeadId, teamLeads, toast, user]);
 
   const loadAccounts = useCallback(async () => {
     if (!user) return;
-    if (isAdmin && !teamLeadId) return;
+    if (canReadLikeAdmin && !teamLeadId) return;
     try {
       setLoading(true);
       const next = await listLinkedinAccountsForManagementAction({
         currentUserId: user.$id,
-        teamLeadId: isAdmin && teamLeadId !== "all" ? teamLeadId : null,
+        teamLeadId: canReadLikeAdmin && teamLeadId !== "all" ? teamLeadId : null,
       });
       setAccounts(next);
     } catch (error: unknown) {
@@ -159,7 +160,7 @@ function LinkedinAccountsContent() {
     } finally {
       setLoading(false);
     }
-  }, [isAdmin, teamLeadId, toast, user]);
+  }, [canReadLikeAdmin, teamLeadId, toast, user]);
 
   useEffect(() => {
     void loadTeamLeads();
@@ -263,7 +264,7 @@ function LinkedinAccountsContent() {
             <CardTitle>Manage Linkedin IDs</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            {isAdmin && (
+            {canReadLikeAdmin && (
               <div className="space-y-2">
                 <Label>Team Lead</Label>
                 <select

@@ -106,7 +106,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'attendance-report', role: 'monitor', allowed: true },
   { componentKey: 'lead-requests', role: 'monitor', allowed: true },
   { componentKey: 'linkedin-requests', role: 'monitor', allowed: false },
-  { componentKey: 'linkedin-account-management', role: 'monitor', allowed: false },
+  { componentKey: 'linkedin-account-management', role: 'monitor', allowed: true },
   { componentKey: 'linkedin-reports', role: 'monitor', allowed: true },
   // Team Lead rules
   { componentKey: 'dashboard', role: 'team_lead', allowed: true },

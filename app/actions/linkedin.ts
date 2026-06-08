@@ -100,15 +100,19 @@ async function logAuditAction(
 }
 
 function canManageLinkedinAccounts(user: User) {
-  return user.role === "admin" || user.role === "team_lead";
+  return user.role === "admin";
 }
 
 function canSeeLinkedinReports(user: User) {
-  return user.role === "admin" || user.role === "team_lead";
+  return user.role === "admin" || user.role === "developer" || user.role === "monitor" || user.role === "team_lead";
+}
+
+function canReadLinkedinAccountsLikeAdmin(user: User) {
+  return user.role === "admin" || user.role === "developer" || user.role === "monitor";
 }
 
 function assertLinkedinReportTeamScope(user: User, teamLeadId?: string | null) {
-  if (user.role === "admin") return;
+  if (canReadLinkedinAccountsLikeAdmin(user)) return;
   if (user.role === "team_lead" && user.$id === teamLeadId) return;
   throw new Error("Unauthorized");
 }
@@ -886,7 +890,7 @@ export async function listTeamLeadsForLinkedinAction(input: {
 }) {
   await assertAuthenticatedUserId(input.currentUserId);
   const user = await getAuthenticatedUserDoc();
-  if (user.role !== "admin") {
+  if (!canReadLinkedinAccountsLikeAdmin(user)) {
     throw new Error("Unauthorized");
   }
 
@@ -905,7 +909,7 @@ export async function listAllUsersForLinkedinAction(input: {
 }) {
   await assertAuthenticatedUserId(input.currentUserId);
   const user = await getAuthenticatedUserDoc();
-  if (user.role !== "admin") {
+  if (!canReadLinkedinAccountsLikeAdmin(user)) {
     throw new Error("Unauthorized");
   }
 
@@ -932,7 +936,7 @@ export async function listAgentsForTeamLeadLinkedinAction(input: {
     throw new Error("Team Lead is required");
   }
 
-  if (user.role !== "admin" && user.role !== "team_lead") {
+  if (!canReadLinkedinAccountsLikeAdmin(user) && user.role !== "team_lead") {
     throw new Error("Unauthorized");
   }
 

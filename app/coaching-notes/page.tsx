@@ -22,7 +22,7 @@ export default function CoachingNotesPage() {
 }
 
 function CoachingNotesContent() {
-  const { user, isMonitor } = useAuth();
+  const { user } = useAuth();
   const { toast } = useToast();
   const [users, setUsers] = useState<User[]>([]);
   const [notes, setNotes] = useState<CoachingNote[]>([]);
@@ -92,8 +92,7 @@ function CoachingNotesContent() {
         <p className="text-muted-foreground">Leadership-only coaching notes for users in your scope.</p>
       </div>
       {/* Add Coaching Note form — hidden for Monitor (view-only role) */}
-      {!isMonitor && (
-        <Card>
+      <Card>
           <CardHeader>
             <CardTitle>Add Coaching Note</CardTitle>
           </CardHeader>
@@ -127,8 +126,7 @@ function CoachingNotesContent() {
               {saving ? 'Saving...' : 'Save Note'}
             </Button>
           </CardContent>
-        </Card>
-      )}
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle>Recent Coaching Notes</CardTitle>
