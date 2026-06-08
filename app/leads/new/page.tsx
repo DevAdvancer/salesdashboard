@@ -291,7 +291,7 @@ function LeadGenerationNewLeadContent() {
       const leadData = isLinkedinRequestLead
         ? {
             ...baseLeadData,
-            status: "Connection Accepted",
+            status: "Generated",
             linkedinRequestId,
             ...(effectiveLinkedinCompany ? { company: effectiveLinkedinCompany } : {}),
             sourceName: coldCallEnabled ? "Cold Calls" : "LinkedIN/Lead",
@@ -322,7 +322,7 @@ function LeadGenerationNewLeadContent() {
         user.$id,
         {
           data: leadData,
-          status: isLinkedinRequestLead ? "Connection Accepted" : "Generated",
+          status: "Generated",
           branchId,
         },
         user.$id,
