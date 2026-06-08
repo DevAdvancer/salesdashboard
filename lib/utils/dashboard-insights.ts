@@ -49,6 +49,28 @@ export interface StatusBreakdownItem {
   count: number;
 }
 
+export interface LeadGenerationTeamBreakdownItem {
+  leadGenerationId: string;
+  leadGenerationName: string;
+  assignedLeads: number;
+}
+
+export interface TeamLeadAssignmentSummary {
+  teamLeadId: string;
+  teamLeadName: string;
+  assignedLeads: number;
+  assignmentShare: number;
+  leadGenerationBreakdown: LeadGenerationTeamBreakdownItem[];
+}
+
+export interface AssignmentFairnessAlert {
+  teamLeadId: string;
+  teamLeadName: string;
+  assignedLeads: number;
+  averageLeadsPerTeam: number;
+  share: number;
+}
+
 export interface FollowUpQueueItem {
   leadId: string;
   leadName: string;
@@ -98,6 +120,8 @@ export interface LeadershipDashboardInsights {
   branchSummaries: BranchDashboardSummary[];
   assigneeWorkload: AssigneeWorkloadSummary[];
   statusBreakdown: StatusBreakdownItem[];
+  teamLeadAssignmentSummaries: TeamLeadAssignmentSummary[];
+  assignmentFairnessAlert: AssignmentFairnessAlert | null;
   followUpQueue: FollowUpQueue;
   details: LeadershipDashboardDetails;
 }
@@ -286,6 +310,7 @@ export function buildLeadershipDashboardInsights({
   const branchMap = new Map(branches.map((branch) => [branch.$id, createBranchSummary(branch)]));
   const userMap = new Map(users.map((currentUser) => [currentUser.$id, currentUser]));
   const workloadMap = new Map<string, AssigneeWorkloadSummary>();
+  const teamLeadAssignmentMap = new Map<string, TeamLeadAssignmentSummary>();
   const statusCounts = new Map<string, number>();
   const summary: LeadershipDashboardSummary = {
     activeLeads: 0,
@@ -332,7 +357,7 @@ export function buildLeadershipDashboardInsights({
   }
 
   for (const currentLead of leads) {
-    let amount = 0;
+    let amount = getLeadAmount(currentLead);
     const payment = paymentMap.get(currentLead.$id);
     if (payment && payment.paymentPlan && payment.paymentPlan.percent > 0) {
       amount = (payment.paymentPlan.upfrontAmount * 100) / payment.paymentPlan.percent;
@@ -348,6 +373,13 @@ export function buildLeadershipDashboardInsights({
     const branchName = branchSummary?.branchName ?? 'No branch';
     const owner = userMap.get(currentLead.ownerId);
     const assignee = currentLead.assignedToId ? userMap.get(currentLead.assignedToId) : null;
+    const assignedTeamLeadId =
+      assignee?.role === 'team_lead'
+        ? assignee.$id
+        : assignee?.role === 'agent' && assignee.teamLeadId
+          ? assignee.teamLeadId
+          : null;
+    const assignedTeamLead = assignedTeamLeadId ? userMap.get(assignedTeamLeadId) : null;
     const detailRow: DashboardLeadDetailRow = {
       leadId: currentLead.$id,
       leadName: getLeadName(currentLead),
@@ -366,6 +398,32 @@ export function buildLeadershipDashboardInsights({
 
     statusCounts.set(status, (statusCounts.get(status) ?? 0) + 1);
     summary.totalPipelineValue += amount;
+
+    if (!currentLead.isClosed && owner?.role === 'lead_generation' && assignedTeamLead?.role === 'team_lead') {
+      const teamSummary = teamLeadAssignmentMap.get(assignedTeamLead.$id) ?? {
+        teamLeadId: assignedTeamLead.$id,
+        teamLeadName: assignedTeamLead.name,
+        assignedLeads: 0,
+        assignmentShare: 0,
+        leadGenerationBreakdown: [],
+      };
+      teamSummary.assignedLeads += 1;
+
+      const leadGenerationEntry = teamSummary.leadGenerationBreakdown.find(
+        (entry) => entry.leadGenerationId === owner.$id
+      );
+      if (leadGenerationEntry) {
+        leadGenerationEntry.assignedLeads += 1;
+      } else {
+        teamSummary.leadGenerationBreakdown.push({
+          leadGenerationId: owner.$id,
+          leadGenerationName: owner.name,
+          assignedLeads: 1,
+        });
+      }
+
+      teamLeadAssignmentMap.set(assignedTeamLead.$id, teamSummary);
+    }
     
     if (payment && (payment.status === 'partially_paid' || payment.status === 'fully_paid')) {
       summary.totalUpfrontValue += payment.paymentPlan.upfrontAmount;
@@ -471,6 +529,35 @@ export function buildLeadershipDashboardInsights({
   followUpQueue.dueToday.sort((a, b) => a.nextFollowUpAt.localeCompare(b.nextFollowUpAt));
   followUpQueue.upcoming.sort((a, b) => a.nextFollowUpAt.localeCompare(b.nextFollowUpAt));
   details.pipelineValue.sort((a, b) => b.amount - a.amount || a.leadName.localeCompare(b.leadName));
+  const totalTeamAssignedLeads = Array.from(teamLeadAssignmentMap.values()).reduce(
+    (total, team) => total + team.assignedLeads,
+    0,
+  );
+  const teamLeadAssignmentSummaries = Array.from(teamLeadAssignmentMap.values())
+    .map((team) => ({
+      ...team,
+      assignmentShare: totalTeamAssignedLeads > 0
+        ? Math.round((team.assignedLeads / totalTeamAssignedLeads) * 100)
+        : 0,
+      leadGenerationBreakdown: team.leadGenerationBreakdown.sort(
+        (a, b) => b.assignedLeads - a.assignedLeads || a.leadGenerationName.localeCompare(b.leadGenerationName),
+      ),
+    }))
+    .sort((a, b) => b.assignedLeads - a.assignedLeads || a.teamLeadName.localeCompare(b.teamLeadName));
+  const averageLeadsPerTeam = teamLeadAssignmentSummaries.length > 0
+    ? totalTeamAssignedLeads / teamLeadAssignmentSummaries.length
+    : 0;
+  const assignmentFairnessAlert =
+    teamLeadAssignmentSummaries.length > 1 &&
+    teamLeadAssignmentSummaries[0].assignedLeads > averageLeadsPerTeam * 1.25
+      ? {
+        teamLeadId: teamLeadAssignmentSummaries[0].teamLeadId,
+        teamLeadName: teamLeadAssignmentSummaries[0].teamLeadName,
+        assignedLeads: teamLeadAssignmentSummaries[0].assignedLeads,
+        averageLeadsPerTeam,
+        share: teamLeadAssignmentSummaries[0].assignmentShare,
+      }
+      : null;
 
   return {
     summary,
@@ -495,6 +582,8 @@ export function buildLeadershipDashboardInsights({
     statusBreakdown: Array.from(statusCounts.entries())
       .map(([status, count]) => ({ status, count }))
       .sort((a, b) => a.status.localeCompare(b.status)),
+    teamLeadAssignmentSummaries,
+    assignmentFairnessAlert,
     followUpQueue,
     details,
   };

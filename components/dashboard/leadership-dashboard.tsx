@@ -244,6 +244,8 @@ export function LeadershipDashboard({
   const branchSummaries = insights?.branchSummaries ?? [];
   const assigneeWorkload = insights?.assigneeWorkload ?? [];
   const statusBreakdown = insights?.statusBreakdown ?? [];
+  const teamLeadAssignmentSummaries = insights?.teamLeadAssignmentSummaries ?? [];
+  const assignmentFairnessAlert = insights?.assignmentFairnessAlert ?? null;
   const roleName = formatRoleName(role);
   const scopeLabel = role === 'admin' || role === 'developer'
     ? 'all CRM activity'
@@ -400,6 +402,66 @@ export function LeadershipDashboard({
           </CardContent>
         </Card>
       </div>
+
+      {(role === 'admin' || role === 'developer' || role === 'monitor') && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardList className="h-4 w-4" />
+              Lead Gen Team Handoffs
+            </CardTitle>
+            <CardDescription>Active leads assigned from Lead Generation to each team.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {isLoading ? (
+              <TableSkeleton />
+            ) : teamLeadAssignmentSummaries.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No Lead Generation handoffs recorded yet.</div>
+            ) : (
+              <>
+                {assignmentFairnessAlert && (
+                  <div className="border border-yellow-500/40 bg-yellow-500/10 p-3 text-sm">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 text-yellow-700" />
+                      <p>
+                        {assignmentFairnessAlert.teamLeadName} has {assignmentFairnessAlert.share}% of current Lead Gen
+                        handoffs ({assignmentFairnessAlert.assignedLeads} leads), above the average of{' '}
+                        {assignmentFairnessAlert.averageLeadsPerTeam.toFixed(1)} per team.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[640px]">
+                    <thead className="border-b">
+                      <tr className="text-left">
+                        <th className="p-3 text-sm font-semibold">Team Lead</th>
+                        <th className="p-3 text-sm font-semibold">Assigned Leads</th>
+                        <th className="p-3 text-sm font-semibold">Share</th>
+                        <th className="p-3 text-sm font-semibold">Lead Gen Users</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {teamLeadAssignmentSummaries.map((team) => (
+                        <tr key={team.teamLeadId} className="border-b last:border-0">
+                          <td className="p-3 text-sm font-medium">{team.teamLeadName}</td>
+                          <td className="p-3 text-sm">{team.assignedLeads}</td>
+                          <td className="p-3 text-sm">{team.assignmentShare}%</td>
+                          <td className="p-3 text-sm text-muted-foreground">
+                            {team.leadGenerationBreakdown
+                              .map((item) => `${item.leadGenerationName}: ${item.assignedLeads}`)
+                              .join(', ')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>

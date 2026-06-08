@@ -164,6 +164,19 @@ async function assertAssignmentAllowed(actor: User, agent: User, lead: Lead, dat
 
     const actorOwnsLead = lead.ownerId === actor.$id;
 
+    if (actor.role === 'lead_generation') {
+        if (!actorOwnsLead) {
+            throw new Error('Permission denied');
+        }
+        if (agent.role !== 'team_lead') {
+            throw new Error('Lead generation can only assign leads to team leads.');
+        }
+        if (agent.isActive === false) {
+            throw new Error('Inactive team leads cannot be assigned leads.');
+        }
+        return;
+    }
+
     if (agent.role !== 'agent') {
         throw new Error('Leads can only be assigned to agents.');
     }
@@ -283,12 +296,8 @@ export async function assignLeadAction(
             leadId
         ) as unknown as Lead;
 
-        if (actorDoc.role === 'lead_generation') {
-            throw new Error('Permission denied');
-        }
-
         if (
-            !['admin', 'developer', 'manager', 'assistant_manager', 'team_lead'].includes(actorDoc.role) &&
+            !['admin', 'developer', 'manager', 'assistant_manager', 'team_lead', 'lead_generation'].includes(actorDoc.role) &&
             currentLead.ownerId !== actorDoc.$id
         ) {
             throw new Error('Permission denied');
@@ -402,18 +411,22 @@ export async function listLeadAssignableAgentsAction(
     ) as unknown as Lead;
 
     const canListForLead =
-        (currentLead.ownerId === actorDoc.$id && actorDoc.role !== 'lead_generation') ||
+        currentLead.ownerId === actorDoc.$id ||
         ['admin', 'developer', 'manager', 'assistant_manager', 'team_lead'].includes(actorDoc.role);
 
     if (!canListForLead) {
         throw new Error('Permission denied');
     }
 
+    const roleQuery = actorDoc.role === 'lead_generation'
+        ? Query.equal('role', 'team_lead')
+        : Query.equal('role', 'agent');
+
     const response = await databases.listDocuments(
         DATABASE_ID,
         COLLECTIONS.USERS,
         [
-            Query.equal('role', 'agent'),
+            roleQuery,
             Query.limit(5000),
         ]
     );

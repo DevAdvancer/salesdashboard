@@ -474,7 +474,60 @@ describe('lead server action authorization', () => {
     );
   });
 
-  it('rejects lead generation owners assigning their own leads', async () => {
+  it('allows lead generation owners to assign their own leads to an active team lead', async () => {
+    const documentsById = new Map<string, Record<string, unknown>>([
+      ['leadgen-1', {
+        $id: 'leadgen-1',
+        email: 'leadgen@example.com',
+        role: 'lead_generation',
+        branchIds: ['branch-1'],
+        managerId: null,
+        managerIds: [],
+        teamLeadId: 'tl-1',
+      }],
+      ['lead-1', {
+        $id: 'lead-1',
+        data: '{}',
+        ownerId: 'leadgen-1',
+        assignedToId: null,
+        branchId: 'branch-1',
+        isClosed: false,
+        closedAt: null,
+        status: 'Generated',
+      }],
+      ['tl-1', {
+        $id: 'tl-1',
+        email: 'tl@example.com',
+        role: 'team_lead',
+        branchIds: ['branch-1'],
+        managerId: null,
+        managerIds: [],
+        teamLeadId: null,
+        isActive: true,
+      }],
+    ]);
+
+    mockGetDocument.mockImplementation((_databaseId, _collectionId, documentId: string) => {
+      const doc = documentsById.get(documentId);
+      if (!doc) throw new Error(`Missing document ${documentId}`);
+      return Promise.resolve(doc);
+    });
+
+    const { assignLeadAction } = await import('@/lib/actions/lead-actions');
+
+    await expect(assignLeadAction('lead-1', 'tl-1', 'leadgen-1', 'Lead Gen')).resolves.toMatchObject({
+      success: true,
+    });
+    expect(mockUpdateDocument).toHaveBeenCalledWith(
+      'database',
+      'leads',
+      'lead-1',
+      { assignedToId: 'tl-1' },
+      expect.arrayContaining(['read:user:tl-1', 'update:user:tl-1'])
+    );
+  });
+
+  it('rejects lead generation owners assigning their own leads directly to agents', async () => {
     const documentsById = new Map<string, Record<string, unknown>>([
       ['leadgen-1', {
         $id: 'leadgen-1',
@@ -515,7 +568,9 @@ describe('lead server action authorization', () => {
 
     const { assignLeadAction } = await import('@/lib/actions/lead-actions');
 
-    await expect(assignLeadAction('lead-1', 'agent-2', 'leadgen-1', 'Lead Gen')).rejects.toThrow('Permission denied');
+    await expect(assignLeadAction('lead-1', 'agent-2', 'leadgen-1', 'Lead Gen')).rejects.toThrow(
+      'Lead generation can only assign leads to team leads.'
+    );
     expect(mockUpdateDocument).not.toHaveBeenCalled();
   });
 

@@ -38,6 +38,12 @@ type AssignedAgent = User & {
   branchNames: string;
 };
 
+type LeadGenerationTeamAssignmentStat = {
+  teamLeadId: string;
+  teamLeadName: string;
+  assignedLeads: number;
+};
+
 
 
 function LegacyDashboardContent() {
@@ -811,9 +817,15 @@ function LegacyDashboardContent() {
 function LeadGenerationDashboardContent() {
   const { user } = useAuth();
   const router = useRouter();
-  const [stats, setStats] = useState<{ total: number; unassigned: number; loading: boolean }>({
+  const [stats, setStats] = useState<{
+    total: number;
+    unassigned: number;
+    teamAssignments: LeadGenerationTeamAssignmentStat[];
+    loading: boolean;
+  }>({
     total: 0,
     unassigned: 0,
+    teamAssignments: [],
     loading: true,
   });
 
@@ -826,8 +838,55 @@ function LeadGenerationDashboardContent() {
       try {
         const leads = await listLeads({ isClosed: false }, user.$id, user.role, user.branchIds);
         const unassigned = leads.filter((lead) => !lead.assignedToId).length;
+        const { getUserByIdOrNull } = await import("@/lib/services/user-service");
+        const usersById = new Map<string, User>([[user.$id, user]]);
+        const userIdsToResolve = new Set(
+          leads
+            .map((lead) => lead.assignedToId)
+            .filter((assignedToId): assignedToId is string => Boolean(assignedToId)),
+        );
+
+        for (const userId of Array.from(userIdsToResolve)) {
+          const resolvedUser = await getUserByIdOrNull(userId);
+          if (!resolvedUser) continue;
+
+          usersById.set(resolvedUser.$id, resolvedUser);
+          if (resolvedUser.role === "agent" && resolvedUser.teamLeadId && !usersById.has(resolvedUser.teamLeadId)) {
+            const teamLead = await getUserByIdOrNull(resolvedUser.teamLeadId);
+            if (teamLead) {
+              usersById.set(teamLead.$id, teamLead);
+            }
+          }
+        }
+
+        const teamMap = new Map<string, LeadGenerationTeamAssignmentStat>();
+        for (const lead of leads) {
+          if (!lead.assignedToId) continue;
+          const assignee = usersById.get(lead.assignedToId);
+          const teamLeadId =
+            assignee?.role === "team_lead"
+              ? assignee.$id
+              : assignee?.role === "agent"
+                ? assignee.teamLeadId
+                : null;
+          if (!teamLeadId) continue;
+
+          const teamLead = usersById.get(teamLeadId);
+          const teamStat = teamMap.get(teamLeadId) ?? {
+            teamLeadId,
+            teamLeadName: teamLead?.name ?? "Unknown Team Lead",
+            assignedLeads: 0,
+          };
+          teamStat.assignedLeads += 1;
+          teamMap.set(teamLeadId, teamStat);
+        }
+
+        const teamAssignments = Array.from(teamMap.values()).sort(
+          (a, b) => b.assignedLeads - a.assignedLeads || a.teamLeadName.localeCompare(b.teamLeadName),
+        );
+
         if (!cancelled) {
-          setStats({ total: leads.length, unassigned, loading: false });
+          setStats({ total: leads.length, unassigned, teamAssignments, loading: false });
         }
       } catch {
         if (!cancelled) {
@@ -878,11 +937,44 @@ function LeadGenerationDashboardContent() {
         <Card>
           <CardHeader>
             <CardTitle>Awaiting Assignment</CardTitle>
-            <CardDescription>Leads not yet assigned to an agent.</CardDescription>
+            <CardDescription>Leads not yet assigned to a team.</CardDescription>
           </CardHeader>
           <CardContent className="text-3xl font-semibold">{stats.loading ? '—' : stats.unassigned}</CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Team Assignment Counts</CardTitle>
+          <CardDescription>Active leads you have assigned to each team.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {stats.loading ? (
+            <Skeleton className="h-24 w-full" />
+          ) : stats.teamAssignments.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No leads assigned to a team yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="border-b">
+                  <tr className="text-left">
+                    <th className="p-3 text-sm font-semibold">Team Lead</th>
+                    <th className="p-3 text-sm font-semibold">Assigned Leads</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.teamAssignments.map((team) => (
+                    <tr key={team.teamLeadId} className="border-b last:border-0">
+                      <td className="p-3 text-sm font-medium">{team.teamLeadName}</td>
+                      <td className="p-3 text-sm">{team.assignedLeads}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

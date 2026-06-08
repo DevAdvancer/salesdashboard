@@ -297,4 +297,54 @@ describe('buildLeadershipDashboardInsights', () => {
       isClosed: true,
     });
   });
+
+  it('summarizes lead generation handoffs by team and flags uneven sharing', () => {
+    const users = [
+      user({ $id: 'lg-1', name: 'Lane LG', role: 'lead_generation', branchIds: ['branch-1'] }),
+      user({ $id: 'lg-2', name: 'Lina LG', role: 'lead_generation', branchIds: ['branch-1'] }),
+      user({ $id: 'tl-1', name: 'Tara TL', role: 'team_lead', branchIds: ['branch-1'] }),
+      user({ $id: 'tl-2', name: 'Theo TL', role: 'team_lead', branchIds: ['branch-1'] }),
+      user({ $id: 'agent-1', name: 'Alex Agent', role: 'agent', teamLeadId: 'tl-1', branchIds: ['branch-1'] }),
+    ];
+
+    const leads = [
+      lead({ $id: 'lead-1', ownerId: 'lg-1', assignedToId: 'tl-1', branchId: 'branch-1' }),
+      lead({ $id: 'lead-2', ownerId: 'lg-1', assignedToId: 'tl-1', branchId: 'branch-1' }),
+      lead({ $id: 'lead-3', ownerId: 'lg-2', assignedToId: 'agent-1', branchId: 'branch-1' }),
+      lead({ $id: 'lead-4', ownerId: 'lg-2', assignedToId: 'tl-2', branchId: 'branch-1' }),
+    ];
+
+    const insights = buildLeadershipDashboardInsights({
+      leads,
+      users,
+      branches,
+      now,
+    });
+
+    expect(insights.teamLeadAssignmentSummaries).toEqual([
+      expect.objectContaining({
+        teamLeadId: 'tl-1',
+        teamLeadName: 'Tara TL',
+        assignedLeads: 3,
+        assignmentShare: 75,
+        leadGenerationBreakdown: [
+          { leadGenerationId: 'lg-1', leadGenerationName: 'Lane LG', assignedLeads: 2 },
+          { leadGenerationId: 'lg-2', leadGenerationName: 'Lina LG', assignedLeads: 1 },
+        ],
+      }),
+      expect.objectContaining({
+        teamLeadId: 'tl-2',
+        teamLeadName: 'Theo TL',
+        assignedLeads: 1,
+        assignmentShare: 25,
+      }),
+    ]);
+    expect(insights.assignmentFairnessAlert).toMatchObject({
+      teamLeadId: 'tl-1',
+      teamLeadName: 'Tara TL',
+      assignedLeads: 3,
+      averageLeadsPerTeam: 2,
+      share: 75,
+    });
+  });
 });

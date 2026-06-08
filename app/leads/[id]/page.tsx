@@ -193,7 +193,13 @@ function LeadDetailContent() {
     try {
       if (lead.ownerId === user.$id) {
         const fetchedAgents = await listLeadAssignableAgents(lead.$id, user.$id);
-        setAgents(fetchedAgents.filter((candidate) => candidate.role === "agent"));
+        setAgents(
+          fetchedAgents.filter((candidate) =>
+            user.role === "lead_generation"
+              ? candidate.role === "team_lead"
+              : candidate.role === "agent",
+          ),
+        );
         return;
       }
 
@@ -739,7 +745,6 @@ function LeadDetailContent() {
   const isLeadOwner = lead.ownerId === user.$id;
   const canModifyLead = !isMonitor || isLeadOwner;
   const canAssignLead =
-    !isLeadGeneration &&
     canModifyLead &&
     Boolean(lead) &&
     (isLeadOwner ||
@@ -931,7 +936,9 @@ function LeadDetailContent() {
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="assignedTo">Assigned To</Label>
+                  <Label htmlFor="assignedTo">
+                    {isLeadGeneration ? "Assigned Team Lead" : "Assigned To"}
+                  </Label>
                   <select
                     id="assignedTo"
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
