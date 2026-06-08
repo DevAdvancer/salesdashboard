@@ -6,6 +6,7 @@ import { assertAuthenticatedUserId } from '@/lib/server/current-user';
 import { CreateManagerInput, CreateTeamLeadInput, CreateAgentInput, UserRole, CreateAssistantManagerInput } from '@/lib/types';
 import { COLLECTIONS } from '@/lib/constants/appwrite';
 import { normalizeEmail } from '@/lib/utils/user-hierarchy';
+import { getErrorMessage } from '@/lib/utils';
 
 // Constants
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
@@ -17,10 +18,6 @@ type CreateAdminInput = {
     email: string;
     password: string;
 };
-
-function getErrorMessage(error: unknown): string {
-    return error instanceof Error ? error.message : String(error);
-}
 
 function getErrorCode(error: unknown): number | undefined {
     return typeof error === 'object' && error !== null && 'code' in error

@@ -9,6 +9,7 @@ import {
   isAllowedLeadStatusTransition,
   normalizeLeadStatus,
 } from '@/lib/utils/lead-status-workflow';
+import { getErrorMessage } from '@/lib/utils';
 
 // Helper to validate Appwrite ID format
 function isValidId(id: string | null | undefined): boolean {
@@ -40,10 +41,6 @@ function buildAuditChanges(previousData: LeadData, nextData: LeadData, changedDa
     });
 
     return changes;
-}
-
-function getErrorMessage(error: unknown, fallback: string): string {
-    return error instanceof Error ? error.message : fallback;
 }
 
 function normalizeStatusText(value: unknown) {

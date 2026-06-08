@@ -32,6 +32,7 @@ import {
 import { createLead } from "@/lib/services/lead-action-service";
 import type { LinkedinAccount, LinkedinRequest } from "@/lib/types";
 import { validateLeadUniqueness } from "@/lib/services/lead-validator";
+import { getErrorMessage } from "@/lib/utils";
 
 const LINKEDIN_ACCEPT_WINDOW_DAYS = 15;
 
@@ -43,9 +44,7 @@ function todayDateInputValue() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Please try again";
-}
+
 
 function safeParseJson(value: unknown) {
   if (typeof value !== "string" || !value) return null;

@@ -100,7 +100,7 @@ async function logAuditAction(
 }
 
 function canManageLinkedinAccounts(user: User) {
-  return user.role === "admin";
+  return user.role === "admin" || user.role === "developer" || user.role === "team_lead";
 }
 
 function canSeeLinkedinReports(user: User) {

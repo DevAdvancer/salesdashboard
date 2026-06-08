@@ -50,6 +50,7 @@ import {
   normalizeLeadStatus,
   canonicalizeLeadStatus,
 } from "@/lib/utils/lead-status-workflow";
+import { getErrorMessage } from "@/lib/utils";
 
 function isBackoutStatus(value: unknown) {
   const text = typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -85,9 +86,7 @@ export default function LeadDetailPage() {
   );
 }
 
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
-}
+
 
 function LeadDetailContent() {
   const { user, loading: authLoading } = useAuth();

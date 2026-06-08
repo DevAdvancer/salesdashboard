@@ -24,10 +24,9 @@ import {
   listAllUsersForLinkedinAction,
 } from "@/app/actions/linkedin";
 import type { LinkedinAccount, LinkedinAccountType, User } from "@/lib/types";
+import { getErrorMessage } from "@/lib/utils";
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Please try again";
-}
+
 
 function RequiredMark() {
   return <span className="text-red-500">*</span>;

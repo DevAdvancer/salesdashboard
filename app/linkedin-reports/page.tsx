@@ -25,6 +25,7 @@ import {
   listAllUsersForLinkedinAction,
 } from "@/app/actions/linkedin";
 import type { LinkedinAccount, LinkedinRequest, User } from "@/lib/types";
+import { getErrorMessage } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 
 function dateInputValueFromDate(date: Date) {
@@ -56,9 +57,7 @@ type ReportRow = {
   withdrawn: number;
 };
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Please try again";
-}
+
 
 function RequiredMark() {
   return <span className="text-red-500">*</span>;
