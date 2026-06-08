@@ -283,6 +283,10 @@ export async function assignLeadAction(
             leadId
         ) as unknown as Lead;
 
+        if (actorDoc.role === 'lead_generation') {
+            throw new Error('Permission denied');
+        }
+
         if (
             !['admin', 'developer', 'manager', 'assistant_manager', 'team_lead'].includes(actorDoc.role) &&
             currentLead.ownerId !== actorDoc.$id
@@ -398,7 +402,7 @@ export async function listLeadAssignableAgentsAction(
     ) as unknown as Lead;
 
     const canListForLead =
-        currentLead.ownerId === actorDoc.$id ||
+        (currentLead.ownerId === actorDoc.$id && actorDoc.role !== 'lead_generation') ||
         ['admin', 'developer', 'manager', 'assistant_manager', 'team_lead'].includes(actorDoc.role);
 
     if (!canListForLead) {

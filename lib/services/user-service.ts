@@ -483,10 +483,10 @@ export async function getAssignableUsers(
 
   try {
     const allowedRoles: UserRole[] =
-      (creatorRole === 'admin' || creatorRole === 'developer') ? ['admin', 'developer', 'manager', 'assistant_manager', 'team_lead', 'agent', 'lead_generation'] :
+      (creatorRole === 'admin' || creatorRole === 'developer') ? ['admin', 'developer', 'manager', 'assistant_manager', 'team_lead', 'agent'] :
       creatorRole === 'manager' ? ['assistant_manager', 'team_lead', 'agent'] :
-      creatorRole === 'assistant_manager' ? ['team_lead', 'agent', 'lead_generation'] :
-      creatorRole === 'team_lead' ? ['agent', 'lead_generation'] :
+      creatorRole === 'assistant_manager' ? ['team_lead', 'agent'] :
+      creatorRole === 'team_lead' ? ['agent'] :
       [];
 
     if (!allowedRoles.length) return [];

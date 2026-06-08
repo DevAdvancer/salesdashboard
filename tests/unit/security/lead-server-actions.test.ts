@@ -474,6 +474,51 @@ describe('lead server action authorization', () => {
     );
   });
 
+  it('rejects lead generation owners assigning their own leads', async () => {
+    const documentsById = new Map<string, Record<string, unknown>>([
+      ['leadgen-1', {
+        $id: 'leadgen-1',
+        email: 'leadgen@example.com',
+        role: 'lead_generation',
+        branchIds: ['branch-1'],
+        managerId: null,
+        managerIds: [],
+        teamLeadId: 'tl-1',
+      }],
+      ['lead-1', {
+        $id: 'lead-1',
+        data: '{}',
+        ownerId: 'leadgen-1',
+        assignedToId: null,
+        branchId: 'branch-1',
+        isClosed: false,
+        closedAt: null,
+        status: 'Generated',
+      }],
+      ['agent-2', {
+        $id: 'agent-2',
+        email: 'agent2@example.com',
+        role: 'agent',
+        branchIds: ['branch-1'],
+        managerId: null,
+        managerIds: [],
+        teamLeadId: 'tl-1',
+        isActive: true,
+      }],
+    ]);
+
+    mockGetDocument.mockImplementation((_databaseId, _collectionId, documentId: string) => {
+      const doc = documentsById.get(documentId);
+      if (!doc) throw new Error(`Missing document ${documentId}`);
+      return Promise.resolve(doc);
+    });
+
+    const { assignLeadAction } = await import('@/lib/actions/lead-actions');
+
+    await expect(assignLeadAction('lead-1', 'agent-2', 'leadgen-1', 'Lead Gen')).rejects.toThrow('Permission denied');
+    expect(mockUpdateDocument).not.toHaveBeenCalled();
+  });
+
   it('allows a monitor owner to assign their own lead to any active agent', async () => {
     const documentsById = new Map<string, Record<string, unknown>>([
       ['monitor-1', {

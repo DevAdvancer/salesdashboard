@@ -739,6 +739,7 @@ function LeadDetailContent() {
   const isLeadOwner = lead.ownerId === user.$id;
   const canModifyLead = !isMonitor || isLeadOwner;
   const canAssignLead =
+    !isLeadGeneration &&
     canModifyLead &&
     Boolean(lead) &&
     (isLeadOwner ||
