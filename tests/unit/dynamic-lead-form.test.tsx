@@ -532,6 +532,69 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
       expect(screen.getByText('Qualified')).toBeInTheDocument();
     });
 
+    it('shows reserved LinkedIn source options only to monitors', () => {
+      const sourceFieldConfig: FormField[] = [
+        {
+          id: 'source',
+          type: 'dropdown',
+          label: 'Source',
+          key: 'source',
+          required: false,
+          visible: true,
+          order: 1,
+          options: ['Website', 'Referral', 'LinkedIN/Lead', 'Cold Calls'],
+        },
+      ];
+
+      mockUseAuth.mockReturnValue({
+        user: { $id: 'monitor-1', name: 'Monitor', email: 'monitor@test.com', role: 'monitor', managerId: null, branchIds: [] },
+        isManager: false,
+        isAgent: false,
+        isMonitor: true,
+        loading: false,
+        login: jest.fn(),
+        logout: jest.fn(),
+        signup: jest.fn(),
+      });
+
+      render(<DynamicLeadForm formConfig={sourceFieldConfig} onSubmit={mockOnSubmit} />);
+
+      expect(screen.getByText('LinkedIN/Lead')).toBeInTheDocument();
+      expect(screen.getByText('Cold Calls')).toBeInTheDocument();
+    });
+
+    it('hides reserved LinkedIn source options from non-monitor users', () => {
+      const sourceFieldConfig: FormField[] = [
+        {
+          id: 'source',
+          type: 'dropdown',
+          label: 'Source',
+          key: 'source',
+          required: false,
+          visible: true,
+          order: 1,
+          options: ['Website', 'Referral', 'LinkedIN/Lead', 'Cold Calls'],
+        },
+      ];
+
+      mockUseAuth.mockReturnValue({
+        user: { $id: 'manager-1', name: 'Manager', email: 'manager@test.com', role: 'manager', managerId: null, branchIds: [] },
+        isManager: true,
+        isAgent: false,
+        isMonitor: false,
+        loading: false,
+        login: jest.fn(),
+        logout: jest.fn(),
+        signup: jest.fn(),
+      });
+
+      render(<DynamicLeadForm formConfig={sourceFieldConfig} onSubmit={mockOnSubmit} />);
+
+      expect(screen.queryByText('LinkedIN/Lead')).not.toBeInTheDocument();
+      expect(screen.queryByText('Cold Calls')).not.toBeInTheDocument();
+      expect(screen.getByText('Website')).toBeInTheDocument();
+    });
+
     it('should render checkboxes for checklist field type', () => {
       mockUseAuth.mockReturnValue({
         user: { $id: '1', name: 'Manager', email: 'manager@test.com', role: 'manager', managerId: null },

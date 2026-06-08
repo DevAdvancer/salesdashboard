@@ -25,6 +25,7 @@ interface DynamicLeadFormProps {
 function filterReservedLeadSources(
   options: string[] | undefined,
   fieldKey: string,
+  includeReservedSources: boolean,
 ) {
   if (!options) return options;
   if (fieldKey !== "source" && fieldKey !== "sourceName") return options;
@@ -35,10 +36,17 @@ function filterReservedLeadSources(
     "cold call",
     "cold calls",
   ]);
-  return options.filter((option) => {
+
+  const filteredOptions = options.filter((option) => {
     const normalized = option.trim().toLowerCase();
     return normalized && !reserved.has(normalized);
   });
+
+  if (!includeReservedSources) {
+    return filteredOptions;
+  }
+
+  return [...filteredOptions, "LinkedIN/Lead", "Cold Calls"];
 }
 
 /**
@@ -217,6 +225,7 @@ export function DynamicLeadForm({
         const dropdownOptions = filterReservedLeadSources(
           field.options,
           field.key,
+          isMonitor,
         );
         return (
           <div key={field.id} className="space-y-2">
@@ -247,6 +256,7 @@ export function DynamicLeadForm({
         const checklistOptions = filterReservedLeadSources(
           field.options,
           field.key,
+          isMonitor,
         );
         return (
           <div key={field.id} className="space-y-2">

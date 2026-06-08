@@ -24,7 +24,7 @@ import {
   getBackoutStatusForLeadIdsAction,
   getLinkedinConnectionHistoryAction,
   listMyLinkedinAccountsAction,
-  listMyLinkedinRequestsForAccountAction,
+  listMyLinkedinRequestsAction,
   markLinkedinRequestAcceptedAction,
   withdrawLinkedinRequestAction,
   linkLeadToLinkedinRequestAction,
@@ -33,6 +33,7 @@ import { createLead } from "@/lib/services/lead-action-service";
 import type { LinkedinAccount, LinkedinRequest } from "@/lib/types";
 import { validateLeadUniqueness } from "@/lib/services/lead-validator";
 import { getErrorMessage } from "@/lib/utils";
+import { getLinkedinRequestDateFilterValue } from "@/lib/utils/linkedin-request-dates";
 
 const LINKEDIN_ACCEPT_WINDOW_DAYS = 15;
 
@@ -135,9 +136,14 @@ function LinkedinRequestsContent() {
   const usedToday = useMemo(() => {
     return requests.filter((r) => {
       const isActive = r.isActive !== false;
-      return isActive && r.status !== "withdrawn" && r.dateSent === todayIso;
+      return (
+        isActive &&
+        r.status !== "withdrawn" &&
+        r.accountId === selectedAccountId &&
+        r.dateSent === todayIso
+      );
     }).length;
-  }, [requests, todayIso]);
+  }, [requests, selectedAccountId, todayIso]);
   const remainingToday =
     dailyLimit === null ? null : Math.max(dailyLimit - usedToday, 0);
 
@@ -162,13 +168,12 @@ function LinkedinRequestsContent() {
   }, [selectedAccountId, toast, user]);
 
   const loadRequests = useCallback(async () => {
-    if (!user || !selectedAccountId) return;
+    if (!user) return;
     try {
       setLoadingList(true);
-      const next = await listMyLinkedinRequestsForAccountAction({
+      const next = await listMyLinkedinRequestsAction({
         currentUserId: user.$id,
-        accountId: selectedAccountId,
-        limit: 100,
+        limit: 500,
       });
       setRequests(next);
       const leadIds = Array.from(
@@ -199,7 +204,7 @@ function LinkedinRequestsContent() {
     } finally {
       setLoadingList(false);
     }
-  }, [selectedAccountId, user]);
+  }, [user]);
 
   useEffect(() => {
     void loadAccounts();
@@ -465,10 +470,7 @@ function LinkedinRequestsContent() {
         return false;
       }
       if (filterDate) {
-        const sent = new Date(r.dateSent);
-        const sentValue = Number.isNaN(sent.getTime())
-          ? ""
-          : `${sent.getFullYear()}-${String(sent.getMonth() + 1).padStart(2, "0")}-${String(sent.getDate()).padStart(2, "0")}`;
+        const sentValue = getLinkedinRequestDateFilterValue(r.dateSent);
         if (sentValue !== filterDate) return false;
       }
       if (normalizedUrl) {
@@ -614,7 +616,7 @@ function LinkedinRequestsContent() {
             <Button
               variant="outline"
               onClick={() => void loadRequests()}
-              disabled={loadingList || !selectedAccountId}>
+              disabled={loadingList || !user}>
               {loadingList ? "Refreshing..." : "Refresh"}
             </Button>
           </div>

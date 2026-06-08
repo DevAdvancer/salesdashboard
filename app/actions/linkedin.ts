@@ -755,6 +755,32 @@ export async function listMyLinkedinRequestsForAccountAction(input: {
   return response.documents as unknown as LinkedinRequest[];
 }
 
+export async function listMyLinkedinRequestsAction(input: {
+  currentUserId: string;
+  limit?: number;
+}) {
+  await assertAuthenticatedUserId(input.currentUserId);
+  const user = await getAuthenticatedUserDoc();
+  const { databases } = await createAdminClient();
+
+  const delegatedUserIds = await listDelegatedSourceUserIdsForToday(databases, user.$id);
+  const agentIds =
+    delegatedUserIds.length > 0 ? [user.$id, ...delegatedUserIds] : [user.$id];
+
+  const response = await databases.listDocuments(
+    DATABASE_ID,
+    COLLECTIONS.LINKEDIN_REQUESTS,
+    [
+      Query.equal("agentId", agentIds),
+      Query.orderDesc("dateSent"),
+      Query.orderDesc("$createdAt"),
+      Query.limit(Math.min(Math.max(input.limit ?? 200, 1), 500)),
+    ],
+  );
+
+  return response.documents as unknown as LinkedinRequest[];
+}
+
 export async function markLinkedinRequestAcceptedAction(input: {
   currentUserId: string;
   requestId: string;
