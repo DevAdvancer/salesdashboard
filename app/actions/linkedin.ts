@@ -181,7 +181,7 @@ async function logAuditAction(
 }
 
 function canManageLinkedinAccounts(user: User) {
-  return user.role === "admin" || user.role === "developer";
+  return user.role === "admin" || user.role === "developer" || user.role === "team_lead";
 }
 
 function canSeeLinkedinReports(user: User) {
@@ -192,9 +192,17 @@ function canReadLinkedinAccountsLikeAdmin(user: User) {
   return user.role === "admin" || user.role === "developer" || user.role === "monitor" || user.role === "operations";
 }
 
+function resolveLinkedinReportTeamLeadId(user: User, teamLeadId?: string | null) {
+  if (user.role === "team_lead") {
+    return user.$id;
+  }
+
+  return teamLeadId ?? null;
+}
+
 function assertLinkedinReportTeamScope(user: User, teamLeadId?: string | null) {
   if (canReadLinkedinAccountsLikeAdmin(user)) return;
-  if (user.role === "team_lead" && user.$id === teamLeadId) return;
+  if (user.role === "team_lead" && user.$id === resolveLinkedinReportTeamLeadId(user, teamLeadId)) return;
   throw new Error("Unauthorized");
 }
 
@@ -235,6 +243,33 @@ async function getLinkedinAccountDoc(
     COLLECTIONS.LINKEDIN_ACCOUNTS,
     accountId,
   )) as unknown as LinkedinAccount;
+}
+
+async function getTeamLeadAssignedUserIds(
+  databases: Awaited<ReturnType<typeof createAdminClient>>["databases"],
+  assignedUserIds: string[],
+) {
+  const teamLeadAssignedUserIds = new Set<string>();
+  const chunkSize = 100;
+
+  for (let i = 0; i < assignedUserIds.length; i += chunkSize) {
+    const chunk = assignedUserIds.slice(i, i + chunkSize);
+    const usersResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
+      Query.equal("$id", chunk),
+      Query.limit(2000),
+    ]);
+
+    for (const userDoc of usersResponse.documents as unknown as Array<{
+      $id: string;
+      role?: unknown;
+    }>) {
+      if (userDoc.role === "team_lead") {
+        teamLeadAssignedUserIds.add(userDoc.$id);
+      }
+    }
+  }
+
+  return teamLeadAssignedUserIds;
 }
 
 async function listDelegatedSourceUserIdsForToday(
@@ -1306,27 +1341,11 @@ export async function listLinkedinAccountsForManagementAction(input: {
     new Set(accounts.map((account) => account.assignedUserId).filter(Boolean)),
   );
 
-  if (assignedUserIds.length === 0) {
+  if (assignedUserIds.length === 0 || user.role !== "team_lead") {
     return accounts;
   }
 
-  const teamLeadAssignedUserIds = new Set<string>();
-  const chunkSize = 100;
-  for (let i = 0; i < assignedUserIds.length; i += chunkSize) {
-    const chunk = assignedUserIds.slice(i, i + chunkSize);
-    const usersResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
-      Query.equal("$id", chunk),
-      Query.limit(2000),
-    ]);
-    for (const userDoc of usersResponse.documents as unknown as Array<{
-      $id: string;
-      role?: unknown;
-    }>) {
-      if (userDoc.role === "team_lead") {
-        teamLeadAssignedUserIds.add(userDoc.$id);
-      }
-    }
-  }
+  const teamLeadAssignedUserIds = await getTeamLeadAssignedUserIds(databases, assignedUserIds);
 
   return accounts.filter(
     (account) => !teamLeadAssignedUserIds.has(account.assignedUserId),
@@ -1344,7 +1363,8 @@ export async function getLinkedinWeeklyReportAction(input: {
   if (!canSeeLinkedinReports(user)) {
     throw new Error("Unauthorized");
   }
-  assertLinkedinReportTeamScope(user, input.teamLeadId);
+  const effectiveTeamLeadId = resolveLinkedinReportTeamLeadId(user, input.teamLeadId);
+  assertLinkedinReportTeamScope(user, effectiveTeamLeadId);
 
   const startDate = assertDateIso(input.startDate);
   const endDate = assertDateIso(input.endDate);
@@ -1361,8 +1381,8 @@ export async function getLinkedinWeeklyReportAction(input: {
       Query.limit(pageSize),
       Query.orderAsc("$id"),
     ];
-    if (input.teamLeadId && input.teamLeadId !== "all") {
-      queries.unshift(Query.equal("teamLeadId", input.teamLeadId));
+    if (effectiveTeamLeadId && effectiveTeamLeadId !== "all") {
+      queries.unshift(Query.equal("teamLeadId", effectiveTeamLeadId));
     }
     if (cursor) queries.push(Query.cursorAfter(cursor));
 
@@ -1382,9 +1402,13 @@ export async function getLinkedinWeeklyReportAction(input: {
   const uniqueRequests = Array.from(
     new Map(all.map((r) => [r.$id, r] as const)).values(),
   );
+  const visibleRequests =
+    user.role === "team_lead"
+      ? uniqueRequests.filter((request) => request.agentId !== user.$id)
+      : uniqueRequests;
 
   const accountIds = Array.from(
-    new Set(uniqueRequests.map((r) => r.accountId).filter(Boolean)),
+    new Set(visibleRequests.map((r) => r.accountId).filter(Boolean)),
   );
 
   const accountsMap = new Map<string, LinkedinAccount>();
@@ -1416,7 +1440,7 @@ export async function getLinkedinWeeklyReportAction(input: {
 
   const map = new Map<string, Row>();
   const leadIdsByKey = new Map<string, Set<string>>();
-  for (const req of uniqueRequests) {
+  for (const req of visibleRequests) {
     const account = accountsMap.get(req.accountId);
     const accountType = (account?.accountType ?? "main") as LinkedinAccountType;
     const idName = account?.idName ?? req.accountId;
@@ -1518,7 +1542,8 @@ export async function listLinkedinRequestsForAdminAction(input: {
   if (!canSeeLinkedinReports(user)) {
     throw new Error("Unauthorized");
   }
-  assertLinkedinReportTeamScope(user, input.teamLeadId);
+  const effectiveTeamLeadId = resolveLinkedinReportTeamLeadId(user, input.teamLeadId);
+  assertLinkedinReportTeamScope(user, effectiveTeamLeadId);
 
   const start = toUtcDayStartIso(input.startDate);
   const end = toUtcDayEndIso(input.endDate);
@@ -1531,8 +1556,8 @@ export async function listLinkedinRequestsForAdminAction(input: {
     Query.limit(Math.min(Math.max(input.limit ?? 500, 1), 2000)),
   ];
 
-  if (input.teamLeadId && input.teamLeadId !== "all") {
-    queries.unshift(Query.equal("teamLeadId", input.teamLeadId));
+  if (effectiveTeamLeadId && effectiveTeamLeadId !== "all") {
+    queries.unshift(Query.equal("teamLeadId", effectiveTeamLeadId));
   }
 
   if (input.agentId) {
@@ -1551,5 +1576,8 @@ export async function listLinkedinRequestsForAdminAction(input: {
   );
 
   const docs = response.documents as unknown as LinkedinRequest[];
-  return Array.from(new Map(docs.map((r) => [r.$id, r] as const)).values());
+  const uniqueDocs = Array.from(new Map(docs.map((r) => [r.$id, r] as const)).values());
+  return user.role === "team_lead"
+    ? uniqueDocs.filter((request) => request.agentId !== user.$id)
+    : uniqueDocs;
 }

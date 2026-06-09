@@ -123,6 +123,36 @@ async function getLeadVisibilityUserIds(viewerId: string, viewerRole: UserRole):
   return getVisibleHierarchyUserIds(viewerId, viewerRole, response.documents as unknown as HierarchyUserDocument[]);
 }
 
+type TeamLeadScopedUserDocument = {
+  $id: string;
+  role?: UserRole;
+};
+
+async function getTeamLeadLeadVisibilityScope(viewerId: string): Promise<{
+  ownerVisibleUserIds: string[];
+  assignmentVisibleUserIds: string[];
+}> {
+  const teamUsers = await databases.listDocuments(
+    DATABASE_ID,
+    COLLECTIONS.USERS,
+    [
+      Query.equal('teamLeadId', viewerId),
+      Query.or([Query.equal('role', 'agent'), Query.equal('role', 'lead_generation')]),
+    ]
+  );
+
+  const docs = teamUsers.documents as unknown as TeamLeadScopedUserDocument[];
+  const assignmentVisibleUserIds = [viewerId, ...docs.map((user) => user.$id)];
+  const ownerVisibleUserIds = [
+    viewerId,
+    ...docs
+      .filter((user) => user.role === 'agent')
+      .map((user) => user.$id),
+  ];
+
+  return { ownerVisibleUserIds, assignmentVisibleUserIds };
+}
+
 async function assertActorCanMutateLead(actorId?: string) {
   if (!actorId) return;
   const actor = await getUserById(actorId);
@@ -135,6 +165,24 @@ function appendHierarchyLeadVisibilityQuery(queries: string[], visibleUserIds: s
   const orConditions = [
     Query.equal('ownerId', visibleUserIds),
     Query.equal('assignedToId', visibleUserIds),
+  ];
+
+  if (specialBranchId) {
+    orConditions.push(Query.equal('branchId', specialBranchId));
+  }
+
+  queries.push(Query.or(orConditions));
+}
+
+function appendTeamLeadLeadVisibilityQuery(
+  queries: string[],
+  ownerVisibleUserIds: string[],
+  assignmentVisibleUserIds: string[],
+  specialBranchId?: string | null
+) {
+  const orConditions = [
+    Query.equal('ownerId', ownerVisibleUserIds),
+    Query.equal('assignedToId', assignmentVisibleUserIds),
   ];
 
   if (specialBranchId) {
@@ -518,8 +566,14 @@ export async function listLeads(
       const visibleUserIds = await getLeadVisibilityUserIds(userId, userRole);
       appendHierarchyLeadVisibilityQuery(queries, visibleUserIds, specialBranchId);
     } else if (userRole === 'team_lead') {
-      const visibleUserIds = await getLeadVisibilityUserIds(userId, userRole);
-      appendHierarchyLeadVisibilityQuery(queries, visibleUserIds, specialBranchId);
+      const { ownerVisibleUserIds, assignmentVisibleUserIds } =
+        await getTeamLeadLeadVisibilityScope(userId);
+      appendTeamLeadLeadVisibilityQuery(
+        queries,
+        ownerVisibleUserIds,
+        assignmentVisibleUserIds,
+        specialBranchId,
+      );
     }
 
     /*

@@ -1,8 +1,11 @@
 import { isRoleEligibleForComponent } from "@/lib/constants/component-access";
 
 describe("component access eligibility", () => {
-  it("allows team leads to use Linkedin Requests and open Linkedin accounts", () => {
+  it("allows team leads to use Linkedin Requests, manage Linkedin accounts, and view Linkedin reports", () => {
     expect(isRoleEligibleForComponent("linkedin-requests", "team_lead")).toBe(
+      true,
+    );
+    expect(isRoleEligibleForComponent("linkedin-reports", "team_lead")).toBe(
       true,
     );
     expect(

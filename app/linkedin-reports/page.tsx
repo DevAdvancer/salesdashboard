@@ -145,27 +145,45 @@ function LinkedinReportsContent() {
   const loadAgents = useCallback(async () => {
     if (!user || !teamLeadId) return;
     try {
+      const effectiveTeamLeadId =
+        user.role === "team_lead"
+          ? user.$id
+          : teamLeadId === "all"
+            ? undefined
+            : teamLeadId;
       let next: User[] = [];
-      if (canReadLikeAdmin && teamLeadId === "all") {
+      if (canReadLikeAdmin && effectiveTeamLeadId === undefined) {
         next = await listAllUsersForLinkedinAction({ currentUserId: user.$id });
       } else {
         next = await listAgentsForTeamLeadLinkedinAction({
           currentUserId: user.$id,
-          teamLeadId: teamLeadId === "all" ? undefined : teamLeadId,
+          teamLeadId: effectiveTeamLeadId,
         });
       }
-      setAgents(next);
+
+      const selectedTeamLead =
+        canReadLikeAdmin && effectiveTeamLeadId
+          ? teamLeads.find((teamLead) => teamLead.$id === effectiveTeamLeadId) ?? null
+          : null;
+      const visibleUsers = selectedTeamLead ? [selectedTeamLead, ...next] : next;
+      setAgents(visibleUsers);
     } catch {
       setAgents([]);
     }
-  }, [canReadLikeAdmin, teamLeadId, user]);
+  }, [canReadLikeAdmin, teamLeadId, teamLeads, user]);
 
   const loadAccounts = useCallback(async () => {
     if (!user || !teamLeadId) return;
     try {
+      const effectiveTeamLeadId =
+        user.role === "team_lead"
+          ? user.$id
+          : teamLeadId === "all"
+            ? null
+            : teamLeadId;
       const next = await listLinkedinAccountsForManagementAction({
         currentUserId: user.$id,
-        teamLeadId: teamLeadId === "all" ? null : teamLeadId,
+        teamLeadId: effectiveTeamLeadId,
       });
       setAccounts(next);
     } catch {
@@ -180,9 +198,15 @@ function LinkedinReportsContent() {
     const endDate = range.to ?? range.from;
     try {
       setLoading(true);
+      const effectiveTeamLeadId =
+        user.role === "team_lead"
+          ? user.$id
+          : teamLeadId === "all"
+            ? null
+            : teamLeadId;
       const result = await getLinkedinWeeklyReportAction({
         currentUserId: user.$id,
-        teamLeadId: teamLeadId === "all" ? null : teamLeadId,
+        teamLeadId: effectiveTeamLeadId,
         startDate,
         endDate,
       });
@@ -214,9 +238,15 @@ function LinkedinReportsContent() {
 
     try {
       setRequestsLoading(true);
+      const effectiveTeamLeadId =
+        user.role === "team_lead"
+          ? user.$id
+          : teamLeadId === "all"
+            ? null
+            : teamLeadId;
       const next = await listLinkedinRequestsForAdminAction({
         currentUserId: user.$id,
-        teamLeadId: teamLeadId === "all" ? null : teamLeadId,
+        teamLeadId: effectiveTeamLeadId,
         startDate,
         endDate,
         status: requestStatus,

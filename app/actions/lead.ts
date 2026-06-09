@@ -269,6 +269,39 @@ async function getLeadVisibilityUserIds(databases: any, viewerId: string, viewer
   return getVisibleHierarchyUserIds(viewerId, viewerRole, users);
 }
 
+type TeamLeadScopedUserDocument = {
+  $id: string;
+  role?: UserRole;
+};
+
+async function getTeamLeadLeadVisibilityScope(databases: any, viewerId: string): Promise<{
+  ownerVisibleUserIds: string[];
+  assignmentVisibleUserIds: string[];
+}> {
+  const teamUsers = await listAllDocuments<TeamLeadScopedUserDocument>({
+    databases,
+    databaseId: DATABASE_ID,
+    collectionId: COLLECTIONS.USERS,
+    queries: [
+      Query.equal('teamLeadId', viewerId),
+      Query.or([Query.equal('role', 'agent'), Query.equal('role', 'lead_generation')]),
+      Query.orderAsc('$id'),
+    ],
+    pageLimit: 100,
+    maxPages: 100,
+  });
+
+  const assignmentVisibleUserIds = [viewerId, ...teamUsers.map((user) => user.$id)];
+  const ownerVisibleUserIds = [
+    viewerId,
+    ...teamUsers
+      .filter((user) => user.role === 'agent')
+      .map((user) => user.$id),
+  ];
+
+  return { ownerVisibleUserIds, assignmentVisibleUserIds };
+}
+
 function appendHierarchyLeadVisibilityQuery(
   queries: string[],
   visibleUserIds: string[],
@@ -279,6 +312,36 @@ function appendHierarchyLeadVisibilityQuery(
   const orConditions = [
     Query.equal('ownerId', visibleUserIds),
     Query.equal('assignedToId', visibleUserIds),
+  ];
+
+  if (specialBranchId) {
+    orConditions.push(Query.equal('branchId', specialBranchId));
+  }
+
+  if (includeBackedOutForBranches && branchIds && branchIds.length > 0) {
+    orConditions.push(
+      Query.and([
+        Query.equal('branchId', branchIds),
+        Query.equal('isClosed', true),
+        Query.equal('status', ['Backout', 'Backed Out', 'Backedout', 'Backed out']),
+      ]),
+    );
+  }
+
+  queries.push(Query.or(orConditions));
+}
+
+function appendTeamLeadLeadVisibilityQuery(
+  queries: string[],
+  ownerVisibleUserIds: string[],
+  assignmentVisibleUserIds: string[],
+  specialBranchId?: string | null,
+  branchIds?: string[],
+  includeBackedOutForBranches?: boolean,
+) {
+  const orConditions = [
+    Query.equal('ownerId', ownerVisibleUserIds),
+    Query.equal('assignedToId', assignmentVisibleUserIds),
   ];
 
   if (specialBranchId) {
@@ -884,10 +947,12 @@ export async function listLeadsAction(
         true,
       );
     } else if (userRole === 'team_lead') {
-      const visibleUserIds = await getLeadVisibilityUserIds(databases, userId, userRole);
-      appendHierarchyLeadVisibilityQuery(
+      const { ownerVisibleUserIds, assignmentVisibleUserIds } =
+        await getTeamLeadLeadVisibilityScope(databases, userId);
+      appendTeamLeadLeadVisibilityQuery(
         queries,
-        visibleUserIds,
+        ownerVisibleUserIds,
+        assignmentVisibleUserIds,
         specialBranchId,
         branchIds,
         true,

@@ -52,29 +52,43 @@ describe("Linkedin account management authorization", () => {
     mockCreateDocument.mockResolvedValue({ $id: "account-1" });
   });
 
-  it("rejects team leads from saving Linkedin account changes", async () => {
+  it("allows team leads to save Linkedin account changes for their own agents", async () => {
     mockGetAuthenticatedUserDoc.mockResolvedValue({
       $id: "tl-1",
       name: "Team Lead",
       role: "team_lead",
+    });
+    mockGetDocument.mockResolvedValue({
+      $id: "agent-1",
+      name: "Agent One",
+      role: "agent",
+      teamLeadId: "tl-1",
     });
 
     const { upsertLinkedinAccountAction } = await import(
       "@/app/actions/linkedin"
     );
 
-    await expect(
-      upsertLinkedinAccountAction({
-        currentUserId: "tl-1",
+    await upsertLinkedinAccountAction({
+      currentUserId: "tl-1",
+      assignedUserId: "agent-1",
+      company: "SilverSpace Inc.",
+      idName: "Main",
+      accountType: "main",
+      licenseType: "Normal",
+      connectionLimit: 20,
+    });
+
+    expect(mockCreateDocument).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({
         assignedUserId: "agent-1",
-        company: "SilverSpace Inc.",
-        idName: "Main",
-        accountType: "main",
-        licenseType: "Normal",
-        connectionLimit: 20,
+        teamLeadId: "tl-1",
       }),
-    ).rejects.toThrow("Unauthorized");
-    expect(mockCreateAdminClient).not.toHaveBeenCalled();
+      expect.any(Array),
+    );
   });
 
   it("rejects operations from saving Linkedin account changes", async () => {
@@ -141,7 +155,7 @@ describe("Linkedin account management authorization", () => {
     );
   });
 
-  it("hides team lead-owned Linkedin IDs from the management list", async () => {
+  it("allows admins to see team lead-owned Linkedin IDs in the management list", async () => {
     mockAssertAuthenticatedUserId.mockResolvedValue({ $id: "admin-1" });
     mockGetAuthenticatedUserDoc.mockResolvedValue({
       $id: "admin-1",
@@ -193,6 +207,11 @@ describe("Linkedin account management authorization", () => {
         $id: "account-agent",
         assignedUserId: "agent-1",
       }),
+      expect.objectContaining({
+        $id: "account-tl",
+        assignedUserId: "tl-1",
+      }),
     ]);
   });
+
 });

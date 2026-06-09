@@ -47,12 +47,13 @@ describe('lead hierarchy visibility', () => {
     (databases.listDocuments as jest.Mock).mockResolvedValue({ documents: [] });
   });
 
-  it('scopes team lead leads to the TL and their agents', async () => {
+  it('shows TL-owned and agent-owned leads to the TL, but only shows lead-gen leads after assignment', async () => {
     (databases.listDocuments as jest.Mock)
       .mockResolvedValueOnce({
         documents: [
           { $id: 'agent-1', role: 'agent', teamLeadId: 'tl-1' },
           { $id: 'agent-2', role: 'agent', teamLeadId: 'tl-1' },
+          { $id: 'lg-1', role: 'lead_generation', teamLeadId: 'tl-1' },
         ],
       })
       .mockResolvedValueOnce({ documents: [] });
@@ -61,8 +62,9 @@ describe('lead hierarchy visibility', () => {
 
     expect(Query.equal).toHaveBeenCalledWith('teamLeadId', 'tl-1');
     expect(Query.equal).toHaveBeenCalledWith('role', 'agent');
+    expect(Query.equal).toHaveBeenCalledWith('role', 'lead_generation');
     expect(Query.equal).toHaveBeenCalledWith('ownerId', ['tl-1', 'agent-1', 'agent-2']);
-    expect(Query.equal).toHaveBeenCalledWith('assignedToId', ['tl-1', 'agent-1', 'agent-2']);
+    expect(Query.equal).toHaveBeenCalledWith('assignedToId', ['tl-1', 'agent-1', 'agent-2', 'lg-1']);
   });
 
   it('scopes manager leads to the manager and their hierarchy instead of all leads', async () => {
