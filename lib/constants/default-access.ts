@@ -24,7 +24,7 @@ export type ComponentKey =
   | 'linkedin-account-management'
   | 'linkedin-reports';
 
-export type UserRole = 'admin' | 'developer' | 'team_lead' | 'agent' | 'lead_generation' | 'monitor';
+export type UserRole = 'admin' | 'developer' | 'team_lead' | 'agent' | 'lead_generation' | 'monitor' | 'operations';
 
 export interface AccessRule {
   componentKey: ComponentKey;
@@ -108,6 +108,31 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'linkedin-requests', role: 'monitor', allowed: false },
   { componentKey: 'linkedin-account-management', role: 'monitor', allowed: true },
   { componentKey: 'linkedin-reports', role: 'monitor', allowed: true },
+  // Operations rules - admin-level visibility without mutation privileges
+  { componentKey: 'dashboard', role: 'operations', allowed: true },
+  { componentKey: 'chat', role: 'operations', allowed: true },
+  { componentKey: 'leads', role: 'operations', allowed: true },
+  { componentKey: 'history', role: 'operations', allowed: true },
+  { componentKey: 'user-management', role: 'operations', allowed: true },
+  { componentKey: 'field-management', role: 'operations', allowed: false },
+  { componentKey: 'settings', role: 'operations', allowed: true },
+  { componentKey: 'branch-management', role: 'operations', allowed: true },
+  { componentKey: 'audit-logs', role: 'operations', allowed: true },
+  { componentKey: 'mock', role: 'operations', allowed: true },
+  { componentKey: 'assessment-support', role: 'operations', allowed: true },
+  { componentKey: 'interview-support', role: 'operations', allowed: true },
+  { componentKey: 'hierarchy', role: 'operations', allowed: true },
+  { componentKey: 'work-queue', role: 'operations', allowed: true },
+  { componentKey: 'reports', role: 'operations', allowed: true },
+  { componentKey: 'coaching-notes', role: 'operations', allowed: true },
+  { componentKey: 'review-queue', role: 'operations', allowed: true },
+  { componentKey: 'notifications', role: 'operations', allowed: true },
+  { componentKey: 'attendance', role: 'operations', allowed: true },
+  { componentKey: 'attendance-report', role: 'operations', allowed: true },
+  { componentKey: 'lead-requests', role: 'operations', allowed: true },
+  { componentKey: 'linkedin-requests', role: 'operations', allowed: false },
+  { componentKey: 'linkedin-account-management', role: 'operations', allowed: true },
+  { componentKey: 'linkedin-reports', role: 'operations', allowed: true },
   // Team Lead rules
   { componentKey: 'dashboard', role: 'team_lead', allowed: true },
   { componentKey: 'chat', role: 'team_lead', allowed: true },

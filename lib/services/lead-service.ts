@@ -123,6 +123,14 @@ async function getLeadVisibilityUserIds(viewerId: string, viewerRole: UserRole):
   return getVisibleHierarchyUserIds(viewerId, viewerRole, response.documents as unknown as HierarchyUserDocument[]);
 }
 
+async function assertActorCanMutateLead(actorId?: string) {
+  if (!actorId) return;
+  const actor = await getUserById(actorId);
+  if (actor.role === 'operations') {
+    throw new Error('Permission denied');
+  }
+}
+
 function appendHierarchyLeadVisibilityQuery(queries: string[], visibleUserIds: string[], specialBranchId?: string | null) {
   const orConditions = [
     Query.equal('ownerId', visibleUserIds),
@@ -216,6 +224,8 @@ export async function createLead(
     creatingUserName?: string
 ): Promise<Lead> {
   try {
+    await assertActorCanMutateLead(creatingUserId || ownerId);
+
     // Validate lead uniqueness
     const validation = await validateLeadUniqueness(input.data);
     if (!validation.isValid) {
@@ -329,6 +339,8 @@ export async function updateLead(
     actorName?: string
 ): Promise<Lead> {
   try {
+    await assertActorCanMutateLead(actorId);
+
     // Get the current lead to merge data
     const currentLead = await getLead(leadId);
     const currentData = JSON.parse(currentLead.data) as LeadData;
@@ -412,6 +424,8 @@ export async function updateLead(
  */
 export async function deleteLead(leadId: string, actorId?: string, actorName?: string): Promise<void> {
   try {
+    await assertActorCanMutateLead(actorId);
+
     let leadName = '';
     try {
       const currentLead = await getLead(leadId);
@@ -495,8 +509,8 @@ export async function listLeads(
       queries.push(Query.or(orConditions));
     } else if (userRole === 'lead_generation') {
       queries.push(Query.equal('ownerId', userId));
-    } else if (userRole === 'admin' || userRole === 'developer' || userRole === 'monitor') {
-      // Admins, developers, and monitors see all leads across all branches - no branch/owner filter
+    } else if (userRole === 'admin' || userRole === 'developer' || userRole === 'monitor' || userRole === 'operations') {
+      // Admins, developers, monitors, and operations see all leads across all branches - no branch/owner filter
     } else if (userRole === 'manager') {
       const visibleUserIds = await getLeadVisibilityUserIds(userId, userRole);
       appendHierarchyLeadVisibilityQuery(queries, visibleUserIds, specialBranchId);
@@ -687,7 +701,7 @@ export async function closeLead(
     actorRole?: import('@/lib/types').UserRole
 ): Promise<Lead> {
   try {
-    if (actorRole === 'monitor') {
+    if (actorRole === 'monitor' || actorRole === 'operations') {
       throw new Error('Permission denied');
     }
 
@@ -790,6 +804,8 @@ export async function reopenLead(
     actorName?: string
 ): Promise<Lead> {
   try {
+    await assertActorCanMutateLead(actorId);
+
     // Get the current lead
     const currentLead = await getLead(leadId);
     let leadName = '';
@@ -867,6 +883,8 @@ export async function assignLead(
     actorName?: string
 ): Promise<Lead> {
   try {
+    await assertActorCanMutateLead(actorId);
+
     // Get the current lead
     const currentLead = await getLead(leadId);
     let leadName = '';

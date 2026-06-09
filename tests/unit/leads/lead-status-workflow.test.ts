@@ -2,6 +2,7 @@ import {
   getLeadCreateStatusOptions,
   getLeadEditAllowedStatuses,
   isAllowedLeadStatusTransition,
+  shouldRequireLeadFollowUpForStatus,
 } from "@/lib/utils/lead-status-workflow";
 
 describe("lead status workflow", () => {
@@ -31,5 +32,17 @@ describe("lead status workflow", () => {
     expect(isAllowedLeadStatusTransition("Interested", "Signed/Closure")).toBe(
       false,
     );
+  });
+
+  it("requires follow-up details only when moving into Pipeline / Follow up", () => {
+    expect(
+      shouldRequireLeadFollowUpForStatus("Interested", "Pipeline / Follow up"),
+    ).toBe(true);
+    expect(
+      shouldRequireLeadFollowUpForStatus("Interested", "Not Interested"),
+    ).toBe(false);
+    expect(
+      shouldRequireLeadFollowUpForStatus("Interested", "Interested"),
+    ).toBe(false);
   });
 });

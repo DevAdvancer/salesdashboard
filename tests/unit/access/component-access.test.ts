@@ -46,4 +46,38 @@ describe("component access eligibility", () => {
     expect(isRoleEligibleForComponent("field-management", "monitor")).toBe(false);
     expect(isRoleEligibleForComponent("linkedin-requests", "monitor")).toBe(false);
   });
+
+  it("keeps operations page visibility aligned with admin visibility", () => {
+    const adminVisibleComponents = [
+      "dashboard",
+      "chat",
+      "leads",
+      "history",
+      "user-management",
+      "settings",
+      "branch-management",
+      "audit-logs",
+      "mock",
+      "assessment-support",
+      "interview-support",
+      "hierarchy",
+      "work-queue",
+      "reports",
+      "coaching-notes",
+      "review-queue",
+      "notifications",
+      "attendance",
+      "attendance-report",
+      "lead-requests",
+      "linkedin-account-management",
+      "linkedin-reports",
+    ] as const;
+
+    adminVisibleComponents.forEach((component) => {
+      expect(isRoleEligibleForComponent(component, "operations" as never)).toBe(true);
+    });
+
+    expect(isRoleEligibleForComponent("field-management", "operations" as never)).toBe(false);
+    expect(isRoleEligibleForComponent("linkedin-requests", "operations" as never)).toBe(false);
+  });
 });

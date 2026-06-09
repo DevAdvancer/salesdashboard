@@ -42,7 +42,7 @@ export default function UserManagementPage() {
 
 function UserManagementContent() {
   const searchParams = useSearchParams();
-  const { user, isAdmin, isDeveloper, isTeamLead, isMonitor } =
+  const { user, isAdmin, isDeveloper, isTeamLead, isMonitor, isOperations } =
     useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [search, setSearch] = useState("");
@@ -80,6 +80,7 @@ function UserManagementContent() {
     | "agent"
     | "lead_generation"
     | "monitor"
+    | "operations"
   >("team_lead");
   // Initialize createRole when dialog opens or user changes
   useEffect(() => {
@@ -95,6 +96,7 @@ function UserManagementContent() {
   const canCreateLeadGeneration =
     isAdmin || isDeveloper || isTeamLead;
   const canCreateMonitor = isAdmin || isDeveloper;
+  const canCreateOperations = isAdmin || isDeveloper;
   const canCreate =
     canCreateAdmin ||
     canCreateAdmin ||
@@ -102,7 +104,8 @@ function UserManagementContent() {
     canCreateTeamLead ||
     canCreateAgent ||
     canCreateLeadGeneration ||
-    canCreateMonitor;
+    canCreateMonitor ||
+    canCreateOperations;
 
   useEffect(() => {
     if (searchParams.get("action") === "create" && canCreate) {
@@ -112,15 +115,15 @@ function UserManagementContent() {
 
   // The branches available for assignment (subset of current user's branchIds)
   const availableBranches = allBranches.filter(
-    (b) => b.isActive && (isAdmin || isDeveloper || isMonitor || (user?.branchIds ?? []).includes(b.$id)),
+    (b) => b.isActive && (isAdmin || isDeveloper || isMonitor || isOperations || (user?.branchIds ?? []).includes(b.$id)),
   );
 
   const fetchUsers = useCallback(async () => {
     if (!user) return;
     try {
       setIsLoading(true);
-      if (isAdmin || isDeveloper || isMonitor) {
-        // Admin/Monitor sees all users
+      if (isAdmin || isDeveloper || isMonitor || isOperations) {
+        // Admin/read-only visibility roles see all users
         const { Query } = await import("appwrite");
         const response = await databases.listDocuments(
           process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
@@ -150,6 +153,7 @@ function UserManagementContent() {
           admin: 0,
           developer: 0,
           monitor: 1,
+          operations: 1,
           team_lead: 2,
           lead_generation: 3,
           agent: 4,
@@ -184,7 +188,7 @@ function UserManagementContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, isAdmin, isDeveloper, isMonitor]);
+  }, [user, isAdmin, isDeveloper, isMonitor, isOperations]);
 
   useEffect(() => {
     if (user) {
@@ -231,10 +235,11 @@ function UserManagementContent() {
       // Load Team Leads when Admin/Manager is creating Agent/TL or editing Agent/TL
       const isAgentTarget =
         (showCreateDialog &&
-          (createRole === "agent" || createRole === "lead_generation" || createRole === "monitor")) ||
+          (createRole === "agent" || createRole === "lead_generation" || createRole === "monitor" || createRole === "operations")) ||
         editingUser?.role === "agent" ||
         editingUser?.role === "lead_generation" ||
-        editingUser?.role === "monitor";
+        editingUser?.role === "monitor" ||
+        editingUser?.role === "operations";
       // For Admin, also load if creating Team Lead? No, Team Lead doesn't report to Team Lead.
 
       if (isAdmin && isAgentTarget) {
@@ -277,7 +282,7 @@ function UserManagementContent() {
     if (!formPassword) errs.password = "Password is required";
     else if (formPassword.length < 8)
       errs.password = "Password must be at least 8 characters";
-    if (createRole !== "admin" && createRole !== "developer" && createRole !== "monitor" && selectedBranchIds.length === 0)
+    if (createRole !== "admin" && createRole !== "developer" && createRole !== "monitor" && createRole !== "operations" && selectedBranchIds.length === 0)
       errs.branches = "At least one branch must be selected";
     setFormErrors(errs);
     return Object.keys(errs).length === 0;
@@ -376,7 +381,7 @@ function UserManagementContent() {
     if (
       !user ||
       !isAdmin && !isDeveloper ||
-      (agent.role !== "agent" && agent.role !== "lead_generation" && agent.role !== "monitor")
+      (agent.role !== "agent" && agent.role !== "lead_generation" && agent.role !== "monitor" && agent.role !== "operations")
     )
       return;
 
@@ -449,7 +454,7 @@ function UserManagementContent() {
             currentUserId: user.$id,
           });
         } else {
-          if (createRole !== "monitor" && !selectedTeamLeadId) {
+          if (createRole !== "monitor" && createRole !== "operations" && !selectedTeamLeadId) {
             setError(
               "Agents must be assigned to a Team Lead",
             );
@@ -466,8 +471,10 @@ function UserManagementContent() {
                 ? "lead_generation"
                 : createRole === "monitor"
                   ? "monitor"
+                  : createRole === "operations"
+                    ? "operations"
                   : "agent",
-            teamLeadId: createRole === "monitor" ? undefined : selectedTeamLeadId || undefined,
+            teamLeadId: createRole === "monitor" || createRole === "operations" ? undefined : selectedTeamLeadId || undefined,
             branchIds: selectedBranchIds,
             currentUserId: user.$id,
           });
@@ -502,6 +509,7 @@ function UserManagementContent() {
     agent: "Agent",
     lead_generation: "Lead Generation",
     monitor: "Monitor",
+    operations: "Operations",
   };
   const createButtonLabel = "Create User";
   const dialogTitle = "Create User";
@@ -524,6 +532,8 @@ function UserManagementContent() {
         return "Lead Generation";
       case "monitor":
         return "Monitor";
+      case "operations":
+        return "Operations";
       default:
         return role;
     }
@@ -712,7 +722,8 @@ function UserManagementContent() {
                                   <>
                                     {(u.role === "agent" ||
                                       u.role === "lead_generation" ||
-                                      u.role === "monitor") && (
+                                      u.role === "monitor" ||
+                                      u.role === "operations") && (
                                       <Button
                                         variant="outline"
                                         size="sm"
@@ -947,6 +958,15 @@ function UserManagementContent() {
                         Monitor
                       </Button>
                     )}
+                    {canCreateOperations && (
+                      <Button
+                        type="button"
+                        variant={createRole === "operations" ? "default" : "outline"}
+                        onClick={() => setCreateRole("operations")}
+                        size="sm">
+                        Operations
+                      </Button>
+                    )}
                   </div>
                 )}
 
@@ -1001,6 +1021,7 @@ function UserManagementContent() {
                       {(isAdmin || isDeveloper) && <option value="admin">Admin</option>}
                       {(isAdmin || isDeveloper) && <option value="developer">Developer</option>}
                       {(isAdmin || isDeveloper) && <option value="monitor">Monitor</option>}
+                      {(isAdmin || isDeveloper) && <option value="operations">Operations</option>}
                       <option value="team_lead">Team Lead</option>
                       <option value="agent">Agent</option>
                       <option value="lead_generation">Lead Generation</option>

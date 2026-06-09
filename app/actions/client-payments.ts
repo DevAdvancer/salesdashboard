@@ -50,11 +50,11 @@ function ensureComponentAccess(role: string, componentKey: Parameters<typeof isR
 }
 
 function isAdminLikeReadRole(role: User["role"]) {
-  return role === "admin" || role === "developer" || role === "monitor";
+  return role === "admin" || role === "developer" || role === "monitor" || role === "operations";
 }
 
 function assertCanMutateClientPayments(actor: User) {
-  if (actor.role === "monitor") {
+  if (actor.role === "monitor" || actor.role === "operations") {
     throw new Error("Not authorized");
   }
 }

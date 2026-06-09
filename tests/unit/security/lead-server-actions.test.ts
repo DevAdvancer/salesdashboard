@@ -124,6 +124,51 @@ describe('lead server action authorization', () => {
     expect(Query.equal).toHaveBeenCalledWith('isClosed', false);
   });
 
+  it('lets operations list active leads without owner or assignment scoping', async () => {
+    mockGetDocument.mockResolvedValueOnce({
+      $id: 'operations-1',
+      email: 'operations@example.com',
+      role: 'operations',
+      branchIds: [],
+    });
+
+    const { listLeadsAction } = await import('@/app/actions/lead');
+    const { Query } = await import('node-appwrite');
+
+    await listLeadsAction({}, 'operations-1', 'agent' as any, []);
+
+    expect(Query.equal).not.toHaveBeenCalledWith('ownerId', expect.anything());
+    expect(Query.equal).not.toHaveBeenCalledWith('assignedToId', expect.anything());
+    expect(Query.equal).toHaveBeenCalledWith('isClosed', false);
+  });
+
+  it('lets operations read any lead detail', async () => {
+    mockGetDocument
+      .mockResolvedValueOnce({
+        $id: 'operations-1',
+        email: 'operations@example.com',
+        role: 'operations',
+        branchIds: [],
+      })
+      .mockResolvedValueOnce({
+        $id: 'lead-1',
+        data: '{}',
+        ownerId: 'owner-1',
+        assignedToId: 'agent-1',
+        branchId: 'branch-1',
+        isClosed: false,
+        closedAt: null,
+        status: 'Generated',
+      });
+
+    const { getLeadAction } = await import('@/app/actions/lead');
+
+    await expect(getLeadAction('lead-1', 'operations-1')).resolves.toMatchObject({
+      $id: 'lead-1',
+      ownerId: 'owner-1',
+    });
+  });
+
   it('allows monitor lead edits only when the monitor owns the lead', async () => {
     mockGetDocument
       .mockResolvedValueOnce({
@@ -252,6 +297,70 @@ describe('lead server action authorization', () => {
       }),
       expect.arrayContaining(['read:user:monitor-1', 'update:user:monitor-1']),
     );
+  });
+
+  it('rejects operations lead creation before writing', async () => {
+    mockGetDocument.mockResolvedValueOnce({
+      $id: 'operations-1',
+      email: 'operations@example.com',
+      role: 'operations',
+      branchIds: [],
+    });
+
+    const { createLeadAction } = await import('@/app/actions/lead');
+
+    await expect(
+      createLeadAction(
+        'operations-1',
+        {
+          data: {
+            firstName: 'New',
+            lastName: 'Lead',
+            email: 'new@example.com',
+            phone: '5551112222',
+          },
+          status: 'Interested',
+        },
+        'operations-1',
+        'Operations',
+      )
+    ).rejects.toThrow('Permission denied');
+
+    expect(mockCreateDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects operations lead edits even when operations owns the lead', async () => {
+    mockGetDocument
+      .mockResolvedValueOnce({
+        $id: 'operations-1',
+        email: 'operations@example.com',
+        role: 'operations',
+        branchIds: [],
+      })
+      .mockResolvedValueOnce({
+        $id: 'lead-1',
+        data: JSON.stringify({
+          firstName: 'Current',
+          lastName: 'Lead',
+          email: 'current@example.com',
+          phone: '5551112222',
+          status: 'Interested',
+        }),
+        ownerId: 'operations-1',
+        assignedToId: null,
+        branchId: 'branch-1',
+        isClosed: false,
+        closedAt: null,
+        status: 'Interested',
+      });
+
+    const { updateLeadAction } = await import('@/app/actions/lead');
+
+    await expect(
+      updateLeadAction('lead-1', { firstName: 'Changed' }, 'operations-1', 'Operations')
+    ).rejects.toThrow('Permission denied');
+
+    expect(mockUpdateDocument).not.toHaveBeenCalled();
   });
 
   it('rejects reopen attempts from non-manager users before updating with the admin client', async () => {
@@ -631,6 +740,53 @@ describe('lead server action authorization', () => {
     );
   });
 
+  it('rejects operations lead assignment even when operations owns the lead', async () => {
+    const documentsById = new Map<string, Record<string, unknown>>([
+      ['operations-1', {
+        $id: 'operations-1',
+        email: 'operations@example.com',
+        role: 'operations',
+        branchIds: [],
+        managerId: null,
+        managerIds: [],
+        teamLeadId: null,
+      }],
+      ['lead-1', {
+        $id: 'lead-1',
+        data: '{}',
+        ownerId: 'operations-1',
+        assignedToId: null,
+        branchId: 'branch-1',
+        isClosed: false,
+        closedAt: null,
+        status: 'Generated',
+      }],
+      ['agent-2', {
+        $id: 'agent-2',
+        email: 'agent2@example.com',
+        role: 'agent',
+        branchIds: ['branch-9'],
+        managerId: null,
+        managerIds: [],
+        teamLeadId: 'tl-9',
+        isActive: true,
+      }],
+    ]);
+
+    mockGetDocument.mockImplementation((_databaseId, _collectionId, documentId: string) => {
+      const doc = documentsById.get(documentId);
+      if (!doc) throw new Error(`Missing document ${documentId}`);
+      return Promise.resolve(doc);
+    });
+
+    const { assignLeadAction } = await import('@/lib/actions/lead-actions');
+
+    await expect(assignLeadAction('lead-1', 'agent-2', 'operations-1', 'Operations')).rejects.toThrow(
+      'Permission denied'
+    );
+    expect(mockUpdateDocument).not.toHaveBeenCalled();
+  });
+
   it('blocks duplicate lead edits and notifies admins and team leads only', async () => {
     mockGetDocument
       .mockResolvedValueOnce({
@@ -743,6 +899,13 @@ describe('lead server action authorization', () => {
   });
 
   it('rejects blank required lead fields before creating', async () => {
+    mockGetDocument.mockResolvedValueOnce({
+      $id: 'manager-1',
+      email: 'manager@example.com',
+      role: 'manager',
+      teamLeadId: null,
+    });
+
     const { createLeadAction } = await import('@/app/actions/lead');
 
     await expect(

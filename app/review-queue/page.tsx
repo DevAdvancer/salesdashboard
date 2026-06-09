@@ -32,7 +32,7 @@ export default function ReviewQueuePage() {
 }
 
 function ReviewQueueContent() {
-  const { user, isAdmin, isManager, isAssistantManager, isMonitor } = useAuth();
+  const { user, isAdmin, isManager, isAssistantManager, isMonitor, isOperations } = useAuth();
   const { toast } = useToast();
   const [items, setItems] = useState<ReviewQueueItem[]>([]);
   const [type, setType] = useState('lead_reopen');
@@ -151,8 +151,8 @@ function ReviewQueueContent() {
         <p className="text-muted-foreground">Escalations, approvals, duplicate checks, and leadership review items.</p>
       </div>
 
-      {/* Create Request — hidden for Monitor (view-only role) */}
-      {!isMonitor && (
+      {/* Create Request - hidden for read-only roles */}
+      {!isMonitor && !isOperations && (
         <Card>
           <CardHeader>
             <CardTitle>Create Review Request</CardTitle>

@@ -109,6 +109,7 @@ const lockedPrefilledInputClassName = "h-8 bg-muted text-muted-foreground";
 
 function InterviewContent() {
   const { user, loading } = useAuth();
+  const isReadOnly = user?.role === "operations";
   const { toast } = useToast();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
@@ -638,15 +639,15 @@ function InterviewContent() {
     <div className="container mx-auto p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Sales Interview Support</h1>
-        {!isOutlookConnected ? (
+        {!isReadOnly && !isOutlookConnected ? (
           <Button onClick={handleConnectOutlook} disabled={isAuthLoading}>
             {isAuthLoading ? "Connecting..." : "Connect Outlook"}
           </Button>
-        ) : (
+        ) : isOutlookConnected ? (
           <Button variant="outline" disabled className="text-green-600 border-green-600">
             Outlook Connected
           </Button>
-        )}
+        ) : null}
       </div>
 
       <Card>
@@ -717,7 +718,7 @@ function InterviewContent() {
                           <Button
                             size="sm"
                             onClick={() => handleCreateInterview(lead)}
-                            disabled={!isOutlookConnected || isPreparingInterview}>
+                            disabled={isReadOnly || !isOutlookConnected || isPreparingInterview}>
                             {isPreparingInterview && selectedLead?.$id === lead.$id
                               ? "Preparing..."
                               : "Create Interview"}
@@ -1018,7 +1019,7 @@ function InterviewContent() {
             <Button variant="outline" onClick={() => setIsModalOpen(false)}>
               Go Back
             </Button>
-            <Button onClick={sendEmail} disabled={isSending}>
+            <Button onClick={sendEmail} disabled={isReadOnly || isSending}>
               {isSending ? "Sending..." : "Send Request"}
             </Button>
           </DialogFooter>

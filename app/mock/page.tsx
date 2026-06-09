@@ -99,6 +99,7 @@ const lockedPrefilledInputClassName = "h-8 bg-muted text-muted-foreground";
 function MockContent() {
   const { user, loading } = useAuth();
   const isMonitor = user?.role === 'monitor';
+  const isReadOnly = isMonitor || user?.role === 'operations';
   const { toast } = useToast();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
@@ -639,7 +640,7 @@ function MockContent() {
     <div className="container mx-auto p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Mock Interview Setup</h1>
-        {!isMonitor && (!isOutlookConnected ? (
+        {!isReadOnly && (!isOutlookConnected ? (
           <Button onClick={handleConnectOutlook} disabled={isAuthLoading}>
             {isAuthLoading ? "Connecting..." : "Connect Outlook"}
           </Button>
@@ -728,7 +729,7 @@ function MockContent() {
                             Mock Created
                           </span>
                         )}
-                        {!isMonitor && (attemptsCount === 0 ? (
+                        {!isReadOnly && (attemptsCount === 0 ? (
                           <Button
                             size="sm"
                             onClick={() => handleCreateMock(lead)}

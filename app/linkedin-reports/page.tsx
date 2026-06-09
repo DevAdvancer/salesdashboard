@@ -66,7 +66,11 @@ function RequiredMark() {
 function LinkedinReportsContent() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const canReadLikeAdmin = user?.role === "admin" || user?.role === "developer" || user?.role === "monitor";
+  const canReadLikeAdmin =
+    user?.role === "admin" ||
+    user?.role === "developer" ||
+    user?.role === "monitor" ||
+    user?.role === "operations";
   const [teamLeads, setTeamLeads] = useState<User[]>([]);
   const [teamLeadId, setTeamLeadId] = useState<string>("all");
   const initial = useMemo(() => sevenDayRange(), []);

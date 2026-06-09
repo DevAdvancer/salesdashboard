@@ -77,6 +77,31 @@ describe("Linkedin account management authorization", () => {
     expect(mockCreateAdminClient).not.toHaveBeenCalled();
   });
 
+  it("rejects operations from saving Linkedin account changes", async () => {
+    mockGetAuthenticatedUserDoc.mockResolvedValue({
+      $id: "operations-1",
+      name: "Operations",
+      role: "operations",
+    });
+
+    const { upsertLinkedinAccountAction } = await import(
+      "@/app/actions/linkedin"
+    );
+
+    await expect(
+      upsertLinkedinAccountAction({
+        currentUserId: "operations-1",
+        assignedUserId: "agent-1",
+        company: "SilverSpace Inc.",
+        idName: "Main",
+        accountType: "main",
+        licenseType: "Normal",
+        connectionLimit: 20,
+      }),
+    ).rejects.toThrow("Unauthorized");
+    expect(mockCreateAdminClient).not.toHaveBeenCalled();
+  });
+
   it("allows admins to assign a Linkedin account directly to a team lead", async () => {
     mockAssertAuthenticatedUserId.mockResolvedValue({ $id: "admin-1" });
     mockGetAuthenticatedUserDoc.mockResolvedValue({

@@ -198,6 +198,10 @@ function AccessConfigContent() {
       return;
     }
 
+    if (role === "operations") {
+      return;
+    }
+
     const key = `${componentKey}-${role}`;
     const existingRule = rules.get(key);
     // Calculate new allowed state based on CURRENT effective permission
@@ -255,6 +259,7 @@ function AccessConfigContent() {
   const canEditTeamLead = isAdminOrDev;
   const canEditAgent = isAdminOrDev;
   const canEditLeadGeneration = isAdminOrDev;
+  const canEditOperations = false;
 
   if (!canManageAccess) {
     return null;
@@ -278,7 +283,7 @@ function AccessConfigContent() {
             Access Control Configuration
           </CardTitle>
           <CardDescription>
-            Configure which components are visible to monitors, team leads, lead
+            Configure which components are visible to monitors, operations, team leads, lead
             generation users, and agents. Admin and Developer always have full
             access.
           </CardDescription>
@@ -287,9 +292,10 @@ function AccessConfigContent() {
           <div className="space-y-6">
             {/* Header Row */}
             <div
-              className="hidden sm:grid gap-4 pb-4 border-b grid-cols-6">
+              className="hidden sm:grid gap-4 pb-4 border-b grid-cols-7">
               <div className="font-semibold">Component</div>
               <div className="font-semibold text-center">Monitor</div>
+              <div className="font-semibold text-center">Operations</div>
               <div className="font-semibold text-center">Team Lead</div>
               <div className="font-semibold text-center">Lead Gen</div>
               <div className="font-semibold text-center">Agent</div>
@@ -300,7 +306,7 @@ function AccessConfigContent() {
             {visibleComponents.map((component) => (
               <div
                 key={component.key}
-                className="grid grid-cols-1 gap-2 items-center border-b sm:border-b-0 pb-4 sm:pb-0 sm:grid-cols-6 sm:gap-4">
+                className="grid grid-cols-1 gap-2 items-center border-b sm:border-b-0 pb-4 sm:pb-0 sm:grid-cols-7 sm:gap-4">
                 <div>
                   <Label className="font-medium">{component.label}</Label>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -330,6 +336,23 @@ function AccessConfigContent() {
                 )}
 
                 {/* Assistant Manager column — only visible to admin/developer */}
+                <div className="flex sm:justify-center items-center gap-2 sm:gap-0">
+                  <span className="text-sm text-muted-foreground sm:hidden">
+                    Operations:
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={isAllowed(component.key, "operations")}
+                    onChange={() => toggleAccess(component.key, "operations")}
+                    disabled={
+                      isSaving ||
+                      !canEditOperations ||
+                      !isRoleEligibleForComponent(component.key, "operations")
+                    }
+                    className="h-5 w-5 rounded border-input disabled:opacity-50 cursor-pointer"
+                  />
+                </div>
+
                 {/* Team Lead column */}
                 <div className="flex sm:justify-center items-center gap-2 sm:gap-0">
                   <span className="text-sm text-muted-foreground sm:hidden">
@@ -402,7 +425,8 @@ function AccessConfigContent() {
               <strong>Note:</strong> Changes are saved immediately. Admin and
               Developer always have full access to all components. Toggle the
               checkboxes to control what monitors, team leads, lead generation
-              users, and agents can see.
+              users, and agents can see. Operations access is fixed to the
+              read-only platform view.
             </p>
           </div>
         </CardContent>

@@ -7,7 +7,7 @@ import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { isRoleEligibleForComponent } from "@/lib/constants/component-access";
 import type { ComponentKey, UserRole } from "@/lib/types";
 
-type EditableRole = Exclude<UserRole, "admin">;
+type EditableRole = Exclude<UserRole, "admin" | "developer" | "operations">;
 
 async function logAccessSettingChange(input: {
   actorId: string;

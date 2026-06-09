@@ -28,7 +28,7 @@ export default function LeadRequestsPage() {
 
 function LeadRequestsContent() {
   const { user } = useAuth();
-  const isMonitor = user?.role === 'monitor';
+  const isReadOnly = user?.role === 'monitor' || user?.role === 'operations';
   const [requests, setRequests] = useState<LeadRequest[]>([]);
   const [options, setOptions] = useState<LeadRequestAdminOptions>({ users: [], branches: [] });
   const [assignments, setAssignments] = useState<AssignmentState>({});
@@ -219,7 +219,7 @@ function LeadRequestsContent() {
                       </div>
                     </Td>
                     <Td>
-                      {isMonitor ? (
+                      {isReadOnly ? (
                         <span className="text-xs text-[var(--muted-foreground)]">View only</span>
                       ) : (
                         <div className="grid gap-2">
@@ -266,7 +266,7 @@ function LeadRequestsContent() {
                       </div>
                     </Td>
                     <Td>
-                      {!isMonitor && request.status === 'pending' ? (
+                      {!isReadOnly && request.status === 'pending' ? (
                         <div className="flex flex-col gap-2">
                           <Button
                             type="button"
@@ -289,7 +289,7 @@ function LeadRequestsContent() {
                           </Button>
                         </div>
                       ) : (
-                        <span className="text-xs text-[var(--muted-foreground)]">{isMonitor ? 'View only' : 'No action'}</span>
+                        <span className="text-xs text-[var(--muted-foreground)]">{isReadOnly ? 'View only' : 'No action'}</span>
                       )}
                     </Td>
                   </tr>

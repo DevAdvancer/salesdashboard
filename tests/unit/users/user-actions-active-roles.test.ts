@@ -155,4 +155,31 @@ describe('active user role creation actions', () => {
     expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerId');
     expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerIds');
   });
+
+  it('creates operations users without retired manager attributes', async () => {
+    const { createAgentAction } = await import('@/app/actions/user');
+
+    await createAgentAction({
+      currentUserId: 'admin-1',
+      name: 'Operations User',
+      email: 'operations@example.com',
+      password: 'password123',
+      role: 'operations' as any,
+      branchIds: [],
+    });
+
+    expect(getCreatedUserPayload()).toEqual(
+      expect.objectContaining({
+        name: 'Operations User',
+        email: 'operations@example.com',
+        role: 'operations',
+        teamLeadId: null,
+        branchIds: [],
+      }),
+    );
+    expect(getCreatedUserPayload()).not.toHaveProperty('managerId');
+    expect(getCreatedUserPayload()).not.toHaveProperty('managerIds');
+    expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerId');
+    expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerIds');
+  });
 });

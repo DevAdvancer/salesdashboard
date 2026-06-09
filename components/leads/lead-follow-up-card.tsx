@@ -14,7 +14,7 @@ interface LeadFollowUpCardProps {
   lead: Lead;
   user: User;
   disabled?: boolean;
-  onUpdated: () => Promise<void> | void;
+  onUpdated: (updatedLead?: Lead) => Promise<void> | void;
 }
 
 function toDateTimeLocal(value?: string | null) {
@@ -57,7 +57,7 @@ export function LeadFollowUpCard({ lead, user, disabled = false, onUpdated }: Le
 
     try {
       setSaving(true);
-      await updateLeadFollowUp({
+      const updatedLead = await updateLeadFollowUp({
         actorId: user.$id,
         leadId: lead.$id,
         nextFollowUpAt: fromDateTimeLocal(nextFollowUpAt),
@@ -66,7 +66,7 @@ export function LeadFollowUpCard({ lead, user, disabled = false, onUpdated }: Le
         followUpStatus: followUpStatus || 'pending',
       });
       toast({ title: 'Saved', description: 'Follow-up details updated.' });
-      await onUpdated();
+      await onUpdated(updatedLead);
     } catch (error) {
       console.error('Failed to update follow-up:', error);
       toast({

@@ -34,6 +34,14 @@ interface AttemptReservation {
     previousSentSubjects: string[];
 }
 
+async function assertCanWriteAssessmentAttempt(databases: DatabasesClient, userId: string) {
+    const user = await databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, userId) as unknown as UserDocument;
+    if (user.role === 'operations') {
+        throw new Error('Permission denied');
+    }
+    return user;
+}
+
 /**
  * Write an ASSESSMENT_EMAIL_SENT audit log entry (best-effort, does not throw).
  */
@@ -216,7 +224,7 @@ export async function reserveAssessmentAttempt(userId: string, leadId: string, s
 
     try {
         const { databases } = await createAdminClient();
-        const user = await databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, userId) as unknown as UserDocument;
+        const user = await assertCanWriteAssessmentAttempt(databases, userId);
         const isAdmin = user.role === 'admin' || user.role === 'developer';
         const allAttempts = await listAttemptsForLead(databases, leadId);
 
@@ -284,6 +292,7 @@ export async function rollbackAssessmentAttempt(userId: string, reservation: Att
 
     try {
         const { databases } = await createAdminClient();
+        await assertCanWriteAssessmentAttempt(databases, userId);
 
         if (reservation.created) {
             await databases.deleteDocument(
@@ -321,6 +330,7 @@ export async function completeAssessmentAttempt(
 ) {
     await assertAuthenticatedUserId(userId);
     const { databases } = await createAdminClient();
+    await assertCanWriteAssessmentAttempt(databases, userId);
 
     await logAssessmentAudit(databases, userId, leadId, {
         subject,

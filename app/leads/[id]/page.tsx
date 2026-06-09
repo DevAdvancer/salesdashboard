@@ -49,6 +49,7 @@ import {
   isAllowedLeadStatusTransition,
   normalizeLeadStatus,
   canonicalizeLeadStatus,
+  shouldRequireLeadFollowUpForStatus,
 } from "@/lib/utils/lead-status-workflow";
 import { getErrorMessage } from "@/lib/utils";
 
@@ -123,7 +124,7 @@ function LeadDetailContent() {
       setIsLoading(true);
       setError(null);
       const fetchedLead =
-        user.role === "monitor"
+        user.role === "monitor" || user.role === "operations"
           ? await getLeadAction(leadId, user.$id)
           : await getLead(leadId);
       setLead(fetchedLead);
@@ -250,12 +251,23 @@ function LeadDetailContent() {
 
   const handleSave = async () => {
     if (!lead || !user) return;
+    if (user.role === "operations") return;
     if (user.role === "monitor" && lead.ownerId !== user.$id) return;
 
     try {
       setIsSaving(true);
 
-      if (!isLeadGeneration && !lead.isClosed) {
+      const nextStatus = (leadData as any).status;
+      const previousStatus = lead.status;
+      const statusChanged =
+        normalizeStatusText(nextStatus) &&
+        normalizeStatusText(previousStatus) !== normalizeStatusText(nextStatus);
+
+      if (
+        !isLeadGeneration &&
+        !lead.isClosed &&
+        shouldRequireLeadFollowUpForStatus(previousStatus, nextStatus)
+      ) {
         const hasNextFollowUpAt = Boolean(lead.nextFollowUpAt);
         const hasNextAction = Boolean(
           lead.nextAction && String(lead.nextAction).trim(),
@@ -270,12 +282,6 @@ function LeadDetailContent() {
           return;
         }
       }
-
-      const nextStatus = (leadData as any).status;
-      const previousStatus = lead.status;
-      const statusChanged =
-        normalizeStatusText(nextStatus) &&
-        normalizeStatusText(previousStatus) !== normalizeStatusText(nextStatus);
 
       if (
         statusChanged &&
@@ -347,6 +353,7 @@ function LeadDetailContent() {
 
   const handleCloseLead = async () => {
     if (!lead || !user) return;
+    if (user.role === "operations") return;
     if (user.role === "monitor" && lead.ownerId !== user.$id) return;
 
     try {
@@ -468,6 +475,7 @@ function LeadDetailContent() {
 
   const handleReopenLead = async () => {
     if (!lead || !user) return;
+    if (user.role === "operations") return;
     if (user.role === "monitor" && lead.ownerId !== user.$id) return;
 
     try {
@@ -492,6 +500,7 @@ function LeadDetailContent() {
 
   const handleAssignAgent = async (agentId: string) => {
     if (!lead || !user) return;
+    if (user.role === "operations") return;
     if (user.role === "monitor" && lead.ownerId !== user.$id) return;
 
     try {
@@ -520,6 +529,7 @@ function LeadDetailContent() {
     const isReadOnly =
       !isEditing ||
       lead?.isClosed ||
+      user?.role === "operations" ||
       (user?.role === "monitor" && lead?.ownerId !== user.$id);
 
     switch (field.type) {
@@ -742,8 +752,9 @@ function LeadDetailContent() {
 
   const isLeadGeneration = user.role === "lead_generation";
   const isMonitor = user.role === "monitor";
+  const isOperations = user.role === "operations";
   const isLeadOwner = lead.ownerId === user.$id;
-  const canModifyLead = !isMonitor || isLeadOwner;
+  const canModifyLead = !isOperations && (!isMonitor || isLeadOwner);
   const canAssignLead =
     canModifyLead &&
     Boolean(lead) &&
@@ -972,7 +983,14 @@ function LeadDetailContent() {
               lead={lead}
               user={user}
               disabled={lead.isClosed || (isMonitor && !isLeadOwner)}
-              onUpdated={loadLead}
+              onUpdated={(updatedLead) => {
+                if (updatedLead) {
+                  setLead(updatedLead);
+                  setLeadData(JSON.parse(updatedLead.data));
+                  return;
+                }
+                return loadLead();
+              }}
             />
           </div>
         )}

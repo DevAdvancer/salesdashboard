@@ -99,7 +99,7 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
 
     // Monitor always uses default component-access — DB override rules are ignored
     // so admins cannot accidentally lock monitor out of hierarchy, audit-logs, etc.
-    if (user.role === 'monitor') {
+    if (user.role === 'monitor' || user.role === 'operations') {
       return getDefaultComponentAccess(componentKey, user.role);
     }
 

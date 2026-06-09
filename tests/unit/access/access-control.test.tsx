@@ -153,6 +153,51 @@ describe('Access Control System', () => {
       expect(result.current.canAccess('linkedin-requests')).toBe(false);
     });
 
+    it('should grant operations broad read access by default', async () => {
+      mockUseAuth.mockReturnValue({
+        user: { $id: 'operations-1', role: 'operations', email: 'operations@test.com' },
+        isManager: false,
+        isAdmin: false,
+      });
+
+      (databases.listDocuments as jest.Mock).mockResolvedValue({
+        documents: [
+          { componentKey: 'dashboard', role: 'operations', allowed: false },
+        ],
+        total: 1,
+      });
+
+      const { result } = renderHook(() => useAccess(), { wrapper });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      const visibleComponents: ComponentKey[] = [
+        'dashboard',
+        'leads',
+        'history',
+        'user-management',
+        'branch-management',
+        'audit-logs',
+        'hierarchy',
+        'work-queue',
+        'reports',
+        'review-queue',
+        'attendance',
+        'lead-requests',
+        'linkedin-account-management',
+        'linkedin-reports',
+      ];
+
+      visibleComponents.forEach((component) => {
+        expect(result.current.canAccess(component)).toBe(true);
+      });
+
+      expect(result.current.canAccess('field-management')).toBe(false);
+      expect(result.current.canAccess('linkedin-requests')).toBe(false);
+    });
+
     it('should return false when user is not authenticated', async () => {
       // Setup: No user
       mockUseAuth.mockReturnValue({

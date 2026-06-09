@@ -101,4 +101,28 @@ describe("monitor coaching notes authorization", () => {
       note: "Monitor note",
     });
   });
+
+  it("allows operations to list coaching notes but rejects creating them", async () => {
+    mockGetDocument.mockResolvedValue({
+      $id: "operations-1",
+      name: "Operations",
+      email: "operations@example.com",
+      role: "operations",
+      branchIds: [],
+    });
+
+    const { listCoachingNotesAction, createCoachingNoteAction } = await import("@/app/actions/sop");
+
+    await expect(listCoachingNotesAction("operations-1")).resolves.toHaveLength(1);
+    await expect(
+      createCoachingNoteAction({
+        actorId: "operations-1",
+        targetUserId: "agent-1",
+        targetUserName: "Agent",
+        note: "Operations note",
+        visibility: "leadership",
+      }),
+    ).rejects.toThrow("Not authorized");
+    expect(mockCreateDocument).not.toHaveBeenCalled();
+  });
 });

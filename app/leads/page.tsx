@@ -51,6 +51,8 @@ function deletedUserPlaceholder(userId: string): User {
 function LeadsContent() {
   const { user, loading } = useAuth();
   const isMonitor = user?.role === 'monitor';
+  const isOperations = user?.role === 'operations';
+  const isReadOnlyAdminView = isMonitor || isOperations;
   const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [agents, setAgents] = useState<User[]>([]);
@@ -91,6 +93,7 @@ function LeadsContent() {
     user?.role === "admin" ||
     user?.role === "developer" ||
     user?.role === "monitor" ||
+    user?.role === "operations" ||
     user?.role === "manager";
   const isLeadGeneration = user?.role === "lead_generation";
   const pageTitle = isLeadGeneration ? "Generated Leads" : "Active Leads";
@@ -214,7 +217,7 @@ function LeadsContent() {
 
     if (user) {
       if (
-        ["admin", "developer", "monitor", "manager", "assistant_manager", "team_lead"].includes(
+        ["admin", "developer", "monitor", "operations", "manager", "assistant_manager", "team_lead"].includes(
           user.role,
         )
       ) {
@@ -224,6 +227,7 @@ function LeadsContent() {
         user.role === "admin" ||
         user.role === "developer" ||
         user.role === "monitor" ||
+        user.role === "operations" ||
         user.role === "manager"
       ) {
         loadBranches();
@@ -320,7 +324,7 @@ function LeadsContent() {
   const loadAgents = async () => {
     if (
       !user ||
-      !["admin", "developer", "monitor", "manager", "assistant_manager", "team_lead"].includes(
+      !["admin", "developer", "monitor", "operations", "manager", "assistant_manager", "team_lead"].includes(
         user.role,
       )
     )
@@ -334,6 +338,7 @@ function LeadsContent() {
         user.role === "admin" ||
         user.role === "developer" ||
         user.role === "monitor" ||
+        user.role === "operations" ||
         user.role === "assistant_manager"
       ) {
         // For managers, AMs and admins, load assignable users
@@ -354,7 +359,7 @@ function LeadsContent() {
   };
 
   const loadBranches = async () => {
-    if (!user || !["admin", "developer", "monitor", "manager"].includes(user.role)) return;
+    if (!user || !["admin", "developer", "monitor", "operations", "manager"].includes(user.role)) return;
 
     try {
       const branchList = await listBranches();
@@ -364,6 +369,7 @@ function LeadsContent() {
           user.role === "admin" ||
           user.role === "developer" ||
           user.role === "monitor" ||
+          user.role === "operations" ||
           (user.branchIds ?? []).includes(branch.$id)
         );
       });
@@ -543,7 +549,9 @@ function LeadsContent() {
               {isExporting ? "Exporting..." : "Export CSV"}
             </Button>
           )}
-          {!isLeadGeneration && <Button onClick={() => router.push("/leads/new")}>Create Lead</Button>}
+          {!isLeadGeneration && !isReadOnlyAdminView && (
+            <Button onClick={() => router.push("/leads/new")}>Create Lead</Button>
+          )}
         </div>
       </div>
 
@@ -585,7 +593,7 @@ function LeadsContent() {
               </select>
             </div>
 
-            {["admin", "developer", "monitor", "manager", "assistant_manager", "team_lead"].includes(
+            {["admin", "developer", "monitor", "operations", "manager", "assistant_manager", "team_lead"].includes(
               user?.role || "",
             ) && (
               <div>
@@ -653,7 +661,9 @@ function LeadsContent() {
               No leads found.{" "}
               {Object.keys(filters).length > 0
                 ? "Try adjusting your filters."
-                : "Create your first lead to get started."}
+                : isReadOnlyAdminView
+                  ? "No active leads are available."
+                  : "Create your first lead to get started."}
             </p>
           </CardContent>
         </Card>
@@ -677,6 +687,7 @@ function LeadsContent() {
                         "admin",
                         "developer",
                         "monitor",
+                        "operations",
                         "manager",
                         "assistant_manager",
                         "team_lead",
@@ -689,6 +700,7 @@ function LeadsContent() {
                         "admin",
                         "developer",
                         "monitor",
+                        "operations",
                         "manager",
                         "assistant_manager",
                         "team_lead",
@@ -746,6 +758,7 @@ function LeadsContent() {
                             "admin",
                             "developer",
                             "monitor",
+                            "operations",
                             "manager",
                             "assistant_manager",
                             "team_lead",
@@ -765,6 +778,7 @@ function LeadsContent() {
                             "admin",
                             "developer",
                             "monitor",
+                            "operations",
                             "manager",
                             "assistant_manager",
                             "team_lead",

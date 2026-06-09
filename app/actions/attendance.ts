@@ -24,7 +24,7 @@ function getEtDateKey(now: Date) {
 }
 
 function isAttendanceAdminLikeReadRole(role: User["role"]) {
-  return role === "admin" || role === "developer" || role === "monitor";
+  return role === "admin" || role === "developer" || role === "monitor" || role === "operations";
 }
 
 function getEtHour(now: Date) {

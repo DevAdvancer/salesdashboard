@@ -62,10 +62,21 @@ function ensureComponentAccess(role: UserRole, componentKey: Parameters<typeof i
   }
 }
 
-function ensureLeadership(role: UserRole) {
-  if (!["admin", "developer", "manager", "assistant_manager", "monitor", "team_lead"].includes(role)) {
+function ensureLeadershipRead(role: UserRole) {
+  if (!["admin", "developer", "manager", "assistant_manager", "monitor", "operations", "team_lead"].includes(role)) {
     throw new Error("Not authorized");
   }
+}
+
+function ensureCanMutate(role: UserRole) {
+  if (role === "operations") {
+    throw new Error("Not authorized");
+  }
+}
+
+function ensureLeadershipMutation(role: UserRole) {
+  ensureLeadershipRead(role);
+  ensureCanMutate(role);
 }
 
 function getLeadDisplayName(lead: Lead): string {
@@ -167,6 +178,7 @@ export async function updateLeadFollowUpAction(input: {
 }): Promise<Lead> {
   const actor = await getActor(input.actorId);
   ensureComponentAccess(actor.role, "leads");
+  ensureCanMutate(actor.role);
 
   const { databases } = await createAdminClient();
   const currentLead = await databases.getDocument(DATABASE_ID, COLLECTIONS.LEADS, input.leadId);
@@ -290,6 +302,7 @@ export async function createLeadNoteAction(input: {
 }): Promise<LeadNote> {
   const actor = await getActor(input.actorId);
   ensureComponentAccess(actor.role, "leads");
+  ensureCanMutate(actor.role);
 
   const { databases } = await createAdminClient();
   const doc = await databases.createDocument(
@@ -311,7 +324,7 @@ export async function createLeadNoteAction(input: {
 
 export async function listCoachingNotesAction(actorId: string, targetUserId?: string): Promise<CoachingNote[]> {
   const actor = await getActor(actorId);
-  ensureLeadership(actor.role);
+  ensureLeadershipRead(actor.role);
 
   const queries = [Query.orderDesc("createdAt"), Query.limit(200)];
   if (targetUserId) queries.push(Query.equal("targetUserId", targetUserId));
@@ -329,7 +342,7 @@ export async function createCoachingNoteAction(input: {
   visibility: CoachingNoteVisibility;
 }): Promise<CoachingNote> {
   const actor = await getActor(input.actorId);
-  ensureLeadership(actor.role);
+  ensureLeadershipMutation(actor.role);
 
   const { databases } = await createAdminClient();
   const doc = await databases.createDocument(
@@ -369,6 +382,7 @@ export async function listReviewTargetOptionsAction(input: {
 }): Promise<ReviewTargetOption[]> {
   const actor = await getActor(input.actorId);
   ensureComponentAccess(actor.role, "review-queue");
+  ensureCanMutate(actor.role);
 
   const searchQuery = input.searchQuery?.trim() ?? "";
   let options: ReviewTargetOption[] = [];
@@ -448,7 +462,7 @@ export async function updateReviewQueueStatusAction(
   status: string
 ): Promise<ReviewQueueItem> {
   const actor = await getActor(actorId);
-  ensureLeadership(actor.role);
+  ensureLeadershipMutation(actor.role);
 
   const { databases } = await createAdminClient();
   const doc = await databases.updateDocument(
@@ -466,6 +480,7 @@ export async function updateReviewQueueStatusAction(
 export async function listNotificationsAction(actorId: string): Promise<NotificationRecord[]> {
   const actor = await getActor(actorId);
   ensureComponentAccess(actor.role, "notifications");
+  ensureCanMutate(actor.role);
 
   const { databases } = await createAdminClient();
   const response = await databases.listDocuments(

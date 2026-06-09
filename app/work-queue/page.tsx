@@ -32,9 +32,9 @@ export default function WorkQueuePage() {
 }
 
 function WorkQueueContent() {
-  const { user, isAdmin, isManager, isAssistantManager, isTeamLead, isMonitor } =
+  const { user, isAdmin, isManager, isAssistantManager, isTeamLead, isMonitor, isOperations } =
     useAuth();
-  const canReadLikeAdmin = isAdmin || isMonitor;
+  const canReadLikeAdmin = isAdmin || isMonitor || isOperations;
   const [insights, setInsights] = useState<LeadershipDashboardInsights | null>(
     null,
   );

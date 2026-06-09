@@ -72,3 +72,12 @@ export function isAllowedLeadStatusTransition(
   );
   return allowed.has(next);
 }
+
+export function shouldRequireLeadFollowUpForStatus(
+  previousStatus: unknown,
+  nextStatus: unknown,
+) {
+  const previous = normalizeLeadStatus(previousStatus);
+  const next = normalizeLeadStatus(nextStatus);
+  return next === "pipelinefollowup" && previous !== next;
+}

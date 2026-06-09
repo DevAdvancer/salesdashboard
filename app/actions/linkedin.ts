@@ -100,15 +100,15 @@ async function logAuditAction(
 }
 
 function canManageLinkedinAccounts(user: User) {
-  return user.role === "admin" || user.role === "developer" || user.role === "team_lead";
+  return user.role === "admin" || user.role === "developer";
 }
 
 function canSeeLinkedinReports(user: User) {
-  return user.role === "admin" || user.role === "developer" || user.role === "monitor" || user.role === "team_lead";
+  return user.role === "admin" || user.role === "developer" || user.role === "monitor" || user.role === "operations" || user.role === "team_lead";
 }
 
 function canReadLinkedinAccountsLikeAdmin(user: User) {
-  return user.role === "admin" || user.role === "developer" || user.role === "monitor";
+  return user.role === "admin" || user.role === "developer" || user.role === "monitor" || user.role === "operations";
 }
 
 function assertLinkedinReportTeamScope(user: User, teamLeadId?: string | null) {

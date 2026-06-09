@@ -20,6 +20,7 @@ function formatRoleLabel(role: UserRole) {
   if (role === 'assistant_manager') return 'Assistant Manager';
   if (role === 'team_lead') return 'Team Lead';
   if (role === 'lead_generation') return 'Lead Generation';
+  if (role === 'operations') return 'Operations';
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 

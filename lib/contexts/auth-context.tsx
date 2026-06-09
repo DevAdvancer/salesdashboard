@@ -189,6 +189,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isAgent = user?.role === 'agent';
   const isLeadGeneration = user?.role === 'lead_generation';
   const isMonitor = user?.role === 'monitor';
+  const isOperations = user?.role === 'operations';
 
   const value: AuthContextType = {
     user,
@@ -200,6 +201,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isAgent,
     isLeadGeneration,
     isMonitor,
+    isOperations,
     loading,
     login,
     logout,

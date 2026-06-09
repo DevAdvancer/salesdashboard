@@ -113,7 +113,7 @@ export async function createPublicLeadRequestAction(input: PublicLeadRequestInpu
 }
 
 export async function listLeadRequestsAction(): Promise<LeadRequest[]> {
-  await assertLeadRequestAdmin();
+  await assertLeadRequestReader();
   const { databases } = await createAdminClient();
 
   try {
@@ -131,7 +131,7 @@ export async function listLeadRequestsAction(): Promise<LeadRequest[]> {
 }
 
 export async function getLeadRequestAdminOptionsAction(): Promise<LeadRequestAdminOptions> {
-  await assertLeadRequestAdmin();
+  await assertLeadRequestReader();
   const { databases } = await createAdminClient();
 
   const [users, branches] = await Promise.all([
@@ -258,6 +258,19 @@ async function assertLeadRequestAdmin() {
   const actor = await getAuthenticatedUserDoc();
   if (actor.role !== 'admin' && actor.role !== 'developer') {
     throw new Error('Only admins can manage lead requests.');
+  }
+  return actor;
+}
+
+async function assertLeadRequestReader() {
+  const actor = await getAuthenticatedUserDoc();
+  if (
+    actor.role !== 'admin' &&
+    actor.role !== 'developer' &&
+    actor.role !== 'monitor' &&
+    actor.role !== 'operations'
+  ) {
+    throw new Error('Only admins can view lead requests.');
   }
   return actor;
 }

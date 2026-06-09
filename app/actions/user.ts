@@ -391,10 +391,10 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
     }
 
     const role: UserRole = agentInput.role ?? 'agent';
-    if (role !== 'agent' && role !== 'lead_generation' && role !== 'monitor') {
+    if (role !== 'agent' && role !== 'lead_generation' && role !== 'monitor' && role !== 'operations') {
         throw new Error('Invalid role for createAgentAction');
     }
-    if (role === 'monitor' && callerDoc.role !== 'admin' && callerDoc.role !== 'developer') {
+    if ((role === 'monitor' || role === 'operations') && callerDoc.role !== 'admin' && callerDoc.role !== 'developer') {
         throw new Error('Permission denied: Only admins and developers can create this role');
     }
 
@@ -403,8 +403,8 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
     const userId = ID.unique();
 
     const isTeamLead = callerDoc.role === 'team_lead';
-    const teamLeadId = role === 'monitor' ? null : (isTeamLead ? callerDoc.$id : (agentInput.teamLeadId || null));
-    if (!teamLeadId && role !== 'monitor' && callerDoc.role !== 'admin' && callerDoc.role !== 'developer') {
+    const teamLeadId = role === 'monitor' || role === 'operations' ? null : (isTeamLead ? callerDoc.$id : (agentInput.teamLeadId || null));
+    if (!teamLeadId && role !== 'monitor' && role !== 'operations' && callerDoc.role !== 'admin' && callerDoc.role !== 'developer') {
         throw new Error("Agents must be assigned to a Team Lead");
     }
 
@@ -500,7 +500,7 @@ export async function updateUserAction(input: {
                  throw new Error("Manager and assistant manager roles have been removed.");
              }
              updates.role = role;
-             if (role === 'team_lead' || role === 'monitor' || role === 'admin' || role === 'developer') {
+             if (role === 'team_lead' || role === 'monitor' || role === 'operations' || role === 'admin' || role === 'developer') {
                  updates.teamLeadId = null;
              }
         }
@@ -655,8 +655,8 @@ export async function setAgentActiveAction(input: {
 
     const targetUserDoc = await getUserDoc(userId);
     if (!targetUserDoc) throw new Error("Target user not found");
-    if (targetUserDoc.role !== 'agent' && targetUserDoc.role !== 'lead_generation' && targetUserDoc.role !== 'monitor') {
-        throw new Error("Only agents, lead generation users, and monitors can be inactivated from this action");
+    if (targetUserDoc.role !== 'agent' && targetUserDoc.role !== 'lead_generation' && targetUserDoc.role !== 'monitor' && targetUserDoc.role !== 'operations') {
+        throw new Error("Only agents, lead generation users, monitors, and operations can be inactivated from this action");
     }
 
     const { users, databases } = await createAdminClient();

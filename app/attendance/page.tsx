@@ -88,7 +88,10 @@ function AttendanceContent() {
     selectedDateKey < todayKey &&
     user?.role !== "admin";
   const isAdminLikeAttendance =
-    user?.role === "admin" || user?.role === "developer" || user?.role === "monitor";
+    user?.role === "admin" ||
+    user?.role === "developer" ||
+    user?.role === "monitor" ||
+    user?.role === "operations";
   const canEditAttendance = user?.role === "admin" || user?.role === "team_lead";
 
   const loadOverview = useCallback(async () => {

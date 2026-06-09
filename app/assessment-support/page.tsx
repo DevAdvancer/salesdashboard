@@ -110,6 +110,7 @@ const lockedPrefilledInputClassName = "h-8 bg-muted text-muted-foreground";
 
 function AssessmentContent() {
   const { user, loading } = useAuth();
+  const isReadOnly = user?.role === "operations";
   const { toast } = useToast();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
@@ -717,18 +718,18 @@ function AssessmentContent() {
     <div className="container mx-auto p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Sales Assessment Support</h1>
-        {!isOutlookConnected ? (
+        {!isReadOnly && !isOutlookConnected ? (
           <Button onClick={handleConnectOutlook} disabled={isAuthLoading}>
             {isAuthLoading ? "Connecting..." : "Connect Outlook"}
           </Button>
-        ) : (
+        ) : isOutlookConnected ? (
           <Button
             variant="outline"
             disabled
             className="text-green-600 border-green-600">
             Outlook Connected
           </Button>
-        )}
+        ) : null}
       </div>
 
       <Card>
@@ -808,7 +809,7 @@ function AssessmentContent() {
                           <Button
                             size="sm"
                             onClick={() => handleCreateAssessment(lead)}
-                            disabled={!isOutlookConnected || isPreparingAssessment}>
+                            disabled={isReadOnly || !isOutlookConnected || isPreparingAssessment}>
                             {isPreparingAssessment && selectedLead?.$id === lead.$id
                               ? "Preparing..."
                               : "Create Assessment"}
@@ -1143,7 +1144,7 @@ function AssessmentContent() {
             <Button variant="outline" onClick={() => setIsModalOpen(false)}>
               Go Back
             </Button>
-            <Button onClick={sendEmail} disabled={isSending}>
+            <Button onClick={sendEmail} disabled={isReadOnly || isSending}>
               {isSending ? "Sending..." : "Send Request"}
             </Button>
           </DialogFooter>

@@ -158,6 +158,10 @@ async function getVisibleUserIdsForActor(actor: User, databases: AdminDatabases)
 }
 
 async function assertAssignmentAllowed(actor: User, agent: User, lead: Lead, databases: AdminDatabases) {
+    if (actor.role === 'operations') {
+        throw new Error('Permission denied');
+    }
+
     if (actor.role === 'admin' || actor.role === 'developer') {
         return;
     }
@@ -208,6 +212,10 @@ async function assertAssignmentAllowed(actor: User, agent: User, lead: Lead, dat
 }
 
 async function assertLeadAccessAllowed(actor: User, lead: Lead, databases: AdminDatabases) {
+    if (actor.role === 'operations') {
+        throw new Error('Permission denied');
+    }
+
     if (actor.role === 'monitor') {
         if (lead.ownerId === actor.$id) {
             return;
@@ -411,7 +419,7 @@ export async function listLeadAssignableAgentsAction(
     ) as unknown as Lead;
 
     const canListForLead =
-        currentLead.ownerId === actorDoc.$id ||
+        (actorDoc.role !== 'operations' && currentLead.ownerId === actorDoc.$id) ||
         ['admin', 'developer', 'manager', 'assistant_manager', 'team_lead'].includes(actorDoc.role);
 
     if (!canListForLead) {
@@ -633,6 +641,10 @@ export async function closeLeadAction(
                 actorId
             ) as unknown as User
             : null;
+
+        if (actorDoc?.role === 'operations') {
+            throw new Error('Permission denied');
+        }
 
         if (actorDoc?.role === 'monitor' && currentLead.ownerId !== actorDoc.$id) {
             throw new Error('Permission denied');

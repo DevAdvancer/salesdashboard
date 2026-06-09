@@ -65,7 +65,10 @@ function AttendanceReportContent() {
   }, []);
 
   const isAdminLike =
-    user?.role === "admin" || user?.role === "developer" || user?.role === "monitor";
+    user?.role === "admin" ||
+    user?.role === "developer" ||
+    user?.role === "monitor" ||
+    user?.role === "operations";
 
   // Load team lead options for admin/monitor
   useEffect(() => {

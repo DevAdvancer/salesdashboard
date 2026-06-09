@@ -34,6 +34,14 @@ interface AttemptReservation {
     previousSentSubjects: string[];
 }
 
+async function assertCanWriteInterviewAttempt(databases: DatabasesClient, userId: string) {
+    const user = await databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, userId) as unknown as UserDocument;
+    if (user.role === 'operations') {
+        throw new Error('Permission denied');
+    }
+    return user;
+}
+
 /**
  * Write an INTERVIEW_EMAIL_SENT audit log entry (best-effort, does not throw).
  */
@@ -222,7 +230,7 @@ export async function reserveInterviewAttempt(userId: string, leadId: string, su
     try {
         await assertAuthenticatedUserId(userId);
         const { databases } = await createAdminClient();
-        const user = await databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, userId) as unknown as UserDocument;
+        const user = await assertCanWriteInterviewAttempt(databases, userId);
         const isAdmin = user.role === 'admin' || user.role === 'developer';
 
         const allAttempts = await listAttemptsForLead(databases, leadId);
@@ -285,6 +293,7 @@ export async function rollbackInterviewAttempt(userId: string, reservation: Atte
 
     try {
         const { databases } = await createAdminClient();
+        await assertCanWriteInterviewAttempt(databases, userId);
 
         if (reservation.created) {
             await databases.deleteDocument(
@@ -322,6 +331,7 @@ export async function completeInterviewAttempt(
 ) {
     await assertAuthenticatedUserId(userId);
     const { databases } = await createAdminClient();
+    await assertCanWriteInterviewAttempt(databases, userId);
 
     await logInterviewAudit(databases, userId, leadId, {
         subject,

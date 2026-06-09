@@ -310,8 +310,12 @@ function isMonitorRole(role: UserRole) {
   return role === 'monitor';
 }
 
+function isOperationsRole(role: UserRole) {
+  return role === 'operations';
+}
+
 function isAdminLikeReadAllRole(role: UserRole) {
-  return role === 'admin' || role === 'developer' || role === 'monitor';
+  return role === 'admin' || role === 'developer' || role === 'monitor' || role === 'operations';
 }
 
 async function assertLeadReopenAllowed(
@@ -319,6 +323,10 @@ async function assertLeadReopenAllowed(
   actorDoc: UserDocument,
   lead: Lead
 ) {
+  if (isOperationsRole(actorDoc.role)) {
+    throw new Error('Permission denied');
+  }
+
   if (isMonitorRole(actorDoc.role)) {
     if (lead.ownerId === actorDoc.$id) return;
     throw new Error('Permission denied');
@@ -349,6 +357,10 @@ async function assertLeadUpdateAllowed(
   actorDoc: UserDocument,
   lead: Lead
 ) {
+  if (isOperationsRole(actorDoc.role)) {
+    throw new Error('Permission denied');
+  }
+
   if (isMonitorRole(actorDoc.role)) {
     if (lead.ownerId === actorDoc.$id) return;
     throw new Error('Permission denied');
@@ -438,6 +450,21 @@ export async function createLeadAction(
         await assertAuthenticatedUserId(creatingUserId || ownerId);
         const { databases } = await createAdminClient();
 
+        const finalOwnerId = creatingUserId || ownerId;
+        if (!isValidId(finalOwnerId)) {
+             throw new Error(`Invalid owner ID format: "${finalOwnerId}"`);
+        }
+
+        const actorDoc = await databases.getDocument(
+            DATABASE_ID,
+            COLLECTIONS.USERS,
+            finalOwnerId
+        ) as unknown as UserDocument;
+
+        if (isOperationsRole(actorDoc.role)) {
+            throw new Error('Permission denied');
+        }
+
         assertRequiredLeadData(input.data);
 
         // Validate uniqueness
@@ -447,11 +474,6 @@ export async function createLeadAction(
                 `Duplicate ${validation.duplicateField} found in lead ${validation.existingLeadId}` +
                 (validation.existingBranchId ? ` (branch: ${validation.existingBranchId})` : '')
             );
-        }
-
-        const finalOwnerId = creatingUserId || ownerId;
-        if (!isValidId(finalOwnerId)) {
-             throw new Error(`Invalid owner ID format: "${finalOwnerId}"`);
         }
 
         const dataJson = JSON.stringify(input.data);

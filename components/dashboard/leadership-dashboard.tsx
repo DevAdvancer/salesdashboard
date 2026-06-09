@@ -57,6 +57,7 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
 function formatRoleName(role: UserRole) {
   if (role === 'team_lead') return 'Team Lead';
   if (role === 'lead_generation') return 'Lead Generation';
+  if (role === 'operations') return 'Operations';
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
@@ -403,7 +404,7 @@ export function LeadershipDashboard({
         </Card>
       </div>
 
-      {(role === 'admin' || role === 'developer' || role === 'monitor') && (
+      {(role === 'admin' || role === 'developer' || role === 'monitor' || role === 'operations') && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

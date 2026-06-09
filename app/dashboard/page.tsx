@@ -47,8 +47,9 @@ type LeadGenerationTeamAssignmentStat = {
 
 
 function LegacyDashboardContent() {
-  const { user, isAdmin, isManager, isAssistantManager, isAgent, isTeamLead, isMonitor } =
+  const { user, isAdmin, isManager, isAssistantManager, isAgent, isTeamLead, isMonitor, isOperations } =
     useAuth();
+  const isReadOnlyAdminView = isMonitor || isOperations;
   const router = useRouter();
   const [metrics, setMetrics] = useState({
     activeLeads: 0,
@@ -136,7 +137,7 @@ function LegacyDashboardContent() {
           ]);
           let usersForInsights: User[] = [user];
 
-          if (isAdmin || isMonitor || isManager || isAssistantManager) {
+          if (isAdmin || isReadOnlyAdminView || isManager || isAssistantManager) {
             const visibleUsers = await userService.getAssignableUsers(
               user.role,
               user.branchIds || [],
@@ -192,7 +193,7 @@ function LegacyDashboardContent() {
               .filter((branchId): branchId is string => Boolean(branchId)),
           ]);
           const branchesForInsights: Branch[] = allBranches.filter(
-            (branch) => isAdmin || isMonitor || branchIdsInScope.has(branch.$id),
+            (branch) => isAdmin || isReadOnlyAdminView || branchIdsInScope.has(branch.$id),
           );
 
           const visibleLeadIds = Array.from(
@@ -253,7 +254,7 @@ function LegacyDashboardContent() {
 
 
         // Fetch upfront payment insights for admin-like read roles.
-        if (isAdmin || isMonitor) {
+        if (isAdmin || isReadOnlyAdminView) {
           setPaymentInsightsLoading(true);
           try {
             const insights = await listAllPaymentInsightsAction(user.$id);
@@ -275,7 +276,7 @@ function LegacyDashboardContent() {
     if (user) {
       fetchMetrics();
     }
-  }, [user, isAdmin, isAssistantManager, isManager, isMonitor]);
+  }, [user, isAdmin, isAssistantManager, isManager, isReadOnlyAdminView]);
 
 
   useEffect(() => {
@@ -549,7 +550,7 @@ function LegacyDashboardContent() {
         </Card>
       </div>
 
-      {(isAdmin || isMonitor || isManager || isAssistantManager) && (
+      {(isAdmin || isReadOnlyAdminView || isManager || isAssistantManager) && (
         <div id="tour-leadership-dashboard">
           <LeadershipDashboard
             role={user.role}
@@ -577,7 +578,7 @@ function LegacyDashboardContent() {
       </div>
 
       {/* Financial Insights */}
-      {(isAdmin || isMonitor) && (
+      {(isAdmin || isReadOnlyAdminView) && (
         <FinancialInsightsSection
           paymentRecords={paymentInsights}
           isLoading={paymentInsightsLoading}
@@ -627,7 +628,7 @@ function LegacyDashboardContent() {
           </CardContent>
         </Card>
 
-        {(isAdmin || isMonitor) && (
+        {(isAdmin || isReadOnlyAdminView) && (
           <Card>
             <CardHeader>
               <CardTitle>Admin Access</CardTitle>
@@ -635,13 +636,13 @@ function LegacyDashboardContent() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                As a {isMonitor ? "monitor" : "admin"}, you can:
+                As a {isOperations ? "operations" : isMonitor ? "monitor" : "admin"}, you can:
               </p>
               <ul className="list-disc list-inside text-sm mt-2 space-y-1">
-                <li>{isMonitor ? "View all branches" : "Manage all branches"}</li>
-                <li>{isMonitor ? "View users" : "Create and manage users"}</li>
-                <li>{isMonitor ? "View configured lead forms" : "Configure lead forms"}</li>
-                <li>{isMonitor ? "View access controls" : "Manage access controls"}</li>
+                <li>{isReadOnlyAdminView ? "View all branches" : "Manage all branches"}</li>
+                <li>{isReadOnlyAdminView ? "View users" : "Create and manage users"}</li>
+                <li>{isReadOnlyAdminView ? "View configured lead forms" : "Configure lead forms"}</li>
+                <li>{isReadOnlyAdminView ? "View access controls" : "Manage access controls"}</li>
                 <li>View all leads and clients</li>
               </ul>
             </CardContent>
@@ -729,15 +730,15 @@ function LegacyDashboardContent() {
                 Linkedin Request
               </Button>
             )}
-            {(isAdmin || isMonitor || isManager || isTeamLead) && (
+            {(isAdmin || isReadOnlyAdminView || isManager || isTeamLead) && (
               <>
                 <Button
                   className="w-full"
                   variant="outline"
                   onClick={() => router.push("/users")}>
-                  {isMonitor ? "View Users" : "Manage Users"}
+                  {isReadOnlyAdminView ? "View Users" : "Manage Users"}
                 </Button>
-                {!isMonitor && (
+                {!isReadOnlyAdminView && (
                   <Button
                     className="w-full"
                     variant="outline"
@@ -755,12 +756,12 @@ function LegacyDashboardContent() {
                 Configure Forms
               </Button>
             )}
-            {(isAdmin || isMonitor) && (
+            {(isAdmin || isReadOnlyAdminView) && (
               <Button
                 className="w-full"
                 variant="outline"
                 onClick={() => router.push("/branches")}>
-                {isMonitor ? "View Branches" : "Manage Branches"}
+                {isReadOnlyAdminView ? "View Branches" : "Manage Branches"}
               </Button>
             )}
           </CardContent>
