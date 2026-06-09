@@ -22,16 +22,21 @@ import {
   reopenLead,
   updateLead,
 } from "@/lib/services/lead-action-service";
-import {
-  getAssignableUsers,
-} from "@/lib/services/user-service";
+import { getAssignableUsers } from "@/lib/services/user-service";
 import {
   getClosureFormConfig,
   getFormConfig,
   getPaymentPlanFormConfig,
 } from "@/lib/services/form-config-service";
 import { upsertClientPaymentRecord } from "@/lib/services/client-payment-service";
-import { Lead, User, FormField, LeadData, LeadDataValue, PaymentStatus } from "@/lib/types";
+import {
+  Lead,
+  User,
+  FormField,
+  LeadData,
+  LeadDataValue,
+  PaymentStatus,
+} from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +56,10 @@ import {
   canonicalizeLeadStatus,
   shouldRequireLeadFollowUpForStatus,
 } from "@/lib/utils/lead-status-workflow";
+import {
+  getLinkedinProfileValue,
+  isLinkedinProfileField,
+} from "@/lib/utils/lead-linkedin-field";
 import { getErrorMessage } from "@/lib/utils";
 
 function isBackoutStatus(value: unknown) {
@@ -86,8 +95,6 @@ export default function LeadDetailPage() {
     </ProtectedRoute>
   );
 }
-
-
 
 function LeadDetailContent() {
   const { user, loading: authLoading } = useAuth();
@@ -193,7 +200,10 @@ function LeadDetailContent() {
 
     try {
       if (lead.ownerId === user.$id) {
-        const fetchedAgents = await listLeadAssignableAgents(lead.$id, user.$id);
+        const fetchedAgents = await listLeadAssignableAgents(
+          lead.$id,
+          user.$id,
+        );
         setAgents(
           fetchedAgents.filter((candidate) =>
             user.role === "lead_generation"
@@ -210,8 +220,14 @@ function LeadDetailContent() {
         user.role === "admin" ||
         user.role === "developer"
       ) {
-        const fetchedAgents = await getAssignableUsers(user.role, user.branchIds || [], user.$id);
-        setAgents(fetchedAgents.filter((candidate) => candidate.role === "agent"));
+        const fetchedAgents = await getAssignableUsers(
+          user.role,
+          user.branchIds || [],
+          user.$id,
+        );
+        setAgents(
+          fetchedAgents.filter((candidate) => candidate.role === "agent"),
+        );
       }
     } catch (err: unknown) {
       console.error("Error loading agents:", err);
@@ -427,7 +443,8 @@ function LeadDetailContent() {
         leadId,
         personalDetails: closureValues,
         paymentPlan: { percent, months, upfrontAmount },
-        initialStatus: (initialPaymentStatus || (upfrontAmount > 0 ? "partially_paid" : "not_paid")) as PaymentStatus,
+        initialStatus: (initialPaymentStatus ||
+          (upfrontAmount > 0 ? "partially_paid" : "not_paid")) as PaymentStatus,
       });
 
       await closeLead(leadId, closeStatus, user.$id, user.name, user.role);
@@ -521,11 +538,26 @@ function LeadDetailContent() {
   };
 
   const handleFieldChange = (key: string, value: LeadDataValue) => {
-    setLeadData((prev) => ({ ...prev, [key]: value }));
+    const linkedinField = formFields.find(
+      (field) => field.key === key && isLinkedinProfileField(field),
+    );
+
+    setLeadData((prev) =>
+      linkedinField
+        ? {
+            ...prev,
+            [key]: value,
+            linkedinProfileUrl:
+              typeof value === "string" ? value : String(value ?? ""),
+          }
+        : { ...prev, [key]: value },
+    );
   };
 
   const renderField = (field: FormField) => {
-    const value = String(leadData[field.key] ?? "");
+    const value = isLinkedinProfileField(field)
+      ? getLinkedinProfileValue(leadData, [field])
+      : String(leadData[field.key] ?? "");
     const isReadOnly =
       !isEditing ||
       lead?.isClosed ||
@@ -553,7 +585,9 @@ function LeadDetailContent() {
           );
           const mergedOptions = Array.from(
             new Set([
-              ...(field.options ?? []).map((opt) => canonicalizeLeadStatus(opt)),
+              ...(field.options ?? []).map((opt) =>
+                canonicalizeLeadStatus(opt),
+              ),
               ...LEAD_WORKFLOW_STATUSES,
             ]),
           );
@@ -919,7 +953,10 @@ function LeadDetailContent() {
               {formFields
                 .filter((field) => {
                   if (isLeadGeneration) {
-                    return leadGenerationVisibleKeys.has(field.key);
+                    return (
+                      leadGenerationVisibleKeys.has(field.key) ||
+                      isLinkedinProfileField(field)
+                    );
                   }
                   return user.role === "manager" || field.visible;
                 })
@@ -1146,13 +1183,21 @@ function LeadDetailContent() {
                       </select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="initialPaymentStatus">Initial Payment Status</Label>
+                      <Label htmlFor="initialPaymentStatus">
+                        Initial Payment Status
+                      </Label>
                       <select
                         id="initialPaymentStatus"
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        value={initialPaymentStatus || (Number(paymentPlanValues.upfrontAmount) > 0 ? "partially_paid" : "not_paid")}
-                        onChange={(e) => setInitialPaymentStatus(e.target.value)}
-                      >
+                        value={
+                          initialPaymentStatus ||
+                          (Number(paymentPlanValues.upfrontAmount) > 0
+                            ? "partially_paid"
+                            : "not_paid")
+                        }
+                        onChange={(e) =>
+                          setInitialPaymentStatus(e.target.value)
+                        }>
                         <option value="not_paid">Not Paid</option>
                         <option value="partially_paid">Partially Paid</option>
                         <option value="fully_paid">Fully Paid</option>
