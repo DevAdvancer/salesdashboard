@@ -153,7 +153,7 @@ describe('Access Control System', () => {
       expect(result.current.canAccess('linkedin-requests')).toBe(false);
     });
 
-    it('should grant operations broad read access by default', async () => {
+    it('should hide audit logs from operations by default', async () => {
       mockUseAuth.mockReturnValue({
         user: { $id: 'operations-1', role: 'operations', email: 'operations@test.com' },
         isManager: false,
@@ -179,7 +179,6 @@ describe('Access Control System', () => {
         'history',
         'user-management',
         'branch-management',
-        'audit-logs',
         'hierarchy',
         'work-queue',
         'reports',
@@ -194,6 +193,7 @@ describe('Access Control System', () => {
         expect(result.current.canAccess(component)).toBe(true);
       });
 
+      expect(result.current.canAccess('audit-logs')).toBe(false);
       expect(result.current.canAccess('field-management')).toBe(false);
       expect(result.current.canAccess('linkedin-requests')).toBe(false);
     });

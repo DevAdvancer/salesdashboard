@@ -15,8 +15,10 @@ import type {
   LinkedinRequestStatus,
   User,
 } from "@/lib/types";
-
-const LINKEDIN_ACCEPT_WINDOW_DAYS = 15;
+import {
+  LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS,
+  LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS,
+} from "@/lib/utils/linkedin-withdrawal-reminders";
 
 function normalizeCompany(value: string) {
   return value.trim();
@@ -71,6 +73,85 @@ function assertDateIso(value: string) {
     throw new Error("Invalid date");
   }
   return date.toISOString();
+}
+
+function normalizeLeadOutcomeStatus(value: unknown) {
+  return typeof value === "string"
+    ? value.trim().toLowerCase().replace(/\s+/g, "")
+    : "";
+}
+
+function getLeadOutcomeLabel(status: unknown) {
+  const normalized = normalizeLeadOutcomeStatus(status);
+  if (normalized === "backout" || normalized === "backedout") {
+    return "Backed Out";
+  }
+  if (normalized === "notinterested") {
+    return "Not Interested";
+  }
+  return null;
+}
+
+async function getLinkedinRequestLeadSnapshot(
+  databases: Awaited<ReturnType<typeof createAdminClient>>["databases"],
+  leadId?: string | null,
+) {
+  if (!leadId) return null;
+
+  try {
+    const lead = await databases.getDocument(
+      DATABASE_ID,
+      COLLECTIONS.LEADS,
+      leadId,
+    ) as unknown as { status?: unknown; isClosed?: unknown };
+    return {
+      leadId,
+      status: typeof lead.status === "string" ? lead.status : "",
+      isClosed: Boolean(lead.isClosed),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function getLinkedinRequestLeadOutcomeLabel(
+  databases: Awaited<ReturnType<typeof createAdminClient>>["databases"],
+  request: Pick<LinkedinRequest, "leadId">,
+) {
+  const lead = await getLinkedinRequestLeadSnapshot(databases, request.leadId);
+  return getLeadOutcomeLabel(lead?.status);
+}
+
+async function isBlockingLinkedinRequest(
+  databases: Awaited<ReturnType<typeof createAdminClient>>["databases"],
+  request: LinkedinRequest,
+) {
+  if ((request.isActive ?? true) === false) return false;
+  if (request.status === "withdrawn") return false;
+  if (request.status !== "accepted") return true;
+
+  const outcomeLabel = await getLinkedinRequestLeadOutcomeLabel(databases, request);
+  return !outcomeLabel;
+}
+
+async function createGeneralChatMessage(
+  databases: Awaited<ReturnType<typeof createAdminClient>>["databases"],
+  input: {
+    createdById: string;
+    createdByName: string;
+    body: string;
+  },
+) {
+  const body = input.body.trim();
+  if (!body) return;
+
+  await databases.createDocument(DATABASE_ID, COLLECTIONS.CHAT_MESSAGES, ID.unique(), {
+    channel: "general",
+    body,
+    createdById: input.createdById,
+    createdByName: input.createdByName,
+    createdAt: new Date().toISOString(),
+  });
 }
 
 async function logAuditAction(
@@ -251,7 +332,13 @@ export async function checkLinkedinDuplicateAction(input: {
   );
 
   const docs = response.documents as unknown as LinkedinRequest[];
-  const active = docs.find((doc) => (doc.isActive ?? true) && doc.status !== "withdrawn") ?? null;
+  let active: LinkedinRequest | null = null;
+  for (const doc of docs) {
+    if (await isBlockingLinkedinRequest(databases, doc)) {
+      active = doc;
+      break;
+    }
+  }
   return {
     isDuplicate: Boolean(active),
     activeRequestId: active?.$id ?? null,
@@ -319,8 +406,13 @@ export async function createLinkedinRequestAction(input: {
   );
 
   const existingByCompany = existingByCompanyResponse.documents as unknown as LinkedinRequest[];
-  const activeByCompany =
-    existingByCompany.find((doc) => (doc.isActive ?? true) && doc.status !== "withdrawn") ?? null;
+  let activeByCompany: LinkedinRequest | null = null;
+  for (const doc of existingByCompany) {
+    if (await isBlockingLinkedinRequest(databases, doc)) {
+      activeByCompany = doc;
+      break;
+    }
+  }
 
   const alreadySentResponse = await databases.listDocuments(
     DATABASE_ID,
@@ -706,11 +798,21 @@ export async function getBackoutStatusForLeadIdsAction(input: {
   const leadIds = Array.from(
     new Set(input.leadIds.filter((id) => typeof id === "string" && id.trim())),
   );
-  if (leadIds.length === 0) return { byLeadId: {} as Record<string, { isBackout: boolean }> };
+  if (leadIds.length === 0) {
+    return {
+      byLeadId: {} as Record<
+        string,
+        { isBackout: boolean; statusLabel: string | null; isTerminal: boolean }
+      >,
+    };
+  }
 
   const { databases } = await createAdminClient();
 
-  const byLeadId: Record<string, { isBackout: boolean }> = {};
+  const byLeadId: Record<
+    string,
+    { isBackout: boolean; statusLabel: string | null; isTerminal: boolean }
+  > = {};
   const chunkSize = 100;
   for (let i = 0; i < leadIds.length; i += chunkSize) {
     const chunk = leadIds.slice(i, i + chunkSize);
@@ -719,11 +821,12 @@ export async function getBackoutStatusForLeadIdsAction(input: {
       Query.limit(2000),
     ]);
     for (const doc of response.documents as unknown as Array<{ $id: string; status?: unknown; isClosed?: unknown }>) {
-      const status = typeof doc.status === "string" ? doc.status.trim().toLowerCase() : "";
-      const normalized = status.replace(/\s+/g, "");
-      const isBackout =
-        normalized === "backout" || normalized === "backedout";
-      byLeadId[doc.$id] = { isBackout };
+      const statusLabel = getLeadOutcomeLabel(doc.status);
+      byLeadId[doc.$id] = {
+        isBackout: statusLabel === "Backed Out",
+        statusLabel,
+        isTerminal: Boolean(statusLabel),
+      };
     }
   }
 
@@ -855,10 +958,15 @@ export async function markLinkedinRequestAcceptedAction(input: {
 export async function withdrawLinkedinRequestAction(input: {
   currentUserId: string;
   requestId: string;
+  reason: string;
 }) {
   await assertAuthenticatedUserId(input.currentUserId);
   const user = await getAuthenticatedUserDoc();
   const { databases } = await createAdminClient();
+  const reason = input.reason.trim();
+  if (!reason) {
+    throw new Error("Withdraw reason is required.");
+  }
 
   const existing = (await databases.getDocument(
     DATABASE_ID,
@@ -870,15 +978,30 @@ export async function withdrawLinkedinRequestAction(input: {
     throw new Error("Unauthorized");
   }
 
-  if (existing.status !== "sent" || existing.isActive === false) {
-    throw new Error("Only active 'sent' requests can be withdrawn.");
+  const nowIso = new Date().toISOString();
+  let eligibilityAnchor = "";
+  let manualWithdrawDays = 0;
+
+  if (existing.status === "sent" && existing.isActive !== false) {
+    eligibilityAnchor = existing.dateSent;
+    manualWithdrawDays = LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS;
+  } else if (
+    existing.status === "accepted" &&
+    existing.isActive !== false &&
+    !existing.leadId
+  ) {
+    eligibilityAnchor = existing.acceptedAt || existing.dateSent;
+    manualWithdrawDays = LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS;
+  } else {
+    throw new Error("This Linkedin request cannot be withdrawn.");
   }
 
-  const nowIso = new Date().toISOString();
-  const daysPassed = daysBetweenUtc(existing.dateSent, nowIso);
-  if (daysPassed < LINKEDIN_ACCEPT_WINDOW_DAYS) {
-    const remaining = LINKEDIN_ACCEPT_WINDOW_DAYS - daysPassed;
-    throw new Error(`You can withdraw after ${LINKEDIN_ACCEPT_WINDOW_DAYS} days. ${remaining} days left.`);
+  const daysPassed = daysBetweenUtc(eligibilityAnchor, nowIso);
+  if (daysPassed < manualWithdrawDays) {
+    const remaining = manualWithdrawDays - daysPassed;
+    throw new Error(
+      `You can withdraw after ${manualWithdrawDays} days. ${remaining} days left.`,
+    );
   }
 
   const updated = await databases.updateDocument(
@@ -904,9 +1027,19 @@ export async function withdrawLinkedinRequestAction(input: {
       company: existing.company,
       targetUrl: existing.targetUrl,
       dateSent: existing.dateSent,
+      acceptedAt: existing.acceptedAt ?? null,
       withdrawnAt: nowIso,
+      reason,
     },
   });
+
+  try {
+    await createGeneralChatMessage(databases, {
+      createdById: user.$id,
+      createdByName: user.name,
+      body: `Linkedin URL available again: ${existing.targetUrl} (${existing.company}) was withdrawn by ${user.name}. Reason: ${reason}`,
+    });
+  } catch {}
 
   return updated as unknown as LinkedinRequest;
 }
@@ -1168,7 +1301,36 @@ export async function listLinkedinAccountsForManagementAction(input: {
     queries,
   );
 
-  return response.documents as unknown as LinkedinAccount[];
+  const accounts = response.documents as unknown as LinkedinAccount[];
+  const assignedUserIds = Array.from(
+    new Set(accounts.map((account) => account.assignedUserId).filter(Boolean)),
+  );
+
+  if (assignedUserIds.length === 0) {
+    return accounts;
+  }
+
+  const teamLeadAssignedUserIds = new Set<string>();
+  const chunkSize = 100;
+  for (let i = 0; i < assignedUserIds.length; i += chunkSize) {
+    const chunk = assignedUserIds.slice(i, i + chunkSize);
+    const usersResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
+      Query.equal("$id", chunk),
+      Query.limit(2000),
+    ]);
+    for (const userDoc of usersResponse.documents as unknown as Array<{
+      $id: string;
+      role?: unknown;
+    }>) {
+      if (userDoc.role === "team_lead") {
+        teamLeadAssignedUserIds.add(userDoc.$id);
+      }
+    }
+  }
+
+  return accounts.filter(
+    (account) => !teamLeadAssignedUserIds.has(account.assignedUserId),
+  );
 }
 
 export async function getLinkedinWeeklyReportAction(input: {

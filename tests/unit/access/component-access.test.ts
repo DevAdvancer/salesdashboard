@@ -56,7 +56,6 @@ describe("component access eligibility", () => {
       "user-management",
       "settings",
       "branch-management",
-      "audit-logs",
       "mock",
       "assessment-support",
       "interview-support",
@@ -78,6 +77,7 @@ describe("component access eligibility", () => {
     });
 
     expect(isRoleEligibleForComponent("field-management", "operations" as never)).toBe(false);
+    expect(isRoleEligibleForComponent("audit-logs", "operations" as never)).toBe(false);
     expect(isRoleEligibleForComponent("linkedin-requests", "operations" as never)).toBe(false);
   });
 });

@@ -140,4 +140,59 @@ describe("Linkedin account management authorization", () => {
       expect.any(Array),
     );
   });
+
+  it("hides team lead-owned Linkedin IDs from the management list", async () => {
+    mockAssertAuthenticatedUserId.mockResolvedValue({ $id: "admin-1" });
+    mockGetAuthenticatedUserDoc.mockResolvedValue({
+      $id: "admin-1",
+      name: "Admin",
+      role: "admin",
+    });
+    mockListDocuments
+      .mockResolvedValueOnce({
+        documents: [
+          {
+            $id: "account-agent",
+            assignedUserId: "agent-1",
+            company: "Acme",
+            idName: "Agent Main",
+            accountType: "main",
+            teamLeadId: "tl-1",
+            isActive: true,
+          },
+          {
+            $id: "account-tl",
+            assignedUserId: "tl-1",
+            company: "Acme",
+            idName: "TL Main",
+            accountType: "main",
+            teamLeadId: "tl-1",
+            isActive: true,
+          },
+        ],
+        total: 2,
+      })
+      .mockResolvedValueOnce({
+        documents: [
+          { $id: "agent-1", role: "agent" },
+          { $id: "tl-1", role: "team_lead" },
+        ],
+        total: 2,
+      });
+
+    const { listLinkedinAccountsForManagementAction } = await import(
+      "@/app/actions/linkedin"
+    );
+
+    await expect(
+      listLinkedinAccountsForManagementAction({
+        currentUserId: "admin-1",
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        $id: "account-agent",
+        assignedUserId: "agent-1",
+      }),
+    ]);
+  });
 });

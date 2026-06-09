@@ -27,15 +27,17 @@ import {
   listMyLinkedinRequestsAction,
   markLinkedinRequestAcceptedAction,
   withdrawLinkedinRequestAction,
-  linkLeadToLinkedinRequestAction,
 } from "@/app/actions/linkedin";
-import { createLead } from "@/lib/services/lead-action-service";
 import type { LinkedinAccount, LinkedinRequest } from "@/lib/types";
 import { validateLeadUniqueness } from "@/lib/services/lead-validator";
 import { getErrorMessage } from "@/lib/utils";
 import { getLinkedinRequestDateFilterValue } from "@/lib/utils/linkedin-request-dates";
-
-const LINKEDIN_ACCEPT_WINDOW_DAYS = 15;
+import {
+  LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS,
+  LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS,
+  LINKEDIN_SENT_AUTO_WITHDRAW_DAYS,
+  LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS,
+} from "@/lib/utils/linkedin-withdrawal-reminders";
 
 function todayDateInputValue() {
   const now = new Date();
@@ -44,8 +46,6 @@ function todayDateInputValue() {
   const dd = String(now.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
 }
-
-
 
 function safeParseJson(value: unknown) {
   if (typeof value !== "string" || !value) return null;
@@ -118,8 +118,8 @@ function LinkedinRequestsContent() {
   >("all");
   const [filterUrl, setFilterUrl] = useState<string>("");
   const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
-  const [backoutByLeadId, setBackoutByLeadId] = useState<
-    Record<string, boolean>
+  const [leadOutcomeByLeadId, setLeadOutcomeByLeadId] = useState<
+    Record<string, { statusLabel: string | null; isTerminal: boolean }>
   >({});
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const selectedAccount = useMemo(
@@ -190,17 +190,23 @@ function LinkedinRequestsContent() {
           currentUserId: user.$id,
           leadIds,
         });
-        const map: Record<string, boolean> = {};
+        const map: Record<
+          string,
+          { statusLabel: string | null; isTerminal: boolean }
+        > = {};
         Object.entries(status.byLeadId).forEach(([leadId, info]) => {
-          map[leadId] = Boolean(info?.isBackout);
+          map[leadId] = {
+            statusLabel: info?.statusLabel ?? null,
+            isTerminal: Boolean(info?.isTerminal),
+          };
         });
-        setBackoutByLeadId(map);
+        setLeadOutcomeByLeadId(map);
       } else {
-        setBackoutByLeadId({});
+        setLeadOutcomeByLeadId({});
       }
     } catch {
       setRequests([]);
-      setBackoutByLeadId({});
+      setLeadOutcomeByLeadId({});
     } finally {
       setLoadingList(false);
     }
@@ -384,43 +390,12 @@ function LinkedinRequestsContent() {
         currentUserId: user.$id,
         requestId: request.$id,
       });
-      
-      if (user.role === "lead_generation") {
-        const leadData = {
-          linkedinProfileUrl: request.targetUrl,
-          sourceName: request.coldCall ? "Cold Calls" : "LinkedIN/Lead",
-          source: request.coldCall ? "Cold Calls" : "LinkedIN/Lead",
-          company: request.company,
-          ...(request.coldCallPhone ? { phone: request.coldCallPhone } : {}),
-        };
-        const branchId = user.branchId || (user.branchIds && user.branchIds.length > 0 ? user.branchIds[0] : undefined);
-        const created = await createLead(
-          user.$id,
-          {
-            data: leadData,
-            status: "Connection Accepted",
-            branchId,
-          },
-          user.$id,
-          user.name
-        );
-        await linkLeadToLinkedinRequestAction({
-          currentUserId: user.$id,
-          requestId: request.$id,
-          leadId: created.$id,
-        });
-        toast({
-          title: "Accepted & Lead Created",
-          description: "Marked as accepted and auto-created lead.",
-          variant: "success",
-        });
-      } else {
-        toast({
-          title: "Accepted",
-          description: "Marked as accepted.",
-          variant: "success",
-        });
-      }
+      toast({
+        title: "Accepted",
+        description:
+          "Marked as accepted. Create a lead within 7 days or withdraw it.",
+        variant: "success",
+      });
       await loadRequests();
     } catch (error: unknown) {
       toast({
@@ -434,13 +409,41 @@ function LinkedinRequestsContent() {
     }
   };
 
-  const withdraw = async (requestId: string) => {
+  const openCreateLead = (request: LinkedinRequest) => {
+    const params = new URLSearchParams();
+    params.set("linkedinRequestId", request.$id);
+    params.set("linkedinTargetUrl", request.targetUrl);
+    params.set("linkedinCompany", request.company);
+    if (
+      request.coldCall &&
+      typeof request.coldCallPhone === "string" &&
+      request.coldCallPhone.trim()
+    ) {
+      params.set("coldCall", "1");
+      params.set("coldCallPhone", request.coldCallPhone.trim());
+    }
+    router.push(`/leads/new?${params.toString()}`);
+  };
+
+  const withdraw = async (request: LinkedinRequest) => {
     if (!user) return;
+    const reason =
+      window.prompt("Enter withdraw reason for audit")?.trim() ?? "";
+    if (!reason) {
+      toast({
+        title: "Withdraw reason required",
+        description: "Please enter a reason before withdrawing this request.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
-      setWithdrawingId(requestId);
+      setWithdrawingId(request.$id);
       await withdrawLinkedinRequestAction({
         currentUserId: user.$id,
-        requestId,
+        requestId: request.$id,
+        reason,
       });
       toast({
         title: "Withdrawn",
@@ -462,11 +465,7 @@ function LinkedinRequestsContent() {
   const filteredRequests = useMemo(() => {
     const normalizedUrl = filterUrl.trim().toLowerCase();
     return requests.filter((r) => {
-      if (filterStatus === "all") {
-        const isActive = r.isActive !== false;
-        if (!isActive) return false;
-        if (r.status === "withdrawn") return false;
-      } else if (r.status !== filterStatus) {
+      if (filterStatus !== "all" && r.status !== filterStatus) {
         return false;
       }
       if (filterDate) {
@@ -684,78 +683,94 @@ function LinkedinRequestsContent() {
                 </TableRow>
               ) : (
                 filteredRequests.map((r) => {
-                  const daysPassed = daysSinceDateInputValue(r.dateSent);
-                  const daysLeft = Math.max(
-                    LINKEDIN_ACCEPT_WINDOW_DAYS - daysPassed,
+                  const leadOutcome = r.leadId
+                    ? leadOutcomeByLeadId[r.leadId]
+                    : undefined;
+                  const leadStatusLabel = leadOutcome?.statusLabel ?? null;
+                  const sentDaysPassed = daysSinceDateInputValue(r.dateSent);
+                  const sentDaysLeft = Math.max(
+                    LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS - sentDaysPassed,
                     0,
                   );
-                  const notAcceptedLabel =
-                    daysLeft > 0
-                      ? `Not Accepted - ${daysLeft} days left`
-                      : "Not Accepted - 0 days left";
-                  const canWithdraw =
+                  const sentAutoDaysLeft = Math.max(
+                    LINKEDIN_SENT_AUTO_WITHDRAW_DAYS - sentDaysPassed,
+                    0,
+                  );
+                  const acceptedAnchor = r.acceptedAt || r.dateSent;
+                  const acceptedDaysPassed =
+                    daysSinceDateInputValue(acceptedAnchor);
+                  const acceptedLeadDaysLeft = Math.max(
+                    LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS - acceptedDaysPassed,
+                    0,
+                  );
+                  const acceptedAutoDaysLeft = Math.max(
+                    LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS - acceptedDaysPassed,
+                    0,
+                  );
+                  const canWithdrawSent =
                     r.status === "sent" &&
                     (r.isActive ?? true) &&
-                    daysLeft === 0;
-                  const statusLabel =
-                    r.status === "accepted"
-                      ? "Accepted"
+                    sentDaysPassed >= LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS;
+                  const canWithdrawAccepted =
+                    r.status === "accepted" &&
+                    (r.isActive ?? true) &&
+                    !r.leadId &&
+                    acceptedDaysPassed >= LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS;
+                  const statusLabel = leadStatusLabel
+                    ? leadStatusLabel
+                    : r.status === "accepted"
+                      ? r.leadId
+                        ? "Accepted"
+                        : acceptedDaysPassed < LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS
+                          ? `Accepted - ${acceptedLeadDaysLeft} days left to create lead`
+                          : `Accepted - withdraw now (${acceptedAutoDaysLeft} days before auto-withdraw)`
                       : r.status === "withdrawn" || r.isActive === false
                         ? "Withdrawn"
-                        : notAcceptedLabel;
+                        : sentDaysPassed < LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS
+                          ? `Sent - ${sentDaysLeft} days left to withdraw`
+                          : `Sent - withdraw now (${sentAutoDaysLeft} days before auto-withdraw)`;
 
                   return (
                     <TableRow key={r.$id}>
                       <TableCell className="break-all">{r.targetUrl}</TableCell>
                       <TableCell>
-                        {new Date(r.dateSent).toLocaleDateString(undefined, { timeZone: 'UTC' })}
+                        {new Date(r.dateSent).toLocaleDateString(undefined, {
+                          timeZone: "UTC",
+                        })}
                       </TableCell>
                       <TableCell>{statusLabel}</TableCell>
                       <TableCell>
                         {r.status === "accepted" ? (
                           <div className="flex flex-wrap gap-2">
                             {r.leadId ? (
-                              backoutByLeadId[r.leadId] ? (
-                                <Button variant="destructive" disabled>
-                                  Backed Out
-                                </Button>
-                              ) : (
-                                <Button
-                                  variant="outline"
-                                  onClick={() =>
-                                    router.push(
-                                      `/leads/${encodeURIComponent(r.leadId!)}`,
-                                    )
-                                  }>
-                                  Open Lead
-                                </Button>
-                              )
-                            ) : user.role === "lead_generation" ? (
-                              <span className="text-sm text-muted-foreground">Auto-creating...</span>
+                              <Button
+                                variant="outline"
+                                onClick={() =>
+                                  router.push(
+                                    `/leads/${encodeURIComponent(r.leadId!)}`,
+                                  )
+                                }>
+                                Open Lead
+                              </Button>
                             ) : (
                               <Button
                                 variant="outline"
-                                onClick={() => {
-                                  const params = new URLSearchParams();
-                                  params.set("linkedinRequestId", r.$id);
-                                  params.set("linkedinTargetUrl", r.targetUrl);
-                                  params.set("linkedinCompany", r.company);
-                                  if (
-                                    r.coldCall &&
-                                    typeof r.coldCallPhone === "string" &&
-                                    r.coldCallPhone.trim()
-                                  ) {
-                                    params.set("coldCall", "1");
-                                    params.set(
-                                      "coldCallPhone",
-                                      r.coldCallPhone.trim(),
-                                    );
-                                  }
-                                  router.push(
-                                    `/leads/new?${params.toString()}`,
-                                  );
-                                }}>
+                                onClick={() => openCreateLead(r)}>
                                 Create Lead
+                              </Button>
+                            )}
+                            {!r.leadId && (
+                              <Button
+                                variant="outline"
+                                disabled={
+                                  !canWithdrawAccepted ||
+                                  withdrawingId === r.$id ||
+                                  acceptingId === r.$id
+                                }
+                                onClick={() => withdraw(r)}>
+                                {withdrawingId === r.$id
+                                  ? "Withdrawing..."
+                                  : "Withdraw"}
                               </Button>
                             )}
                             <span className="text-sm text-muted-foreground">
@@ -780,11 +795,11 @@ function LinkedinRequestsContent() {
                             <Button
                               variant="outline"
                               disabled={
-                                !canWithdraw ||
+                                !canWithdrawSent ||
                                 withdrawingId === r.$id ||
                                 acceptingId === r.$id
                               }
-                              onClick={() => withdraw(r.$id)}>
+                              onClick={() => withdraw(r)}>
                               {withdrawingId === r.$id
                                 ? "Withdrawing..."
                                 : "Withdraw"}

@@ -247,6 +247,57 @@ function getLeadResumeFileId(lead: Lead): string | null {
     }
 }
 
+function getLeadLinkedinRequestId(lead: Lead): string | null {
+    try {
+        const data = JSON.parse(lead.data) as { linkedinRequestId?: unknown };
+        return typeof data.linkedinRequestId === 'string' && data.linkedinRequestId ? data.linkedinRequestId : null;
+    } catch {
+        return null;
+    }
+}
+
+async function syncLinkedinRequestAfterLeadClosure(
+    lead: Lead,
+    outcome: 'Backed Out' | 'Not Interested',
+    actorId: string,
+    actorName: string,
+    databases: AdminDatabases,
+    occurredAt: string,
+) {
+    const requestId = getLeadLinkedinRequestId(lead);
+    if (!requestId) return;
+
+    try {
+        await databases.updateDocument(
+            DATABASE_ID,
+            COLLECTIONS.LINKEDIN_REQUESTS,
+            requestId,
+            {
+                status: 'withdrawn',
+                isActive: false,
+                withdrawnAt: occurredAt,
+            },
+        );
+
+        await databases.createDocument(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, ID.unique(), {
+            action: 'LINKEDIN_REQUEST_WITHDRAW',
+            actorId,
+            actorName,
+            targetId: requestId,
+            targetType: 'linkedin_request',
+            metadata: JSON.stringify({
+                leadId: lead.$id,
+                reason: `Lead marked as ${outcome}`,
+                withdrawnAt: occurredAt,
+                source: 'lead_status_sync',
+            }),
+            performedAt: occurredAt,
+        });
+    } catch (error) {
+        console.error(`Failed to sync Linkedin request for lead ${lead.$id}:`, error);
+    }
+}
+
 async function syncResumePermissionsForAssignment(
     lead: Lead,
     agentId: string,
@@ -517,6 +568,15 @@ export async function backoutLeadAction(
     [...new Set(permissions)],
   );
 
+  await syncLinkedinRequestAfterLeadClosure(
+    currentLead,
+    "Backed Out",
+    actorId,
+    actorName,
+    databases,
+    nowIso,
+  );
+
   try {
     await databases.createDocument(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, ID.unique(), {
       action: "LEAD_UPDATE",
@@ -560,25 +620,17 @@ export async function notInterestedLeadAction(
 
   await assertLeadAccessAllowed(actorDoc, currentLead, databases);
 
-  const unassignedOwnerId =
-    process.env.NEXT_PUBLIC_APPWRITE_UNASSIGNED_OWNER_ID ||
-    process.env.APPWRITE_UNASSIGNED_OWNER_ID ||
-    "";
-  if (!unassignedOwnerId) {
-    throw new Error("Missing unassigned owner user id (APPWRITE_UNASSIGNED_OWNER_ID).");
-  }
-
   const permissions: string[] = [
-    Permission.read(Role.user(unassignedOwnerId)),
-    Permission.update(Role.user(unassignedOwnerId)),
-    Permission.delete(Role.user(unassignedOwnerId)),
+    Permission.read(Role.user(currentLead.ownerId)),
+    Permission.update(Role.user(currentLead.ownerId)),
+    Permission.delete(Role.user(currentLead.ownerId)),
     Permission.read(Role.label("admin")),
     Permission.update(Role.label("admin")),
     Permission.delete(Role.label("admin")),
     Permission.read(Role.user(actorId)),
   ];
 
-  const hierarchyPerms = await getHierarchyPermissionsServer(unassignedOwnerId, databases);
+  const hierarchyPerms = await getHierarchyPermissionsServer(currentLead.ownerId, databases);
   permissions.push(...hierarchyPerms);
 
   const nowIso = new Date().toISOString();
@@ -587,13 +639,22 @@ export async function notInterestedLeadAction(
     COLLECTIONS.LEADS,
     leadId,
     {
-      ownerId: unassignedOwnerId,
-      assignedToId: unassignedOwnerId,
+      ownerId: currentLead.ownerId,
+      assignedToId: null,
       isClosed: true,
       closedAt: nowIso,
       status: "Not Interested",
     },
     [...new Set(permissions)],
+  );
+
+  await syncLinkedinRequestAfterLeadClosure(
+    currentLead,
+    "Not Interested",
+    actorId,
+    actorName,
+    databases,
+    nowIso,
   );
 
   try {
@@ -605,8 +666,8 @@ export async function notInterestedLeadAction(
       targetType: "LEAD",
       metadata: JSON.stringify({
         status: "Not Interested",
-        ownerId: unassignedOwnerId,
-        assignedToId: unassignedOwnerId,
+        ownerId: currentLead.ownerId,
+        assignedToId: null,
         isClosed: true,
         closedAt: nowIso,
       }),
@@ -670,7 +731,7 @@ export async function closeLeadAction(
 
         const hierarchyPerms = await getHierarchyPermissionsServer(currentLead.ownerId, databases);
         permissions.push(...hierarchyPerms);
-        
+
         if (nextAssignedToId) {
             const assignedHierarchyPerms = await getHierarchyPermissionsServer(nextAssignedToId, databases);
             permissions.push(...assignedHierarchyPerms);

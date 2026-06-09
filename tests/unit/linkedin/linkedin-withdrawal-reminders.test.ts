@@ -1,5 +1,6 @@
 import {
   buildLinkedinWithdrawalReminder,
+  shouldAutoWithdrawLinkedinRequest,
   shouldSendLinkedinWithdrawalReminder,
 } from '@/lib/utils/linkedin-withdrawal-reminders';
 import type { LinkedinRequest } from '@/lib/types';
@@ -11,8 +12,6 @@ function request(overrides: Partial<LinkedinRequest>): LinkedinRequest {
     agentId: 'agent-1',
     teamLeadId: 'team-lead-1',
     company: 'Acme',
-    idName: 'Primary',
-    accountType: 'main',
     targetUrl: 'https://linkedin.com/in/acme-person',
     dateSent: '2026-05-01T00:00:00.000Z',
     status: 'sent',
@@ -31,17 +30,17 @@ describe('linkedin withdrawal reminders', () => {
       shouldSendLinkedinWithdrawalReminder({
         request: request({ dateSent: '2026-05-01T09:00:00.000Z' }),
         now,
-        lastReminderCreatedAt: null,
+        remindersSentToday: 0,
       })
     ).toBe(true);
   });
 
-  it('does not send before 15 days, after withdrawal, or within one hour of the last reminder', () => {
+  it('does not send before 15 days, after withdrawal, or after 5 reminders in the same day', () => {
     expect(
       shouldSendLinkedinWithdrawalReminder({
         request: request({ dateSent: '2026-05-02T00:00:00.000Z' }),
         now,
-        lastReminderCreatedAt: null,
+        remindersSentToday: 0,
       })
     ).toBe(false);
 
@@ -49,7 +48,7 @@ describe('linkedin withdrawal reminders', () => {
       shouldSendLinkedinWithdrawalReminder({
         request: request({ status: 'withdrawn', withdrawnAt: '2026-05-15T12:00:00.000Z' }),
         now,
-        lastReminderCreatedAt: null,
+        remindersSentToday: 0,
       })
     ).toBe(false);
 
@@ -57,8 +56,57 @@ describe('linkedin withdrawal reminders', () => {
       shouldSendLinkedinWithdrawalReminder({
         request: request({}),
         now,
-        lastReminderCreatedAt: '2026-05-16T11:30:00.000Z',
+        remindersSentToday: 5,
       })
+    ).toBe(false);
+  });
+
+  it('uses the accepted reminder copy after 7 days when no lead exists', () => {
+    expect(
+      buildLinkedinWithdrawalReminder(
+        request({
+          status: 'accepted',
+          acceptedAt: '2026-05-08T00:00:00.000Z',
+          leadId: null,
+        }),
+      ),
+    ).toEqual({
+      type: 'linkedin_accepted_withdrawal_due',
+      title: 'Create lead or withdraw Linkedin connection',
+      body: 'Acme connection was accepted 7+ days ago. Create a lead now or withdraw it from Linkedin and CRM.',
+      targetId: 'request-1',
+      targetType: 'LINKEDIN_REQUEST',
+    });
+  });
+
+  it('auto withdraws sent requests after 20 days and accepted requests without leads after 12 days', () => {
+    expect(
+      shouldAutoWithdrawLinkedinRequest({
+        request: request({ dateSent: '2026-04-26T00:00:00.000Z' }),
+        now,
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldAutoWithdrawLinkedinRequest({
+        request: request({
+          status: 'accepted',
+          acceptedAt: '2026-05-04T00:00:00.000Z',
+          leadId: null,
+        }),
+        now,
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldAutoWithdrawLinkedinRequest({
+        request: request({
+          status: 'accepted',
+          acceptedAt: '2026-05-04T00:00:00.000Z',
+          leadId: 'lead-1',
+        }),
+        now,
+      }),
     ).toBe(false);
   });
 

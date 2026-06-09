@@ -117,7 +117,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'field-management', role: 'operations', allowed: false },
   { componentKey: 'settings', role: 'operations', allowed: true },
   { componentKey: 'branch-management', role: 'operations', allowed: true },
-  { componentKey: 'audit-logs', role: 'operations', allowed: true },
+  { componentKey: 'audit-logs', role: 'operations', allowed: false },
   { componentKey: 'mock', role: 'operations', allowed: true },
   { componentKey: 'assessment-support', role: 'operations', allowed: true },
   { componentKey: 'interview-support', role: 'operations', allowed: true },
