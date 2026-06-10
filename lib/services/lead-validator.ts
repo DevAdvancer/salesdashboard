@@ -2,6 +2,7 @@ import { Query } from 'appwrite';
 import { databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { LeadData, LeadValidationResult } from '@/lib/types';
 import { normalizeLinkedinProfileUrl } from '@/lib/utils/linkedin';
+import { normalizeLeadStatus } from '@/lib/utils/lead-status-workflow';
 
 /**
  * Validate lead uniqueness across all branches
@@ -59,6 +60,12 @@ export async function validateLeadUniqueness(
   }
 }
 
+function shouldIgnoreLinkedinDuplicate(doc: Record<string, unknown>, leadData: LeadData) {
+  const status = typeof doc.status === 'string' ? doc.status : leadData.status;
+  const normalizedStatus = normalizeLeadStatus(status);
+  return normalizedStatus === 'notinterested' || normalizedStatus === 'backedout';
+}
+
 /**
  * Check for a duplicate value in a specific field across all leads
  *
@@ -114,6 +121,9 @@ async function checkDuplicateField(
           (leadData as any).linkedinProfileUrl || (leadData as any).linkedinProfile,
         );
         if (inputNormalized && docNormalized && inputNormalized === docNormalized) {
+          if (shouldIgnoreLinkedinDuplicate(doc as Record<string, unknown>, leadData)) {
+            continue;
+          }
           return {
             isValid: false,
             duplicateField: field,

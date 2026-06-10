@@ -41,6 +41,7 @@ jest.mock('node-appwrite', () => ({
   },
   Role: {
     user: jest.fn((userId) => `user:${userId}`),
+    label: jest.fn((label) => `label:${label}`),
   },
 }));
 
@@ -59,6 +60,7 @@ describe('lead server action authorization', () => {
     process.env.NEXT_PUBLIC_APPWRITE_LEADS_COLLECTION_ID = 'leads';
     process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID = 'users';
     process.env.NEXT_PUBLIC_APPWRITE_AUDIT_LOGS_COLLECTION_ID = 'audit';
+    process.env.APPWRITE_UNASSIGNED_OWNER_ID = 'unassigned-owner';
 
     mockAssertAuthenticatedUserId.mockResolvedValue({ $id: 'viewer-1' });
     mockCreateAdminClient.mockResolvedValue({
@@ -859,6 +861,69 @@ describe('lead server action authorization', () => {
     );
   });
 
+  it('allows retrying a duplicate Linkedin URL when the existing lead is not interested', async () => {
+    mockGetDocument
+      .mockResolvedValueOnce({
+        $id: 'manager-1',
+        email: 'manager@example.com',
+        role: 'manager',
+        branchIds: ['branch-1'],
+        managerId: null,
+        managerIds: [],
+        teamLeadId: null,
+      })
+      .mockResolvedValueOnce({
+        $id: 'lead-1',
+        data: JSON.stringify({
+          firstName: 'Current',
+          email: 'current@example.com',
+          phone: '(555) 111-2222',
+          linkedinProfileUrl: 'https://linkedin.com/in/current',
+        }),
+        ownerId: 'manager-1',
+        assignedToId: 'agent-1',
+        branchId: 'branch-1',
+        isClosed: false,
+        closedAt: null,
+        status: 'Interested',
+      });
+
+    mockListDocuments.mockResolvedValueOnce({
+      documents: [
+        {
+          $id: 'lead-2',
+          branchId: 'branch-2',
+          status: 'Not Interested',
+          data: JSON.stringify({
+            firstName: 'Existing',
+            email: 'other@example.com',
+            phone: '5552223333',
+            linkedinProfileUrl: 'https://linkedin.com/in/existing',
+          }),
+        },
+      ],
+    });
+    mockUpdateDocument.mockResolvedValueOnce({
+      $id: 'lead-1',
+      status: 'Interested',
+    });
+
+    const { updateLeadAction } = await import('@/app/actions/lead');
+    const { createNotificationsForRecipients } = await import('@/lib/server/notifications');
+
+    await expect(
+      updateLeadAction(
+        'lead-1',
+        { linkedinProfileUrl: 'https://linkedin.com/in/existing' },
+        'manager-1',
+        'Manager',
+      )
+    ).resolves.toBeTruthy();
+
+    expect(mockUpdateDocument).toHaveBeenCalled();
+    expect(createNotificationsForRecipients).not.toHaveBeenCalled();
+  });
+
   it('rejects blank required lead fields before updating', async () => {
     mockGetDocument
       .mockResolvedValueOnce({
@@ -927,5 +992,157 @@ describe('lead server action authorization', () => {
 
     expect(mockListDocuments).not.toHaveBeenCalled();
     expect(mockUpdateDocument).not.toHaveBeenCalled();
+  });
+
+  it('moves backed out leads to the unassigned owner and clears assignedToId', async () => {
+    mockGetDocument
+      .mockResolvedValueOnce({
+        $id: 'manager-1',
+        email: 'manager@example.com',
+        role: 'manager',
+        managerId: null,
+        managerIds: [],
+        teamLeadId: null,
+        branchIds: ['branch-1'],
+      })
+      .mockResolvedValueOnce({
+        $id: 'lead-1',
+        data: JSON.stringify({
+          firstName: 'Current',
+          lastName: 'Lead',
+          status: 'Interested',
+        }),
+        ownerId: 'owner-1',
+        assignedToId: 'agent-1',
+        branchId: 'branch-1',
+        isClosed: false,
+        closedAt: null,
+        status: 'Interested',
+      })
+      .mockResolvedValueOnce({
+        $id: 'unassigned-owner',
+        managerId: null,
+        managerIds: [],
+        teamLeadId: null,
+      });
+
+    mockUpdateDocument.mockResolvedValueOnce({
+      $id: 'lead-1',
+      ownerId: 'unassigned-owner',
+      assignedToId: null,
+      isClosed: true,
+      status: 'Backed Out',
+    });
+
+    const { backoutLeadAction } = await import('@/lib/actions/lead-actions');
+
+    await expect(backoutLeadAction('lead-1', 'manager-1', 'Manager')).resolves.toMatchObject({
+      success: true,
+      lead: expect.objectContaining({
+        ownerId: 'unassigned-owner',
+        assignedToId: null,
+      }),
+    });
+
+    expect(mockUpdateDocument).toHaveBeenCalledWith(
+      'database',
+      'leads',
+      'lead-1',
+      expect.objectContaining({
+        ownerId: 'unassigned-owner',
+        assignedToId: null,
+        status: 'Backed Out',
+      }),
+      expect.any(Array),
+    );
+  });
+
+  it('moves not interested leads to the unassigned owner and clears assignedToId', async () => {
+    mockGetDocument
+      .mockResolvedValueOnce({
+        $id: 'manager-1',
+        email: 'manager@example.com',
+        role: 'manager',
+        managerId: null,
+        managerIds: [],
+        teamLeadId: null,
+        branchIds: ['branch-1'],
+      })
+      .mockResolvedValueOnce({
+        $id: 'lead-1',
+        data: JSON.stringify({
+          firstName: 'Current',
+          lastName: 'Lead',
+          status: 'Interested',
+          linkedinRequestId: 'linkedin-request-1',
+        }),
+        ownerId: 'owner-1',
+        assignedToId: 'agent-1',
+        branchId: 'branch-1',
+        isClosed: false,
+        closedAt: null,
+        status: 'Interested',
+      })
+      .mockResolvedValueOnce({
+        $id: 'unassigned-owner',
+        managerId: null,
+        managerIds: [],
+        teamLeadId: null,
+      })
+      .mockResolvedValueOnce({
+        $id: 'linkedin-request-1',
+        targetUrl: 'https://linkedin.com/in/test-profile',
+        company: 'Acme',
+      });
+
+    mockUpdateDocument
+      .mockResolvedValueOnce({
+        $id: 'lead-1',
+        ownerId: 'unassigned-owner',
+        assignedToId: null,
+        isClosed: true,
+        status: 'Not Interested',
+      })
+      .mockResolvedValueOnce({
+        $id: 'linkedin-request-1',
+        status: 'sent',
+        isActive: true,
+        leadId: null,
+      });
+
+    const { notInterestedLeadAction } = await import('@/lib/actions/lead-actions');
+
+    await expect(notInterestedLeadAction('lead-1', 'manager-1', 'Manager')).resolves.toMatchObject({
+      success: true,
+      lead: expect.objectContaining({
+        ownerId: 'unassigned-owner',
+        assignedToId: null,
+      }),
+    });
+
+    expect(mockUpdateDocument).toHaveBeenCalledWith(
+      'database',
+      'leads',
+      'lead-1',
+      expect.objectContaining({
+        ownerId: 'unassigned-owner',
+        assignedToId: null,
+        status: 'Not Interested',
+      }),
+      expect.any(Array),
+    );
+    expect(mockUpdateDocument).toHaveBeenNthCalledWith(
+      2,
+      'database',
+      'linkedin_requests',
+      'linkedin-request-1',
+      expect.objectContaining({
+        status: 'sent',
+        isActive: true,
+        leadId: null,
+        acceptedAt: null,
+        withdrawnAt: null,
+      }),
+    );
   });
 });

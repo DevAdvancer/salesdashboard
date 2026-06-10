@@ -43,6 +43,16 @@ function isBackoutStatus(value: unknown) {
   );
 }
 
+function isNotInterestedStatus(value: unknown) {
+  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (!text) return false;
+  return text.replace(/\s+/g, "") === "notinterested";
+}
+
+function isClientExcludedStatus(value: unknown) {
+  return isBackoutStatus(value) || isNotInterestedStatus(value);
+}
+
 export default function HistoryDetailPage() {
   return (
     <ProtectedRoute componentKey="history">
@@ -109,7 +119,7 @@ function HistoryDetailContent() {
         router.push(`/leads/${leadId}`);
         return;
       }
-      if (isBackoutStatus(fetchedLead.status)) {
+      if (isClientExcludedStatus(fetchedLead.status)) {
         router.push(`/leads/${leadId}`);
         return;
       }

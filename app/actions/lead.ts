@@ -60,6 +60,15 @@ function isBlankLeadValue(value: unknown) {
     return value === null || value === undefined;
 }
 
+function shouldIgnoreLinkedinDuplicate(
+    doc: Record<string, unknown>,
+    leadData: LeadData,
+) {
+    const status = typeof doc.status === 'string' ? doc.status : leadData.status;
+    const normalizedStatus = normalizeLeadStatus(status);
+    return normalizedStatus === 'notinterested' || normalizedStatus === 'backedout';
+}
+
 function assertRequiredLeadData(data: LeadData) {
     for (const [key, label] of Object.entries(REQUIRED_LEAD_FIELD_LABELS)) {
         if (Object.prototype.hasOwnProperty.call(data, key) && isBlankLeadValue(data[key])) {
@@ -139,6 +148,9 @@ async function validateLeadUniqueness(
                       (leadData as any).linkedinProfileUrl || (leadData as any).linkedinProfile,
                     );
                     if (docNormalized && docNormalized === inputNormalized) {
+                        if (shouldIgnoreLinkedinDuplicate(doc as Record<string, unknown>, leadData)) {
+                            continue;
+                        }
                         return {
                             isValid: false,
                             duplicateField: 'linkedinProfileUrl',

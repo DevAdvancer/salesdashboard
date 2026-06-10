@@ -29,6 +29,16 @@ function isBackoutStatus(value: unknown) {
   );
 }
 
+function isNotInterestedStatus(value: unknown) {
+  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (!text) return false;
+  return text.replace(/\s+/g, "") === "notinterested";
+}
+
+function isClientExcludedStatus(value: unknown) {
+  return isBackoutStatus(value) || isNotInterestedStatus(value);
+}
+
 function HistoryContent() {
   const router = useRouter();
   const { user } = useAuth();
@@ -234,7 +244,7 @@ function HistoryContent() {
         user.role,
         user.branchIds,
       );
-      const visible = closedLeads.filter((lead) => !isBackoutStatus(lead.status));
+      const visible = closedLeads.filter((lead) => !isClientExcludedStatus(lead.status));
       setLeads(visible);
       setPaymentByLeadId({});
       if (visible.length > 0) {

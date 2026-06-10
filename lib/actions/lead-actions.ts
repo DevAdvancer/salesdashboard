@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/server/appwrite';
 import { createNotificationsForRecipients } from '@/lib/server/notifications';
 import { BUCKETS, COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { Permission, Role, ID, Query } from 'node-appwrite';
-import { Lead, User } from '@/lib/types';
+import { Lead, LinkedinRequest, User } from '@/lib/types';
 import { assertAuthenticatedUserId } from '@/lib/server/current-user';
 
 type AdminDatabases = Awaited<ReturnType<typeof createAdminClient>>['databases'];
@@ -79,6 +79,14 @@ function getLeadDisplayName(lead: Lead): string {
     } catch {
         return 'Lead';
     }
+}
+
+function getUnassignedOwnerId(): string {
+    return (
+        process.env.NEXT_PUBLIC_APPWRITE_UNASSIGNED_OWNER_ID ||
+        process.env.APPWRITE_UNASSIGNED_OWNER_ID ||
+        ''
+    );
 }
 
 function getUserBranchIds(user: User): string[] {
@@ -268,6 +276,56 @@ async function syncLinkedinRequestAfterLeadClosure(
     if (!requestId) return;
 
     try {
+        const request = await databases.getDocument(
+            DATABASE_ID,
+            COLLECTIONS.LINKEDIN_REQUESTS,
+            requestId,
+        ) as unknown as LinkedinRequest;
+
+        if (outcome === 'Not Interested') {
+            await databases.updateDocument(
+                DATABASE_ID,
+                COLLECTIONS.LINKEDIN_REQUESTS,
+                requestId,
+                {
+                    status: 'sent',
+                    isActive: true,
+                    leadId: null,
+                    acceptedAt: null,
+                    withdrawnAt: null,
+                },
+            );
+
+            await databases.createDocument(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, ID.unique(), {
+                action: 'LINKEDIN_REQUEST_REOPEN',
+                actorId,
+                actorName,
+                targetId: requestId,
+                targetType: 'linkedin_request',
+                metadata: JSON.stringify({
+                    leadId: lead.$id,
+                    targetUrl: request.targetUrl,
+                    company: request.company,
+                    reason: `Lead marked as ${outcome}`,
+                    reopenedAt: occurredAt,
+                    source: 'lead_status_sync',
+                }),
+                performedAt: occurredAt,
+            });
+
+            try {
+                await databases.createDocument(DATABASE_ID, COLLECTIONS.CHAT_MESSAGES, ID.unique(), {
+                    channel: 'general',
+                    body: `Linkedin URL available again: ${request.targetUrl} (${request.company}) lead was marked as Not Interested by ${actorName}. Another agent can try this URL.`,
+                    createdById: actorId,
+                    createdByName: actorName,
+                    createdAt: occurredAt,
+                });
+            } catch {}
+
+            return;
+        }
+
         await databases.updateDocument(
             DATABASE_ID,
             COLLECTIONS.LINKEDIN_REQUESTS,
@@ -287,6 +345,8 @@ async function syncLinkedinRequestAfterLeadClosure(
             targetType: 'linkedin_request',
             metadata: JSON.stringify({
                 leadId: lead.$id,
+                targetUrl: request.targetUrl,
+                company: request.company,
                 reason: `Lead marked as ${outcome}`,
                 withdrawnAt: occurredAt,
                 source: 'lead_status_sync',
@@ -532,10 +592,7 @@ export async function backoutLeadAction(
 
   await assertLeadAccessAllowed(actorDoc, currentLead, databases);
 
-  const unassignedOwnerId =
-    process.env.NEXT_PUBLIC_APPWRITE_UNASSIGNED_OWNER_ID ||
-    process.env.APPWRITE_UNASSIGNED_OWNER_ID ||
-    "";
+  const unassignedOwnerId = getUnassignedOwnerId();
   if (!unassignedOwnerId) {
     throw new Error("Missing unassigned owner user id (APPWRITE_UNASSIGNED_OWNER_ID).");
   }
@@ -560,7 +617,7 @@ export async function backoutLeadAction(
     leadId,
     {
       ownerId: unassignedOwnerId,
-      assignedToId: unassignedOwnerId,
+      assignedToId: null,
       isClosed: true,
       closedAt: nowIso,
       status: "Backed Out",
@@ -587,7 +644,7 @@ export async function backoutLeadAction(
       metadata: JSON.stringify({
         status: "Backed Out",
         ownerId: unassignedOwnerId,
-        assignedToId: unassignedOwnerId,
+        assignedToId: null,
         isClosed: true,
         closedAt: nowIso,
       }),
@@ -620,17 +677,22 @@ export async function notInterestedLeadAction(
 
   await assertLeadAccessAllowed(actorDoc, currentLead, databases);
 
+  const unassignedOwnerId = getUnassignedOwnerId();
+  if (!unassignedOwnerId) {
+    throw new Error("Missing unassigned owner user id (APPWRITE_UNASSIGNED_OWNER_ID).");
+  }
+
   const permissions: string[] = [
-    Permission.read(Role.user(currentLead.ownerId)),
-    Permission.update(Role.user(currentLead.ownerId)),
-    Permission.delete(Role.user(currentLead.ownerId)),
+    Permission.read(Role.user(unassignedOwnerId)),
+    Permission.update(Role.user(unassignedOwnerId)),
+    Permission.delete(Role.user(unassignedOwnerId)),
     Permission.read(Role.label("admin")),
     Permission.update(Role.label("admin")),
     Permission.delete(Role.label("admin")),
     Permission.read(Role.user(actorId)),
   ];
 
-  const hierarchyPerms = await getHierarchyPermissionsServer(currentLead.ownerId, databases);
+  const hierarchyPerms = await getHierarchyPermissionsServer(unassignedOwnerId, databases);
   permissions.push(...hierarchyPerms);
 
   const nowIso = new Date().toISOString();
@@ -639,7 +701,7 @@ export async function notInterestedLeadAction(
     COLLECTIONS.LEADS,
     leadId,
     {
-      ownerId: currentLead.ownerId,
+      ownerId: unassignedOwnerId,
       assignedToId: null,
       isClosed: true,
       closedAt: nowIso,
@@ -666,7 +728,7 @@ export async function notInterestedLeadAction(
       targetType: "LEAD",
       metadata: JSON.stringify({
         status: "Not Interested",
-        ownerId: currentLead.ownerId,
+        ownerId: unassignedOwnerId,
         assignedToId: null,
         isClosed: true,
         closedAt: nowIso,
