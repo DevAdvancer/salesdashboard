@@ -14,6 +14,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/contexts/auth-context";
 import {
@@ -22,6 +24,7 @@ import {
   listTeamLeadsForLinkedinAction,
   upsertLinkedinAccountAction,
   listAllUsersForLinkedinAction,
+  toggleLinkedinAccountStatusAction,
 } from "@/app/actions/linkedin";
 import type { LinkedinAccount, LinkedinAccountType, User } from "@/lib/types";
 import { getErrorMessage } from "@/lib/utils";
@@ -52,6 +55,7 @@ function LinkedinAccountsContent() {
   const [accountType, setAccountType] = useState<LinkedinAccountType>("main");
   const [mainAccountId, setMainAccountId] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const companyOptions = useMemo(
     () => ["SilverSpace Inc.", "Vizva Inc.", "Flawless-ED"],
@@ -191,6 +195,31 @@ function LinkedinAccountsContent() {
     );
     setAccountType(account.accountType);
     setMainAccountId(account.mainAccountId ?? "");
+  };
+
+  const onToggleStatus = async (account: LinkedinAccount, isActive: boolean) => {
+    if (!user) return;
+    try {
+      setTogglingId(account.$id);
+      await toggleLinkedinAccountStatusAction({
+        currentUserId: user.$id,
+        accountId: account.$id,
+        isActive,
+      });
+      toast({
+        title: isActive ? "Account activated" : "Account deactivated",
+        description: `${account.idName} is now ${isActive ? "Active" : "Inactive"}.`,
+      });
+      await loadAccounts();
+    } catch (error: unknown) {
+      toast({
+        title: "Failed to update status",
+        description: getErrorMessage(error),
+        variant: "destructive",
+      });
+    } finally {
+      setTogglingId(null);
+    }
   };
 
   const resetForm = () => {
@@ -399,6 +428,11 @@ function LinkedinAccountsContent() {
               <Button variant="outline" onClick={resetForm} disabled={saving}>
                 Reset
               </Button>
+              {!editingId && (
+                <div className="text-sm text-muted-foreground">
+                  New accounts are created Active by default. You can deactivate them after creation.
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -418,6 +452,7 @@ function LinkedinAccountsContent() {
                 <TableHead>Type</TableHead>
                 <TableHead>License</TableHead>
                 <TableHead>Limit</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead className="w-[140px]">Action</TableHead>
               </TableRow>
             </TableHeader>
@@ -425,7 +460,7 @@ function LinkedinAccountsContent() {
               {loading ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="text-sm text-muted-foreground">
                     Loading...
                   </TableCell>
@@ -433,35 +468,58 @@ function LinkedinAccountsContent() {
               ) : accounts.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="text-sm text-muted-foreground">
                     No Linkedin IDs created yet.
                   </TableCell>
                 </TableRow>
               ) : (
-                accounts.map((a) => (
-                  <TableRow key={a.$id}>
-                    <TableCell>
-                      {agentsMap.get(a.assignedUserId) ?? a.assignedUserId}
-                    </TableCell>
-                    <TableCell>{a.company}</TableCell>
-                    <TableCell>{a.idName}</TableCell>
-                    <TableCell className="uppercase">{a.accountType}</TableCell>
-                    <TableCell>{a.licenseType || "-"}</TableCell>
-                    <TableCell>
-                      {typeof a.connectionLimit === "number"
-                        ? a.connectionLimit
-                        : "-"}
-                    </TableCell>
-                    <TableCell>
-                      {!isMonitor && (
-                        <Button variant="outline" onClick={() => startEdit(a)}>
-                          Edit
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))
+                accounts.map((a) => {
+                  const isActive = a.isActive !== false;
+                  return (
+                    <TableRow
+                      key={a.$id}
+                      className={!isActive ? "opacity-60" : undefined}
+                    >
+                      <TableCell>
+                        {agentsMap.get(a.assignedUserId) ?? a.assignedUserId}
+                      </TableCell>
+                      <TableCell>{a.company}</TableCell>
+                      <TableCell>{a.idName}</TableCell>
+                      <TableCell className="uppercase">{a.accountType}</TableCell>
+                      <TableCell>{a.licenseType || "-"}</TableCell>
+                      <TableCell>
+                        {typeof a.connectionLimit === "number"
+                          ? a.connectionLimit
+                          : "-"}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={isActive ? "active" : "inactive"}>
+                            {isActive ? "Active" : "Inactive"}
+                          </Badge>
+                          {!isMonitor && (
+                            <Switch
+                              checked={isActive}
+                              disabled={togglingId === a.$id}
+                              onCheckedChange={(checked) =>
+                                onToggleStatus(a, checked)
+                              }
+                              aria-label={`Toggle ${a.idName} active status`}
+                            />
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {!isMonitor && (
+                          <Button variant="outline" onClick={() => startEdit(a)}>
+                            Edit
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>

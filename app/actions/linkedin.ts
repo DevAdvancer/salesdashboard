@@ -410,6 +410,13 @@ export async function createLinkedinRequestAction(input: {
   }
   const { databases } = await createAdminClient();
   const account = await assertAccessibleLinkedinAccount(databases, user.$id, input.accountId);
+
+  if (account.isActive === false) {
+    throw new Error(
+      "This Linkedin ID is currently inactive. Please ask Team Lead/Admin to activate it.",
+    );
+  }
+
   const company = normalizeCompany(account.company);
   const connectionLimitRaw = (account as unknown as { connectionLimit?: unknown })
     .connectionLimit;
@@ -1303,6 +1310,53 @@ export async function upsertLinkedinAccountAction(input: {
     metadata: payload,
   });
   return doc as unknown as LinkedinAccount;
+}
+
+export async function toggleLinkedinAccountStatusAction(input: {
+  currentUserId: string;
+  accountId: string;
+  isActive: boolean;
+}) {
+  await assertAuthenticatedUserId(input.currentUserId);
+  const user = await getAuthenticatedUserDoc();
+
+  if (!canManageLinkedinAccounts(user)) {
+    throw new Error("Unauthorized");
+  }
+
+  const { databases } = await createAdminClient();
+  const account = await getLinkedinAccountDoc(databases, input.accountId);
+
+  // Team leads can only toggle accounts for their own team
+  if (user.role === "team_lead") {
+    await assertAgentIsInTeam(user.$id, account.assignedUserId);
+  }
+
+  const updated = await databases.updateDocument(
+    DATABASE_ID,
+    COLLECTIONS.LINKEDIN_ACCOUNTS,
+    input.accountId,
+    {
+      isActive: input.isActive,
+      updatedBy: user.$id,
+    },
+  );
+
+  await logAuditAction(databases, {
+    action: input.isActive ? "LINKEDIN_ACCOUNT_ACTIVATE" : "LINKEDIN_ACCOUNT_DEACTIVATE",
+    actorId: user.$id,
+    actorName: user.name,
+    targetType: "linkedin_account",
+    targetId: input.accountId,
+    metadata: {
+      assignedUserId: account.assignedUserId,
+      idName: account.idName,
+      company: account.company,
+      isActive: input.isActive,
+    },
+  });
+
+  return updated as unknown as LinkedinAccount;
 }
 
 export async function listLinkedinAccountsForManagementAction(input: {
