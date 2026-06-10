@@ -517,7 +517,10 @@ function LeadDetailContent() {
 
   const handleAssignAgent = async (agentId: string) => {
     if (!lead || !user) return;
+    // Agents cannot assign leads — the assignment workflow is controlled by
+    // managers, team leads, lead generation, and admins only.
     if (user.role === "operations") return;
+    if (user.role === "agent" || user.role === "lead_generation") return;
     if (user.role === "monitor" && lead.ownerId !== user.$id) return;
 
     try {
@@ -792,11 +795,12 @@ function LeadDetailContent() {
   const canAssignLead =
     canModifyLead &&
     Boolean(lead) &&
-    (isLeadOwner ||
-      user.role === "manager" ||
+    (user.role === "manager" ||
       user.role === "team_lead" ||
       user.role === "admin" ||
-      user.role === "developer");
+      user.role === "developer" ||
+      user.role === "assistant_manager" ||
+      user.role === "lead_generation");
   const headerFirstName =
     typeof leadData.firstName === "string" ? leadData.firstName : "";
   const headerLastName =

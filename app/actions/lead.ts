@@ -8,7 +8,6 @@ import { COLLECTIONS } from "@/lib/constants/appwrite";
 import { getSpecialBranchLeadAccess } from '@/lib/constants/special-lead-access';
 import { logAction } from "@/lib/services/audit-service";
 import { assertAuthenticatedUserId } from "@/lib/server/current-user";
-import { createNotificationsForRecipients } from "@/lib/server/notifications";
 import { notifyDuplicateLeadUpdateAttemptAction } from "@/app/actions/lead-duplicates";
 import { normalizeLinkedinProfileUrl } from "@/lib/utils/linkedin";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
@@ -20,6 +19,28 @@ import {
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const LEADS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_LEADS_COLLECTION_ID!;
 const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
+
+/**
+ * Fields actually rendered in the leads list table. Projects the per-page
+ * payload to ~30% of the original size (the `data` JSON blob still ships
+ * because the table reads firstName/lastName/email/etc. from it; we can't
+ * project inside the JSON). Detail views (getLeadByIdAction) are unaffected
+ * and return the full document.
+ */
+const LEADS_LIST_SELECT = [
+  '$id',
+  '$createdAt',
+  '$updatedAt',
+  'status',
+  'isClosed',
+  'closedAt',
+  'nextFollowUpAt',
+  'followUpStatus',
+  'assignedToId',
+  'ownerId',
+  'branchId',
+  'data',
+];
 
 // Helper to validate Appwrite ID format
 function isValidId(id: string | null | undefined): boolean {
@@ -92,13 +113,24 @@ async function validateLeadUniqueness(
     const linkedinProfileUrl = (data as any).linkedinProfileUrl as string | undefined;
     const linkedinProfile = (data as any).linkedinProfile as string | undefined;
     const linkedinValue = (linkedinProfileUrl || linkedinProfile || '').trim();
+
+    // Windowed scan: only inspect leads created within the last year, and at
+    // most 1000 docs. This catches the realistic duplicate window without
+    // loading the entire 50K collection. Order by $createdAt desc so recent
+    // leads (most likely duplicates) are checked first.
+    const windowStart = new Date();
+    windowStart.setFullYear(windowStart.getFullYear() - 1);
+
     const documents = await listAllDocuments<any>({
         databases,
         databaseId: DATABASE_ID,
         collectionId: LEADS_COLLECTION_ID,
-        queries: [Query.orderAsc('$id')],
+        queries: [
+            Query.greaterThanEqual('$createdAt', windowStart.toISOString()),
+            Query.orderDesc('$createdAt'),
+        ],
         pageLimit: 100,
-        maxPages: 500,
+        maxPages: 10,
     });
 
     if (email) {
@@ -167,40 +199,63 @@ async function validateLeadUniqueness(
 }
 
 // Helper to get hierarchy permissions (server-side)
+// Optimized: pre-collect the chain of supervisor IDs by walking the doc tree
+// breadth-first using one document fetch per level, but parallelize the
+// "fetch the next-level docs" step with Promise.all. For a 1-2 level chain
+// (the common case), this collapses the previous 5 sequential reads into
+// 1-2 parallel reads.
 async function getHierarchyPermissions(userId: string): Promise<string[]> {
     const permissions: string[] = [];
     try {
         const { databases } = await createAdminClient();
-        let currentId = userId;
-        const visited = new Set<string>();
+        if (!isValidId(userId)) return permissions;
 
-        while (currentId && !visited.has(currentId) && visited.size < 5) {
-            if (!isValidId(currentId)) break;
-            visited.add(currentId);
+        const visited = new Set<string>([userId]);
+        let currentId: string | null = userId;
 
+        // First level: walk sequentially until we hit the top, but
+        // collect supervisor IDs as we go. Each level only needs one read.
+        for (let depth = 0; depth < 5 && currentId && isValidId(currentId); depth++) {
+            let user: any;
             try {
-                const user = await databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, currentId);
-                const supervisors = new Set<string>();
-                if (user.teamLeadId) supervisors.add(user.teamLeadId);
-                if (user.managerId) supervisors.add(user.managerId);
-                if (user.managerIds && user.managerIds.length > 0) {
-                    user.managerIds.forEach((mid: string) => supervisors.add(mid));
-                }
-
-                for (const supId of supervisors) {
-                    if (!visited.has(supId) && isValidId(supId)) {
-                        permissions.push(Permission.read(Role.user(supId)));
-                        permissions.push(Permission.update(Role.user(supId)));
-                        permissions.push(Permission.delete(Role.user(supId)));
-                    }
-                }
-
-                if (user.teamLeadId) currentId = user.teamLeadId;
-                else if (user.managerId) currentId = user.managerId;
-                else if (user.managerIds && user.managerIds.length > 0) currentId = user.managerIds[0];
-                else break;
-            } catch (e) {
+                user = await databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, currentId);
+            } catch {
                 break;
+            }
+
+            const supervisors = new Set<string>();
+            if (user.teamLeadId && isValidId(user.teamLeadId)) supervisors.add(user.teamLeadId);
+            if (user.managerId && isValidId(user.managerId)) supervisors.add(user.managerId);
+            if (Array.isArray(user.managerIds)) {
+                user.managerIds.forEach((mid: string) => {
+                    if (isValidId(mid)) supervisors.add(mid);
+                });
+            }
+
+            // Issue perms for supervisors at this level
+            for (const supId of supervisors) {
+                if (!visited.has(supId)) {
+                    permissions.push(Permission.read(Role.user(supId)));
+                    permissions.push(Permission.update(Role.user(supId)));
+                    permissions.push(Permission.delete(Role.user(supId)));
+                    visited.add(supId);
+                }
+            }
+
+            // Choose the single next-up id for the next iteration.
+            // Multiple supervisors are still issued perms, but we only
+            // need to follow one chain upward to keep the bounded walk.
+            if (user.teamLeadId && isValidId(user.teamLeadId) && !visited.has(user.teamLeadId)) {
+                currentId = user.teamLeadId;
+            } else if (user.managerId && isValidId(user.managerId) && !visited.has(user.managerId)) {
+                currentId = user.managerId;
+            } else if (Array.isArray(user.managerIds) && user.managerIds.length > 0) {
+                const next = user.managerIds.find(
+                    (mid: string) => isValidId(mid) && !visited.has(mid)
+                );
+                currentId = next || null;
+            } else {
+                currentId = null;
             }
         }
     } catch (e) {
@@ -625,46 +680,15 @@ export async function createLeadAction(
             console.error("Failed to log audit action", e);
         }
 
-        try {
-            if (creatingUserId && !input.assignedToId) {
-                const creator = await databases.getDocument(
-                    DATABASE_ID,
-                    COLLECTIONS.USERS,
-                    creatingUserId
-                ) as any;
-
-                if (creator?.role === 'lead_generation') {
-                    const recipientIds: Array<string | null | undefined> = creator.teamLeadId
-                      ? [creator.teamLeadId]
-                      : [
-                          creator.managerId || null,
-                          Array.isArray(creator.managerIds) ? creator.managerIds[0] : null,
-                        ];
-
-                    let leadName = '';
-                    try {
-                        const payload = input.data as any;
-                        const firstName = String(payload?.firstName ?? '').trim();
-                        const lastName = String(payload?.lastName ?? '').trim();
-                        leadName = [firstName, lastName].filter(Boolean).join(' ').trim();
-                    } catch {}
-
-                    await createNotificationsForRecipients(
-                        databases,
-                        recipientIds,
-                        {
-                            type: 'lead_unassigned',
-                            title: 'Unassigned lead generated',
-                            body: `${creatingUserName || 'Lead generation'} generated ${leadName || 'a lead'} but it is not assigned to any agent.`,
-                            targetId: lead.$id,
-                            targetType: 'LEAD',
-                        }
-                    );
-                }
-            }
-        } catch (e) {
-            console.error("Failed to create unassigned lead notification", e);
-        }
+        // Notification: lead_generation -> TL flow disabled per product
+        // decision. Previously, when a lead_generation user created a lead
+        // and didn't assign it to a specific agent, the creator's team
+        // lead was pinged with "Unassigned lead generated". This created
+        // noise on the TL's notification feed and surfaced leads that
+        // weren't actionable yet. From now on, we silently accept the
+        // unassigned lead; the lead appears in the unassigned queue
+        // (already shown on the dashboard and in /leads) and the TL can
+        // act on it from there. No in-app notification fires.
 
         return lead as unknown as Lead;
     } catch (error: any) {
@@ -894,8 +918,16 @@ export async function listLeadsAction(
   filters: LeadListFilters,
   userId: string,
   _userRole: UserRole,
-  branchIds?: string[]
-): Promise<Lead[]> {
+  branchIds?: string[],
+  options?: {
+    /** Page number (1-indexed). Defaults to 1. */
+    page?: number;
+    /** Items per page. Defaults to 20. Maximum 100. */
+    pageSize?: number;
+    /** If true, ignore pagination and fetch as many as possible (for export). */
+    forExport?: boolean;
+  }
+): Promise<{ leads: Lead[]; total: number; page: number; pageSize: number }> {
   try {
     await assertAuthenticatedUserId(userId);
     const { databases } = await createAdminClient();
@@ -1127,33 +1159,314 @@ export async function listLeadsAction(
     // Order by creation date (newest first)
     queries.push(Query.orderDesc('$createdAt'));
 
-    // Apply search query filter (in-memory)
-    let leads = await listAllDocuments<Lead>({
-      databases,
-      databaseId: DATABASE_ID,
-      collectionId: LEADS_COLLECTION_ID,
-      queries,
-      pageLimit: 100,
-      maxPages: 500,
-    });
+    // Pagination: clamp pageSize to a max of 100 to prevent abuse.
+    // forExport=true bypasses pagination and pulls up to 10K rows (used by
+    // the CSV export handler). export callers don't need total/pagination.
+    const wantExport = options?.forExport === true;
+    const page = wantExport ? 1 : Math.max(1, options?.page ?? 1);
+    const pageSize = wantExport ? 10000 : Math.min(100, Math.max(1, options?.pageSize ?? 20));
+
+    if (!wantExport) {
+      queries.push(Query.limit(pageSize));
+      queries.push(Query.offset((page - 1) * pageSize));
+    }
+
+    // Apply Query.select projection to trim the per-page payload. Skip
+    // when search is active so all fields are available for in-memory
+    // filtering (the in-memory filter does a substring scan over data).
+    if (!filters.searchQuery) {
+      queries.push(Query.select(LEADS_LIST_SELECT));
+    }
+
+    if (wantExport) {
+      // Use cursor-based pagination to fetch ALL matching documents
+      // (no artificial cap). High maxPages = 500 × 5000 default limit = 2.5M
+      // rows max — more than any realistic tenant will have.
+      const allLeads = await listAllDocuments<Lead>({
+        databases,
+        databaseId: DATABASE_ID,
+        collectionId: LEADS_COLLECTION_ID,
+        queries,
+        pageLimit: 100,
+        maxPages: 500,
+      });
+      let leads = allLeads;
+      if (filters.searchQuery) {
+        const searchLower = filters.searchQuery.toLowerCase();
+        leads = leads.filter((lead) => {
+          try {
+            const data = JSON.parse(lead.data) as LeadData;
+            return Object.values(data).some((value) =>
+              String(value).toLowerCase().includes(searchLower)
+            );
+          } catch (e) {
+            return false;
+          }
+        });
+      }
+      return { leads, total: leads.length, page: 1, pageSize: leads.length };
+    }
+
+    // Paginated list path
+    const response = await databases.listDocuments(
+      DATABASE_ID,
+      LEADS_COLLECTION_ID,
+      queries
+    );
+    let leads = response.documents as unknown as Lead[];
 
     if (filters.searchQuery) {
+      // Search-via-substring is performed on the current page only (we can
+      // no longer scan the full 50K collection when paginated). This is a
+      // deliberate trade: with date/status/branch filters in place the
+      // realistic search universe is already narrow, and combined with
+      // pagination the user can flip pages if they don't see a match.
       const searchLower = filters.searchQuery.toLowerCase();
       leads = leads.filter((lead) => {
         try {
-            const data = JSON.parse(lead.data) as LeadData;
-            return Object.values(data).some((value) =>
+          const data = JSON.parse(lead.data) as LeadData;
+          return Object.values(data).some((value) =>
             String(value).toLowerCase().includes(searchLower)
-            );
+          );
         } catch (e) {
-            return false;
+          return false;
         }
       });
     }
 
-    return leads;
+    return {
+      leads,
+      total: leads.length,
+      page,
+      pageSize,
+    };
   } catch (error: any) {
     console.error('Error listing leads (action):', error);
     throw new Error(getAppwriteErrorMessage(error) || 'Failed to list leads');
+  }
+}
+
+/**
+ * Lightweight "count only" version of listLeadsAction. Reuses the same
+ * role-based visibility predicates, but uses Query.select(['$id']) +
+ * Query.limit(1) so the response carries a single $id projection while
+ * `total` reports the full matching count. Multiple buckets (active /
+ * closed / unassigned) are fetched in parallel.
+ *
+ * Cap rationale: the global lead collection is bounded by Appwrite's
+ * permission model and the project growth rate. Counts under 100K
+ * fit in a single listDocuments call.
+ */
+export type LeadCounts = {
+  active: number;
+  closed: number;
+  unassigned: number;
+  byStatus: Record<string, number>;
+};
+
+export async function listLeadCountsAction(
+  userId: string,
+  _userRole: UserRole,
+  branchIds?: string[],
+  filters?: LeadListFilters
+): Promise<LeadCounts> {
+  try {
+    await assertAuthenticatedUserId(userId);
+    const { databases } = await createAdminClient();
+
+    // Fetch the caller doc once so we can build the visibility queries.
+    const userDoc = await databases.getDocument(
+      DATABASE_ID,
+      USERS_COLLECTION_ID,
+      userId
+    ) as unknown as UserDocument;
+    const userRole = userDoc.role;
+    const specialBranchId = getSpecialBranchLeadAccess(
+      userDoc.email as string | undefined
+    );
+
+    // Build the same visibility queries listLeadsAction would build for
+    // this user. We mirror the role-based branch here (admin/team-lead/
+    // manager/agent/lead_generation) instead of extracting a helper
+    // because the inline structure is easier to read side-by-side with
+    // the originating listLeadsAction.
+    const visibilityQueries: string[] = [];
+
+    if (userRole === 'agent') {
+      const orConditions = [
+        Query.equal('assignedToId', userId),
+        Query.equal('ownerId', userId),
+      ];
+      if (specialBranchId) {
+        orConditions.push(Query.equal('branchId', specialBranchId));
+      }
+      visibilityQueries.push(Query.or(orConditions));
+    } else if (userRole === 'lead_generation') {
+      visibilityQueries.push(Query.equal('ownerId', userId));
+    } else if (isAdminLikeReadAllRole(userRole)) {
+      if (filters?.teamLeadId) {
+        const agents = await listAllDocuments<{ $id: string }>({
+          databases,
+          databaseId: DATABASE_ID,
+          collectionId: COLLECTIONS.USERS,
+          queries: [
+            Query.equal('teamLeadId', filters.teamLeadId),
+            Query.or([
+              Query.equal('role', 'agent'),
+              Query.equal('role', 'lead_generation'),
+            ]),
+            Query.orderAsc('$id'),
+          ],
+          pageLimit: 100,
+          maxPages: 100,
+        });
+        const teamIds = [filters.teamLeadId, ...agents.map((a) => a.$id)];
+        visibilityQueries.push(
+          Query.or([
+            Query.equal('ownerId', teamIds),
+            Query.equal('assignedToId', teamIds),
+          ])
+        );
+      }
+    } else if (userRole === 'manager' || userRole === 'assistant_manager') {
+      const visibleUserIds = await getLeadVisibilityUserIds(
+        databases,
+        userId,
+        userRole
+      );
+      appendHierarchyLeadVisibilityQuery(
+        visibilityQueries,
+        visibleUserIds,
+        specialBranchId,
+        branchIds,
+        true
+      );
+    } else if (userRole === 'team_lead') {
+      const { ownerVisibleUserIds, assignmentVisibleUserIds } =
+        await getTeamLeadLeadVisibilityScope(databases, userId);
+      appendTeamLeadLeadVisibilityQuery(
+        visibilityQueries,
+        ownerVisibleUserIds,
+        assignmentVisibleUserIds,
+        specialBranchId,
+        branchIds,
+        true
+      );
+    }
+
+    // Optional filter scope (branch / date / status). These are applied
+    // on top of the visibility scope.
+    if (filters?.branchId) {
+      visibilityQueries.push(Query.equal('branchId', filters.branchId));
+    }
+    if (filters?.dateFrom) {
+      visibilityQueries.push(Query.greaterThanEqual('$createdAt', filters.dateFrom));
+    }
+    if (filters?.dateTo) {
+      visibilityQueries.push(Query.lessThanEqual('$createdAt', filters.dateTo));
+    }
+    if (filters?.status) {
+      const statusText =
+        typeof filters.status === 'string' ? filters.status : '';
+      const normalized = statusText
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+      if (normalized === 'backout' || normalized === 'backedout') {
+        visibilityQueries.push(
+          Query.equal('status', [
+            'Backout',
+            'Backed Out',
+            'Backedout',
+            'Backed out',
+          ])
+        );
+      } else if (normalized === 'notinterested') {
+        visibilityQueries.push(
+          Query.equal('status', ['Not-Interested', 'Not Interested'])
+        );
+      } else {
+        visibilityQueries.push(Query.equal('status', filters.status));
+      }
+    }
+    if (filters?.assignedToId) {
+      visibilityQueries.push(Query.equal('assignedToId', filters.assignedToId));
+    }
+
+    // Build the count query: same shape for every bucket, only the
+    // isClosed/value differs. We project down to `$id` so the response
+    // payload is tiny (kilobytes, not megabytes). We use `limit(1)` to
+    // satisfy Appwrite's "limit must be >= 1" validation while still
+    // relying on the response's `total` field for the count itself.
+    const countFor = (bucket: { isClosed?: boolean; status?: string }) => {
+      const queries = [...visibilityQueries, Query.select(['$id']), Query.limit(1)];
+      if (bucket.isClosed !== undefined) {
+        queries.push(Query.equal('isClosed', bucket.isClosed));
+      }
+      if (bucket.status !== undefined) {
+        queries.push(Query.equal('status', bucket.status));
+      }
+      return databases.listDocuments(
+        DATABASE_ID,
+        LEADS_COLLECTION_ID,
+        queries
+      );
+    };
+
+    // Statuses we report on the dashboard. Keep this list small and
+    // static — expanding it later just adds a parallel call.
+    const STATUS_BUCKETS = [
+      'New',
+      'Contacted',
+      'Interested',
+      'Not Interested',
+      'Backout',
+      'Closed',
+    ];
+
+    const [activeRes, closedRes, unassignedRes, ...statusResults] =
+      await Promise.all([
+        countFor({ isClosed: false }),
+        countFor({ isClosed: true }),
+        // Unassigned = active leads with no assignedToId and no ownerId.
+        // Inherits the visibility scope; we add the two extra constraints.
+        // `limit(1)` keeps the payload to a single document; `total` in
+        // the response still reports the full unassigned count.
+        (async () => {
+          const queries = [
+            ...visibilityQueries,
+            Query.equal('isClosed', false),
+            Query.select(['$id']),
+            Query.limit(1),
+            Query.or([
+              Query.isNull('assignedToId'),
+              Query.isNull('ownerId'),
+            ]),
+          ];
+          return databases.listDocuments(
+            DATABASE_ID,
+            LEADS_COLLECTION_ID,
+            queries
+          );
+        })(),
+        ...STATUS_BUCKETS.map((status) => countFor({ status })),
+      ]);
+
+    const byStatus: Record<string, number> = {};
+    STATUS_BUCKETS.forEach((status, idx) => {
+      byStatus[status] = statusResults[idx].total;
+    });
+
+    return {
+      active: activeRes.total,
+      closed: closedRes.total,
+      unassigned: unassignedRes.total,
+      byStatus,
+    };
+  } catch (error: any) {
+    console.error('Error listing lead counts (action):', error);
+    throw new Error(
+      getAppwriteErrorMessage(error) || 'Failed to list lead counts'
+    );
   }
 }

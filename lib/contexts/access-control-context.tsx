@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { databases } from '@/lib/appwrite';
 import { useAuth } from './auth-context';
 import {
@@ -126,8 +126,13 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
     await fetchRules();
   }, [fetchRules]);
 
+  const value = useMemo<AccessControlContextType>(
+    () => ({ canAccess, isLoading, refreshRules }),
+    [canAccess, isLoading, refreshRules]
+  );
+
   return (
-    <AccessControlContext.Provider value={{ canAccess, isLoading, refreshRules }}>
+    <AccessControlContext.Provider value={value}>
       {children}
     </AccessControlContext.Provider>
   );

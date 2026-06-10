@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { useAccess, ComponentKey } from '@/lib/contexts/access-control-context';
@@ -24,11 +24,8 @@ export function ProtectedRoute({
   const router = useRouter();
 
   useEffect(() => {
-    if (!user) {
-      // Not authenticated, redirect to login
-      router.replace('/login');
-      return;
-    }
+    // Auth redirect is handled by AppLayout — only enforce permission here.
+    if (!user) return;
 
     if (!isLoading && !canAccess(componentKey)) {
       // Not authorized, redirect to fallback

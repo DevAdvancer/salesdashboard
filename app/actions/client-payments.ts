@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { ID, Query } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
 import { assertAuthenticatedUserId } from "@/lib/server/current-user";
+import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { isRoleEligibleForComponent } from "@/lib/constants/component-access";
 import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
@@ -424,34 +425,42 @@ export async function listAllPaymentInsightsAction(
 
   const { databases } = await createAdminClient();
 
-  // Fetch all payment records (admin sees everything)
-  const paymentsResponse = await databases.listDocuments(
-    DATABASE_ID,
-    COLLECTIONS.CLIENT_PAYMENTS,
-    [Query.limit(5000)]
-  );
+  // Fetch all payment records (admin sees everything) using cursor
+  // pagination so we never silently cap at 5000.
+  const paymentDocs = await listAllDocuments<any>({
+    databases,
+    databaseId: DATABASE_ID,
+    collectionId: COLLECTIONS.CLIENT_PAYMENTS,
+    queries: [],
+    pageLimit: 100,
+    maxPages: 500,
+  });
 
-  if (paymentsResponse.documents.length === 0) return [];
+  if (paymentDocs.length === 0) return [];
 
   // Batch-fetch all lead documents to get company names
   const leadIds = Array.from(
     new Set(
-      paymentsResponse.documents
+      paymentDocs
         .map((doc: any) => (typeof doc.leadId === "string" ? doc.leadId : ""))
         .filter(Boolean)
     )
   );
 
-  const leadsResponse =
+  const leadDocs =
     leadIds.length > 0
-      ? await databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS, [
-          Query.equal("$id", leadIds),
-          Query.limit(Math.min(5000, leadIds.length)),
-        ])
-      : { documents: [] };
+      ? await listAllDocuments<any>({
+          databases,
+          databaseId: DATABASE_ID,
+          collectionId: COLLECTIONS.LEADS,
+          queries: [Query.equal("$id", leadIds)],
+          pageLimit: 100,
+          maxPages: 500,
+        })
+      : [];
 
   const leadDataMap = new Map<string, string>(); // leadId -> company name
-  for (const lead of leadsResponse.documents as any[]) {
+  for (const lead of leadDocs as any[]) {
     let company = "";
     try {
       const parsed = JSON.parse(lead.data ?? "{}") as Record<string, unknown>;
@@ -472,7 +481,7 @@ export async function listAllPaymentInsightsAction(
 
   const results: PaymentInsightRecord[] = [];
 
-  for (const doc of paymentsResponse.documents as any[]) {
+  for (const doc of paymentDocs as any[]) {
     const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
     if (!leadId) continue;
 

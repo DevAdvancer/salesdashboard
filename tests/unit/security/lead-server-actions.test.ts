@@ -35,9 +35,12 @@ jest.mock('node-appwrite', () => ({
     greaterThanEqual: jest.fn((key, value) => `gte:${key}:${value}`),
     lessThanEqual: jest.fn((key, value) => `lte:${key}:${value}`),
     limit: jest.fn((limit) => `limit:${limit}`),
+    offset: jest.fn((offset) => `offset:${offset}`),
     or: jest.fn((conditions) => `or:${conditions.join('|')}`),
     orderAsc: jest.fn((key) => `orderAsc:${key}`),
     orderDesc: jest.fn((key) => `orderDesc:${key}`),
+    select: jest.fn((fields) => `select:${JSON.stringify(fields)}`),
+    isNull: jest.fn((key) => `isNull:${key}`),
   },
   Role: {
     user: jest.fn((userId) => `user:${userId}`),
@@ -573,15 +576,10 @@ describe('lead server action authorization', () => {
 
     const { assignLeadAction } = await import('@/lib/actions/lead-actions');
 
-    await expect(assignLeadAction('lead-1', 'agent-2', 'owner-1', 'Owner')).resolves.toMatchObject({
-      success: true,
-    });
-    expect(mockUpdateDocument).toHaveBeenCalledWith(
-      'database',
-      'leads',
-      'lead-1',
-      { assignedToId: 'agent-2' },
-      expect.arrayContaining(['read:user:agent-2', 'update:user:agent-2'])
+    // Agents cannot assign leads, even leads they own. The assignment workflow is
+    // controlled by managers, team leads, lead generation, and admins.
+    await expect(assignLeadAction('lead-1', 'agent-2', 'owner-1', 'Owner')).rejects.toThrow(
+      'Permission denied'
     );
   });
 
@@ -730,15 +728,10 @@ describe('lead server action authorization', () => {
 
     const { assignLeadAction } = await import('@/lib/actions/lead-actions');
 
-    await expect(assignLeadAction('lead-1', 'agent-2', 'monitor-1', 'Monitor')).resolves.toMatchObject({
-      success: true,
-    });
-    expect(mockUpdateDocument).toHaveBeenCalledWith(
-      'database',
-      'leads',
-      'lead-1',
-      { assignedToId: 'agent-2' },
-      expect.arrayContaining(['read:user:agent-2', 'update:user:agent-2'])
+    // Monitors cannot assign leads (per product decision to restrict
+    // assignment to managers, team leads, lead generation, and admins).
+    await expect(assignLeadAction('lead-1', 'agent-2', 'monitor-1', 'Monitor')).rejects.toThrow(
+      'Permission denied'
     );
   });
 

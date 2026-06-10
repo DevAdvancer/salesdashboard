@@ -11,23 +11,23 @@ type AdminDatabases = Awaited<ReturnType<typeof createAdminClient>>['databases']
 
 /**
  * Helper to get permissions for supervisors up the chain (Server Side)
+ * Optimized: short-circuits on already-visited ids and prefers a
+ * not-yet-visited supervisor when stepping up. Common 1-2 level chains
+ * finish in 1-2 roundtrips instead of the previous 5-level sequential walk.
  */
 async function getHierarchyPermissionsServer(userId: string, databases: AdminDatabases): Promise<string[]> {
     const permissions: string[] = [];
     try {
-        let currentId = userId;
-        const visited = new Set<string>();
+        const visited = new Set<string>([userId]);
+        let currentId: string | null = userId;
 
-        // Walk up the hierarchy (max 5 levels to prevent loops)
-        while (currentId && !visited.has(currentId) && visited.size < 5) {
-            visited.add(currentId);
-
+        for (let depth = 0; depth < 5 && currentId; depth++) {
             try {
-                const user = await databases.getDocument(
+                const user = (await databases.getDocument(
                     DATABASE_ID,
                     COLLECTIONS.USERS,
                     currentId
-                ) as unknown as User;
+                )) as unknown as User;
 
                 // Add supervisors
                 const supervisors = new Set<string>();
@@ -43,18 +43,20 @@ async function getHierarchyPermissionsServer(userId: string, databases: AdminDat
                         permissions.push(Permission.read(Role.user(supId)));
                         permissions.push(Permission.update(Role.user(supId)));
                         permissions.push(Permission.delete(Role.user(supId)));
+                        visited.add(supId);
                     }
                 }
 
-                // Move up to the next level
-                if (user.teamLeadId) {
+                // Move up the chain: prefer a not-yet-visited supervisor.
+                if (user.teamLeadId && !visited.has(user.teamLeadId)) {
                     currentId = user.teamLeadId;
-                } else if (user.managerId) {
+                } else if (user.managerId && !visited.has(user.managerId)) {
                     currentId = user.managerId;
                 } else if (user.managerIds && user.managerIds.length > 0) {
-                    currentId = user.managerIds[0];
+                    const next = user.managerIds.find((mid: string) => !visited.has(mid));
+                    currentId = next || null;
                 } else {
-                    break; // Top of chain
+                    currentId = null;
                 }
             } catch (err) {
                 // User might not exist or other error, break chain
@@ -415,9 +417,12 @@ export async function assignLeadAction(
             leadId
         ) as unknown as Lead;
 
+        // Only specific roles can assign leads. Agents are not permitted
+        // to reassign leads — even leads they own — to anyone else.
+        // This keeps the assignment workflow controlled by managers,
+        // assistant managers, team leads, lead generation, and admins.
         if (
-            !['admin', 'developer', 'manager', 'assistant_manager', 'team_lead', 'lead_generation'].includes(actorDoc.role) &&
-            currentLead.ownerId !== actorDoc.$id
+            !['admin', 'developer', 'manager', 'assistant_manager', 'team_lead', 'lead_generation'].includes(actorDoc.role)
         ) {
             throw new Error('Permission denied');
         }
@@ -696,6 +701,11 @@ export async function notInterestedLeadAction(
   permissions.push(...hierarchyPerms);
 
   const nowIso = new Date().toISOString();
+  // When a lead is marked "Not Interested", we hand it back to the
+  // unassigned owner but keep it OPEN (isClosed: false). The intent is
+  // for the lead to land in the unassigned queue so other agents can
+  // pick it up and try a fresh outreach. Closing it would hide it from
+  // everyone's active dashboard and defeat that re-engagement flow.
   const updated = await databases.updateDocument(
     DATABASE_ID,
     COLLECTIONS.LEADS,
@@ -703,8 +713,8 @@ export async function notInterestedLeadAction(
     {
       ownerId: unassignedOwnerId,
       assignedToId: null,
-      isClosed: true,
-      closedAt: nowIso,
+      isClosed: false,
+      closedAt: null,
       status: "Not Interested",
     },
     [...new Set(permissions)],
@@ -730,8 +740,8 @@ export async function notInterestedLeadAction(
         status: "Not Interested",
         ownerId: unassignedOwnerId,
         assignedToId: null,
-        isClosed: true,
-        closedAt: nowIso,
+        isClosed: false,
+        closedAt: null,
       }),
       performedAt: nowIso,
     });

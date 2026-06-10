@@ -50,34 +50,51 @@ export function NotificationBell({ className }: { className?: string }) {
     [notifications]
   );
 
+  // Dedupe concurrent loads by reusing an in-flight promise.
+  const loadPromiseRef = useRef<Promise<void> | null>(null);
+
   const load = useCallback(async ({ forceRefresh = false }: { forceRefresh?: boolean } = {}) => {
     if (!user || !canSeeNotifications) return;
-    try {
-      setLoading(true);
-      const next = await listNotifications(user.$id, { forceRefresh });
-      setNotifications(next);
-
-      const visibleToasts = next.filter(
-        (notification) =>
-          !notification.readAt &&
-          (notification.type === 'lead_unassigned' ||
-            notification.type === 'linkedin_withdrawal_due') &&
-          !toastedIdsRef.current.has(notification.$id)
-      );
-
-      visibleToasts.forEach((notification) => {
-        toastedIdsRef.current.add(notification.$id);
-        toast({
-          title: notification.title || 'Notification',
-          description: notification.body,
-        });
-      });
-    } catch (error) {
-      console.error('Failed to load notification bell:', error);
-      setNotifications([]);
-    } finally {
-      setLoading(false);
+    // Share an in-flight request if one is already running.
+    if (loadPromiseRef.current) {
+      try {
+        await loadPromiseRef.current;
+      } catch {}
+      return;
     }
+
+    const run = async () => {
+      try {
+        setLoading(true);
+        const next = await listNotifications(user.$id, { forceRefresh });
+        setNotifications(next);
+
+        const visibleToasts = next.filter(
+          (notification) =>
+            !notification.readAt &&
+            (notification.type === 'lead_unassigned' ||
+              notification.type === 'linkedin_withdrawal_due') &&
+            !toastedIdsRef.current.has(notification.$id)
+        );
+
+        visibleToasts.forEach((notification) => {
+          toastedIdsRef.current.add(notification.$id);
+          toast({
+            title: notification.title || 'Notification',
+            description: notification.body,
+          });
+        });
+      } catch (error) {
+        console.error('Failed to load notification bell:', error);
+        setNotifications([]);
+      } finally {
+        setLoading(false);
+        loadPromiseRef.current = null;
+      }
+    };
+
+    loadPromiseRef.current = run();
+    await loadPromiseRef.current;
   }, [canSeeNotifications, toast, user]);
 
   const forceLoad = useCallback(() => {

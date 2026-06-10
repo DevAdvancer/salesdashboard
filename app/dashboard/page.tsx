@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,10 +13,10 @@ import {
 } from "@/components/ui/card";
 import { ProtectedRoute } from "@/components/protected-route";
 import { listLeads } from "@/lib/services/lead-action-service";
+import { useLeadCountsQuery } from "@/lib/queries/leads/use-lead-counts-query";
 import { getMockAttempts } from "@/app/actions/mock";
 import { getInterviewAttempts } from "@/app/actions/interview";
 import { getAssessmentAttempts } from "@/app/actions/assessment";
-import { getBranchById } from "@/lib/services/branch-service";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Branch, User } from "@/lib/types";
 import { appIcons } from "@/components/navigation-config";
@@ -51,6 +51,16 @@ function LegacyDashboardContent() {
     useAuth();
   const isReadOnlyAdminView = isMonitor || isOperations;
   const router = useRouter();
+
+  // Exact counts for the dashboard cards. Replaces the previous
+  // listLeads-driven counts (which were capped by the action's
+  // default pageSize and could understate large tenants).
+  const countsQuery = useLeadCountsQuery({
+    userId: user?.$id ?? "",
+    role: user?.role ?? "agent",
+    branchIds: user?.branchIds,
+  });
+
   const [metrics, setMetrics] = useState({
     activeLeads: 0,
     closedLeads: 0,
@@ -60,10 +70,20 @@ function LegacyDashboardContent() {
     loading: true,
   });
 
-  const [managerName, setManagerName] = useState<string | null>(null);
-  const [assistantManagerName, setAssistantManagerName] = useState<
-    string | null
-  >(null);
+  // Promote the TanStack counts query result into the metrics state.
+  // The counts query is uncapped (Appwrite returns `total` only),
+  // so this overrides any array-length-based numbers from the
+  // legacy listLeads fetch when both are available.
+  useEffect(() => {
+    if (!countsQuery.data) return;
+    setMetrics((prev) => ({
+      ...prev,
+      activeLeads: countsQuery.data.active,
+      closedLeads: countsQuery.data.closed,
+      loading: prev.loading && countsQuery.isLoading,
+    }));
+  }, [countsQuery.data, countsQuery.isLoading]);
+
   const [teamLeadName, setTeamLeadName] = useState<string | null>(null);
   const [assignedAgents, setAssignedAgents] = useState<AssignedAgent[]>([]);
   const [isOutlookChecking, setIsOutlookChecking] = useState(true);
@@ -74,9 +94,38 @@ function LegacyDashboardContent() {
   const [paymentInsights, setPaymentInsights] = useState<PaymentInsightRecord[]>([]);
   const [paymentInsightsLoading, setPaymentInsightsLoading] = useState(false);
 
+  // Memoize the "My Agents" table rows so unrelated re-renders (e.g. a
+  // payment-insights refresh) don't rebuild every <tr>.
+  const assignedAgentRows = useMemo(
+    () =>
+      assignedAgents.map((agent) => (
+        <tr
+          key={agent.$id}
+          className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+          <td className="p-3 text-sm">{agent.name}</td>
+          <td className="p-3 text-sm text-muted-foreground">{agent.email}</td>
+          <td className="p-3 text-sm">{agent.branchNames || "N/A"}</td>
+          <td className="p-3 text-sm">
+            <span className="inline-flex items-center rounded-full bg-[var(--soft-cloud)] px-3 py-1 text-xs font-medium text-[var(--success)]">
+              Active
+            </span>
+          </td>
+        </tr>
+      )),
+    [assignedAgents],
+  );
 
-  // Check Outlook connection status
+
+  // Check Outlook connection status — once per session, not every mount.
   useEffect(() => {
+    const OUTLOOK_CHECKED_KEY = "crm:outlook-checked";
+    if (typeof window === "undefined") return;
+    if (!user) return;
+    if (window.sessionStorage.getItem(OUTLOOK_CHECKED_KEY) === "1") {
+      setIsOutlookChecking(false);
+      return;
+    }
+
     const checkOutlookConnection = async () => {
       try {
         const response = await fetch("/api/auth/status");
@@ -86,18 +135,17 @@ function LegacyDashboardContent() {
           // If not connected, redirect to login
           console.log("Outlook not connected, redirecting to login...");
           window.location.href = "/api/auth/login";
-        } else {
-          setIsOutlookChecking(false);
+          return;
         }
+        window.sessionStorage.setItem(OUTLOOK_CHECKED_KEY, "1");
+        setIsOutlookChecking(false);
       } catch (error) {
         console.error("Failed to check Outlook status:", error);
         setIsOutlookChecking(false);
       }
     };
 
-    if (user) {
-      checkOutlookConnection();
-    }
+    checkOutlookConnection();
   }, [user]);
 
   useEffect(() => {
@@ -129,6 +177,11 @@ function LegacyDashboardContent() {
         console.log("[Dashboard] Active leads count:", activeLeads.length);
         console.log("[Dashboard] Closed leads count:", closedLeads.length);
 
+        // All dashboard consumers need the same unique lead id list.
+        const visibleLeadIds = Array.from(
+          new Set([...activeLeads, ...closedLeads].map((lead) => lead.$id)),
+        );
+
         setDashboardInsightsLoading(true);
         try {
           const [userService, branchService] = await Promise.all([
@@ -152,24 +205,24 @@ function LegacyDashboardContent() {
           } else if (userIsTeamLead) {
             const agents = await userService.getAgentsByTeamLead(user.$id);
             usersForInsights = [user, ...agents];
-            const agentsWithBranches = await Promise.all(
-              agents.map(async (agent) => {
-                if (agent.branchIds && agent.branchIds.length > 0) {
-                  try {
-                    const branchNames = await Promise.all(
-                      agent.branchIds.map(async (bid) => {
-                        const branch = await getBranchById(bid);
-                        return branch.name;
-                      }),
-                    );
-                    return { ...agent, branchNames: branchNames.join(", ") };
-                  } catch {
-                    return { ...agent, branchNames: "Unknown" };
-                  }
-                }
-                return { ...agent, branchNames: "N/A" };
-              }),
+            // Pre-fetch all branches once and build a lookup map so we don't
+            // hit the database N-times-per-agent inside the loop.
+            const allBranchesForTeam = await branchService.listBranches();
+            const branchNameById = new Map(
+              allBranchesForTeam.map((b) => [b.$id, b.name] as const),
             );
+            const agentsWithBranches = agents.map((agent) => {
+              if (!agent.branchIds || agent.branchIds.length === 0) {
+                return { ...agent, branchNames: "N/A" };
+              }
+              const names = agent.branchIds
+                .map((bid) => branchNameById.get(bid))
+                .filter((name): name is string => Boolean(name));
+              return {
+                ...agent,
+                branchNames: names.length > 0 ? names.join(", ") : "Unknown",
+              };
+            });
 
             setAssignedAgents(agentsWithBranches);
           }
@@ -180,6 +233,8 @@ function LegacyDashboardContent() {
             getUserByIdOrNull: userService.getUserByIdOrNull,
           });
 
+          // Reuse the branches we already fetched for the team-lead table
+          // when applicable; otherwise fetch them now.
           const allBranches = await branchService.listBranches();
           const branchIdsInScope = new Set([
             ...usersForInsights.flatMap(
@@ -196,10 +251,7 @@ function LegacyDashboardContent() {
             (branch) => isAdmin || isReadOnlyAdminView || branchIdsInScope.has(branch.$id),
           );
 
-          const visibleLeadIds = Array.from(
-            new Set([...activeLeads, ...closedLeads].map((lead) => lead.$id)),
-          );
-
+          // visibleLeadIds is hoisted above this try block; reuse it here.
           const paymentSummaries = visibleLeadIds.length > 0
             ? await listClientPaymentSummariesAction({ actorId: user.$id, leadIds: visibleLeadIds })
             : [];
@@ -219,9 +271,7 @@ function LegacyDashboardContent() {
           setDashboardInsightsLoading(false);
         }
 
-        const visibleLeadIds = Array.from(
-          new Set([...activeLeads, ...closedLeads].map((lead) => lead.$id)),
-        );
+        // visibleLeadIds is hoisted above the try block; reuse it here.
         const [mockAttempts, interviewAttempts, assessmentAttempts] =
           visibleLeadIds.length > 0
             ? await Promise.all([
@@ -243,9 +293,17 @@ function LegacyDashboardContent() {
             return total + (Number.isFinite(count) ? count : 0);
           }, 0);
 
+        // Use the lightweight counts action as the primary count source.
+        // The action returns uncapped totals (no document payload).
+        // Fall back to array length if countsQuery hasn't returned yet.
+        const activeCount = countsQuery.data?.active ??
+          activeLeads.length;
+        const closedCount = countsQuery.data?.closed ??
+          closedLeads.length;
+
         setMetrics({
-          activeLeads: activeLeads.length,
-          closedLeads: closedLeads.length,
+          activeLeads: activeCount,
+          closedLeads: closedCount,
           createdMocks: countCreatedRequests(mockAttempts),
           createdInterviewSupport: countCreatedRequests(interviewAttempts),
           createdAssessmentSupport: countCreatedRequests(assessmentAttempts),
@@ -284,10 +342,15 @@ function LegacyDashboardContent() {
       if (!user) return;
 
       try {
-        const userIsAgent = user.role === "agent";
-        const userIsTeamLead = user.role === "team_lead";
-        const { databases } = await import("@/lib/appwrite");
+        // The current hierarchy only has Team Lead -> Agent. The legacy
+        // Manager / Assistant Manager roles are retired, so we just resolve
+        // the team lead's name for the user-info card.
+        if (!user.teamLeadId) {
+          setTeamLeadName(null);
+          return;
+        }
 
+        const { databases } = await import("@/lib/appwrite");
         const isNotFoundError = (error: unknown) => {
           if (typeof error !== "object" || error === null) return false;
           const maybe = error as {
@@ -308,81 +371,18 @@ function LegacyDashboardContent() {
           );
         };
 
-        const getUserDocOrNull = async (userId: string) => {
-          try {
-            return await databases.getDocument(
-              process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
-              process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
-              userId,
-            );
-          } catch (error) {
-            if (isNotFoundError(error)) return null;
-            throw error;
-          }
-        };
+        const teamLeadDoc = await databases
+          .getDocument(
+            process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+            process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
+            user.teamLeadId,
+          )
+          .catch((error) => (isNotFoundError(error) ? null : Promise.reject(error)));
 
-        setManagerName(null);
-        setAssistantManagerName(null);
-        setTeamLeadName(null);
-
-        // Fetch manager name if user has managerId
-        if (user.managerId) {
-          const managerDoc = await getUserDocOrNull(user.managerId);
-          if (managerDoc && typeof managerDoc.name === "string") {
-            setManagerName(managerDoc.name);
-          }
-        }
-
-        // Check for Assistant Manager in the hierarchy
-        // If user is Agent: Team Lead -> Assistant Manager -> Manager
-        // If user is Team Lead: Assistant Manager -> Manager
-        if (userIsAgent || userIsTeamLead) {
-          // Correct approach:
-          // 1. Fetch Team Lead (for Agent)
-          // 2. Check Team Lead's manager. If AM, display AM.
-
-          if (userIsAgent && user.teamLeadId) {
-            const tlDoc = await getUserDocOrNull(user.teamLeadId);
-            if (tlDoc?.managerId) {
-              const supDoc = await getUserDocOrNull(String(tlDoc.managerId));
-              if (
-                supDoc?.role === "assistant_manager" &&
-                typeof supDoc.name === "string"
-              ) {
-                setAssistantManagerName(supDoc.name);
-              }
-            }
-          }
-
-          // For Team Lead:
-          // Their 'managerId' might be AM or Manager.
-          // If they report to AM, managerId is AM.
-          // If they report to Manager, managerId is Manager.
-          if (userIsTeamLead && user.managerId) {
-            const mDoc = await getUserDocOrNull(user.managerId);
-            if (mDoc?.role === "assistant_manager") {
-              if (typeof mDoc.name === "string") {
-                setAssistantManagerName(mDoc.name);
-              }
-              setManagerName(null);
-              if (mDoc.managerId) {
-                const bigBoss = await getUserDocOrNull(String(mDoc.managerId));
-                if (bigBoss && typeof bigBoss.name === "string") {
-                  setManagerName(bigBoss.name);
-                }
-              }
-            }
-          }
-        }
-
-        // Fetch team lead name if user has teamLeadId
-        if (user.teamLeadId) {
-          const teamLeadDoc = await getUserDocOrNull(user.teamLeadId);
-          if (teamLeadDoc && typeof teamLeadDoc.name === "string") {
-            setTeamLeadName(teamLeadDoc.name);
-          } else {
-            setTeamLeadName(null);
-          }
+        if (teamLeadDoc && typeof teamLeadDoc.name === "string") {
+          setTeamLeadName(teamLeadDoc.name);
+        } else {
+          setTeamLeadName(null);
         }
       } catch (error) {
         console.error("Error fetching user names:", error);
@@ -609,16 +609,6 @@ function LegacyDashboardContent() {
                   ? "Team Lead"
                   : user.role.charAt(0).toUpperCase() + user.role.slice(1)}
               </p>
-              {assistantManagerName && (
-                <p className="text-sm">
-                  <strong>Assistant Manager:</strong> {assistantManagerName}
-                </p>
-              )}
-              {managerName && (
-                <p className="text-sm">
-                  <strong>Manager:</strong> {managerName}
-                </p>
-              )}
               {teamLeadName && (
                 <p className="text-sm">
                   <strong>Team Lead:</strong> {teamLeadName}
@@ -787,24 +777,7 @@ function LegacyDashboardContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {assignedAgents.map((agent) => (
-                    <tr
-                      key={agent.$id}
-                      className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                      <td className="p-3 text-sm">{agent.name}</td>
-                      <td className="p-3 text-sm text-muted-foreground">
-                        {agent.email}
-                      </td>
-                      <td className="p-3 text-sm">
-                        {agent.branchNames || "N/A"}
-                      </td>
-                      <td className="p-3 text-sm">
-                        <span className="inline-flex items-center rounded-full bg-[var(--soft-cloud)] px-3 py-1 text-xs font-medium text-[var(--success)]">
-                          Active
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {assignedAgentRows}
                 </tbody>
               </table>
             </div>

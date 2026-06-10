@@ -30,8 +30,16 @@ describe("lead action service", () => {
   });
 
   it("caches equivalent lead list reads behind one server action call", async () => {
+    // listLeadsAction returns { leads, total, page, pageSize } — the
+    // service unwraps the `leads` field, so the mock must return that
+    // envelope shape, not the array directly.
     const leads = [{ $id: "lead-1" }];
-    jest.mocked(listLeadsAction).mockResolvedValue(leads as any);
+    (listLeadsAction as jest.Mock).mockResolvedValue({
+      leads,
+      total: 1,
+      page: 1,
+      pageSize: 10000,
+    });
 
     const first = await listLeads(
       { status: "New", isClosed: false },
@@ -52,11 +60,20 @@ describe("lead action service", () => {
   });
 
   it("clears cached lead reads after creating a lead", async () => {
-    jest
-      .mocked(listLeadsAction)
-      .mockResolvedValueOnce([{ $id: "old-lead" }] as any)
-      .mockResolvedValueOnce([{ $id: "new-lead" }] as any);
-    jest.mocked(createLeadAction).mockResolvedValue({ $id: "new-lead" } as any);
+    (listLeadsAction as jest.Mock)
+      .mockResolvedValueOnce({
+        leads: [{ $id: "old-lead" }],
+        total: 1,
+        page: 1,
+        pageSize: 10000,
+      })
+      .mockResolvedValueOnce({
+        leads: [{ $id: "new-lead" }],
+        total: 1,
+        page: 1,
+        pageSize: 10000,
+      });
+    (createLeadAction as jest.Mock).mockResolvedValue({ $id: "new-lead" } as any);
 
     await listLeads({ isClosed: false }, "user-1", "admin", []);
     await createLead("user-1", { data: {}, status: "New" }, "user-1", "A");
@@ -67,13 +84,33 @@ describe("lead action service", () => {
   });
 
   it("clears cached lead reads after assignment and backout mutations", async () => {
-    jest
-      .mocked(listLeadsAction)
-      .mockResolvedValueOnce([{ $id: "before" }] as any)
-      .mockResolvedValueOnce([{ $id: "assigned" }] as any)
-      .mockResolvedValueOnce([{ $id: "backout" }] as any);
-    jest.mocked(assignLeadAction).mockResolvedValue({ success: true, lead: { $id: "assigned" } } as any);
-    jest.mocked(backoutLeadAction).mockResolvedValue({ success: true, lead: { $id: "backout" } } as any);
+    (listLeadsAction as jest.Mock)
+      .mockResolvedValueOnce({
+        leads: [{ $id: "before" }],
+        total: 1,
+        page: 1,
+        pageSize: 10000,
+      })
+      .mockResolvedValueOnce({
+        leads: [{ $id: "assigned" }],
+        total: 1,
+        page: 1,
+        pageSize: 10000,
+      })
+      .mockResolvedValueOnce({
+        leads: [{ $id: "backout" }],
+        total: 1,
+        page: 1,
+        pageSize: 10000,
+      });
+    (assignLeadAction as jest.Mock).mockResolvedValue({
+      success: true,
+      lead: { $id: "assigned" },
+    } as any);
+    (backoutLeadAction as jest.Mock).mockResolvedValue({
+      success: true,
+      lead: { $id: "backout" },
+    } as any);
 
     await listLeads({ isClosed: false }, "user-1", "admin", []);
     await assignLead("lead-1", "agent-1", "user-1", "A");
@@ -85,10 +122,19 @@ describe("lead action service", () => {
   });
 
   it("allows direct lead cache invalidation", async () => {
-    jest
-      .mocked(listLeadsAction)
-      .mockResolvedValueOnce([{ $id: "before" }] as any)
-      .mockResolvedValueOnce([{ $id: "after" }] as any);
+    (listLeadsAction as jest.Mock)
+      .mockResolvedValueOnce({
+        leads: [{ $id: "before" }],
+        total: 1,
+        page: 1,
+        pageSize: 10000,
+      })
+      .mockResolvedValueOnce({
+        leads: [{ $id: "after" }],
+        total: 1,
+        page: 1,
+        pageSize: 10000,
+      });
 
     await listLeads({ isClosed: false }, "user-1", "admin", []);
     clearLeadReadCache();

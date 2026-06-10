@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { account, databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { User, UserRole, AuthContext as AuthContextType } from '@/lib/types';
 import { deleteAppwritePresence } from '@/lib/utils/appwrite-presences';
@@ -86,16 +86,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Check for existing session on mount
   useEffect(() => {
+    let cancelled = false;
+
     const checkSession = async () => {
       try {
         const session = await account.get();
         if (session) {
-          await syncServerSession({ force: true });
-          const userDoc = await fetchUserDocument(session.$id);
+          // Parallelize: server session sync + user doc fetch both depend on
+          // the local cookie already set by account.get(); no sequential order required.
+          const [, userDoc] = await Promise.all([
+            syncServerSession({ force: true }),
+            fetchUserDocument(session.$id),
+          ]);
+          if (cancelled) return;
+
           if (userDoc?.isActive === false) {
             await account.deleteSession('current').catch(() => {});
             await clearServerSession();
-            setUser(null);
+            if (!cancelled) setUser(null);
             return;
           }
           setUser(userDoc);
@@ -103,13 +111,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch {
         // No active session
         await clearServerSession();
-        setUser(null);
+        if (!cancelled) setUser(null);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     checkSession();
+
+    return () => {
+      cancelled = true;
+    };
   }, [clearServerSession, fetchUserDocument, syncServerSession]);
 
   useEffect(() => {
@@ -191,22 +203,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isMonitor = user?.role === 'monitor';
   const isOperations = user?.role === 'operations';
 
-  const value: AuthContextType = {
-    user,
-    isAdmin,
-    isDeveloper,
-    isManager,
-    isAssistantManager,
-    isTeamLead,
-    isAgent,
-    isLeadGeneration,
-    isMonitor,
-    isOperations,
-    loading,
-    login,
-    logout,
-    signup,
-  };
+  const value = useMemo<AuthContextType>(
+    () => ({
+      user,
+      isAdmin,
+      isDeveloper,
+      isManager,
+      isAssistantManager,
+      isTeamLead,
+      isAgent,
+      isLeadGeneration,
+      isMonitor,
+      isOperations,
+      loading,
+      login,
+      logout,
+      signup,
+    }),
+    [
+      user,
+      isAdmin,
+      isDeveloper,
+      isManager,
+      isAssistantManager,
+      isTeamLead,
+      isAgent,
+      isLeadGeneration,
+      isMonitor,
+      isOperations,
+      loading,
+      login,
+      logout,
+      signup,
+    ]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

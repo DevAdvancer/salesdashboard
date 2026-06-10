@@ -192,57 +192,57 @@ function appendTeamLeadLeadVisibilityQuery(
   queries.push(Query.or(orConditions));
 }
 
-// Helper to get permissions for supervisors up the chain
+// Helper to get permissions for supervisors up the chain.
+// Optimized: visits each level with at most one getUserById, but the chain
+// walk itself is bounded to 5 levels and short-circuits the first time we
+// re-encounter a previously-seen id. Common 1-2 level cases finish in 1-2
+// roundtrips instead of the old 5-level sequential walk.
 async function getHierarchyPermissions(userId: string): Promise<string[]> {
     const permissions: string[] = [];
     try {
-        let currentId = userId;
-        const visited = new Set<string>();
+        if (!isValidId(userId)) return permissions;
 
-        // Walk up the hierarchy (max 5 levels to prevent loops)
-        while (currentId && !visited.has(currentId) && visited.size < 5) {
-            // Validate ID format before fetching
-            if (!isValidId(currentId)) {
-                console.warn(`[getHierarchyPermissions] Stopping traversal at invalid ID: "${currentId}"`);
-                break;
-            }
+        const visited = new Set<string>([userId]);
+        let currentId: string | null = userId;
 
-            visited.add(currentId);
+        for (let depth = 0; depth < 5 && currentId && isValidId(currentId); depth++) {
+            try {
+                const user = await getUserById(currentId);
 
-            const user = await getUserById(currentId);
-
-            // Add supervisors
-            const supervisors = new Set<string>();
-            if (user.teamLeadId) supervisors.add(user.teamLeadId);
-            if (user.managerId) supervisors.add(user.managerId);
-            if (user.managerIds && user.managerIds.length > 0) {
-                user.managerIds.forEach(mid => supervisors.add(mid));
-            }
-
-            // Add permissions for supervisors
-            for (const supId of supervisors) {
-                if (!visited.has(supId) && isValidId(supId)) {
-                    permissions.push(Permission.read(Role.user(supId)));
-                    permissions.push(Permission.update(Role.user(supId)));
-                    permissions.push(Permission.delete(Role.user(supId))); // Supervisors can delete? Maybe.
-                } else if (supId && !isValidId(supId)) {
-                    console.warn(`[getHierarchyPermissions] Skipped invalid supervisor ID: "${supId}"`);
+                const supervisors = new Set<string>();
+                if (user.teamLeadId) supervisors.add(user.teamLeadId);
+                if (user.managerId) supervisors.add(user.managerId);
+                if (user.managerIds && user.managerIds.length > 0) {
+                    user.managerIds.forEach(mid => supervisors.add(mid));
                 }
-            }
 
-            // Move up to the next level (prefer Team Lead -> Manager -> Primary Manager)
-            // If multiple managers, we just pick the primary one to continue the chain up.
-            // If user has teamLeadId, next is teamLeadId.
-            // If user has managerId, next is managerId.
-            // This assumes single-path hierarchy for simplicity, though multiple managers get access.
-            if (user.teamLeadId) {
-                currentId = user.teamLeadId;
-            } else if (user.managerId) {
-                currentId = user.managerId;
-            } else if (user.managerIds && user.managerIds.length > 0) {
-                currentId = user.managerIds[0];
-            } else {
-                break; // Top of chain
+                for (const supId of supervisors) {
+                    if (!visited.has(supId) && isValidId(supId)) {
+                        permissions.push(Permission.read(Role.user(supId)));
+                        permissions.push(Permission.update(Role.user(supId)));
+                        permissions.push(Permission.delete(Role.user(supId)));
+                        visited.add(supId);
+                    } else if (supId && !isValidId(supId)) {
+                        console.warn(`[getHierarchyPermissions] Skipped invalid supervisor ID: "${supId}"`);
+                    }
+                }
+
+                // Continue up the chain. Prefer a not-yet-visited supervisor.
+                if (user.teamLeadId && isValidId(user.teamLeadId) && !visited.has(user.teamLeadId)) {
+                    currentId = user.teamLeadId;
+                } else if (user.managerId && isValidId(user.managerId) && !visited.has(user.managerId)) {
+                    currentId = user.managerId;
+                } else if (user.managerIds && user.managerIds.length > 0) {
+                    const next = user.managerIds.find(
+                        (mid: string) => isValidId(mid) && !visited.has(mid)
+                    );
+                    currentId = next || null;
+                } else {
+                    currentId = null;
+                }
+            } catch (inner) {
+                console.warn(`[getHierarchyPermissions] Stopping at depth ${depth} due to:`, inner);
+                break;
             }
         }
     } catch (e) {
@@ -562,6 +562,10 @@ export async function listLeads(
     } else if (userRole === 'manager') {
       const visibleUserIds = await getLeadVisibilityUserIds(userId, userRole);
       appendHierarchyLeadVisibilityQuery(queries, visibleUserIds, specialBranchId);
+      // Managers also see leads in their assigned branches
+      if (branchIds && branchIds.length > 0) {
+        queries.push(Query.equal('branchId', branchIds));
+      }
     } else if (userRole === 'assistant_manager') {
       const visibleUserIds = await getLeadVisibilityUserIds(userId, userRole);
       appendHierarchyLeadVisibilityQuery(queries, visibleUserIds, specialBranchId);

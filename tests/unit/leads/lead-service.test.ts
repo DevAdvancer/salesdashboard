@@ -43,8 +43,35 @@ describe('Lead Service', () => {
     company: 'Acme Corp',
   };
 
+  // The test mock only stubs out the LEADS collection (see the module
+  // mock at the top of the file). To avoid breaking the actor lookup
+  // that runs before lead reads in createLead/closeLead/etc., we
+  // pre-mock getDocument to return a manager user doc.
+  // Also, we stub createDocument for audit logs so closeLead/reopenLead
+  // can create audit logs without stepping on the lead update mocks.
+  const mockManagerDoc: any = {
+    $id: mockManagerId,
+    name: 'Manager Test',
+    email: 'manager@example.com',
+    role: 'manager',
+    branchIds: ['branch-1'],
+  };
+
+  const mockAuditLog: any = {
+    $id: 'audit-123',
+    action: 'LEAD_UPDATE',
+    actorId: mockManagerId,
+    actorName: 'Manager',
+    targetId: 'lead-123',
+    targetType: 'LEAD',
+    metadata: JSON.stringify({ test: true }),
+    performedAt: new Date().toISOString(),
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
+    (databases.getDocument as jest.Mock).mockResolvedValue(mockManagerDoc);
+    (databases.createDocument as jest.Mock).mockResolvedValue(mockAuditLog);
   });
 
   describe('createLead', () => {

@@ -52,14 +52,23 @@ export async function createPublicLeadRequestAction(input: PublicLeadRequestInpu
 
   const { databases } = await createAdminClient();
 
-  // Fetch all existing lead requests to check for duplicates
+  // Windowed scan: only check the last 6 months of non-rejected lead requests.
+  // Public form submissions are most likely duplicates of recent ones; this
+  // bounds the cost without sacrificing accuracy for realistic dup windows.
+  const windowStart = new Date();
+  windowStart.setMonth(windowStart.getMonth() - 6);
+
   const existingRequests = await listAllDocuments<LeadRequestDocument>({
     databases,
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.LEAD_REQUESTS,
-    queries: [],
+    queries: [
+      Query.greaterThanEqual('$createdAt', windowStart.toISOString()),
+      Query.notEqual('status', 'rejected'),
+      Query.orderDesc('$createdAt'),
+    ],
     pageLimit: 100,
-    maxPages: 200,
+    maxPages: 20,
   });
 
   const inputEmail = normalizeDuplicateFieldValue('email', normalized.email);
@@ -187,13 +196,20 @@ export async function moveLeadRequestToLeadAction(input: {
   }
 
   const normalized = normalizePublicLeadRequestInput(request);
+  // Windowed scan: only check the last year of leads for duplicates. Public
+  // form submissions are most likely to collide with recent leads.
+  const windowStart = new Date();
+  windowStart.setFullYear(windowStart.getFullYear() - 1);
   const existingLeads = await listAllDocuments<Lead>({
     databases,
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.LEADS,
-    queries: [Query.orderAsc('$id')],
+    queries: [
+      Query.greaterThanEqual('$createdAt', windowStart.toISOString()),
+      Query.orderDesc('$createdAt'),
+    ],
     pageLimit: 100,
-    maxPages: 500,
+    maxPages: 10,
   });
 
   const duplicateWarnings = findLeadRequestDuplicateWarnings(normalized, existingLeads);

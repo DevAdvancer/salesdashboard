@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/auth-context";
-import { listLeads } from "@/lib/services/lead-action-service";
+import { useLeadsForExportQuery } from "@/lib/queries/leads/use-leads-for-export-query";
 import { Branch, Lead, LeadData, HistoryFilters, AuditLog, PaymentStatus } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -201,9 +201,9 @@ function HistoryContent() {
       router.push("/login");
       return;
     }
-
-    loadClosedLeads();
-  }, [user, filters, router]);
+    // closedLeadsQuery is keyed on (userId, role, branchIds, filters) so
+    // it auto-refetches when any of those change. No manual refetch needed.
+  }, [user, router]);
 
   useEffect(() => {
     if (user?.role === "admin" || user?.role === "manager") {
@@ -227,47 +227,71 @@ function HistoryContent() {
     void loadClosedBy(leadsMissingClosedBy);
   }, [filteredLeads, currentPage, closedByMap]);
 
-  const loadClosedLeads = async () => {
-    if (!user) return;
+  // TanStack Query: fetch ALL closed leads matching the current filters.
+  // The action uses cursor pagination (listAllDocuments) so the result
+  // is uncapped at 5K — every closed lead in the user's visibility
+  // scope comes back.
+  const closedLeadsQuery = useLeadsForExportQuery({
+    userId: user?.$id ?? "",
+    role: user?.role ?? "agent",
+    branchIds: user?.branchIds,
+    filters: {
+      isClosed: true,
+      assignedToId: filters.agentId,
+      branchId: filters.branchId,
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+    },
+  });
 
-    try {
-      setLoading(true);
-      const closedLeads = await listLeads(
-        {
-          isClosed: true,
-          assignedToId: filters.agentId,
-          branchId: filters.branchId,
-          dateFrom: filters.dateFrom,
-          dateTo: filters.dateTo,
-        },
-        user.$id,
-        user.role,
-        user.branchIds,
-      );
-      const visible = closedLeads.filter((lead) => !isClientExcludedStatus(lead.status));
-      setLeads(visible);
-      setPaymentByLeadId({});
-      if (visible.length > 0) {
-        try {
-          const summaries = await listClientPaymentSummaries({
-            actorId: user.$id,
-            leadIds: visible.map((lead) => lead.$id),
-          });
-          const next: Record<string, { status: PaymentStatus; personalDetails: Record<string, unknown> }> = {};
-          for (const item of summaries) {
-            next[item.leadId] = { status: item.status, personalDetails: item.personalDetails ?? {} };
-          }
-          setPaymentByLeadId(next);
-        } catch (error) {
-          console.error("Error loading payment statuses:", error);
+  // Mirror the query result into local state, applying the
+  // backout / not-interested filter that the client history page
+  // historically applied.
+  useEffect(() => {
+    if (!closedLeadsQuery.data) return;
+    const visible = closedLeadsQuery.data.leads.filter(
+      (lead) => !isClientExcludedStatus(lead.status)
+    );
+    setLeads(visible);
+    setPaymentByLeadId({});
+  }, [closedLeadsQuery.data]);
+
+  useEffect(() => {
+    setLoading(closedLeadsQuery.isLoading);
+  }, [closedLeadsQuery.isLoading]);
+
+  // Side-effect: fetch payment summaries whenever the visible
+  // closed-leads set changes.
+  useEffect(() => {
+    if (!user || leads.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const summaries = await listClientPaymentSummaries({
+          actorId: user.$id,
+          leadIds: leads.map((lead) => lead.$id),
+        });
+        if (cancelled) return;
+        const next: Record<
+          string,
+          { status: PaymentStatus; personalDetails: Record<string, unknown> }
+        > = {};
+        for (const item of summaries) {
+          next[item.leadId] = {
+            status: item.status,
+            personalDetails: item.personalDetails ?? {},
+          };
         }
+        setPaymentByLeadId(next);
+      } catch (error) {
+        console.error("Error loading payment statuses:", error);
       }
-    } catch (error) {
-      console.error("Error loading closed leads:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [leads, user]);
 
   const loadClosedBy = async (currentLeads: Lead[]) => {
     try {

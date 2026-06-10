@@ -284,17 +284,26 @@ async function listClientPaymentsUpdatedInRange(databases: any, range: WeeklyRep
 
 async function listLeadsByIds(databases: any, leadIds: string[]): Promise<Map<string, LeadDocument>> {
   const map = new Map<string, LeadDocument>();
-  const chunkSize = 80;
+  if (!leadIds || leadIds.length === 0) return map;
+  const chunkSize = 25;
+  const chunks: string[][] = [];
   for (let index = 0; index < leadIds.length; index += chunkSize) {
-    const chunk = leadIds.slice(index, index + chunkSize);
-    const docs = await listAllDocuments<LeadDocument>({
-      databases,
-      databaseId: DATABASE_ID,
-      collectionId: COLLECTIONS.LEADS,
-      queries: [Query.equal("$id", chunk), Query.orderAsc("$id")],
-      pageLimit: 100,
-      maxPages: 10,
-    });
+    chunks.push(leadIds.slice(index, index + chunkSize));
+  }
+  // Parallelize the chunks so wall-clock = slowest single chunk, not sum.
+  const results = await Promise.all(
+    chunks.map((chunk) =>
+      listAllDocuments<LeadDocument>({
+        databases,
+        databaseId: DATABASE_ID,
+        collectionId: COLLECTIONS.LEADS,
+        queries: [Query.equal("$id", chunk), Query.orderAsc("$id")],
+        pageLimit: 100,
+        maxPages: 10,
+      })
+    )
+  );
+  for (const docs of results) {
     docs.forEach((doc) => map.set(doc.$id, doc));
   }
   return map;

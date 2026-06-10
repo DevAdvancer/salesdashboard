@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, memo } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter } from "next/navigation";
-import { listLeads } from "@/lib/services/lead-action-service";
+import { listLeadsForExport } from "@/lib/services/lead-action-service";
+import { useLeadsForExportQuery } from "@/lib/queries/leads/use-leads-for-export-query";
 import {
   getAgentsByTeamLead,
   getAssignableUsers,
-  getUserByIdOrNull,
+  getUsersByIds,
 } from "@/lib/services/user-service";
 import { listBranches } from "@/lib/services/branch-service";
 import { Branch, Lead, User, LeadListFilters, LeadData } from "@/lib/types";
@@ -55,6 +56,7 @@ function LeadsContent() {
   const isReadOnlyAdminView = isMonitor || isOperations;
   const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [totalLeads, setTotalLeads] = useState(0);
   const [agents, setAgents] = useState<User[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [owners, setOwners] = useState<Map<string, User>>(new Map());
@@ -98,14 +100,25 @@ function LeadsContent() {
   const isLeadGeneration = user?.role === "lead_generation";
   const pageTitle = isLeadGeneration ? "Generated Leads" : "Active Leads";
 
-  const handleExport = () => {
-    if (!leads.length) return;
+  const handleExport = async () => {
+    if (!user) return;
     setIsExporting(true);
 
     try {
+      // Fetch the full filtered set for export (bypasses pagination).
+      // The server caps this at 10K to prevent runaway memory.
+      const allLeadsForExport = await listLeadsForExport(
+        filters,
+        user.$id,
+        user.role,
+        user.branchIds,
+      );
+
+      if (!allLeadsForExport.length) return;
+
       // 1. Collect all unique keys from all leads' data
       const allKeys = new Set<string>();
-      const parsedLeads = leads.map((lead) => {
+      const parsedLeads = allLeadsForExport.map((lead) => {
         const data = parseLeadData(lead);
 
         // Add all keys from this lead to the set
@@ -252,74 +265,72 @@ function LeadsContent() {
 
   useEffect(() => {
     if (leads.length > 0) {
-      loadOwnerNames();
-      loadAssignedAgentNames();
+      loadLeadUserNames();
     }
   }, [leads]);
 
-  const loadAssignedAgentNames = async () => {
+  // Bulk-fetch both owners and assigned-agent users in a single roundtrip.
+  // Replaces what was previously ~2N individual getUserByIdOrNull calls.
+  const loadLeadUserNames = async () => {
     if (!user || leads.length === 0) return;
 
     try {
-      const assignedIds = [
-        ...new Set(
-          leads.filter((l) => l.assignedToId).map((lead) => lead.assignedToId!),
-        ),
-      ];
-      const userMap = new Map<string, User>();
-      const missingAssignedIds: string[] = [];
-
-      // Check if we already have these users in 'agents' or 'assignedUsers'
-      for (const id of assignedIds) {
-        // Try finding in existing agents list first
-        const existingAgent = agents.find((a) => a.$id === id);
-        if (existingAgent) {
-          userMap.set(id, existingAgent);
-          continue;
-        }
-
-        const existingAssignedUser = assignedUsers.get(id);
-        if (existingAssignedUser) {
-          userMap.set(id, existingAssignedUser);
-          continue;
-        }
-
-        missingAssignedIds.push(id);
-      }
-
-      const fetchedUsers = await Promise.all(
-        missingAssignedIds.map(async (id) => {
-          try {
-            const fetchedUser = await getUserByIdOrNull(id);
-            return [id, fetchedUser ?? deletedUserPlaceholder(id)] as const;
-          } catch (err) {
-            console.error(`Error loading assigned user ${id}:`, err);
-            return [id, deletedUserPlaceholder(id)] as const;
-          }
-        }),
+      const ownerIds = Array.from(
+        new Set(leads.map((lead) => lead.ownerId).filter(Boolean))
+      );
+      const assignedIds = Array.from(
+        new Set(
+          leads.map((lead) => lead.assignedToId).filter(Boolean) as string[]
+        )
       );
 
-      fetchedUsers.forEach((entry) => {
-        if (entry) {
-          userMap.set(entry[0], entry[1]);
-        }
-      });
+      // Only fetch IDs we don't already have on hand.
+      const allNeededIds = new Set<string>();
+      for (const id of ownerIds) if (!owners.has(id)) allNeededIds.add(id);
+      for (const id of assignedIds) {
+        if (assignedUsers.has(id)) continue;
+        // We may already know this id from the agents list.
+        if (agents.some((a) => a.$id === id)) continue;
+        allNeededIds.add(id);
+      }
 
-      if (userMap.size > 0) {
-        setAssignedUsers((prev) => new Map([...prev, ...userMap]));
+      if (allNeededIds.size === 0) return;
+
+      const fetched = await getUsersByIds(Array.from(allNeededIds));
+
+      const ownerMap = new Map<string, User>();
+      const assignedMap = new Map<string, User>();
+
+      for (const id of ownerIds) {
+        const u = fetched.get(id);
+        ownerMap.set(id, u ?? deletedUserPlaceholder(id));
+      }
+      for (const id of assignedIds) {
+        const cached = assignedUsers.get(id) ?? agents.find((a) => a.$id === id);
+        if (cached) {
+          assignedMap.set(id, cached);
+          continue;
+        }
+        const u = fetched.get(id);
+        assignedMap.set(id, u ?? deletedUserPlaceholder(id));
+      }
+
+      if (ownerMap.size > 0) {
+        setOwners((prev) => new Map([...prev, ...ownerMap]));
+      }
+      if (assignedMap.size > 0) {
+        setAssignedUsers((prev) => new Map([...prev, ...assignedMap]));
       }
     } catch (err) {
-      console.error("Error loading assigned agent names:", err);
+      console.error("Error loading lead user names:", err);
     }
   };
 
+  // TanStack Query handles refetching when filters change. Reset to
+  // page 1 on filter change so users see results from the top.
   useEffect(() => {
-    if (user) {
-      // Don't reload if filters haven't changed meaningfully to avoid loops
-      // but ensure we do load when filters *do* change.
-      loadLeads();
-    }
-  }, [filters, user]); // Added user to dependencies to ensure load on initial auth
+    setCurrentPage(1);
+  }, [filters]);
 
   const loadAgents = async () => {
     if (
@@ -379,86 +390,47 @@ function LeadsContent() {
     }
   };
 
-  const loadOwnerNames = async () => {
-    if (!user || leads.length === 0) return;
+  // TanStack Query: fetch ALL leads matching the current filters (uncapped
+  // via the action's listAllDocuments cursor-pagination). Client-side
+  // pagination is handled below.
+  const normalizedFilters = useMemo(() => {
+    const currentFilters: LeadListFilters = { ...filters };
+    const normalizedStatus =
+      typeof currentFilters.status === "string"
+        ? currentFilters.status.trim().toLowerCase().replace(/\s+/g, "")
+        : "";
+    const isBackout =
+      normalizedStatus === "backout" || normalizedStatus === "backedout";
 
-    try {
-      const ownerIds = [...new Set(leads.map((lead) => lead.ownerId))];
-      const ownerMap = new Map<string, User>();
-      const missingOwnerIds = ownerIds.filter((ownerId) => !owners.has(ownerId));
-
-      const fetchedOwners = await Promise.all(
-        missingOwnerIds.map(async (ownerId) => {
-          try {
-            const owner = await getUserByIdOrNull(ownerId);
-            return [ownerId, owner ?? deletedUserPlaceholder(ownerId)] as const;
-          } catch (err) {
-            console.error(`Error loading owner ${ownerId}:`, err);
-            return [ownerId, deletedUserPlaceholder(ownerId)] as const;
-          }
-        }),
-      );
-
-      fetchedOwners.forEach((entry) => {
-        if (entry) {
-          ownerMap.set(entry[0], entry[1]);
-        }
-      });
-
-      if (ownerMap.size > 0) {
-        setOwners((prev) => new Map([...prev, ...ownerMap]));
-      }
-    } catch (err) {
-      console.error("Error loading owner names:", err);
+    if (currentFilters.isClosed === undefined) {
+      currentFilters.isClosed = isBackout;
     }
-  };
+    return currentFilters;
+  }, [filters]);
 
-  const loadLeads = async () => {
-    if (!user) return;
+  const leadsQuery = useLeadsForExportQuery({
+    userId: user?.$id ?? "",
+    role: user?.role ?? "agent",
+    branchIds: user?.branchIds,
+    filters: normalizedFilters,
+  });
 
-    try {
-      setIsLoading(true);
-      setError(null);
-      // Ensure we explicitly pass isClosed=false to the filters, as listLeads defaults to that
-      // but let's be explicit. Also, if filters already has isClosed, it will be respected.
-      const currentFilters = { ...filters };
-
-      // If we are searching, we might want to search across ALL leads (closed and open)?
-      // For now, let's stick to active leads unless user filters for closed.
-      const normalizedStatus =
-        typeof currentFilters.status === "string"
-          ? currentFilters.status.trim().toLowerCase().replace(/\s+/g, "")
-          : "";
-      const isBackout =
-        normalizedStatus === "backout" || normalizedStatus === "backedout";
-
-      if (currentFilters.isClosed === undefined) {
-        if (isBackout) {
-          currentFilters.isClosed = true;
-        } else {
-        currentFilters.isClosed = false;
-        }
-      }
-
-      const fetchedLeads = await listLeads(
-        currentFilters,
-        user.$id,
-        user.role,
-        user.branchIds,
-      );
-      setLeads(fetchedLeads);
-      setCurrentPage(1);
-    } catch (err) {
-      const errorMessage = handleError(err as Error, {
+  // Mirror the query result into local state so the rest of the
+  // component (assigned-user lookups, exports) doesn't need a rewrite.
+  useEffect(() => {
+    if (leadsQuery.data) {
+      setLeads(leadsQuery.data.leads);
+      setTotalLeads(leadsQuery.data.total);
+    }
+    if (leadsQuery.error) {
+      const errorMessage = handleError(leadsQuery.error as Error, {
         title: "Failed to Load Leads",
         showToast: true,
-        retry: loadLeads,
       });
       setError(errorMessage || "Failed to load leads");
-    } finally {
-      setIsLoading(false);
     }
-  };
+    setIsLoading(leadsQuery.isLoading);
+  }, [leadsQuery.data, leadsQuery.error, leadsQuery.isLoading]);
 
   const handleApplyFilters = () => {
     const newFilters: LeadListFilters = {};
@@ -481,6 +453,8 @@ function LeadsContent() {
     }
 
     setFilters(newFilters);
+    // Reset to page 1 when filters change so users see results starting at the top.
+    setCurrentPage(1);
   };
 
   const handleClearFilters = () => {
@@ -492,14 +466,97 @@ function LeadsContent() {
     setDateToFilter("");
     // Explicitly set empty object to reset everything, including hidden isClosed logic
     setFilters({});
+    setCurrentPage(1);
   };
 
-  const paginatedLeads = leads.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE,
-  );
+  // With the full set loaded client-side, slice it into pages for
+  // display. This is the only place we touch the array length.
+  const paginatedLeads = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return leads.slice(start, start + ITEMS_PER_PAGE);
+  }, [leads, currentPage]);
 
-  const totalPages = Math.ceil(leads.length / ITEMS_PER_PAGE);
+  // Memoize the table rows so that unrelated state updates (e.g. search
+  // query changes) don't cause the entire table to re-render from scratch.
+  const leadRows = useMemo(() => {
+    const visibleRoles = [
+      "admin",
+      "developer",
+      "monitor",
+      "operations",
+      "manager",
+      "assistant_manager",
+      "team_lead",
+    ];
+    const showAssigned = visibleRoles.includes(user?.role || "");
+    return paginatedLeads.map((lead) => {
+      const leadData = parseLeadData(lead);
+      const firstName =
+        typeof leadData.firstName === "string" ? leadData.firstName : "";
+      const lastName =
+        typeof leadData.lastName === "string" ? leadData.lastName : "";
+      const email =
+        typeof leadData.email === "string" ? leadData.email : "";
+      const sourceName =
+        typeof leadData.sourceName === "string" ? leadData.sourceName : "";
+      const source =
+        typeof leadData.source === "string" ? leadData.source : "";
+
+      return (
+        <tr
+          key={lead.$id}
+          className="border-b hover:bg-accent/50 transition-colors">
+          <td className="p-3 md:p-4">
+            {firstName} {lastName}
+          </td>
+          <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">
+            {email}
+          </td>
+          <td className="p-3 md:p-4">
+            <span className="inline-block px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-primary/10 text-primary">
+              {lead.status}
+            </span>
+          </td>
+          <td className="p-3 md:p-4 text-muted-foreground hidden lg:table-cell">
+            {sourceName || source || "-"}
+          </td>
+          {showAssigned && (
+            <td className="p-3 md:p-4 text-muted-foreground hidden md:table-cell">
+              {lead.assignedToId ? (
+                <AssignedAgentName
+                  agentId={lead.assignedToId}
+                  assignedUsers={assignedUsers}
+                />
+              ) : (
+                "Unassigned"
+              )}
+            </td>
+          )}
+          {showAssigned && (
+            <td className="p-3 md:p-4 text-muted-foreground hidden lg:table-cell">
+              <OwnerName ownerId={lead.ownerId} owners={owners} />
+            </td>
+          )}
+          <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">
+            {lead.$createdAt
+              ? new Date(lead.$createdAt).toLocaleDateString()
+              : "N/A"}
+          </td>
+          <td className="p-3 md:p-4">
+            <Button
+              id="tour-lead-view-btn"
+              size="sm"
+              variant="outline"
+              onClick={() => router.push(`/leads/${lead.$id}`)}>
+              View
+            </Button>
+          </td>
+        </tr>
+      );
+    });
+  }, [paginatedLeads, assignedUsers, owners, user?.role, router]);
+
+  const totalPages = Math.max(1, Math.ceil(totalLeads / ITEMS_PER_PAGE));
 
   if (loading || isLoading) {
     return (
@@ -525,7 +582,7 @@ function LeadsContent() {
           </CardHeader>
           <CardContent>
             <p>{error}</p>
-            <Button onClick={loadLeads} className="mt-4">
+            <Button onClick={() => leadsQuery.refetch()} className="mt-4">
               Retry
             </Button>
           </CardContent>
@@ -716,97 +773,7 @@ function LeadsContent() {
                     </tr>
                   </thead>
                   <tbody>
-                    {paginatedLeads.map((lead) => {
-                      const leadData = parseLeadData(lead);
-                      const firstName =
-                        typeof leadData.firstName === "string"
-                          ? leadData.firstName
-                          : "";
-                      const lastName =
-                        typeof leadData.lastName === "string"
-                          ? leadData.lastName
-                          : "";
-                      const email =
-                        typeof leadData.email === "string" ? leadData.email : "";
-                      const sourceName =
-                        typeof leadData.sourceName === "string"
-                          ? leadData.sourceName
-                          : "";
-                      const source =
-                        typeof leadData.source === "string"
-                          ? leadData.source
-                          : "";
-                      return (
-                        <tr
-                          key={lead.$id}
-                          className="border-b hover:bg-accent/50 transition-colors">
-                          <td className="p-3 md:p-4">
-                            {firstName} {lastName}
-                          </td>
-                          <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">
-                            {email}
-                          </td>
-                          <td className="p-3 md:p-4">
-                            <span className="inline-block px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-primary/10 text-primary">
-                              {lead.status}
-                            </span>
-                          </td>
-                          <td className="p-3 md:p-4 text-muted-foreground hidden lg:table-cell">
-                            {sourceName || source || "-"}
-                          </td>
-                          {[
-                            "admin",
-                            "developer",
-                            "monitor",
-                            "operations",
-                            "manager",
-                            "assistant_manager",
-                            "team_lead",
-                          ].includes(user?.role || "") && (
-                            <td className="p-3 md:p-4 text-muted-foreground hidden md:table-cell">
-                              {lead.assignedToId ? (
-                                <AssignedAgentName
-                                  agentId={lead.assignedToId}
-                                  assignedUsers={assignedUsers}
-                                />
-                              ) : (
-                                "Unassigned"
-                              )}
-                            </td>
-                          )}
-                          {[
-                            "admin",
-                            "developer",
-                            "monitor",
-                            "operations",
-                            "manager",
-                            "assistant_manager",
-                            "team_lead",
-                          ].includes(user?.role || "") && (
-                            <td className="p-3 md:p-4 text-muted-foreground hidden lg:table-cell">
-                              <OwnerName
-                                ownerId={lead.ownerId}
-                                owners={owners}
-                              />
-                            </td>
-                          )}
-                          <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">
-                            {lead.$createdAt
-                              ? new Date(lead.$createdAt).toLocaleDateString()
-                              : "N/A"}
-                          </td>
-                          <td className="p-3 md:p-4">
-                            <Button
-                              id="tour-lead-view-btn"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => router.push(`/leads/${lead.$id}`)}>
-                              View
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {leadRows}
                   </tbody>
                 </table>
               </div>
@@ -843,7 +810,7 @@ function LeadsContent() {
   );
 }
 
-function AssignedAgentName({
+const AssignedAgentName = memo(function AssignedAgentName({
   agentId,
   assignedUsers,
 }: {
@@ -852,9 +819,9 @@ function AssignedAgentName({
 }) {
   const agent = assignedUsers.get(agentId);
   return <span>{agent?.name || "Unknown"}</span>;
-}
+});
 
-function OwnerName({
+const OwnerName = memo(function OwnerName({
   ownerId,
   owners,
 }: {
@@ -863,7 +830,7 @@ function OwnerName({
 }) {
   const owner = owners.get(ownerId);
   return <span>{owner?.name || "Unknown"}</span>;
-}
+});
 
 export default function LeadsPage() {
   return (

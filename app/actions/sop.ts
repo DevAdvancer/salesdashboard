@@ -382,7 +382,6 @@ export async function listReviewTargetOptionsAction(input: {
 }): Promise<ReviewTargetOption[]> {
   const actor = await getActor(input.actorId);
   ensureComponentAccess(actor.role, "review-queue");
-  ensureCanMutate(actor.role);
 
   const searchQuery = input.searchQuery?.trim() ?? "";
   let options: ReviewTargetOption[] = [];
@@ -397,7 +396,7 @@ export async function listReviewTargetOptionsAction(input: {
       actor.role,
       actor.branchIds
     );
-    options = buildLeadTargetOptions(leads, input.targetType);
+    options = buildLeadTargetOptions(leads.leads, input.targetType);
   } else if (input.targetType === "USER") {
     options = buildUserTargetOptions(await listVisibleReviewUsers(actor));
   } else if (input.targetType === "FORM_FIELD") {
@@ -480,7 +479,6 @@ export async function updateReviewQueueStatusAction(
 export async function listNotificationsAction(actorId: string): Promise<NotificationRecord[]> {
   const actor = await getActor(actorId);
   ensureComponentAccess(actor.role, "notifications");
-  ensureCanMutate(actor.role);
 
   const { databases } = await createAdminClient();
   const response = await databases.listDocuments(

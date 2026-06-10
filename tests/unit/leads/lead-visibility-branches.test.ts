@@ -6,6 +6,7 @@ import { Query } from 'appwrite';
 jest.mock('@/lib/appwrite', () => ({
   databases: {
     listDocuments: jest.fn(),
+    getDocument: jest.fn(),
   },
   DATABASE_ID: 'test-database',
   COLLECTIONS: {
@@ -20,6 +21,8 @@ jest.mock('appwrite', () => ({
     orderDesc: jest.fn((key) => `orderDesc("${key}")`),
     greaterThanEqual: jest.fn(),
     lessThanEqual: jest.fn(),
+    limit: jest.fn((limit) => `limit(${limit})`),
+    or: jest.fn((conditions) => `or(${conditions.join('|')})`),
   },
   Permission: {
     read: jest.fn(),
@@ -41,6 +44,16 @@ describe('Lead Visibility - Multi-Branch Manager', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // The listLeads service calls getUserById(actorId) → getDocument
+    // to load the viewer's role and branchIds for visibility scoping.
+    // We mock it to return a manager with both branch IDs.
+    (databases.getDocument as jest.Mock).mockResolvedValue({
+      $id: mockManagerId,
+      name: 'Test Manager',
+      email: 'manager@example.com',
+      role: 'manager',
+      branchIds: [branchA, branchB],
+    });
   });
 
   it('should query leads for all assigned branches', async () => {
@@ -52,7 +65,9 @@ describe('Lead Visibility - Multi-Branch Manager', () => {
 
     await listLeads({}, mockManagerId, 'manager', branchIds);
 
-    const callArgs = (databases.listDocuments as jest.Mock).mock.calls[0];
+    // The first listDocuments call is from getLeadVisibilityUserIds (hierarchy lookup),
+    // the second call is the actual lead query where branch filtering applies.
+    const callArgs = (databases.listDocuments as jest.Mock).mock.calls[1];
     const queries = callArgs[2];
 
     // Expect Query.equal to have been called with 'branchId' and the array of branches
@@ -71,7 +86,7 @@ describe('Lead Visibility - Multi-Branch Manager', () => {
 
     await listLeads({}, mockManagerId, 'manager', branchIds);
 
-    const callArgs = (databases.listDocuments as jest.Mock).mock.calls[0];
+    const callArgs = (databases.listDocuments as jest.Mock).mock.calls[1];
     const queries = callArgs[2];
 
     expect(Query.equal).toHaveBeenCalledWith('branchId', branchIds);

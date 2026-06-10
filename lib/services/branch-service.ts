@@ -1,6 +1,7 @@
 import { Query } from 'appwrite';
 import { databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { Branch, CreateBranchInput, UpdateBranchInput } from '@/lib/types';
+import { cached, clearCache } from '@/lib/utils/resource-cache';
 
 /**
  * Create a new branch
@@ -34,6 +35,7 @@ export async function createBranch(input: CreateBranchInput): Promise<Branch> {
       }
     );
 
+    invalidateBranchesCache();
     return branch as unknown as Branch;
   } catch (error: any) {
     if (error.message === 'A branch with this name already exists') {
@@ -113,6 +115,7 @@ export async function updateBranch(branchId: string, input: UpdateBranchInput): 
       updateData
     );
 
+    invalidateBranchesCache();
     return branch as unknown as Branch;
   } catch (error: any) {
     if (error.message === 'A branch with this name already exists') {
@@ -161,6 +164,7 @@ export async function deleteBranch(branchId: string): Promise<void> {
     }
 
     await databases.deleteDocument(DATABASE_ID, COLLECTIONS.BRANCHES, branchId);
+    invalidateBranchesCache();
   } catch (error: any) {
     if (
       error.message === 'Cannot delete branch with assigned managers' ||
@@ -179,17 +183,27 @@ export async function deleteBranch(branchId: string): Promise<void> {
  * @returns Array of all branches
  */
 export async function listBranches(): Promise<Branch[]> {
-  try {
-    const response = await databases.listDocuments(
-      DATABASE_ID,
-      COLLECTIONS.BRANCHES,
-      [Query.orderDesc('$createdAt')]
-    );
-    return response.documents as unknown as Branch[];
-  } catch (error: any) {
-    console.error('Error listing branches:', error);
-    throw new Error(error.message || 'Failed to list branches');
-  }
+  return cached('branches:all', 5 * 60 * 1000, async () => {
+    try {
+      const response = await databases.listDocuments(
+        DATABASE_ID,
+        COLLECTIONS.BRANCHES,
+        [Query.orderDesc('$createdAt')]
+      );
+      return response.documents as unknown as Branch[];
+    } catch (error: any) {
+      console.error('Error listing branches:', error);
+      throw new Error(error.message || 'Failed to list branches');
+    }
+  });
+}
+
+/**
+ * Invalidate the cached branches list. Call this after create/update/delete
+ * so the changes appear on the next fetch.
+ */
+export function invalidateBranchesCache(): void {
+  clearCache('branches:');
 }
 
 /**

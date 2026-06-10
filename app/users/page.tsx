@@ -10,6 +10,7 @@ import {
 } from "@/app/actions/user";
 import { getVisibleUserBranches } from "@/lib/utils/branch-visibility";
 import { listBranches } from "@/lib/services/branch-service";
+import { invalidateUsersCache } from "@/lib/services/user-service";
 import { User, Branch, UserRole } from "@/lib/types";
 import {
   Card,
@@ -45,6 +46,9 @@ function UserManagementContent() {
   const { user, isAdmin, isDeveloper, isTeamLead, isMonitor, isOperations } =
     useAuth();
   const [users, setUsers] = useState<User[]>([]);
+  const [usersTotal, setUsersTotal] = useState(0);
+  const [currentUsersPage, setCurrentUsersPage] = useState(1);
+  const USERS_PAGE_SIZE = 50;
   const [search, setSearch] = useState("");
   const [allBranches, setAllBranches] = useState<Branch[]>([]);
   const [branchMap, setBranchMap] = useState<Map<string, string>>(new Map());
@@ -123,14 +127,34 @@ function UserManagementContent() {
     try {
       setIsLoading(true);
       if (isAdmin || isDeveloper || isMonitor || isOperations) {
-        // Admin/read-only visibility roles see all users
+        // Admin/read-only visibility roles see all users (paginated)
         const { Query } = await import("appwrite");
+        // Project only the fields the table actually renders.
         const response = await databases.listDocuments(
           process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
           process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
-          [Query.limit(100)],
+          [
+            Query.limit(USERS_PAGE_SIZE),
+            Query.offset((currentUsersPage - 1) * USERS_PAGE_SIZE),
+            Query.select([
+              '$id',
+              '$createdAt',
+              '$updatedAt',
+              'name',
+              'email',
+              'role',
+              'isActive',
+              'managerId',
+              'managerIds',
+              'assistantManagerId',
+              'assistantManagerIds',
+              'teamLeadId',
+              'branchId',
+              'branchIds',
+            ]),
+          ],
         );
-        const allUsers = response.documents.map((doc: any) => ({
+        const pageUsers = response.documents.map((doc: any) => ({
           $id: doc.$id,
           name: doc.name,
           email: doc.email,
@@ -159,28 +183,28 @@ function UserManagementContent() {
           agent: 4,
         };
 
-        allUsers.sort((a: User, b: User) => {
+        pageUsers.sort((a: User, b: User) => {
           const roleA = roleOrder[a.role] ?? 99;
           const roleB = roleOrder[b.role] ?? 99;
           if (roleA !== roleB) return roleA - roleB;
           return a.name.localeCompare(b.name);
         });
 
-        setUsers(allUsers);
-        setAvailableTeamLeads(
-          allUsers.filter(
-            (u: User) => u.isActive !== false && u.role === "team_lead",
-          ),
-        );
+        setUsers(pageUsers);
+        setUsersTotal(response.total);
+        // Note: setAvailableTeamLeads is handled by fetchTeamLeadsOnly to
+        // ensure ALL team leads are available, not just ones on the current page.
       } else if (user.role === "team_lead") {
         // Team Lead sees their agents
         const { getAgentsByTeamLead } =
           await import("@/lib/services/user-service");
         const agentsList = await getAgentsByTeamLead(user.$id);
         setUsers(agentsList);
+        setUsersTotal(agentsList.length);
       } else {
         // Agents see no one
         setUsers([]);
+        setUsersTotal(0);
       }
     } catch (err: any) {
       console.error("Error fetching users:", err);
@@ -188,14 +212,53 @@ function UserManagementContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, isAdmin, isDeveloper, isMonitor, isOperations]);
+  }, [user, isAdmin, isDeveloper, isMonitor, isOperations, currentUsersPage]);
+
+  // Separate fetch for the team leads dropdown (needs ALL team leads, not just current page).
+  // This ensures team leads on other pages are still available for selection.
+  const fetchTeamLeadsOnly = useCallback(async () => {
+    if (!user) return;
+    if (!isAdmin && !isDeveloper) return; // Only admin/developer need this
+
+    try {
+      const { Query } = await import("appwrite");
+      const response = await databases.listDocuments(
+        process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+        process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
+        [
+          Query.equal("role", "team_lead"),
+          Query.equal("isActive", [true]),
+        ],
+      );
+      const teamLeads = response.documents.map((doc: any) => ({
+        $id: doc.$id,
+        name: doc.name,
+        email: doc.email,
+        role: doc.role,
+        managerId: doc.managerId || null,
+        managerIds: doc.managerIds || [],
+        assistantManagerId: doc.assistantManagerId || null,
+        assistantManagerIds: doc.assistantManagerIds || [],
+        teamLeadId: doc.teamLeadId || null,
+        branchIds: doc.branchIds || [],
+        isActive: doc.isActive !== false,
+        branchId: doc.branchId || null,
+        $createdAt: doc.$createdAt,
+        $updatedAt: doc.$updatedAt,
+      }));
+      setAvailableTeamLeads(teamLeads);
+    } catch (err) {
+      console.error("Error fetching team leads:", err);
+    }
+  }, [user, isAdmin, isDeveloper]);
 
   useEffect(() => {
     if (user) {
       void fetchUsers();
       void fetchBranches();
+      void fetchTeamLeadsOnly();
     }
-  }, [user, fetchUsers]);
+  }, [user, fetchUsers, fetchTeamLeadsOnly]);
 
   useEffect(() => {
     if (!user) return;
@@ -203,17 +266,31 @@ function UserManagementContent() {
     const databaseId = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
     const collectionId = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
 
-    const unsubscribe = client.subscribe(
-      `databases.${databaseId}.collections.${collectionId}.documents`,
-      () => {
+    // Debounce realtime-driven refetches. Bulk imports can fire many
+    // events in <100ms; without this, we'd refetch the entire users list
+    // once per event. 250ms is short enough to feel live, long enough to
+    // coalesce a burst.
+    const debounceRef = { current: null as ReturnType<typeof setTimeout> | null };
+    const scheduleRefetch = () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
         try {
           databases.clearReadCache();
         } catch {}
+        // Realtime update — drop our cached users list too so the change
+        // shows up on the next page that consults the cache.
+        invalidateUsersCache();
         void fetchUsers();
-      },
+      }, 250);
+    };
+
+    const unsubscribe = client.subscribe(
+      `databases.${databaseId}.collections.${collectionId}.documents`,
+      scheduleRefetch,
     );
 
     return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
       unsubscribe();
     };
   }, [user, fetchUsers]);
@@ -263,7 +340,7 @@ function UserManagementContent() {
     }
   }, [showCreateDialog, editingUser, createRole, isAdmin, user]);
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setFormName("");
     setFormEmail("");
     setFormPassword("");
@@ -271,9 +348,9 @@ function UserManagementContent() {
     setSelectedTeamLeadId(null);
     setFormErrors({});
     setError(null);
-  };
+  }, []);
 
-  const validateForm = (): boolean => {
+  const validateForm = useCallback((): boolean => {
     const errs: Record<string, string> = {};
     if (!formName.trim()) errs.name = "Name is required";
     if (!formEmail.trim()) errs.email = "Email is required";
@@ -286,7 +363,7 @@ function UserManagementContent() {
       errs.branches = "At least one branch must be selected";
     setFormErrors(errs);
     return Object.keys(errs).length === 0;
-  };
+  }, [formName, formEmail, formPassword, createRole, selectedBranchIds]);
 
   const toggleBranch = (branchId: string) => {
     setSelectedBranchIds((prev) =>
@@ -296,15 +373,15 @@ function UserManagementContent() {
     );
   };
 
-  const handleEdit = (userToEdit: User) => {
+  const handleEdit = useCallback((userToEdit: User) => {
     setEditingUser(userToEdit);
     setSelectedBranchIds(userToEdit.branchIds || []);
     setSelectedTeamLeadId(userToEdit.teamLeadId || null);
     setEditRole(userToEdit.role);
     setError(null);
-  };
+  }, []);
 
-  const handleUpdateUser = async () => {
+  const handleUpdateUser = useCallback(async () => {
     if (!editingUser || !user) return;
 
     try {
@@ -337,6 +414,7 @@ function UserManagementContent() {
 
       setEditingUser(null);
       setSelectedBranchIds([]);
+      invalidateUsersCache();
       await fetchUsers();
     } catch (err: any) {
       console.error("Error updating user:", err);
@@ -344,9 +422,16 @@ function UserManagementContent() {
     } finally {
       setIsUpdating(false);
     }
-  };
+  }, [
+    editingUser,
+    user,
+    editRole,
+    selectedTeamLeadId,
+    selectedBranchIds,
+    fetchUsers,
+  ]);
 
-  const handleDeleteUser = async (userToDelete: User) => {
+  const handleDeleteUser = useCallback(async (userToDelete: User) => {
     if (!user || (!isAdmin && !isDeveloper) || userToDelete.$id === user.$id) return;
 
     const confirmed = await confirm({
@@ -368,6 +453,7 @@ function UserManagementContent() {
         currentUserId: user.$id,
       });
 
+      invalidateUsersCache();
       await fetchUsers();
     } catch (err: unknown) {
       console.error("Error deleting user:", err);
@@ -375,9 +461,9 @@ function UserManagementContent() {
     } finally {
       setDeletingUserId(null);
     }
-  };
+  }, [user, isAdmin, isDeveloper, confirm, fetchUsers]);
 
-  const handleSetAgentActive = async (agent: User, isActive: boolean) => {
+  const handleSetAgentActive = useCallback(async (agent: User, isActive: boolean) => {
     if (
       !user ||
       !isAdmin && !isDeveloper ||
@@ -409,6 +495,7 @@ function UserManagementContent() {
         currentUserId: user.$id,
       });
 
+      invalidateUsersCache();
       await fetchUsers();
     } catch (err: unknown) {
       console.error("Error updating agent active status:", err);
@@ -420,9 +507,9 @@ function UserManagementContent() {
     } finally {
       setActiveStatusUserId(null);
     }
-  };
+  }, [user, isAdmin, isDeveloper, confirm, fetchUsers]);
 
-  const handleCreate = async () => {
+  const handleCreate = useCallback(async () => {
     if (!user || !validateForm()) return;
 
     try {
@@ -493,6 +580,7 @@ function UserManagementContent() {
 
       resetForm();
       setShowCreateDialog(false);
+      invalidateUsersCache();
       await fetchUsers();
     } catch (err: any) {
       console.error("Error creating user:", err);
@@ -500,7 +588,21 @@ function UserManagementContent() {
     } finally {
       setIsCreating(false);
     }
-  };
+  }, [
+    user,
+    validateForm,
+    isAdmin,
+    isDeveloper,
+    canCreateAgent,
+    createRole,
+    formName,
+    formEmail,
+    formPassword,
+    selectedTeamLeadId,
+    selectedBranchIds,
+    fetchUsers,
+    resetForm,
+  ]);
 
   const roleLabels: Record<string, string> = {
     admin: "Admin",
@@ -766,6 +868,32 @@ function UserManagementContent() {
           )}
         </CardContent>
       </Card>
+
+      {/* Server-side pagination (admin/developer/monitor/operations only) */}
+      {(isAdmin || isDeveloper || isMonitor || isOperations) && usersTotal > USERS_PAGE_SIZE && (
+        <div className="flex flex-col sm:flex-row justify-center items-center gap-2 mt-6">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentUsersPage((p) => Math.max(1, p - 1))}
+            disabled={currentUsersPage === 1}>
+            Previous
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Page {currentUsersPage} of {Math.ceil(usersTotal / USERS_PAGE_SIZE)}
+            {" "}({usersTotal} total)
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setCurrentUsersPage((p) => Math.min(Math.ceil(usersTotal / USERS_PAGE_SIZE), p + 1))
+            }
+            disabled={currentUsersPage >= Math.ceil(usersTotal / USERS_PAGE_SIZE)}>
+            Next
+          </Button>
+        </div>
+      )}
 
       {/* Create User Dialog */}
       {showCreateDialog && (

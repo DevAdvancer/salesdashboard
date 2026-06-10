@@ -2,6 +2,7 @@ import { ID, Permission, Role, Query } from 'appwrite';
 import { account, databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { logAction } from '@/lib/services/audit-service';
 import { User, UserRole, CreateAgentInput, CreateTeamLeadInput, CreateManagerInput, CreateAssistantManagerInput } from '@/lib/types';
+import { cached, clearCache } from '@/lib/utils/resource-cache';
 
 const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
 
@@ -478,48 +479,58 @@ export async function getAssignableUsers(
   creatorBranchIds: string[],
   creatorId?: string
 ): Promise<User[]> {
-  if (creatorRole === 'agent' || creatorRole === 'lead_generation') return [];
-  if (creatorRole !== 'admin' && creatorRole !== 'developer' && !creatorBranchIds.length) return [];
+  // Build a stable cache key from the args that change the result.
+  // branchIds is normalized (sorted) so [{a,b}] and [{b,a}] hit the same entry.
+  const cacheKey =
+    `users:assignable:${creatorRole}:` +
+    (creatorBranchIds || []).slice().sort().join(',') +
+    ':' +
+    (creatorId || '');
 
-  try {
-    const allowedRoles: UserRole[] =
-      (creatorRole === 'admin' || creatorRole === 'developer') ? ['admin', 'developer', 'manager', 'assistant_manager', 'team_lead', 'agent'] :
-      creatorRole === 'manager' ? ['assistant_manager', 'team_lead', 'agent'] :
-      creatorRole === 'assistant_manager' ? ['team_lead', 'agent'] :
-      creatorRole === 'team_lead' ? ['agent'] :
-      [];
+  return cached(cacheKey, 5 * 60 * 1000, async () => {
+    if (creatorRole === 'agent' || creatorRole === 'lead_generation') return [];
+    if (creatorRole !== 'admin' && creatorRole !== 'developer' && !creatorBranchIds.length) return [];
 
-    if (!allowedRoles.length) return [];
+    try {
+      const allowedRoles: UserRole[] =
+        (creatorRole === 'admin' || creatorRole === 'developer') ? ['admin', 'developer', 'manager', 'assistant_manager', 'team_lead', 'agent'] :
+        creatorRole === 'manager' ? ['assistant_manager', 'team_lead', 'agent'] :
+        creatorRole === 'assistant_manager' ? ['team_lead', 'agent'] :
+        creatorRole === 'team_lead' ? ['agent'] :
+        [];
 
-    const queries = [
-      allowedRoles.length === 1
-        ? Query.equal('role', allowedRoles[0])
-        : Query.equal('role', allowedRoles)
-    ];
+      if (!allowedRoles.length) return [];
 
-    if (creatorRole !== 'admin' && creatorRole !== 'developer') {
-      queries.push(Query.contains('branchIds', creatorBranchIds));
+      const queries = [
+        allowedRoles.length === 1
+          ? Query.equal('role', allowedRoles[0])
+          : Query.equal('role', allowedRoles)
+      ];
+
+      if (creatorRole !== 'admin' && creatorRole !== 'developer') {
+        queries.push(Query.contains('branchIds', creatorBranchIds));
+      }
+
+      if (creatorRole === 'team_lead' && creatorId) {
+        queries.push(Query.equal('teamLeadId', creatorId));
+      }
+
+      queries.push(Query.limit(5000));
+
+      const response = await databases.listDocuments(
+        DATABASE_ID,
+        USERS_COLLECTION_ID,
+        queries
+      );
+
+      // Filter out inactive users and the creator themselves
+      const users = response.documents.map(mapDocToUser).filter(u => u.isActive);
+      return creatorId ? users.filter(u => u.$id !== creatorId) : users;
+    } catch (error: any) {
+      console.error('Error fetching assignable users:', error);
+      throw new Error(error.message || 'Failed to fetch assignable users');
     }
-
-    if (creatorRole === 'team_lead' && creatorId) {
-      queries.push(Query.equal('teamLeadId', creatorId));
-    }
-
-    queries.push(Query.limit(5000));
-
-    const response = await databases.listDocuments(
-      DATABASE_ID,
-      USERS_COLLECTION_ID,
-      queries
-    );
-
-    // Filter out inactive users and the creator themselves
-    const users = response.documents.map(mapDocToUser).filter(u => u.isActive);
-    return creatorId ? users.filter(u => u.$id !== creatorId) : users;
-  } catch (error: any) {
-    console.error('Error fetching assignable users:', error);
-    throw new Error(error.message || 'Failed to fetch assignable users');
-  }
+  });
 }
 
 /**
@@ -568,21 +579,31 @@ export async function getAgentsByManager(managerId: string): Promise<User[]> {
  * Get all agents for a specific team lead
  */
 export async function getAgentsByTeamLead(teamLeadId: string): Promise<User[]> {
-  try {
-    const response = await databases.listDocuments(
-      DATABASE_ID,
-      USERS_COLLECTION_ID,
-      [
-        Query.equal('teamLeadId', teamLeadId),
-        Query.or([Query.equal('role', 'agent'), Query.equal('role', 'lead_generation')]),
-        Query.limit(5000),
-      ]
-    );
-    return response.documents.map(mapDocToUser);
-  } catch (error: any) {
-    console.error('Error fetching agents by team lead:', error);
-    throw new Error(error.message || 'Failed to fetch agents by team lead');
-  }
+  return cached(`users:agents:${teamLeadId}`, 5 * 60 * 1000, async () => {
+    try {
+      const response = await databases.listDocuments(
+        DATABASE_ID,
+        USERS_COLLECTION_ID,
+        [
+          Query.equal('teamLeadId', teamLeadId),
+          Query.or([Query.equal('role', 'agent'), Query.equal('role', 'lead_generation')]),
+          Query.limit(5000),
+        ]
+      );
+      return response.documents.map(mapDocToUser);
+    } catch (error: any) {
+      console.error('Error fetching agents by team lead:', error);
+      throw new Error(error.message || 'Failed to fetch agents by team lead');
+    }
+  });
+}
+
+/**
+ * Invalidate every cached user-related entry. Call this from user
+ * create/update/delete flows so the change shows up immediately.
+ */
+export function invalidateUsersCache(): void {
+  clearCache('users:');
 }
 
 /**
@@ -642,6 +663,48 @@ export async function getUserByIdOrNull(userId: string): Promise<User | null> {
     }
     throw error;
   }
+}
+
+/**
+ * Bulk-fetch users by ID. Replaces N individual getDocument calls with a
+ * single listDocuments using Query.equal('$id', ids).
+ *
+ * Appwrite's Query.equal supports an array of values for indexed attributes.
+ * For a large id set, fall back to chunked parallel calls (chunkSize 100 is
+ * the documented array cap for Query.equal).
+ */
+export async function getUsersByIds(ids: string[]): Promise<Map<string, User>> {
+  const result = new Map<string, User>();
+  if (!ids || ids.length === 0) return result;
+
+  const validIdPattern = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,35}$/;
+  const validIds = Array.from(new Set(ids.filter((id) => id && validIdPattern.test(id))));
+  if (validIds.length === 0) return result;
+
+  const CHUNK_SIZE = 100;
+  const chunks: string[][] = [];
+  for (let i = 0; i < validIds.length; i += CHUNK_SIZE) {
+    chunks.push(validIds.slice(i, i + CHUNK_SIZE));
+  }
+
+  const responses = await Promise.all(
+    chunks.map((chunk) =>
+      databases
+        .listDocuments(DATABASE_ID, USERS_COLLECTION_ID, [
+          Query.equal('$id', chunk),
+          Query.limit(chunk.length),
+        ])
+        .catch(() => ({ documents: [] as any[] }))
+    )
+  );
+
+  for (const response of responses) {
+    for (const doc of response.documents) {
+      result.set(doc.$id, mapDocToUser(doc));
+    }
+  }
+
+  return result;
 }
 
 /**

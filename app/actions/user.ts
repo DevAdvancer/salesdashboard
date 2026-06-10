@@ -602,21 +602,40 @@ export async function deleteUserAction(input: {
             [Query.limit(5000)]
         );
 
-        await Promise.all(
-            relatedUsers.documents
-                .filter((doc: Record<string, unknown>) => doc.$id !== userId)
-                .map(async (doc: Record<string, unknown>) => {
-                    const updates = removeDeletedUserReferences(doc, userId);
-                    if (!updates) return;
-
+        // Bound the cascade: Appwrite's write rate limit will reject a
+        // 5000-wide Promise.all. Process the related users with a small
+        // concurrency pool so we don't trip the rate limit while still
+        // finishing in roughly 5000/CONCURRENCY waves.
+        const CONCURRENCY = 10;
+        const queue = relatedUsers.documents
+            .filter((doc: Record<string, unknown>) => doc.$id !== userId)
+            .map((doc: Record<string, unknown>) => async () => {
+                const updates = removeDeletedUserReferences(doc, userId);
+                if (!updates) return;
+                try {
                     await databases.updateDocument(
                         DATABASE_ID,
                         USERS_COLLECTION_ID,
                         String(doc.$id),
                         updates
                     );
-                })
-        );
+                } catch (e) {
+                    console.error(
+                        `Failed to update user ${String(doc.$id)} after delete:`,
+                        e
+                    );
+                }
+            });
+
+        // Simple in-house pool: process queue CONCURRENCY at a time.
+        const workers = Array.from({ length: CONCURRENCY }, async () => {
+            while (queue.length) {
+                const job = queue.shift();
+                if (!job) return;
+                await job();
+            }
+        });
+        await Promise.all(workers);
 
         await databases.deleteDocument(DATABASE_ID, USERS_COLLECTION_ID, userId);
         await users.delete(userId);
