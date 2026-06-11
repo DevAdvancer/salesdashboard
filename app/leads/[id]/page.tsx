@@ -61,6 +61,7 @@ import {
   isLinkedinProfileField,
 } from "@/lib/utils/lead-linkedin-field";
 import { getErrorMessage } from "@/lib/utils";
+import { parseLeadActionError } from "@/lib/utils/lead-action-error";
 
 function isBackoutStatus(value: unknown) {
   const text = typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -162,6 +163,7 @@ function LeadDetailContent() {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string | null>>({});
   const [showCloseDialog, setShowCloseDialog] = useState(false);
   const [closeStep, setCloseStep] = useState(1);
   const [closeStatus, setCloseStatus] = useState("Closed");
@@ -406,9 +408,14 @@ function LeadDetailContent() {
       await loadLead();
     } catch (err: unknown) {
       console.error("Error saving lead:", err);
+      const parsed = parseLeadActionError(err);
+      if (parsed && parsed.field) {
+        setFieldErrors((prev) => ({ ...prev, [parsed.field!]: parsed.message }));
+        return;
+      }
       toast({
         title: "Error",
-        description: getErrorMessage(err, "Failed to save lead"),
+        description: parsed?.message || getErrorMessage(err, "Failed to save lead"),
         variant: "destructive",
       });
     } finally {
@@ -604,6 +611,14 @@ function LeadDetailContent() {
           }
         : { ...prev, [key]: value },
     );
+
+    // Clear any server-side field error when the user edits the input.
+    setFieldErrors((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   };
 
   const renderField = (field: FormField) => {
@@ -615,18 +630,27 @@ function LeadDetailContent() {
       lead?.isClosed ||
       user?.role === "operations" ||
       (user?.role === "monitor" && lead?.ownerId !== user.$id);
+    const fieldError = fieldErrors[field.key];
 
     switch (field.type) {
       case "textarea":
         return (
-          <textarea
-            id={field.key}
-            className="w-full min-h-[100px] px-3 py-2 rounded-md border border-input bg-background text-foreground"
-            value={value}
-            onChange={(e) => handleFieldChange(field.key, e.target.value)}
-            disabled={isReadOnly}
-            placeholder={field.placeholder}
-          />
+          <>
+            <textarea
+              id={field.key}
+              aria-invalid={Boolean(fieldError)}
+              className={`w-full min-h-[100px] px-3 py-2 rounded-md border ${
+                fieldError ? "border-red-500" : "border-input"
+              } bg-background text-foreground`}
+              value={value}
+              onChange={(e) => handleFieldChange(field.key, e.target.value)}
+              disabled={isReadOnly}
+              placeholder={field.placeholder}
+            />
+            {fieldError && (
+              <p className="text-sm text-red-500 mt-1">{fieldError}</p>
+            )}
+          </>
         );
 
       case "dropdown":
@@ -649,54 +673,77 @@ function LeadDetailContent() {
               : mergedOptions;
 
           return (
+            <>
+              <select
+                id={field.key}
+                aria-invalid={Boolean(fieldError)}
+                className={`flex h-10 w-full rounded-md border ${
+                  fieldError ? "border-red-500" : "border-input"
+                } bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
+                value={value}
+                onChange={(e) => handleFieldChange(field.key, e.target.value)}
+                disabled={isReadOnly}>
+                <option value="">Select {field.label}</option>
+                {options.map((option) => (
+                  <option
+                    key={option}
+                    value={option}
+                    disabled={
+                      isEditing &&
+                      !lead?.isClosed &&
+                      !allowed.has(normalizeStatusText(option))
+                    }>
+                    {option}
+                  </option>
+                ))}
+              </select>
+              {fieldError && (
+                <p className="text-sm text-red-500 mt-1">{fieldError}</p>
+              )}
+            </>
+          );
+        }
+        return (
+          <>
             <select
               id={field.key}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              aria-invalid={Boolean(fieldError)}
+              className={`flex h-10 w-full rounded-md border ${
+                fieldError ? "border-red-500" : "border-input"
+              } bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
               value={value}
               onChange={(e) => handleFieldChange(field.key, e.target.value)}
               disabled={isReadOnly}>
               <option value="">Select {field.label}</option>
-              {options.map((option) => (
-                <option
-                  key={option}
-                  value={option}
-                  disabled={
-                    isEditing &&
-                    !lead?.isClosed &&
-                    !allowed.has(normalizeStatusText(option))
-                  }>
+              {field.options?.map((option) => (
+                <option key={option} value={option}>
                   {option}
                 </option>
               ))}
             </select>
-          );
-        }
-        return (
-          <select
-            id={field.key}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            value={value}
-            onChange={(e) => handleFieldChange(field.key, e.target.value)}
-            disabled={isReadOnly}>
-            <option value="">Select {field.label}</option>
-            {field.options?.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
+            {fieldError && (
+              <p className="text-sm text-red-500 mt-1">{fieldError}</p>
+            )}
+          </>
         );
 
       default:
         return (
-          <Input
-            id={field.key}
-            type={field.type}
-            value={value}
-            onChange={(e) => handleFieldChange(field.key, e.target.value)}
-            disabled={isReadOnly}
-            placeholder={field.placeholder}
-          />
+          <>
+            <Input
+              id={field.key}
+              type={field.type}
+              value={value}
+              onChange={(e) => handleFieldChange(field.key, e.target.value)}
+              disabled={isReadOnly}
+              placeholder={field.placeholder}
+              aria-invalid={Boolean(fieldError)}
+              className={fieldError ? "border-red-500" : undefined}
+            />
+            {fieldError && (
+              <p className="text-sm text-red-500 mt-1">{fieldError}</p>
+            )}
+          </>
         );
     }
   };
@@ -905,6 +952,7 @@ function LeadDetailContent() {
                     onClick={() => {
                       setIsEditing(false);
                       setLeadData(JSON.parse(lead.data));
+                      setFieldErrors({});
                     }}>
                     Cancel
                   </Button>

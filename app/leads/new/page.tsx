@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createLead } from "@/lib/services/lead-action-service";
@@ -32,6 +32,7 @@ import {
   isLinkedinProfileField,
 } from "@/lib/utils/lead-linkedin-field";
 import { getLeadCreateStatusOptions } from "@/lib/utils/lead-status-workflow";
+import { parseLeadActionError } from "@/lib/utils/lead-action-error";
 
 export default function NewLeadPage() {
   return (
@@ -91,6 +92,16 @@ function LeadGenerationNewLeadContent() {
   const [resumeFileName, setResumeFileName] = useState<string | null>(null);
   const [isUploadingResume, setIsUploadingResume] = useState(false);
   const [linkedinRequestCompanyResolved, setLinkedinRequestCompanyResolved] = useState<string>("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string | null>>({});
+
+  const clearFieldError = useCallback((key: string) => {
+    setFieldErrors((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
 
   const buildResumePermissions = (currentUser: User) => {
     const readUserIds = new Set<string>([currentUser.$id]);
@@ -340,6 +351,24 @@ function LeadGenerationNewLeadContent() {
       router.push("/leads");
     } catch (err: unknown) {
       console.error("Error generating lead:", err);
+      const parsed = parseLeadActionError(err);
+      if (parsed) {
+        if (parsed.code === "DUPLICATE_FIELD" && parsed.field) {
+          setDuplicateError(parsed.message);
+          setFieldErrors((prev) => ({ ...prev, [parsed.field!]: parsed.message }));
+          return;
+        }
+        if (parsed.field) {
+          setFieldErrors((prev) => ({ ...prev, [parsed.field!]: parsed.message }));
+          return;
+        }
+        toast({
+          title: "Error",
+          description: parsed.message,
+          variant: "destructive",
+        });
+        return;
+      }
       toast({
         title: "Error",
         description:
@@ -398,20 +427,38 @@ function LeadGenerationNewLeadContent() {
               </Label>
               <input
                 id="firstName"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                aria-invalid={Boolean(fieldErrors.firstName)}
+                className={`flex h-10 w-full rounded-md border ${
+                  fieldErrors.firstName ? "border-red-500" : "border-input"
+                } bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
                 value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
+                onChange={(e) => {
+                  setFirstName(e.target.value);
+                  clearFieldError("firstName");
+                }}
               />
+              {fieldErrors.firstName && (
+                <p className="text-sm text-red-500">{fieldErrors.firstName}</p>
+              )}
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="middleName">Middle Name</Label>
               <input
                 id="middleName"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                aria-invalid={Boolean(fieldErrors.middleName)}
+                className={`flex h-10 w-full rounded-md border ${
+                  fieldErrors.middleName ? "border-red-500" : "border-input"
+                } bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
                 value={middleName}
-                onChange={(e) => setMiddleName(e.target.value)}
+                onChange={(e) => {
+                  setMiddleName(e.target.value);
+                  clearFieldError("middleName");
+                }}
               />
+              {fieldErrors.middleName && (
+                <p className="text-sm text-red-500">{fieldErrors.middleName}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -420,10 +467,19 @@ function LeadGenerationNewLeadContent() {
               </Label>
               <input
                 id="lastName"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                aria-invalid={Boolean(fieldErrors.lastName)}
+                className={`flex h-10 w-full rounded-md border ${
+                  fieldErrors.lastName ? "border-red-500" : "border-input"
+                } bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
                 value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
+                onChange={(e) => {
+                  setLastName(e.target.value);
+                  clearFieldError("lastName");
+                }}
               />
+              {fieldErrors.lastName && (
+                <p className="text-sm text-red-500">{fieldErrors.lastName}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -431,10 +487,19 @@ function LeadGenerationNewLeadContent() {
               <input
                 id="email"
                 type="email"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                aria-invalid={Boolean(fieldErrors.email)}
+                className={`flex h-10 w-full rounded-md border ${
+                  fieldErrors.email ? "border-red-500" : "border-input"
+                } bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  clearFieldError("email");
+                }}
               />
+              {fieldErrors.email && (
+                <p className="text-sm text-red-500">{fieldErrors.email}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -443,10 +508,19 @@ function LeadGenerationNewLeadContent() {
               </Label>
               <input
                 id="phone"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                aria-invalid={Boolean(fieldErrors.phone)}
+                className={`flex h-10 w-full rounded-md border ${
+                  fieldErrors.phone ? "border-red-500" : "border-input"
+                } bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  clearFieldError("phone");
+                }}
               />
+              {fieldErrors.phone && (
+                <p className="text-sm text-red-500">{fieldErrors.phone}</p>
+              )}
             </div>
           </div>
 
@@ -456,9 +530,15 @@ function LeadGenerationNewLeadContent() {
             </Label>
             <select
               id="visaStatus"
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              aria-invalid={Boolean(fieldErrors.visaStatus)}
+              className={`flex h-10 w-full rounded-md border ${
+                fieldErrors.visaStatus ? "border-red-500" : "border-input"
+              } bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
               value={visaStatus}
-              onChange={(e) => setVisaStatus(e.target.value)}>
+              onChange={(e) => {
+                setVisaStatus(e.target.value);
+                clearFieldError("visaStatus");
+              }}>
               <option value="">Select visa status</option>
               <option value="Citizen">Citizen</option>
               <option value="GC">GC</option>
@@ -467,6 +547,9 @@ function LeadGenerationNewLeadContent() {
               <option value="CPT">CPT</option>
               <option value="Other">Other</option>
             </select>
+            {fieldErrors.visaStatus && (
+              <p className="text-sm text-red-500">{fieldErrors.visaStatus}</p>
+            )}
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -476,10 +559,19 @@ function LeadGenerationNewLeadContent() {
               </Label>
               <input
                 id="linkedinProfileUrl"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                aria-invalid={Boolean(fieldErrors.linkedinProfileUrl)}
+                className={`flex h-10 w-full rounded-md border ${
+                  fieldErrors.linkedinProfileUrl ? "border-red-500" : "border-input"
+                } bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
                 value={linkedinProfileUrl}
-                onChange={(e) => setLinkedinProfileUrl(e.target.value)}
+                onChange={(e) => {
+                  setLinkedinProfileUrl(e.target.value);
+                  clearFieldError("linkedinProfileUrl");
+                }}
               />
+              {fieldErrors.linkedinProfileUrl && (
+                <p className="text-sm text-red-500">{fieldErrors.linkedinProfileUrl}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -565,6 +657,9 @@ function LegacyNewLeadContent() {
   const duplicateErrorRef = useRef<HTMLDivElement | null>(null);
   const [linkedinRequestCompanyResolved, setLinkedinRequestCompanyResolved] =
     useState<string>("");
+  const [externalErrors, setExternalErrors] = useState<
+    Record<string, string | null>
+  >({});
 
   const linkedinRequestId = (
     searchParams.get("linkedinRequestId") ?? ""
@@ -645,6 +740,15 @@ function LegacyNewLeadContent() {
       block: "center",
     });
   }, [duplicateError]);
+
+  const clearExternalError = useCallback((key: string) => {
+    setExternalErrors((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
 
   const loadFormConfig = async () => {
     try {
@@ -852,9 +956,30 @@ function LegacyNewLeadContent() {
       router.push("/leads");
     } catch (err: any) {
       console.error("Error creating lead:", err);
+      const parsed = parseLeadActionError(err);
+      if (parsed) {
+        if (parsed.code === "DUPLICATE_FIELD" && parsed.field) {
+          // Keep the existing duplicate banner (no regression) AND
+          // surface the field so the input gets a red border.
+          setDuplicateError(parsed.message);
+          setExternalErrors((prev) => ({ ...prev, [parsed.field!]: parsed.message }));
+          return;
+        }
+        if (parsed.field) {
+          setExternalErrors((prev) => ({ ...prev, [parsed.field!]: parsed.message }));
+          return;
+        }
+        // Non-field error: fall back to toast.
+        toast({
+          title: "Error",
+          description: parsed.message,
+          variant: "destructive",
+        });
+        return;
+      }
       toast({
         title: "Error",
-        description: err.message || "Failed to create lead",
+        description: err?.message || "Failed to create lead",
         variant: "destructive",
       });
     } finally {
@@ -943,6 +1068,8 @@ function LegacyNewLeadContent() {
             onSubmit={handleSubmit}
             submitLabel="Create Lead"
             isLoading={isSaving}
+            externalErrors={externalErrors}
+            onClearExternalError={clearExternalError}
             defaultValues={
               isLinkedinRequestLead
                 ? {

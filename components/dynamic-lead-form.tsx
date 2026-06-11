@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FormField } from "@/lib/types";
@@ -20,6 +20,14 @@ interface DynamicLeadFormProps {
   defaultValues?: Record<string, unknown>;
   submitLabel?: string;
   isLoading?: boolean;
+  /**
+   * Server-side validation errors, keyed by `FormField.key`. A non-null
+   * value drives the red border + inline error message; a `null` (or
+   * missing) entry clears any prior server error for that field.
+   */
+  externalErrors?: Record<string, string | null>;
+  /** Notify the parent when the user starts editing a field, so the parent can clear its entry. */
+  onClearExternalError?: (key: string) => void;
 }
 
 function filterReservedLeadSources(
@@ -67,6 +75,8 @@ export function DynamicLeadForm({
   defaultValues = {},
   submitLabel = "Submit",
   isLoading = false,
+  externalErrors,
+  onClearExternalError,
 }: DynamicLeadFormProps) {
   const { user, isAgent, isMonitor } = useAuth();
   const isAgentLike = isAgent || isMonitor;
@@ -148,11 +158,27 @@ export function DynamicLeadForm({
   const {
     register,
     handleSubmit,
+    setError,
+    clearErrors,
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(schema),
     defaultValues,
   });
+
+  // Sync server-side field errors into react-hook-form so the existing
+  // per-field render (errors[field.key]?.message + border-red-500) picks
+  // them up automatically.
+  useEffect(() => {
+    if (!externalErrors) return;
+    for (const [key, message] of Object.entries(externalErrors)) {
+      if (message) {
+        setError(key, { type: "server", message });
+      } else {
+        clearErrors(key);
+      }
+    }
+  }, [externalErrors, setError, clearErrors]);
 
   const handleFormSubmit = async (data: Record<string, unknown>) => {
     // Inject assignedToId into the submitted data (Requirement 4.2, 4.3, 4.4)
@@ -190,7 +216,9 @@ export function DynamicLeadForm({
                     : "text"
               }
               placeholder={field.placeholder}
-              {...register(field.key)}
+              {...register(field.key, {
+              onChange: () => onClearExternalError?.(field.key),
+            })}
               className={error ? "border-red-500" : ""}
             />
             {errorMessage && (
@@ -209,7 +237,9 @@ export function DynamicLeadForm({
             <textarea
               id={field.key}
               placeholder={field.placeholder}
-              {...register(field.key)}
+              {...register(field.key, {
+              onChange: () => onClearExternalError?.(field.key),
+            })}
               className={`flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
                 error ? "border-red-500" : ""
               }`}
@@ -235,7 +265,9 @@ export function DynamicLeadForm({
             </Label>
             <select
               id={field.key}
-              {...register(field.key)}
+              {...register(field.key, {
+              onChange: () => onClearExternalError?.(field.key),
+            })}
               className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
                 error ? "border-red-500" : ""
               }`}>
@@ -271,7 +303,9 @@ export function DynamicLeadForm({
                     type="checkbox"
                     id={`${field.key}-${index}`}
                     value={option}
-                    {...register(field.key)}
+                    {...register(field.key, {
+              onChange: () => onClearExternalError?.(field.key),
+            })}
                     className="h-4 w-4 rounded border-input text-primary focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
                   />
                   <Label

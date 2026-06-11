@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@/lib/server/appwrite";
 import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
+import { LeadActionError } from "@/lib/server/lead-errors";
 import { Lead, LeadData, LeadListFilters, UserRole, CreateLeadInput } from "@/lib/types";
 import { Query, ID, Permission, Role } from "node-appwrite";
 import { COLLECTIONS } from "@/lib/constants/appwrite";
@@ -93,7 +94,11 @@ function shouldIgnoreLinkedinDuplicate(
 function assertRequiredLeadData(data: LeadData) {
     for (const [key, label] of Object.entries(REQUIRED_LEAD_FIELD_LABELS)) {
         if (Object.prototype.hasOwnProperty.call(data, key) && isBlankLeadValue(data[key])) {
-            throw new Error(`${label} is required.`);
+            throw new LeadActionError(
+                'MISSING_REQUIRED_FIELD',
+                `${label} is required.`,
+                { field: key },
+            );
         }
     }
 }
@@ -429,18 +434,18 @@ async function assertLeadReopenAllowed(
   lead: Lead
 ) {
   if (isOperationsRole(actorDoc.role)) {
-    throw new Error('Permission denied');
+    throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
   }
 
   if (isMonitorRole(actorDoc.role)) {
     if (lead.ownerId === actorDoc.$id) return;
-    throw new Error('Permission denied');
+    throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
   }
 
   if (actorDoc.role === 'admin' || actorDoc.role === 'developer') return;
 
   if (actorDoc.role !== 'team_lead') {
-    throw new Error('Permission denied');
+    throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
   }
 
   const specialBranchId = getSpecialBranchLeadAccess(actorDoc.email);
@@ -454,7 +459,7 @@ async function assertLeadReopenAllowed(
     return;
   }
 
-  throw new Error('Permission denied');
+  throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
 }
 
 async function assertLeadUpdateAllowed(
@@ -463,12 +468,12 @@ async function assertLeadUpdateAllowed(
   lead: Lead
 ) {
   if (isOperationsRole(actorDoc.role)) {
-    throw new Error('Permission denied');
+    throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
   }
 
   if (isMonitorRole(actorDoc.role)) {
     if (lead.ownerId === actorDoc.$id) return;
-    throw new Error('Permission denied');
+    throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
   }
 
   if (actorDoc.role === 'admin' || actorDoc.role === 'developer') return;
@@ -481,7 +486,7 @@ async function assertLeadUpdateAllowed(
   }
 
   if (actorDoc.role === 'lead_generation') {
-    throw new Error('Permission denied');
+    throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
   }
 
   const visibleUserIds = await getLeadVisibilityUserIds(databases, actorDoc.$id, actorDoc.role);
@@ -492,7 +497,7 @@ async function assertLeadUpdateAllowed(
     return;
   }
 
-  throw new Error('Permission denied');
+  throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
 }
 
 function getLeadAuditName(data: LeadData): string {
@@ -557,7 +562,10 @@ export async function createLeadAction(
 
         const finalOwnerId = creatingUserId || ownerId;
         if (!isValidId(finalOwnerId)) {
-             throw new Error(`Invalid owner ID format: "${finalOwnerId}"`);
+             throw new LeadActionError(
+                 'INVALID_INPUT',
+                 `Invalid owner ID format: "${finalOwnerId}"`,
+             );
         }
 
         const actorDoc = await databases.getDocument(
@@ -567,7 +575,7 @@ export async function createLeadAction(
         ) as unknown as UserDocument;
 
         if (isOperationsRole(actorDoc.role)) {
-            throw new Error('Permission denied');
+            throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
         }
 
         assertRequiredLeadData(input.data);
@@ -575,9 +583,25 @@ export async function createLeadAction(
         // Validate uniqueness
         const validation = await validateLeadUniqueness(input.data);
         if (!validation.isValid) {
-            throw new Error(
-                `Duplicate ${validation.duplicateField} found in lead ${validation.existingLeadId}` +
-                (validation.existingBranchId ? ` (branch: ${validation.existingBranchId})` : '')
+            const humanField =
+                validation.duplicateField === 'email'
+                    ? 'email address'
+                    : validation.duplicateField === 'phone'
+                      ? 'phone number'
+                      : 'LinkedIn profile URL';
+            const branchSuffix = validation.existingBranchId
+                ? ' in another branch'
+                : '';
+            throw new LeadActionError(
+                'DUPLICATE_FIELD',
+                `A lead with this ${humanField} already exists${branchSuffix}.`,
+                {
+                    field: validation.duplicateField,
+                    meta: {
+                        existingLeadId: validation.existingLeadId,
+                        existingBranchId: validation.existingBranchId,
+                    },
+                },
             );
         }
 
@@ -667,8 +691,17 @@ export async function createLeadAction(
 
         return lead as unknown as Lead;
     } catch (error: any) {
+        // Re-throw structured LeadActionError as-is so the client can
+        // read the `code` and `field` properties. Wrapping in
+        // `new Error(error.message || …)` would strip those and trigger
+        // the production "Server Components render" digest mask.
+        if (error instanceof LeadActionError) throw error;
         console.error('Error creating lead (action):', error);
-        throw new Error(error.message || 'Failed to create lead');
+        throw new LeadActionError(
+            'UNKNOWN',
+            error?.message || 'Failed to create lead',
+            { cause: error },
+        );
     }
 }
 
@@ -715,7 +748,14 @@ export async function updateLeadAction(
                 shouldEnforceWorkflow &&
                 !isAllowedLeadStatusTransition(previousStatus, nextStatus)
             ) {
-                throw new Error('Invalid status transition for this lead.');
+                throw new LeadActionError(
+                    'INVALID_STATUS_TRANSITION',
+                    'Invalid status transition for this lead.',
+                    {
+                        field: 'status',
+                        meta: { previousStatus, nextStatus },
+                    },
+                );
             }
         }
 
@@ -734,9 +774,25 @@ export async function updateLeadAction(
                 console.error('Failed to notify duplicate lead update attempt:', error);
             }
 
-            throw new Error(
-                `Duplicate ${validation.duplicateField} found in lead ${validation.existingLeadId}` +
-                (validation.existingBranchId ? ` (branch: ${validation.existingBranchId})` : '')
+            const humanField =
+                validation.duplicateField === 'email'
+                    ? 'email address'
+                    : validation.duplicateField === 'phone'
+                      ? 'phone number'
+                      : 'LinkedIn profile URL';
+            const branchSuffix = validation.existingBranchId
+                ? ' in another branch'
+                : '';
+            throw new LeadActionError(
+                'DUPLICATE_FIELD',
+                `A lead with this ${humanField} already exists${branchSuffix}.`,
+                {
+                    field: validation.duplicateField,
+                    meta: {
+                        existingLeadId: validation.existingLeadId,
+                        existingBranchId: validation.existingBranchId,
+                    },
+                },
             );
         }
 
@@ -777,8 +833,13 @@ export async function updateLeadAction(
 
         return lead as unknown as Lead;
     } catch (error: any) {
+        if (error instanceof LeadActionError) throw error;
         console.error('Error updating lead (action):', error);
-        throw new Error(error.message || 'Failed to update lead');
+        throw new LeadActionError(
+            'UNKNOWN',
+            error?.message || 'Failed to update lead',
+            { cause: error },
+        );
     }
 }
 
@@ -790,7 +851,7 @@ export async function reopenLeadAction(
     if (actorId) {
         await assertAuthenticatedUserId(actorId);
     } else {
-        throw new Error("Unauthorized");
+        throw new LeadActionError('UNAUTHORIZED', 'Unauthorized');
     }
     const { databases } = await createAdminClient();
     try {
@@ -832,8 +893,13 @@ export async function reopenLeadAction(
 
         return lead as unknown as Lead;
     } catch (error: any) {
+        if (error instanceof LeadActionError) throw error;
         console.error('Error reopening lead (action):', error);
-        throw new Error(error.message || 'Failed to reopen lead');
+        throw new LeadActionError(
+            'UNKNOWN',
+            error?.message || 'Failed to reopen lead',
+            { cause: error },
+        );
     }
 }
 
@@ -871,7 +937,7 @@ export async function getLeadAction(
     }
 
     if (viewerDoc.role === 'lead_generation') {
-      throw new Error('Permission denied');
+      throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
     }
 
     const visibleUserIds = await getLeadVisibilityUserIds(databases, viewerId, viewerDoc.role);
@@ -882,10 +948,15 @@ export async function getLeadAction(
       return lead;
     }
 
-    throw new Error('Permission denied');
+    throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
   } catch (error: any) {
+    if (error instanceof LeadActionError) throw error;
     console.error('Error fetching lead (action):', error);
-    throw new Error(error.message || 'Failed to fetch lead');
+    throw new LeadActionError(
+      'UNKNOWN',
+      error?.message || 'Failed to fetch lead',
+      { cause: error },
+    );
   }
 }
 
