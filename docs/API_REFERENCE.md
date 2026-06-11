@@ -143,7 +143,6 @@ const teamLead = await createTeamLead({
   name: 'Alice Smith',
   email: 'alice@company.com',
   password: 'SecurePass123!',
-  managerIds: ['manager-id-1'],
   branchIds: ['branch-id-1'],
 }, currentUser);
 ```
@@ -203,9 +202,9 @@ Returns all agents + lead_generation users under a team lead.
 
 ---
 
-### `getAgentsByManager(managerId)`
+### `getAgentsByTeamLead(teamLeadId)`
 
-Returns all agents whose `managerId` matches.
+Returns all agents whose `teamLeadId` matches.
 
 ---
 

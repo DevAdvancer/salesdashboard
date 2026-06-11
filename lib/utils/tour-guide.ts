@@ -4,7 +4,6 @@ import type { UserRole } from '@/lib/types';
 
 export function startDashboardTour(role: UserRole) {
   const isAdmin = role === 'admin' || role === 'developer';
-  const isManager = role === 'manager' || role === 'assistant_manager';
   const isTeamLead = role === 'team_lead';
   const isAgent = role === 'agent';
 
@@ -30,7 +29,7 @@ export function startDashboardTour(role: UserRole) {
     },
   });
 
-  if (isAdmin || isManager) {
+  if (isAdmin) {
     steps.push({
       element: '#tour-leadership-dashboard',
       popover: {
@@ -55,9 +54,7 @@ export function startDashboardTour(role: UserRole) {
   }
 
   let followUpDescription = 'Never miss a follow-up. Leads needing attention are automatically queued here based on their schedules.';
-  if (isManager) {
-    followUpDescription = 'Track all follow-ups across your branch. Follow-ups for your agents and team leads will automatically be shown here.';
-  } else if (isTeamLead) {
+  if (isTeamLead) {
     followUpDescription = 'Track your follow-ups and those of your assigned agents here.';
   } else if (isAgent) {
     followUpDescription = 'Your assigned follow-ups will be queued here so you never miss a task.';
@@ -242,12 +239,12 @@ export function startLeadDetailTour(role: UserRole) {
     },
   ];
 
-  if (role === 'manager' || role === 'admin' || role === 'developer') {
+  if (role === 'admin' || role === 'developer') {
     steps.push({
       element: '#tour-lead-assignment',
       popover: {
         title: 'Agent Assignment',
-        description: 'As a manager, you can reassign this lead to a different agent from this dropdown.',
+        description: 'You can reassign this lead to a different agent from this dropdown.',
         side: 'top',
       },
     });

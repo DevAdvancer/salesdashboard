@@ -49,8 +49,7 @@ export default function TestAuthPage() {
         {
           name: 'Test User',
           email: testEmail,
-          role: 'manager',
-          managerId: null,
+          role: 'admin',
         }
       );
       void userDoc;
@@ -116,8 +115,7 @@ export default function TestAuthPage() {
         {
           name: 'Permission Test',
           email: `permtest${Date.now()}@example.com`,
-          role: 'manager',
-          managerId: null,
+          role: 'admin',
         }
       );
 

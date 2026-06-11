@@ -144,12 +144,7 @@ function UserManagementContent() {
               'email',
               'role',
               'isActive',
-              'managerId',
-              'managerIds',
-              'assistantManagerId',
-              'assistantManagerIds',
               'teamLeadId',
-              'branchId',
               'branchIds',
             ]),
           ],
@@ -159,19 +154,13 @@ function UserManagementContent() {
           name: doc.name,
           email: doc.email,
           role: doc.role,
-          managerId: doc.managerId || null,
-          managerIds: doc.managerIds || [],
-          assistantManagerId: doc.assistantManagerId || null,
-          assistantManagerIds: doc.assistantManagerIds || [],
           teamLeadId: doc.teamLeadId || null,
           branchIds: doc.branchIds || [],
           isActive: doc.isActive !== false,
           branchId: doc.branchId || null,
           $createdAt: doc.$createdAt,
           $updatedAt: doc.$updatedAt,
-        })).filter((mappedUser: User) => (
-          mappedUser.role !== "manager" && mappedUser.role !== "assistant_manager"
-        ));
+        }));
 
         const roleOrder: Record<string, number> = {
           admin: 0,
@@ -235,10 +224,6 @@ function UserManagementContent() {
         name: doc.name,
         email: doc.email,
         role: doc.role,
-        managerId: doc.managerId || null,
-        managerIds: doc.managerIds || [],
-        assistantManagerId: doc.assistantManagerId || null,
-        assistantManagerIds: doc.assistantManagerIds || [],
         teamLeadId: doc.teamLeadId || null,
         branchIds: doc.branchIds || [],
         isActive: doc.isActive !== false,
@@ -309,7 +294,7 @@ function UserManagementContent() {
 
   useEffect(() => {
     async function loadTeamLeads() {
-      // Load Team Leads when Admin/Manager is creating Agent/TL or editing Agent/TL
+      // Load Team Leads when Admin is creating Agent/TL or editing Agent/TL
       const isAgentTarget =
         (showCreateDialog &&
           (createRole === "agent" || createRole === "lead_generation" || createRole === "monitor" || createRole === "operations")) ||

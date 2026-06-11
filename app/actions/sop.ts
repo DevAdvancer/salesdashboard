@@ -44,10 +44,6 @@ async function getActor(userId: string): Promise<User> {
     name: doc.name,
     email: doc.email,
     role: doc.role,
-    managerId: doc.managerId || null,
-    managerIds: doc.managerIds || [],
-    assistantManagerId: doc.assistantManagerId || null,
-    assistantManagerIds: doc.assistantManagerIds || [],
     teamLeadId: doc.teamLeadId || null,
     branchIds: doc.branchIds || [],
     branchId: doc.branchId || null,
@@ -63,7 +59,7 @@ function ensureComponentAccess(role: UserRole, componentKey: Parameters<typeof i
 }
 
 function ensureLeadershipRead(role: UserRole) {
-  if (!["admin", "developer", "manager", "assistant_manager", "monitor", "operations", "team_lead"].includes(role)) {
+  if (!["admin", "developer", "monitor", "operations", "team_lead"].includes(role)) {
     throw new Error("Not authorized");
   }
 }
@@ -110,19 +106,7 @@ async function listVisibleReviewUsers(actor: User): Promise<User[]> {
   const queries: string[] = [];
 
   if (actor.role === "admin") {
-    queries.push(Query.equal("role", ["manager", "assistant_manager", "team_lead", "agent"]));
-  } else if (actor.role === "manager") {
-    if (actor.branchIds.length === 0) {
-      return [];
-    }
-    queries.push(Query.equal("role", ["assistant_manager", "team_lead", "agent"]));
-    queries.push(Query.contains("branchIds", actor.branchIds));
-  } else if (actor.role === "assistant_manager") {
-    if (actor.branchIds.length === 0) {
-      return [];
-    }
     queries.push(Query.equal("role", ["team_lead", "agent"]));
-    queries.push(Query.contains("branchIds", actor.branchIds));
   } else if (actor.role === "team_lead") {
     queries.push(Query.equal("role", "agent"));
     queries.push(Query.equal("teamLeadId", actor.$id));
@@ -140,10 +124,6 @@ async function listVisibleReviewUsers(actor: User): Promise<User[]> {
       name: doc.name,
       email: doc.email,
       role: doc.role,
-      managerId: doc.managerId || null,
-      managerIds: doc.managerIds || [],
-      assistantManagerId: doc.assistantManagerId || null,
-      assistantManagerIds: doc.assistantManagerIds || [],
       teamLeadId: doc.teamLeadId || null,
       branchIds: doc.branchIds || [],
       branchId: doc.branchId || null,

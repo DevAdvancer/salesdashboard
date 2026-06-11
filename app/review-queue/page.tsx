@@ -32,7 +32,7 @@ export default function ReviewQueuePage() {
 }
 
 function ReviewQueueContent() {
-  const { user, isAdmin, isManager, isAssistantManager, isMonitor, isOperations } = useAuth();
+  const { user, isAdmin, isTeamLead, isMonitor, isOperations } = useAuth();
   const { toast } = useToast();
   const [items, setItems] = useState<ReviewQueueItem[]>([]);
   const [type, setType] = useState('lead_reopen');
@@ -44,7 +44,7 @@ function ReviewQueueContent() {
   const [saving, setSaving] = useState(false);
   const [loadingItems, setLoadingItems] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const canResolve = isAdmin || isManager || isAssistantManager;
+  const canResolve = isAdmin || isTeamLead;
   const selectedTarget = findReviewTargetOption(targetOptions, targetInput);
 
   const loadItems = useCallback(async () => {

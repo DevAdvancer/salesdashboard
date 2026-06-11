@@ -368,7 +368,7 @@ export function buildLeadershipDashboardInsights({
     const followUpIsOverdue = Boolean(hasPendingFollowUp && followUpDate && followUpDate.getTime() < now.getTime() && !isSameLocalDay(followUpDate, now));
     const followUpIsDueToday = Boolean(hasPendingFollowUp && followUpDate && isSameLocalDay(followUpDate, now));
     const status = normalizeStatus(currentLead.status);
-    const branchId = currentLead.branchId ?? 'unassigned-branch';
+    const branchId = Array.isArray(currentLead.branchIds) && currentLead.branchIds.length > 0 ? currentLead.branchIds[0] : 'unassigned-branch';
     const branchSummary = branchMap.get(branchId);
     const branchName = branchSummary?.branchName ?? 'No branch';
     const owner = userMap.get(currentLead.ownerId);

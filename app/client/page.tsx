@@ -194,7 +194,7 @@ function HistoryContent() {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     return filteredLeads.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   }, [currentPage, filteredLeads]);
-  const canFilterByBranch = user?.role === "admin" || user?.role === "manager";
+  const canFilterByBranch = user?.role === "admin";
 
   useEffect(() => {
     if (!user) {
@@ -206,7 +206,7 @@ function HistoryContent() {
   }, [user, router]);
 
   useEffect(() => {
-    if (user?.role === "admin" || user?.role === "manager") {
+    if (user?.role === "admin") {
       loadBranches();
     }
   }, [user]);
@@ -345,7 +345,7 @@ function HistoryContent() {
   };
 
   const loadBranches = async () => {
-    if (!user || (user.role !== "admin" && user.role !== "manager")) return;
+    if (!user || user.role !== "admin") return;
 
     try {
       const branchList = await listBranches();

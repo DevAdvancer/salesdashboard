@@ -47,7 +47,7 @@ type LeadGenerationTeamAssignmentStat = {
 
 
 function LegacyDashboardContent() {
-  const { user, isAdmin, isManager, isAssistantManager, isAgent, isTeamLead, isMonitor, isOperations } =
+  const { user, isAdmin, isAgent, isTeamLead, isMonitor, isOperations } =
     useAuth();
   const isReadOnlyAdminView = isMonitor || isOperations;
   const router = useRouter();
@@ -190,7 +190,7 @@ function LegacyDashboardContent() {
           ]);
           let usersForInsights: User[] = [user];
 
-          if (isAdmin || isReadOnlyAdminView || isManager || isAssistantManager) {
+          if (isAdmin || isReadOnlyAdminView) {
             const visibleUsers = await userService.getAssignableUsers(
               user.role,
               user.branchIds || [],
@@ -240,12 +240,8 @@ function LegacyDashboardContent() {
             ...usersForInsights.flatMap(
               (visibleUser) => visibleUser.branchIds || [],
             ),
-            ...activeLeads
-              .map((lead) => lead.branchId)
-              .filter((branchId): branchId is string => Boolean(branchId)),
-            ...closedLeads
-              .map((lead) => lead.branchId)
-              .filter((branchId): branchId is string => Boolean(branchId)),
+            ...activeLeads.flatMap((lead) => lead.branchIds || []),
+            ...closedLeads.flatMap((lead) => lead.branchIds || []),
           ]);
           const branchesForInsights: Branch[] = allBranches.filter(
             (branch) => isAdmin || isReadOnlyAdminView || branchIdsInScope.has(branch.$id),
@@ -334,7 +330,7 @@ function LegacyDashboardContent() {
     if (user) {
       fetchMetrics();
     }
-  }, [user, isAdmin, isAssistantManager, isManager, isReadOnlyAdminView]);
+  }, [user, isAdmin, isReadOnlyAdminView]);
 
 
   useEffect(() => {
@@ -550,7 +546,7 @@ function LegacyDashboardContent() {
         </Card>
       </div>
 
-      {(isAdmin || isReadOnlyAdminView || isManager || isAssistantManager) && (
+      {(isAdmin || isReadOnlyAdminView) && (
         <div id="tour-leadership-dashboard">
           <LeadershipDashboard
             role={user.role}
@@ -639,27 +635,6 @@ function LegacyDashboardContent() {
           </Card>
         )}
 
-        {!isAdmin && isManager && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Manager Access</CardTitle>
-              <CardDescription>You have full system access</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                As a manager, you can:
-              </p>
-              <ul className="list-disc list-inside text-sm mt-2 space-y-1">
-                <li>Create and manage team leads</li>
-                <li>Configure lead forms</li>
-                <li>Manage access controls</li>
-                <li>View all leads</li>
-                <li>Access client records and reports</li>
-              </ul>
-            </CardContent>
-          </Card>
-        )}
-
         {isTeamLead && (
           <Card>
             <CardHeader>
@@ -720,7 +695,7 @@ function LegacyDashboardContent() {
                 Linkedin Request
               </Button>
             )}
-            {(isAdmin || isReadOnlyAdminView || isManager || isTeamLead) && (
+            {(isAdmin || isReadOnlyAdminView || isTeamLead) && (
               <>
                 <Button
                   className="w-full"
@@ -738,7 +713,7 @@ function LegacyDashboardContent() {
                 )}
               </>
             )}
-            {(isAdmin || isManager) && (
+            {(isAdmin) && (
               <Button
                 className="w-full"
                 variant="outline"

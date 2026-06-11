@@ -63,12 +63,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         name: userDoc.name as string,
         email: userDoc.email as string,
         role: userDoc.role as UserRole,
-        managerId: (userDoc.managerId as string) || null,
-        managerIds: Array.isArray(userDoc.managerIds) ? (userDoc.managerIds as string[]) : [],
-        assistantManagerId: (userDoc.assistantManagerId as string) || null,
-        assistantManagerIds: Array.isArray(userDoc.assistantManagerIds)
-          ? (userDoc.assistantManagerIds as string[])
-          : [],
         teamLeadId: (userDoc.teamLeadId as string) || null,
         branchIds: Array.isArray(userDoc.branchIds) ? (userDoc.branchIds as string[]) : [],
         isActive: userDoc.isActive !== false,
@@ -195,8 +189,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Role-based helper properties
   const isAdmin = user?.role === 'admin' || user?.role === 'developer';
   const isDeveloper = user?.role === 'developer';
-  const isAssistantManager = false;
-  const isManager = false;
   const isTeamLead = user?.role === 'team_lead';
   const isAgent = user?.role === 'agent';
   const isLeadGeneration = user?.role === 'lead_generation';
@@ -208,8 +200,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       isAdmin,
       isDeveloper,
-      isManager,
-      isAssistantManager,
       isTeamLead,
       isAgent,
       isLeadGeneration,
@@ -224,8 +214,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       isAdmin,
       isDeveloper,
-      isManager,
-      isAssistantManager,
       isTeamLead,
       isAgent,
       isLeadGeneration,

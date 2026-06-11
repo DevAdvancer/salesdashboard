@@ -17,7 +17,7 @@ export interface BranchVisibilityCheck {
  * 3. Any branches assigned to the target user but not the viewer are hidden.
  *
  * @param targetUserBranchIds - The branch IDs assigned to the user being viewed
- * @param viewerRole - The role of the current viewer (admin, manager, team_lead, agent)
+ * @param viewerRole - The role of the current viewer (admin, team_lead, agent)
  * @param viewerBranchIds - The branch IDs assigned to the current viewer
  * @param logger - Optional logger function for visibility mismatches
  * @returns Object containing visible branch IDs and mismatch info

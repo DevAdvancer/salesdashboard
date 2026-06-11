@@ -60,10 +60,6 @@ function isLinkedinRequestLeadData(data: LeadData) {
 
 type HierarchyUserDocument = {
   $id: string;
-  managerId?: string | null;
-  managerIds?: string[];
-  assistantManagerId?: string | null;
-  assistantManagerIds?: string[];
   teamLeadId?: string | null;
 };
 
@@ -78,17 +74,9 @@ function getVisibleHierarchyUserIds(viewerId: string, viewerRole: UserRole, user
     users.forEach((candidate) => {
       if (visibleIds.has(candidate.$id)) return;
 
-      const managerIds = Array.isArray(candidate.managerIds) ? candidate.managerIds : [];
-      const assistantManagerIds = Array.isArray(candidate.assistantManagerIds) ? candidate.assistantManagerIds : [];
-      const reportsToVisibleManager =
-        Boolean(candidate.managerId && visibleIds.has(candidate.managerId)) ||
-        managerIds.some((managerId) => visibleIds.has(managerId));
-      const reportsToVisibleAssistantManager =
-        Boolean(candidate.assistantManagerId && visibleIds.has(candidate.assistantManagerId)) ||
-        assistantManagerIds.some((assistantManagerId) => visibleIds.has(assistantManagerId));
       const reportsToVisibleTeamLead = Boolean(candidate.teamLeadId && visibleIds.has(candidate.teamLeadId));
 
-      if (reportsToVisibleManager || reportsToVisibleAssistantManager || reportsToVisibleTeamLead) {
+      if (reportsToVisibleTeamLead) {
         visibleIds.add(candidate.$id);
         changed = true;
       }
@@ -168,7 +156,7 @@ function appendHierarchyLeadVisibilityQuery(queries: string[], visibleUserIds: s
   ];
 
   if (specialBranchId) {
-    orConditions.push(Query.equal('branchId', specialBranchId));
+    orConditions.push(Query.contains('branchIds', [specialBranchId]));
   }
 
   queries.push(Query.or(orConditions));
@@ -186,7 +174,7 @@ function appendTeamLeadLeadVisibilityQuery(
   ];
 
   if (specialBranchId) {
-    orConditions.push(Query.equal('branchId', specialBranchId));
+    orConditions.push(Query.contains('branchIds', [specialBranchId]));
   }
 
   queries.push(Query.or(orConditions));
@@ -211,10 +199,6 @@ async function getHierarchyPermissions(userId: string): Promise<string[]> {
 
                 const supervisors = new Set<string>();
                 if (user.teamLeadId) supervisors.add(user.teamLeadId);
-                if (user.managerId) supervisors.add(user.managerId);
-                if (user.managerIds && user.managerIds.length > 0) {
-                    user.managerIds.forEach(mid => supervisors.add(mid));
-                }
 
                 for (const supId of supervisors) {
                     if (!visited.has(supId) && isValidId(supId)) {
@@ -230,13 +214,6 @@ async function getHierarchyPermissions(userId: string): Promise<string[]> {
                 // Continue up the chain. Prefer a not-yet-visited supervisor.
                 if (user.teamLeadId && isValidId(user.teamLeadId) && !visited.has(user.teamLeadId)) {
                     currentId = user.teamLeadId;
-                } else if (user.managerId && isValidId(user.managerId) && !visited.has(user.managerId)) {
-                    currentId = user.managerId;
-                } else if (user.managerIds && user.managerIds.length > 0) {
-                    const next = user.managerIds.find(
-                        (mid: string) => isValidId(mid) && !visited.has(mid)
-                    );
-                    currentId = next || null;
                 } else {
                     currentId = null;
                 }
@@ -338,7 +315,7 @@ export async function createLead(
         status: input.status || 'New',
         ownerId: finalOwnerId,
         assignedToId: input.assignedToId || null,
-        branchId: input.branchId || null,
+        branchIds: input.branchIds || [],
         isClosed: false,
         closedAt: null,
       },
@@ -355,7 +332,7 @@ export async function createLead(
             actorName: creatingUserName || 'System',
             targetId: createdLead.$id,
             targetType: 'LEAD',
-            metadata: { leadName: getLeadAuditName(input.data), ...input.data, branchId: input.branchId }
+            metadata: { leadName: getLeadAuditName(input.data), ...input.data, branchIds: input.branchIds || [] }
         });
     }
 
@@ -464,7 +441,7 @@ export async function updateLead(
  * Delete a lead
  *
  * This function permanently deletes a lead from the database.
- * Only the owner (manager) can delete leads.
+ * Only the owner (or admin) can delete leads.
  *
  * @param leadId - The ID of the lead to delete
  * @param actorId - The ID of the user performing the delete (optional, for logging)
@@ -552,23 +529,13 @@ export async function listLeads(
           Query.equal('ownerId', userId),
       ];
       if (specialBranchId) {
-        orConditions.push(Query.equal('branchId', specialBranchId));
+        orConditions.push(Query.contains('branchIds', [specialBranchId]));
       }
       queries.push(Query.or(orConditions));
     } else if (userRole === 'lead_generation') {
       queries.push(Query.equal('ownerId', userId));
     } else if (userRole === 'admin' || userRole === 'developer' || userRole === 'monitor' || userRole === 'operations') {
       // Admins, developers, monitors, and operations see all leads across all branches - no branch/owner filter
-    } else if (userRole === 'manager') {
-      const visibleUserIds = await getLeadVisibilityUserIds(userId, userRole);
-      appendHierarchyLeadVisibilityQuery(queries, visibleUserIds, specialBranchId);
-      // Managers also see leads in their assigned branches
-      if (branchIds && branchIds.length > 0) {
-        queries.push(Query.equal('branchId', branchIds));
-      }
-    } else if (userRole === 'assistant_manager') {
-      const visibleUserIds = await getLeadVisibilityUserIds(userId, userRole);
-      appendHierarchyLeadVisibilityQuery(queries, visibleUserIds, specialBranchId);
     } else if (userRole === 'team_lead') {
       const { ownerVisibleUserIds, assignmentVisibleUserIds } =
         await getTeamLeadLeadVisibilityScope(userId);
@@ -592,19 +559,19 @@ export async function listLeads(
       ];
 
       // Logic change:
-      // Assistant Managers with > 1 branch ALSO see all branch leads (same as Manager).
-      // Assistant Managers with 1 branch only see their own leads + subordinate leads.
-      const shouldSeeAllBranchLeads = (userRole === 'assistant_manager' && branchIds && branchIds.length > 1);
+// Team Leads with > 1 branch ALSO see all branch leads.
+// Team Leads with 1 branch only see their own leads + subordinate leads.
+      const shouldSeeAllBranchLeads = (userRole === 'team_lead' && branchIds && branchIds.length > 1);
 
       if (shouldSeeAllBranchLeads && branchIds && branchIds.length > 0) {
-        orConditions.push(Query.equal('branchId', branchIds));
+        orConditions.push(Query.contains('branchIds', branchIds));
       }
       if (specialBranchId) {
-        orConditions.push(Query.equal('branchId', specialBranchId));
+        orConditions.push(Query.contains('branchIds', [specialBranchId]));
       }
 
       try {
-        // Fetch subordinates (TLs and Agents)
+        // Fetch subordinates (Agents / lead_generation)
         const { getSubordinates } = await import('@/lib/services/user-service');
         const subordinates = await getSubordinates(userId);
 
@@ -613,23 +580,8 @@ export async function listLeads(
           orConditions.push(Query.equal('ownerId', subordinateIds));
           orConditions.push(Query.equal('assignedToId', subordinateIds));
         }
-
-        // Fetch managers of this user (upwards)
-        // currentUser is already fetched at the top of the function
-        const managerIds: string[] = [];
-        if (currentUser.managerId) managerIds.push(currentUser.managerId);
-        if (currentUser.managerIds && currentUser.managerIds.length > 0) {
-            currentUser.managerIds.forEach(mid => {
-                if (!managerIds.includes(mid)) managerIds.push(mid);
-            });
-        }
-
-        if (managerIds.length > 0) {
-            orConditions.push(Query.equal('ownerId', managerIds));
-        }
-
       } catch (err) {
-        console.error('Error fetching subordinates/managers for lead visibility:', err);
+        console.error('Error fetching subordinates for lead visibility:', err);
       }
 
       if (orConditions.length > 1) {
@@ -666,7 +618,7 @@ export async function listLeads(
           Query.equal('assignedToId', teamIds),
         ];
         if (specialBranchId) {
-          orConditions.push(Query.equal('branchId', specialBranchId));
+          orConditions.push(Query.contains('branchIds', [specialBranchId]));
         }
 
         queries.push(Query.or(orConditions));
@@ -692,14 +644,14 @@ export async function listLeads(
       queries.push(Query.equal('status', filters.status));
     }
 
-    // Apply assigned agent filter (for managers and admins)
+    // Apply assigned agent filter (for admins)
     if (filters.assignedToId) {
       queries.push(Query.equal('assignedToId', filters.assignedToId));
     }
 
     // Apply branch filter
     if (filters.branchId) {
-      queries.push(Query.equal('branchId', filters.branchId));
+      queries.push(Query.contains('branchIds', [filters.branchId]));
     }
 
     // Apply date range filters
@@ -827,7 +779,7 @@ export async function closeLead(
               source: leadData.sourceName || leadData.source || '',
               ownerId: currentLead.ownerId,
               assignedToId: currentLead.assignedToId,
-              branchId: currentLead.branchId,
+              branchIds: currentLead.branchIds || [],
               closedAt: lead.closedAt,
               changes: {
                 status: { from: currentLead.status, to: closedStatus },
@@ -845,7 +797,7 @@ export async function closeLead(
 }
 
 /**
- * Reopen a closed lead (manager only)
+ * Reopen a closed lead (admin or team lead only)
  *
  * This function reopens a closed lead by setting isClosed=false.
  * It preserves the closedAt timestamp for audit trail.

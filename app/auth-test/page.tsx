@@ -3,7 +3,7 @@
 import { useAuth } from '@/lib/contexts/auth-context';
 
 export default function AuthTestPage() {
-  const { user, isManager, isAgent, loading } = useAuth();
+  const { user, isTeamLead, isAgent, loading } = useAuth();
 
   if (loading) {
     return (
@@ -32,7 +32,7 @@ export default function AuthTestPage() {
               <strong>Role:</strong> {user.role}
             </p>
             <p>
-              <strong>Is Manager:</strong> {isManager ? 'Yes' : 'No'}
+              <strong>Is Team Lead:</strong> {isTeamLead ? 'Yes' : 'No'}
             </p>
             <p>
               <strong>Is Agent:</strong> {isAgent ? 'Yes' : 'No'}

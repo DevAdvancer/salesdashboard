@@ -11,7 +11,7 @@ import {
 } from "@/lib/services/branch-service";
 import {
   getUsersByBranch,
-  removeManagerFromBranch,
+  removeUserFromBranch,
 } from "@/lib/services/user-service";
 import { Branch, User } from "@/lib/types";
 import {
@@ -47,7 +47,6 @@ const branchNameSchema = z.object({
 type BranchNameForm = z.infer<typeof branchNameSchema>;
 
 interface BranchWithStats extends Branch {
-  managerCount: number;
   leadCount: number;
 }
 
@@ -93,11 +92,10 @@ function BranchManagementContent() {
             const stats = await getBranchStats(branch.$id);
             return {
               ...branch,
-              managerCount: stats.managerCount,
               leadCount: stats.leadCount,
             };
           } catch {
-            return { ...branch, managerCount: 0, leadCount: 0 };
+            return { ...branch, leadCount: 0 };
           }
         }),
       );
@@ -111,25 +109,25 @@ function BranchManagementContent() {
     }
   }, []);
 
-  const fetchManagerData = useCallback(
+  const fetchTeamLeadData = useCallback(
     async (branchList: BranchWithStats[]) => {
       try {
-        const managersMap: Record<string, User[]> = {};
+        const teamLeadsMap: Record<string, User[]> = {};
         await Promise.all(
           branchList.map(async (branch) => {
             try {
               const users = await getUsersByBranch(branch.$id);
-              managersMap[branch.$id] = users.filter(
-                (u) => u.role === "manager",
+              teamLeadsMap[branch.$id] = users.filter(
+                (u) => u.role === "team_lead",
               );
             } catch {
-              managersMap[branch.$id] = [];
+              teamLeadsMap[branch.$id] = [];
             }
           }),
         );
-        setBranchManagers(managersMap);
+        setBranchManagers(teamLeadsMap);
       } catch (err: any) {
-        console.error("Error fetching manager data:", err);
+        console.error("Error fetching team lead data:", err);
       }
     },
     [],
@@ -143,9 +141,9 @@ function BranchManagementContent() {
 
   useEffect(() => {
     if (branches.length > 0) {
-      fetchManagerData(branches);
+      fetchTeamLeadData(branches);
     }
-  }, [branches, fetchManagerData]);
+  }, [branches, fetchTeamLeadData]);
 
   const onCreateSubmit = async (data: BranchNameForm) => {
     try {
@@ -295,24 +293,24 @@ function BranchManagementContent() {
                       <td className="py-3 px-4">
                         {branchManagers[branch.$id]?.length > 0 ? (
                           <div className="space-y-1">
-                            {branchManagers[branch.$id].map((manager) => (
+                            {branchManagers[branch.$id].map((teamLead) => (
                               <div
-                                key={manager.$id}
+                                key={teamLead.$id}
                                 className="flex items-center gap-2 text-sm">
-                                <span>{manager.name}</span>
+                                <span>{teamLead.name}</span>
                                 {isAdmin && (
                                   <button
                                     onClick={async () => {
                                       try {
-                                        await removeManagerFromBranch(
-                                          manager.$id,
+                                        await removeUserFromBranch(
+                                          teamLead.$id,
                                           branch.$id,
                                         );
                                         await fetchBranches();
                                       } catch (err: any) {
                                         setError(
                                           err.message ||
-                                            "Failed to remove manager",
+                                            "Failed to remove team lead",
                                         );
                                       }
                                     }}
@@ -326,7 +324,7 @@ function BranchManagementContent() {
                           </div>
                         ) : (
                           <span className="text-gray-400 text-sm">
-                            No managers
+                            No team leads
                           </span>
                         )}
                       </td>

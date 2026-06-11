@@ -2,6 +2,50 @@
 
 Database ID: `crm-database-1`
 
+## Schema Sync
+
+This document is the **source of truth** for the Appwrite database schema. The script [scripts/sync-appwrite-schema.ts](scripts/sync-appwrite-schema.ts) reads its attribute and index definitions from this file (encoded inline) and applies them to the live Appwrite project.
+
+Required env vars (place in `.env.local`):
+
+```
+NEXT_PUBLIC_APPWRITE_ENDPOINT=https://cloud.appwrite.io/v1
+NEXT_PUBLIC_APPWRITE_PROJECT_ID=your-project-id
+APPWRITE_API_KEY=your-server-api-key
+```
+
+Run:
+
+```bash
+bun run sync:appwrite              # apply changes to Appwrite
+bun run sync:appwrite -- --dry-run # log the diff without writing
+```
+
+The script:
+
+1. **Lists the current attributes/indexes** in each collection.
+2. **Detects deprecated fields** (`managerId`, `managerIds`, `assistantManagerId`, `assistantManagerIds`) and deletes them from the live collection.
+3. **Creates** any attribute or index that is missing.
+4. **Recreates** indexes whose attribute set or type differs from the schema.
+
+> ⚠️ **Note:** Appwrite does not allow shrinking string sizes or removing enum values once data exists. The script will surface those cases as errors. Migrate any data in those fields before rerunning.
+
+---
+
+## Recent Schema Changes
+
+### Retired `manager` and `assistant_manager` roles
+
+The `manager` and `assistant_manager` roles, plus their user-document fields (`managerId`, `managerIds`, `assistantManagerId`, `assistantManagerIds`), have been removed. The `team_lead` role covers the managerial scope. Run `bun run sync:appwrite` to drop the legacy fields from the users collection and update the `role` enum to the active set:
+
+```
+admin, developer, team_lead, agent, lead_generation, monitor, operations
+```
+
+### Leads `branchId` → `branchIds`
+
+The leads collection now uses `branchIds: string[]` (array) instead of a single `branchId` string. Code that previously used `Query.equal('branchId', x)` now uses `Query.contains('branchIds', [x])`. The same change applies to the `users` collection (a user is assigned to one or more branches via `branchIds`).
+
 ---
 
 ## Collection: `users`
@@ -12,14 +56,16 @@ Display Name: Users
 |-----------|----------|----------|------|---------|-----------------------------------------------------------------------------|
 | name      | string   | Yes      | 255  | -       | User's display name                                                         |
 | email     | email    | Yes      | -    | -       | User's email (unique index)                                                 |
-| role      | enum     | Yes      | -    | -       | `admin`, `manager`, or `agent`                                              |
-| managerId | string   | No       | 255  | null    | ID of the user's manager (for agents)                                       |
-| branchIds | string[] | No       | 255  | []      | Array of assigned branch IDs. Managers can have multiple; agents inherit.    |
+| role      | enum     | Yes      | -    | -       | `admin`, `developer`, `team_lead`, `agent`, `lead_generation`, `monitor`, or `operations` |
+| teamLeadId| string   | No       | 255  | null    | ID of the user's team lead (for agents and lead generation)                 |
+| branchIds | string[] | No       | 255  | []      | Array of assigned branch IDs. Team leads can have multiple; agents inherit. |
+| branchId  | string   | No       | 255  | null    | Legacy single branch ID (still maintained for compatibility)                |
+| isActive  | boolean  | No       | -    | true    | Whether the user account is active                                          |
 
 Indexes:
 - `email_idx` — unique on `[email]`
 - `role_idx` — key on `[role]`
-- `manager_idx` — key on `[managerId]`
+- `team_lead_idx` — key on `[teamLeadId]`
 - `branch_idx` — key on `[branchIds]` (array index for querying users by branch)
 
 Permissions:
@@ -38,18 +84,22 @@ Display Name: Leads
 |--------------|----------|----------|-------|---------|---------------------------------------|
 | data         | string   | Yes      | 65535 | -       | JSON-serialized lead data             |
 | status       | string   | Yes      | 50    | -       | Lead status (New, Contacted, etc.)    |
-| ownerId      | string   | Yes      | 255   | -       | Manager who owns this lead            |
+| ownerId      | string   | Yes      | 255   | -       | User (team lead / lead generation) who owns this lead |
 | assignedToId | string   | No       | 255   | null    | Agent assigned to this lead           |
-| branchId     | string   | No       | 255   | null    | Branch this lead belongs to           |
+| branchIds    | string[] | No       | 255   | []      | Array of branch IDs this lead belongs to |
 | isClosed     | boolean  | No       | -     | false   | Whether the lead is closed            |
 | closedAt     | datetime | No       | -     | null    | Timestamp when the lead was closed    |
+| nextFollowUpAt| datetime | No      | -     | null    | Next scheduled follow-up timestamp    |
+| nextAction   | string   | No       | 255   | null    | Next action to take on this lead      |
+| lastContactedAt| datetime | No     | -     | null    | Last contact attempt timestamp        |
+| followUpStatus| string  | No       | 50    | null    | Follow-up status: pending, completed, overdue, or null |
 
 Indexes:
 - `owner_idx` — key on `[ownerId]`
 - `assigned_idx` — key on `[assignedToId]`
 - `status_idx` — key on `[status]`
-- `closed_idx` — key on `[isClosed]`
-- `branch_idx` — key on `[branchId]`
+- `branch_idx` — key on `[branchIds]` (array index)
+- `closed_status_idx` — key on `[isClosed, status]` (composite for fast filter-by-status)
 
 Permissions:
 - Read: any

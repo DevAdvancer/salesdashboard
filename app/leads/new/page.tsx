@@ -95,13 +95,6 @@ function LeadGenerationNewLeadContent() {
   const buildResumePermissions = (currentUser: User) => {
     const readUserIds = new Set<string>([currentUser.$id]);
     if (currentUser.teamLeadId) readUserIds.add(currentUser.teamLeadId);
-    if (currentUser.managerId) readUserIds.add(currentUser.managerId);
-    currentUser.managerIds?.forEach((managerId) => readUserIds.add(managerId));
-    if (currentUser.assistantManagerId)
-      readUserIds.add(currentUser.assistantManagerId);
-    currentUser.assistantManagerIds?.forEach((assistantManagerId) =>
-      readUserIds.add(assistantManagerId),
-    );
 
     return [
       ...Array.from(readUserIds).map((userId) =>
@@ -323,7 +316,7 @@ function LeadGenerationNewLeadContent() {
         {
           data: leadData,
           status: "Generated",
-          branchId,
+          branchIds: branchId ? [branchId] : [],
         },
         user.$id,
         user.name,
@@ -835,7 +828,7 @@ function LegacyNewLeadContent() {
           status: isLinkedinRequestLead
             ? LINKEDIN_INITIAL_STATUS
             : finalData.status || "Interested",
-          branchId,
+          branchIds: branchId ? [branchId] : [],
         },
         user.$id,
         user.name,

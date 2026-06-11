@@ -17,7 +17,6 @@ import { listBranches } from '@/lib/services/branch-service';
 import type { UserRole } from '@/lib/types';
 
 function formatRoleLabel(role: UserRole) {
-  if (role === 'assistant_manager') return 'Assistant Manager';
   if (role === 'team_lead') return 'Team Lead';
   if (role === 'lead_generation') return 'Lead Generation';
   if (role === 'operations') return 'Operations';
@@ -111,7 +110,7 @@ function SettingsContent() {
     return <SettingsSkeleton />;
   }
 
-  const canManageAccess = user.role === 'admin' || user.role === 'manager';
+  const canManageAccess = user.role === 'admin';
 
   const saveProfile = async () => {
     if (!name.trim()) return;

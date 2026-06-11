@@ -28,10 +28,6 @@ function getRoleWeight(role: User["role"]) {
   switch (role) {
     case "admin":
       return -1;
-    case "manager":
-      return 0;
-    case "assistant_manager":
-      return 1;
     case "team_lead":
       return 2;
     case "lead_generation":
@@ -59,54 +55,10 @@ function findUserById(allUsers: User[], userId: string | null | undefined) {
   return userId ? allUsers.find((u) => u.$id === userId) : undefined;
 }
 
-function getValidManagerIds(target: User, allUsers: User[]) {
-  const ids = new Set<string>();
-  const primaryManager = findUserById(allUsers, target.managerId);
-  if (primaryManager?.role === "manager") ids.add(primaryManager.$id);
-  target.managerIds?.forEach((managerId) => {
-    const manager = findUserById(allUsers, managerId);
-    if (manager?.role === "manager") ids.add(managerId);
-  });
-  return Array.from(ids);
-}
-
-function getValidAssistantManagerIds(target: User, allUsers: User[]) {
-  const ids = new Set<string>();
-  const primaryAssistantManager = findUserById(
-    allUsers,
-    target.assistantManagerId,
-  );
-  if (primaryAssistantManager?.role === "assistant_manager")
-    ids.add(primaryAssistantManager.$id);
-  target.assistantManagerIds?.forEach((assistantManagerId) => {
-    const assistantManager = findUserById(allUsers, assistantManagerId);
-    if (assistantManager?.role === "assistant_manager")
-      ids.add(assistantManagerId);
-  });
-  target.managerIds?.forEach((managerId) => {
-    const assistantManager = findUserById(allUsers, managerId);
-    if (assistantManager?.role === "assistant_manager") ids.add(managerId);
-  });
-  const managerIdUser = findUserById(allUsers, target.managerId);
-  if (managerIdUser?.role === "assistant_manager") ids.add(managerIdUser.$id);
-  return Array.from(ids);
-}
-
 function hasExistingParent(target: User, allUsers: User[]) {
-  if (target.role === "manager") return false;
-  if (target.role === "assistant_manager")
-    return getValidManagerIds(target, allUsers).length > 0;
-  if (target.role === "team_lead") {
-    return (
-      getValidAssistantManagerIds(target, allUsers).length > 0 ||
-      getValidManagerIds(target, allUsers).length > 0
-    );
-  }
+  if (target.role === "team_lead") return false;
   if (target.role === "agent" || target.role === "lead_generation") {
-    return (
-      hasUser(allUsers, target.teamLeadId) ||
-      getValidManagerIds(target, allUsers).length > 0
-    );
+    return hasUser(allUsers, target.teamLeadId);
   }
   return false;
 }
@@ -160,48 +112,9 @@ function TreeNode({
 
   // Find children for this node
   const directReports = allUsers.filter((u) => {
-    // Manager sees Assistant Managers, Team Leads AND direct-report Agents
-    if (user.role === "manager") {
-      const isAssigned = getValidManagerIds(u, allUsers).includes(user.$id);
-
-      if (!isAssigned) return false;
-
-      if (u.role === "assistant_manager") return true;
-
-      if (u.role === "team_lead") {
-        // If Team Lead has an Assistant Manager who is also under this Manager, hide them from direct view
-        const amIds = getValidAssistantManagerIds(u, allUsers);
-        if (amIds.length > 0) {
-          const hasReportingAM = amIds.some((amId) => {
-            const am = allUsers.find((au) => au.$id === amId);
-            // Check if this AM reports to the current manager
-            return (
-              am &&
-              am.role === "assistant_manager" &&
-              getValidManagerIds(am, allUsers).includes(user.$id)
-            );
-          });
-          if (hasReportingAM) return false;
-        }
-        return true;
-      }
-
-      return (
-        (u.role === "agent" || u.role === "lead_generation") && !u.teamLeadId
-      );
-    }
-    // Assistant Manager sees Team Leads AND direct-report Agents assigned to them
-    if (user.role === "assistant_manager") {
-      const isAssigned =
-        getValidManagerIds(u, allUsers).includes(user.$id) ||
-        getValidAssistantManagerIds(u, allUsers).includes(user.$id);
-
-      return (
-        (isAssigned && u.role === "team_lead") ||
-        (isAssigned &&
-          (u.role === "agent" || u.role === "lead_generation") &&
-          !u.teamLeadId)
-      );
+    // Admin / monitor / operations see all team leads
+    if (user.role === "admin" || user.role === "developer" || user.role === "monitor" || user.role === "operations") {
+      if (u.role === "team_lead") return true;
     }
     // Team Lead sees assigned Agents
     if (user.role === "team_lead") {
@@ -213,7 +126,7 @@ function TreeNode({
     return false;
   });
 
-  // Sort children: Assistant Managers < Team Leads < Agents
+  // Sort children: Team Leads < Agents
   const sortedReports = sortUsersForHierarchy(directReports);
 
   const hasChildren = sortedReports.length > 0;
@@ -237,10 +150,6 @@ function TreeNode({
           <div
             className={cn(
               "p-2 rounded-full",
-              user.role === "manager" &&
-                "bg-blue-100 text-blue-600 dark:bg-blue-900/20",
-              user.role === "assistant_manager" &&
-                "bg-indigo-100 text-indigo-600 dark:bg-indigo-900/20",
               user.role === "team_lead" &&
                 "bg-purple-100 text-purple-600 dark:bg-purple-900/20",
               user.role === "lead_generation" &&
@@ -248,8 +157,6 @@ function TreeNode({
               user.role === "agent" &&
                 "bg-green-100 text-green-600 dark:bg-green-900/20",
             )}>
-            {user.role === "manager" && <Users className="h-4 w-4" />}
-            {user.role === "assistant_manager" && <Users className="h-4 w-4" />}
             {user.role === "team_lead" && <UserIcon className="h-4 w-4" />}
             {user.role === "lead_generation" && (
               <UserIcon className="h-4 w-4" />
@@ -288,7 +195,7 @@ function TreeNode({
 }
 
 function HierarchyContent() {
-  const { user, isAdmin, isManager, isMonitor } = useAuth();
+  const { user, isAdmin, isTeamLead, isMonitor } = useAuth();
   const canReadAllHierarchy = isAdmin || isMonitor;
   const [users, setUsers] = useState<User[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -309,7 +216,7 @@ function HierarchyContent() {
           [Query.limit(5000)],
         );
         allUsers = response.documents;
-      } else if (isManager && user.branchIds && user.branchIds.length > 0) {
+      } else if (isTeamLead && user.branchIds && user.branchIds.length > 0) {
         const { getUsersByBranches } = await import("@/lib/services/user-service");
         allUsers = await getUsersByBranches(user.branchIds);
       }
@@ -329,14 +236,6 @@ function HierarchyContent() {
           name: String(doc.name ?? ""),
           email: String(doc.email ?? ""),
           role: doc.role as User["role"],
-          managerId: (doc.managerId as string) || null,
-          managerIds: Array.isArray(doc.managerIds)
-            ? (doc.managerIds as string[])
-            : [],
-          assistantManagerId: (doc.assistantManagerId as string) || null,
-          assistantManagerIds: Array.isArray(doc.assistantManagerIds)
-            ? (doc.assistantManagerIds as string[])
-            : [],
           teamLeadId: (doc.teamLeadId as string) || null,
           branchIds: Array.isArray(doc.branchIds) ? (doc.branchIds as string[]) : [],
           isActive: doc.isActive !== false,
@@ -352,7 +251,7 @@ function HierarchyContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, canReadAllHierarchy, isManager]);
+  }, [user, canReadAllHierarchy, isTeamLead]);
 
   useEffect(() => {
     void loadData();
@@ -392,12 +291,9 @@ function HierarchyContent() {
 
   if (canReadAllHierarchy) {
     rootUsers = sortUsersForHierarchy(
-      users.filter((u) => u.role !== "admin" && !hasExistingParent(u, users)),
+      users.filter((u) => u.role === "team_lead"),
     );
-  } else if (isManager && user) {
-    // For Manager: Root is the current manager
-    // IMPORTANT: If a manager has multiple branches, they are still one user node.
-    // The previous logic filtered by ID so it's fine.
+  } else if (user?.role === "team_lead") {
     rootUsers = users.filter((u) => u.$id === user.$id);
   }
 
@@ -405,7 +301,7 @@ function HierarchyContent() {
     users.filter(
       (u) =>
         u.role !== "admin" &&
-        u.role !== "manager" &&
+        (u.role === "agent" || u.role === "lead_generation") &&
         !hasExistingParent(u, users),
     ),
   );

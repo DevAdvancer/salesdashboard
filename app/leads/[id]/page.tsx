@@ -79,6 +79,28 @@ function normalizeStatusText(value: unknown) {
   return normalizeLeadStatus(value);
 }
 
+function formatFollowUpDateTime(value?: string | null): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatFollowUpStatus(value?: string | null): string {
+  if (!value) return "Not set";
+  const normalized = value.toLowerCase();
+  if (normalized === "pending") return "Pending";
+  if (normalized === "completed") return "Completed";
+  if (normalized === "overdue") return "Overdue";
+  return value;
+}
+
 function isNotInterestedStatus(value: unknown) {
   return normalizeStatusText(value) === "notinterested";
 }
@@ -86,6 +108,35 @@ function isNotInterestedStatus(value: unknown) {
 function isLinkedinRequestLead(data: LeadData) {
   const requestId = (data as any).linkedinRequestId;
   return typeof requestId === "string" && requestId.trim().length > 0;
+}
+
+// Ensures a "lastName" text field is always present and rendered just below
+// "firstName". Mirrors the fallback used in DynamicLeadForm so the lead edit
+// view never silently drops the last name field if it was removed from the
+// saved form config.
+function withLastNameField(fields: FormField[]): FormField[] {
+  if (fields.some((f) => f.key === "lastName")) return fields;
+
+  const firstNameField = fields.find((f) => f.key === "firstName");
+  const injected: FormField = {
+    id: "static-lastname",
+    key: "lastName",
+    label: "Last Name",
+    type: "text",
+    required: false,
+    visible: true,
+    order: firstNameField ? firstNameField.order + 0.1 : 0,
+  };
+
+  const firstNameIndex = fields.findIndex((f) => f.key === "firstName");
+  if (firstNameIndex !== -1) {
+    return [
+      ...fields.slice(0, firstNameIndex + 1),
+      injected,
+      ...fields.slice(firstNameIndex + 1),
+    ];
+  }
+  return [injected, ...fields];
 }
 
 export default function LeadDetailPage() {
@@ -215,7 +266,6 @@ function LeadDetailContent() {
       }
 
       if (
-        user.role === "manager" ||
         user.role === "team_lead" ||
         user.role === "admin" ||
         user.role === "developer"
@@ -250,7 +300,6 @@ function LeadDetailContent() {
     if (!user || !lead) return;
     if (
       lead.ownerId === user.$id ||
-      user.role === "manager" ||
       user.role === "team_lead" ||
       user.role === "admin" ||
       user.role === "developer"
@@ -285,14 +334,14 @@ function LeadDetailContent() {
         shouldRequireLeadFollowUpForStatus(previousStatus, nextStatus)
       ) {
         const hasNextFollowUpAt = Boolean(lead.nextFollowUpAt);
-        const hasNextAction = Boolean(
-          lead.nextAction && String(lead.nextAction).trim(),
+        const hasFollowUpStatus = Boolean(
+          lead.followUpStatus && String(lead.followUpStatus).trim(),
         );
-        if (!hasNextFollowUpAt || !hasNextAction) {
+        if (!hasNextFollowUpAt || !hasFollowUpStatus) {
           toast({
             title: "Follow-up required",
             description:
-              "Please fill Next Follow-Up and Next Action in Follow-Up Plan and save it before updating the lead.",
+              "Please fill Next Follow-Up and Follow-Up Status in Follow-Up Plan and save it before updating the lead.",
             variant: "destructive",
           });
           return;
@@ -518,7 +567,7 @@ function LeadDetailContent() {
   const handleAssignAgent = async (agentId: string) => {
     if (!lead || !user) return;
     // Agents cannot assign leads — the assignment workflow is controlled by
-    // managers, team leads, lead generation, and admins only.
+    // team leads, lead generation, and admins only.
     if (user.role === "operations") return;
     if (user.role === "agent" || user.role === "lead_generation") return;
     if (user.role === "monitor" && lead.ownerId !== user.$id) return;
@@ -795,11 +844,9 @@ function LeadDetailContent() {
   const canAssignLead =
     canModifyLead &&
     Boolean(lead) &&
-    (user.role === "manager" ||
-      user.role === "team_lead" ||
+    (user.role === "team_lead" ||
       user.role === "admin" ||
       user.role === "developer" ||
-      user.role === "assistant_manager" ||
       user.role === "lead_generation");
   const headerFirstName =
     typeof leadData.firstName === "string" ? leadData.firstName : "";
@@ -868,7 +915,6 @@ function LeadDetailContent() {
           {lead.isClosed &&
             canModifyLead &&
             (isLeadOwner ||
-              user?.role === "manager" ||
               user?.role === "admin" ||
               user?.role === "team_lead") && (
               <>
@@ -954,7 +1000,7 @@ function LeadDetailContent() {
               </div>
             )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {formFields
+              {withLastNameField(formFields)
                 .filter((field) => {
                   if (isLeadGeneration) {
                     return (
@@ -962,7 +1008,7 @@ function LeadDetailContent() {
                       isLinkedinProfileField(field)
                     );
                   }
-                  return user.role === "manager" || field.visible;
+                  return user.role === "admin" || field.visible;
                 })
                 .map((field) => (
                   <div key={field.id}>
@@ -976,6 +1022,44 @@ function LeadDetailContent() {
                   </div>
                 ))}
             </div>
+
+            {/* Follow-Up summary — reflects the latest values saved from the Follow-Up Plan card */}
+            {!isLeadGeneration && (
+              <div className="mt-6 rounded-md border border-border bg-muted/20 p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-sm font-medium">Follow-Up</p>
+                  <p className="text-xs text-muted-foreground">
+                    Updated from Follow-Up Plan
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label>Next Follow-Up</Label>
+                    <p className="text-sm text-muted-foreground">
+                      {formatFollowUpDateTime(lead.nextFollowUpAt)}
+                    </p>
+                  </div>
+                  <div>
+                    <Label>Next Action</Label>
+                    <p className="text-sm text-muted-foreground">
+                      {lead.nextAction?.trim() ? lead.nextAction : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <Label>Follow-Up Status</Label>
+                    <p className="text-sm text-muted-foreground">
+                      {formatFollowUpStatus(lead.followUpStatus)}
+                    </p>
+                  </div>
+                  <div>
+                    <Label>Last Contacted</Label>
+                    <p className="text-sm text-muted-foreground">
+                      {formatFollowUpDateTime(lead.lastContactedAt)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

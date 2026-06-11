@@ -228,7 +228,7 @@ export async function moveLeadRequestToLeadAction(input: {
     {
       data: leadData,
       assignedToId: input.assignedToId || undefined,
-      branchId: input.branchId || null,
+      branchIds: input.branchId ? [input.branchId] : [],
       status: 'Interested',
     },
     actor.$id,

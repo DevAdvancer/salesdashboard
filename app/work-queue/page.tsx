@@ -32,7 +32,7 @@ export default function WorkQueuePage() {
 }
 
 function WorkQueueContent() {
-  const { user, isAdmin, isManager, isAssistantManager, isTeamLead, isMonitor, isOperations } =
+  const { user, isAdmin, isTeamLead, isMonitor, isOperations } =
     useAuth();
   const canReadLikeAdmin = isAdmin || isMonitor || isOperations;
   const [insights, setInsights] = useState<LeadershipDashboardInsights | null>(
@@ -106,7 +106,7 @@ function WorkQueueContent() {
               ...(await getAgentsByTeamLead(selectedTeamLead.$id)),
             ];
           }
-        } else if (isManager || isAssistantManager) {
+        } else if (isTeamLead) {
           const visibleUsers = await getAssignableUsers(
             user.role,
             user.branchIds || [],
@@ -131,12 +131,8 @@ function WorkQueueContent() {
           ...usersForInsights.flatMap(
             (visibleUser) => visibleUser.branchIds || [],
           ),
-          ...activeLeads
-            .map((lead) => lead.branchId)
-            .filter((branchId): branchId is string => Boolean(branchId)),
-          ...closedLeads
-            .map((lead) => lead.branchId)
-            .filter((branchId): branchId is string => Boolean(branchId)),
+          ...activeLeads.flatMap((lead) => lead.branchIds || []),
+          ...closedLeads.flatMap((lead) => lead.branchIds || []),
         ]);
         const branches: Branch[] = allBranches.filter((branch) =>
           branchIds.has(branch.$id),
@@ -171,8 +167,6 @@ function WorkQueueContent() {
   }, [
     user,
     canReadLikeAdmin,
-    isAssistantManager,
-    isManager,
     isTeamLead,
     selectedTeamLeadId,
     teamLeads,

@@ -129,24 +129,24 @@ export async function updateBranch(branchId: string, input: UpdateBranchInput): 
 /**
  * Delete a branch
  *
- * Prevents deletion if the branch has assigned managers or active leads.
+ * Prevents deletion if the branch has assigned users or active leads.
  *
  * @param branchId - The branch ID
  */
 export async function deleteBranch(branchId: string): Promise<void> {
   try {
-    // Check for assigned managers
-    const managers = await databases.listDocuments(
+    // Check for assigned team leads
+    const teamLeads = await databases.listDocuments(
       DATABASE_ID,
       COLLECTIONS.USERS,
       [
-        Query.equal('role', 'manager'),
-        Query.equal('branchId', branchId),
+        Query.equal('role', 'team_lead'),
+        Query.contains('branchIds', [branchId]),
       ]
     );
 
-    if (managers.total > 0) {
-      throw new Error('Cannot delete branch with assigned managers');
+    if (teamLeads.total > 0) {
+      throw new Error('Cannot delete branch with assigned team leads');
     }
 
     // Check for active leads
@@ -154,7 +154,7 @@ export async function deleteBranch(branchId: string): Promise<void> {
       DATABASE_ID,
       COLLECTIONS.LEADS,
       [
-        Query.equal('branchId', branchId),
+        Query.contains('branchIds', [branchId]),
         Query.equal('isClosed', false),
       ]
     );
@@ -167,7 +167,7 @@ export async function deleteBranch(branchId: string): Promise<void> {
     invalidateBranchesCache();
   } catch (error: any) {
     if (
-      error.message === 'Cannot delete branch with assigned managers' ||
+      error.message === 'Cannot delete branch with assigned team leads' ||
       error.message === 'Cannot delete branch with active leads'
     ) {
       throw error;
@@ -207,31 +207,22 @@ export function invalidateBranchesCache(): void {
 }
 
 /**
- * Get stats for a branch (manager count and lead count)
+ * Get stats for a branch (lead count)
  *
  * @param branchId - The branch ID
- * @returns Object with managerCount and leadCount
+ * @returns Object with leadCount
  */
-export async function getBranchStats(branchId: string): Promise<{ managerCount: number; leadCount: number }> {
+export async function getBranchStats(branchId: string): Promise<{ leadCount: number }> {
   try {
-    const [managers, leads] = await Promise.all([
-      databases.listDocuments(
-        DATABASE_ID,
-        COLLECTIONS.USERS,
-        [
-          Query.equal('role', 'manager'),
-          Query.equal('branchId', branchId),
-        ]
-      ),
+    const [leads] = await Promise.all([
       databases.listDocuments(
         DATABASE_ID,
         COLLECTIONS.LEADS,
-        [Query.equal('branchId', branchId)]
+        [Query.contains('branchIds', [branchId])]
       ),
     ]);
 
     return {
-      managerCount: managers.total,
       leadCount: leads.total,
     };
   } catch (error: any) {

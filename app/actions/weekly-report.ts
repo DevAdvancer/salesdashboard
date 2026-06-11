@@ -61,10 +61,6 @@ type UserDocument = {
   name: string;
   email: string;
   role: UserRole;
-  managerId?: string | null;
-  managerIds?: string[];
-  assistantManagerId?: string | null;
-  assistantManagerIds?: string[];
   teamLeadId?: string | null;
   branchIds?: string[];
   branchId?: string | null;
@@ -84,10 +80,6 @@ function mapUser(doc: UserDocument): User {
     name: doc.name,
     email: doc.email,
     role: doc.role,
-    managerId: doc.managerId || null,
-    managerIds: doc.managerIds || [],
-    assistantManagerId: doc.assistantManagerId || null,
-    assistantManagerIds: doc.assistantManagerIds || [],
     teamLeadId: doc.teamLeadId || null,
     branchIds: doc.branchIds || [],
     branchId: doc.branchId || null,

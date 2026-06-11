@@ -53,7 +53,7 @@ function filterReservedLeadSources(
  * DynamicLeadForm Component
  *
  * Renders a dynamic form based on form configuration with the following features:
- * - Filters fields by visible=true for agents (managers see all fields in builder)
+ * - Filters fields by visible=true for agents (admins see all fields in builder)
  * - Sorts fields by order property
  * - Renders fields based on type (text, email, phone, dropdown, textarea, checklist)
  * - Applies generated zod schema for validation
@@ -72,7 +72,7 @@ export function DynamicLeadForm({
   const isAgentLike = isAgent || isMonitor;
 
   // State for the lead assignment dropdown (Requirement 4.2, 4.3, 4.4)
-  // Agents auto-assign to themselves; managers/team leads default to creator
+  // Agents auto-assign to themselves; team leads default to creator
   const [assignedToId, setAssignedToId] = useState<string | null>(
     isAgentLike && user ? user.$id : user ? user.$id : null,
   );

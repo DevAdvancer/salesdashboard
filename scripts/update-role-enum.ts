@@ -47,7 +47,7 @@ async function run() {
             DATABASE_ID,
             USERS_COLLECTION_ID,
             'role',
-            ['admin', 'manager', 'assistant_manager', 'team_lead', 'agent'],
+            ['admin', 'team_lead', 'agent'],
             true, // required
             'agent' // default
         );

@@ -38,18 +38,10 @@ export function LeadFollowUpCard({ lead, user, disabled = false, onUpdated }: Le
   const [saving, setSaving] = useState(false);
 
   const saveFollowUp = async () => {
-    if (!nextFollowUpAt.trim()) {
+    if (!followUpStatus.trim()) {
       toast({
         title: 'Missing required field',
-        description: 'Next Follow-Up is required.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    if (!nextAction.trim()) {
-      toast({
-        title: 'Missing required field',
-        description: 'Next Action is required.',
+        description: 'Follow-Up Status is required.',
         variant: 'destructive',
       });
       return;
@@ -90,10 +82,7 @@ export function LeadFollowUpCard({ lead, user, disabled = false, onUpdated }: Le
       <CardContent>
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <Label htmlFor="nextFollowUpAt">
-              Next Follow-Up
-              <span className="text-red-500 ml-1">*</span>
-            </Label>
+            <Label htmlFor="nextFollowUpAt">Next Follow-Up</Label>
             <DateTimePicker
               id="nextFollowUpAt"
               value={nextFollowUpAt}
@@ -107,10 +96,7 @@ export function LeadFollowUpCard({ lead, user, disabled = false, onUpdated }: Le
             />
           </div>
           <div>
-            <Label htmlFor="nextAction">
-              Next Action
-              <span className="text-red-500 ml-1">*</span>
-            </Label>
+            <Label htmlFor="nextAction">Next Action</Label>
             <select
               id="nextAction"
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
@@ -127,7 +113,10 @@ export function LeadFollowUpCard({ lead, user, disabled = false, onUpdated }: Le
             </select>
           </div>
           <div>
-            <Label htmlFor="followUpStatus">Follow-Up Status</Label>
+            <Label htmlFor="followUpStatus">
+              Follow-Up Status
+              <span className="text-red-500 ml-1">*</span>
+            </Label>
             <select
               id="followUpStatus"
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"

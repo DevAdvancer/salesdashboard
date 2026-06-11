@@ -40,9 +40,6 @@ function deletedUserPlaceholder(userId: string): User {
     name: 'Deleted user',
     email: '',
     role: 'agent',
-    managerId: null,
-    managerIds: [],
-    assistantManagerIds: [],
     teamLeadId: null,
     branchIds: [],
     isActive: false,
@@ -95,8 +92,7 @@ function LeadsContent() {
     user?.role === "admin" ||
     user?.role === "developer" ||
     user?.role === "monitor" ||
-    user?.role === "operations" ||
-    user?.role === "manager";
+    user?.role === "operations";
   const isLeadGeneration = user?.role === "lead_generation";
   const pageTitle = isLeadGeneration ? "Generated Leads" : "Active Leads";
 
@@ -230,7 +226,7 @@ function LeadsContent() {
 
     if (user) {
       if (
-        ["admin", "developer", "monitor", "operations", "manager", "assistant_manager", "team_lead"].includes(
+        ["admin", "developer", "monitor", "operations", "team_lead"].includes(
           user.role,
         )
       ) {
@@ -240,8 +236,7 @@ function LeadsContent() {
         user.role === "admin" ||
         user.role === "developer" ||
         user.role === "monitor" ||
-        user.role === "operations" ||
-        user.role === "manager"
+        user.role === "operations"
       ) {
         loadBranches();
       }
@@ -335,7 +330,7 @@ function LeadsContent() {
   const loadAgents = async () => {
     if (
       !user ||
-      !["admin", "developer", "monitor", "operations", "manager", "assistant_manager", "team_lead"].includes(
+      !["admin", "developer", "monitor", "operations", "team_lead"].includes(
         user.role,
       )
     )
@@ -345,14 +340,12 @@ function LeadsContent() {
       let fetchedUsers: User[] = [];
 
       if (
-        user.role === "manager" ||
         user.role === "admin" ||
         user.role === "developer" ||
         user.role === "monitor" ||
-        user.role === "operations" ||
-        user.role === "assistant_manager"
+        user.role === "operations"
       ) {
-        // For managers, AMs and admins, load assignable users
+        // For admins, load all assignable users
         fetchedUsers = await getAssignableUsers(
           user.role,
           user.branchIds || [],
@@ -370,7 +363,7 @@ function LeadsContent() {
   };
 
   const loadBranches = async () => {
-    if (!user || !["admin", "developer", "monitor", "operations", "manager"].includes(user.role)) return;
+    if (!user || !["admin", "developer", "monitor", "operations"].includes(user.role)) return;
 
     try {
       const branchList = await listBranches();
@@ -484,8 +477,6 @@ function LeadsContent() {
       "developer",
       "monitor",
       "operations",
-      "manager",
-      "assistant_manager",
       "team_lead",
     ];
     const showAssigned = visibleRoles.includes(user?.role || "");
@@ -650,7 +641,7 @@ function LeadsContent() {
               </select>
             </div>
 
-            {["admin", "developer", "monitor", "operations", "manager", "assistant_manager", "team_lead"].includes(
+            {["admin", "developer", "monitor", "operations", "team_lead"].includes(
               user?.role || "",
             ) && (
               <div>
@@ -745,8 +736,6 @@ function LeadsContent() {
                         "developer",
                         "monitor",
                         "operations",
-                        "manager",
-                        "assistant_manager",
                         "team_lead",
                       ].includes(user?.role || "") && (
                         <th className="p-3 md:p-4 font-semibold hidden md:table-cell">
@@ -758,8 +747,6 @@ function LeadsContent() {
                         "developer",
                         "monitor",
                         "operations",
-                        "manager",
-                        "assistant_manager",
                         "team_lead",
                       ].includes(user?.role || "") && (
                         <th className="p-3 md:p-4 font-semibold hidden lg:table-cell">

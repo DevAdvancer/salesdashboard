@@ -355,7 +355,7 @@ AuthContext stores user in React state
 }
 ```
 
-> **Note:** `isManager` and `isAssistantManager` are intentionally `false` in the auth context because those roles have been retired in the active system. The `manager` and `assistant_manager` roles still exist in the type system and DB but new users should not be assigned these roles.
+> **Note:** The `manager` and `assistant_manager` roles and related fields (`managerId`, `managerIds`, `assistantManagerId`, `assistantManagerIds`) have been removed from the active type system and database. `isManager` and `isAssistantManager` are no longer present in the auth context. The team lead role handles the managerial scope that `manager` previously covered.
 
 ---
 
@@ -370,8 +370,6 @@ AuthContext stores user in React state
 | `team_lead` | Manages a team of agents; can see team's leads |
 | `agent` | Creates and manages own leads |
 | `lead_generation` | Creates leads but no access to closed history or reports |
-| `manager` | ⚠️ RETIRED — do not create new managers |
-| `assistant_manager` | ⚠️ RETIRED — do not create new assistant managers |
 
 ### Access Control System
 
@@ -433,10 +431,7 @@ All collections live in a single Appwrite database. IDs are configured via envir
 | `name` | string | Display name |
 | `email` | string | Unique, used for login |
 | `role` | enum | See roles above |
-| `managerId` | string? | @deprecated — use `managerIds` |
-| `managerIds` | string[] | Array of manager user IDs |
-| `assistantManagerId` | string? | @deprecated |
-| `assistantManagerIds` | string[] | Array of assistant manager IDs |
+| `teamLeadId` | string? | Team lead user ID (for agents and lead generation) |
 | `teamLeadId` | string? | Team lead user ID (for agents) |
 | `branchIds` | string[] | Assigned branch IDs |
 | `branchId` | string? | @deprecated — use `branchIds` |
@@ -596,7 +591,7 @@ The most important file. Handles all lead operations.
 #### `createLead(ownerId, input, creatingUserId?, creatingUserName?)`
 
 1. Validates uniqueness via `validateLeadUniqueness()`
-2. Builds Appwrite permission list (owner + hierarchy managers)
+2. Builds Appwrite permission list (owner + hierarchy team leads)
 3. Creates document in `leads` collection
 4. Logs `LEAD_CREATE` to audit log
 
@@ -613,8 +608,7 @@ The most important file. Handles all lead operations.
 
 Role-based visibility scoping:
 - `admin` / `developer`: see all leads (no filter)
-- `team_lead`: own leads + agents' leads
-- `manager` / `assistant_manager`: hierarchical visibility (walks user tree)
+- `team_lead`: own leads + agents' leads (walks the team hierarchy)
 - `agent`: own leads + leads assigned to them
 - `lead_generation`: only own leads
 
@@ -637,7 +631,7 @@ Manages user CRUD and hierarchy queries.
 | Function | Description |
 |---|---|
 | `createTeamLead(input, currentUser?)` | Creates a team_lead account + Appwrite auth |
-| `createAgent(input, currentUser?)` | Creates an agent account, infers managerId from teamLead |
+| `createAgent(input, currentUser?)` | Creates an agent account, infers teamLeadId from input |
 | `getUserById(userId)` | Fetches user by ID with ID format validation |
 | `getUserByIdOrNull(userId)` | Same but returns null on 404 |
 | `getAssignableUsers(creatorRole, creatorBranchIds, creatorId?)` | Returns users that the creator can assign a lead to |
@@ -647,7 +641,7 @@ Manages user CRUD and hierarchy queries.
 | `deactivateUser(userId, currentUser)` | Sets `isActive=false` (user cannot log in) |
 | `getSubordinates(userId)` | Returns all users below in hierarchy |
 
-> `createManager()` and `createAssistantManager()` both throw immediately — those roles are retired.
+> The `manager` and `assistant_manager` roles are no longer supported — the team lead role covers the managerial scope.
 
 ---
 
@@ -811,7 +805,7 @@ Dropdown to assign/reassign a lead to a user. Filters assignable users based on 
 | `/chat/announcement` | Announcement channel |
 | `/chat/general` | General chat |
 | `/notifications` | All notifications |
-| `/coaching-notes` | Manager coaching notes |
+| `/coaching-notes` | Team lead coaching notes |
 | `/review-queue` | Pending review items |
 | `/reports` | Weekly performance reports |
 | `/audit-logs` | System audit log |
@@ -871,7 +865,7 @@ Key restriction: certain final statuses (e.g., `Signed Closure`, `Backed Out`) c
 
 ### Lead Permissions (Appwrite document-level)
 
-| Event | Owner | Assigned Agent | Managers (hierarchy) |
+| Event | Owner | Assigned Agent | Team Leads (hierarchy) |
 |---|---|---|---|
 | On creation | read + update + delete | read + update | read + update |
 | On closure | read + update + delete | read only | read + update |
@@ -1165,9 +1159,9 @@ If your feature modifies important data, add an `AuditLogAction` entry in `lib/t
 
 `lead-validator.ts` fetches ALL leads via pagination and checks client-side. For large datasets (>10k leads) this will be slow. **Fix:** Add a dedicated server action or background job that maintains a deduplication index.
 
-### 2. Retired Roles
+### 2. (Resolved) Retired Roles
 
-`manager` and `assistant_manager` roles are still in the type system and DB schema, but their creation functions throw immediately. The access control logic and hierarchy queries still reference them for legacy data. **Fix:** Eventually migrate all legacy users to active roles and remove the role types.
+The `manager` and `assistant_manager` roles have been removed from the type system and DB schema. All legacy users should be migrated to active roles (e.g., `team_lead`).
 
 ### 3. Form Field Management Disabled
 

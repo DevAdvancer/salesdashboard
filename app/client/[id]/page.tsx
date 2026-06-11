@@ -62,7 +62,7 @@ export default function HistoryDetailPage() {
 }
 
 function HistoryDetailContent() {
-  const { user, loading: authLoading, isManager, isTeamLead, isMonitor } = useAuth();
+  const { user, loading: authLoading, isAdmin, isTeamLead, isMonitor } = useAuth();
   const router = useRouter();
   const params = useParams();
   const { toast } = useToast();
@@ -324,8 +324,6 @@ function HistoryDetailContent() {
     const fullName = [firstName, lastName].filter(Boolean).join(" ").trim() || fallbackName;
 
     const salesperson = assignedTo?.name || owner?.name || "";
-    const agreement = `${paymentRecord.paymentPlan.percent}% in ${paymentRecord.paymentPlan.months} Months`;
-    const upfront = String(paymentRecord.paymentPlan.upfrontAmount);
 
     const stored = paymentRecord.personalDetails ?? {};
     const next: Record<string, unknown> = { ...stored };
@@ -339,14 +337,27 @@ function HistoryDetailContent() {
       next.linkedinProfileUrl =
         typeof (leadData as any).linkedinProfileUrl === "string" ? (leadData as any).linkedinProfileUrl : "";
     }
-    if (!next.agreement) next.agreement = agreement;
-    if (!next.upfront) next.upfront = upfront;
 
     setClientIntakeValues(next);
     setClientIntakeInitializedForRecord(paymentRecord.$id);
   }, [paymentRecord, leadData, assignedTo, owner, clientIntakeInitializedForRecord]);
 
-  const canReopen = Boolean(isManager || isTeamLead);
+  // Keep `agreement` and `upfront` in sync with the latest payment plan. They
+  // are derived from `paymentRecord.paymentPlan` (not user-edited), so they
+  // should reflect every change the user makes in the Payments section.
+  useEffect(() => {
+    if (!paymentRecord) return;
+    const derivedAgreement = `${paymentRecord.paymentPlan.percent}% in ${paymentRecord.paymentPlan.months} Months`;
+    const derivedUpfront = String(paymentRecord.paymentPlan.upfrontAmount);
+    setClientIntakeValues((prev) => {
+      if (prev.agreement === derivedAgreement && prev.upfront === derivedUpfront) {
+        return prev;
+      }
+      return { ...prev, agreement: derivedAgreement, upfront: derivedUpfront };
+    });
+  }, [paymentRecord]);
+
+  const canReopen = Boolean(isTeamLead);
   const canEditClientPayments = !isMonitor;
 
   const handleReopenLead = async () => {
@@ -466,13 +477,18 @@ function HistoryDetailContent() {
           ? String(valueRaw)
           : JSON.stringify(valueRaw);
 
-    const isLockedField = field.key === "salesperson" || field.key === "agreement" || field.key === "upfront";
+    // Admin and TL can edit agreement/upfront in Client Details.
+    // Other fields (salesperson) remain always locked.
+    const isLockedField =
+      field.key === "salesperson" ||
+      (field.key !== "agreement" && field.key !== "upfront" ? false : !isAdmin && !isTeamLead);
+    const canEditAgreementUpfront = isAdmin || isTeamLead;
     const isDisabled =
       !canEditClientPayments ||
       clientIntakeSaving ||
       !paymentRecord ||
       (paymentRecord.status !== "fully_paid" && paymentRecord.status !== "partially_paid") ||
-      isLockedField;
+      (isLockedField && !canEditAgreementUpfront);
 
     if (field.type === "textarea") {
       return (
@@ -537,12 +553,28 @@ function HistoryDetailContent() {
     const derivedAgreement = `${paymentRecord.paymentPlan.percent}% in ${paymentRecord.paymentPlan.months} Months`;
     const derivedUpfront = String(paymentRecord.paymentPlan.upfrontAmount);
 
+    // Admin and TL can override the derived agreement/upfront with their edit.
+    // For other roles, always re-derive from the live payment plan.
+    const canOverrideAgreementUpfront = isAdmin || isTeamLead;
+    const editedAgreement = typeof clientIntakeValues.agreement === "string"
+      ? clientIntakeValues.agreement.trim()
+      : "";
+    const editedUpfront = typeof clientIntakeValues.upfront === "string"
+      ? clientIntakeValues.upfront.trim()
+      : "";
+    const finalAgreement = canOverrideAgreementUpfront && editedAgreement
+      ? editedAgreement
+      : derivedAgreement;
+    const finalUpfront = canOverrideAgreementUpfront && editedUpfront
+      ? editedUpfront
+      : derivedUpfront;
+
     const merged: Record<string, unknown> = {
       ...(paymentRecord.personalDetails ?? {}),
       ...clientIntakeValues,
       salesperson: derivedSalesperson,
-      agreement: derivedAgreement,
-      upfront: derivedUpfront,
+      agreement: finalAgreement,
+      upfront: finalUpfront,
     };
 
     const missing: string[] = [];

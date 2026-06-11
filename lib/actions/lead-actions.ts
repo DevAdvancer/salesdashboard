@@ -32,10 +32,6 @@ async function getHierarchyPermissionsServer(userId: string, databases: AdminDat
                 // Add supervisors
                 const supervisors = new Set<string>();
                 if (user.teamLeadId) supervisors.add(user.teamLeadId);
-                if (user.managerId) supervisors.add(user.managerId);
-                if (user.managerIds && user.managerIds.length > 0) {
-                    user.managerIds.forEach(mid => supervisors.add(mid));
-                }
 
                 // Add permissions for supervisors
                 for (const supId of supervisors) {
@@ -50,11 +46,6 @@ async function getHierarchyPermissionsServer(userId: string, databases: AdminDat
                 // Move up the chain: prefer a not-yet-visited supervisor.
                 if (user.teamLeadId && !visited.has(user.teamLeadId)) {
                     currentId = user.teamLeadId;
-                } else if (user.managerId && !visited.has(user.managerId)) {
-                    currentId = user.managerId;
-                } else if (user.managerIds && user.managerIds.length > 0) {
-                    const next = user.managerIds.find((mid: string) => !visited.has(mid));
-                    currentId = next || null;
                 } else {
                     currentId = null;
                 }
@@ -105,10 +96,6 @@ function hasBranchOverlap(left: User, right: User): boolean {
 
 type HierarchyUserDocument = {
     $id: string;
-    managerId?: string | null;
-    managerIds?: string[];
-    assistantManagerId?: string | null;
-    assistantManagerIds?: string[];
     teamLeadId?: string | null;
 };
 
@@ -121,17 +108,9 @@ function getVisibleHierarchyUserIds(viewerId: string, users: HierarchyUserDocume
         users.forEach((candidate) => {
             if (visibleIds.has(candidate.$id)) return;
 
-            const managerIds = Array.isArray(candidate.managerIds) ? candidate.managerIds : [];
-            const assistantManagerIds = Array.isArray(candidate.assistantManagerIds) ? candidate.assistantManagerIds : [];
-            const reportsToVisibleManager =
-                Boolean(candidate.managerId && visibleIds.has(candidate.managerId)) ||
-                managerIds.some((managerId) => visibleIds.has(managerId));
-            const reportsToVisibleAssistantManager =
-                Boolean(candidate.assistantManagerId && visibleIds.has(candidate.assistantManagerId)) ||
-                assistantManagerIds.some((assistantManagerId) => visibleIds.has(assistantManagerId));
             const reportsToVisibleTeamLead = Boolean(candidate.teamLeadId && visibleIds.has(candidate.teamLeadId));
 
-            if (reportsToVisibleManager || reportsToVisibleAssistantManager || reportsToVisibleTeamLead) {
+            if (reportsToVisibleTeamLead) {
                 visibleIds.add(candidate.$id);
                 changed = true;
             }
@@ -206,15 +185,13 @@ async function assertAssignmentAllowed(actor: User, agent: User, lead: Lead, dat
         if (agent.teamLeadId !== actor.$id) {
             throw new Error('Team leads can only assign agents under them.');
         }
-    } else if ((actor.role === 'manager' || actor.role === 'assistant_manager') && !hasBranchOverlap(actor, agent)) {
-        throw new Error('Permission denied');
     }
 
     const visibleUserIds = await getVisibleUserIdsForActor(actor, databases);
     const leadInScope =
         visibleUserIds.includes(lead.ownerId) ||
         (lead.assignedToId ? visibleUserIds.includes(lead.assignedToId) : false) ||
-        Boolean(lead.branchId && getUserBranchIds(actor).includes(lead.branchId));
+        Boolean(Array.isArray(lead.branchIds) && lead.branchIds.some((b) => getUserBranchIds(actor).includes(b)));
 
     if (!leadInScope) {
         throw new Error('Permission denied');
@@ -241,7 +218,7 @@ async function assertLeadAccessAllowed(actor: User, lead: Lead, databases: Admin
     const leadInScope =
         visibleUserIds.includes(lead.ownerId) ||
         (lead.assignedToId ? visibleUserIds.includes(lead.assignedToId) : false) ||
-        Boolean(lead.branchId && getUserBranchIds(actor).includes(lead.branchId));
+        Boolean(Array.isArray(lead.branchIds) && lead.branchIds.some((b) => getUserBranchIds(actor).includes(b)));
 
     if (!leadInScope) {
         throw new Error('Permission denied');
@@ -392,7 +369,7 @@ async function syncResumePermissionsForAssignment(
 
 /**
  * Assign a lead to an agent using server-side admin client
- * This bypasses user-level permissions to ensure managers can always reassign leads.
+ * This bypasses user-level permissions to ensure admins can always reassign leads.
  */
 export async function assignLeadAction(
     leadId: string,
@@ -419,10 +396,9 @@ export async function assignLeadAction(
 
         // Only specific roles can assign leads. Agents are not permitted
         // to reassign leads — even leads they own — to anyone else.
-        // This keeps the assignment workflow controlled by managers,
-        // assistant managers, team leads, lead generation, and admins.
+        // This keeps the assignment workflow controlled by team leads, lead generation, and admins.
         if (
-            !['admin', 'developer', 'manager', 'assistant_manager', 'team_lead', 'lead_generation'].includes(actorDoc.role)
+            !['admin', 'developer', 'team_lead', 'lead_generation'].includes(actorDoc.role)
         ) {
             throw new Error('Permission denied');
         }
@@ -536,7 +512,7 @@ export async function listLeadAssignableAgentsAction(
 
     const canListForLead =
         (actorDoc.role !== 'operations' && currentLead.ownerId === actorDoc.$id) ||
-        ['admin', 'developer', 'manager', 'assistant_manager', 'team_lead'].includes(actorDoc.role);
+        ['admin', 'developer', 'team_lead'].includes(actorDoc.role);
 
     if (!canListForLead) {
         throw new Error('Permission denied');
@@ -561,10 +537,6 @@ export async function listLeadAssignableAgentsAction(
             name: doc.name,
             email: doc.email,
             role: doc.role,
-            managerId: doc.managerId || null,
-            managerIds: doc.managerIds || [],
-            assistantManagerId: doc.assistantManagerId || null,
-            assistantManagerIds: doc.assistantManagerIds || [],
             teamLeadId: doc.teamLeadId || null,
             branchIds: doc.branchIds || [],
             branchId: doc.branchId || null,
@@ -841,7 +813,7 @@ export async function closeLeadAction(
                             leadName: getLeadDisplayName(currentLead),
                             ownerId: currentLead.ownerId,
                             assignedToId: currentLead.assignedToId,
-                            branchId: currentLead.branchId,
+                            branchIds: currentLead.branchIds || [],
                             closedAt: lead.closedAt,
                             changes: {
                                 status: { from: currentLead.status, to: closedStatus },

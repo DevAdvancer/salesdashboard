@@ -3,7 +3,7 @@
 import { ID, Permission, Query, Role } from 'node-appwrite';
 import { createAdminClient, createSessionClient } from '@/lib/server/appwrite';
 import { assertAuthenticatedUserId } from '@/lib/server/current-user';
-import { CreateManagerInput, CreateTeamLeadInput, CreateAgentInput, UserRole, CreateAssistantManagerInput } from '@/lib/types';
+import { CreateTeamLeadInput, CreateAgentInput, UserRole } from '@/lib/types';
 import { COLLECTIONS } from '@/lib/constants/appwrite';
 import { normalizeEmail } from '@/lib/utils/user-hierarchy';
 import { getErrorMessage } from '@/lib/utils';
@@ -177,16 +177,6 @@ async function logAuditAction(
     } catch (error) {
         console.error("Failed to log audit action:", error);
     }
-}
-
-export async function createAssistantManagerAction(input: CreateAssistantManagerInput & { currentUserId: string }) {
-    void input;
-    throw new Error("Assistant manager role has been retired. Create a team lead or agent instead.");
-}
-
-export async function createManagerAction(input: CreateManagerInput & { currentUserId: string }) {
-    void input;
-    throw new Error("Manager role has been retired. Create an admin, team lead, agent, or lead generation user instead.");
 }
 
 export async function createAdminAction(input: CreateAdminInput & { currentUserId: string }) {
@@ -461,10 +451,6 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
 export async function updateUserAction(input: {
     userId: string;
     role?: UserRole;
-    managerId?: string | null;
-    managerIds?: string[];
-    assistantManagerId?: string | null;
-    assistantManagerIds?: string[];
     teamLeadId?: string | null;
     branchIds?: string[];
     currentUserId: string;
@@ -496,11 +482,8 @@ export async function updateUserAction(input: {
              if (!isCallerAdmin) {
                  throw new Error("Only admins or developers can change user roles.");
              }
-             if (role === 'manager' || role === 'assistant_manager') {
-                 throw new Error("Manager and assistant manager roles have been removed.");
-             }
              updates.role = role;
-             if (role === 'team_lead' || role === 'monitor' || role === 'operations' || role === 'admin' || role === 'developer') {
+             if (role === 'admin' || role === 'developer') {
                  updates.teamLeadId = null;
              }
         }

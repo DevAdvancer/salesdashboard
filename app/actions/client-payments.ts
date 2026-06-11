@@ -32,10 +32,6 @@ async function getActor(userId: string): Promise<User> {
     name: doc.name,
     email: doc.email,
     role: doc.role,
-    managerId: doc.managerId || null,
-    managerIds: doc.managerIds || [],
-    assistantManagerId: doc.assistantManagerId || null,
-    assistantManagerIds: doc.assistantManagerIds || [],
     teamLeadId: doc.teamLeadId || null,
     branchIds: doc.branchIds || [],
     branchId: doc.branchId || null,
@@ -75,9 +71,9 @@ async function canActorAccessLead(actor: User, leadId: string): Promise<boolean>
 
   if (isAdminLikeReadRole(actor.role)) return true;
 
-  const branchId = typeof lead.branchId === "string" ? lead.branchId : null;
+  const branchIds = Array.isArray(lead.branchIds) ? (lead.branchIds as string[]) : [];
   const specialBranchId = getSpecialBranchLeadAccess(actor.email);
-  if (specialBranchId && branchId === specialBranchId) {
+  if (specialBranchId && branchIds.includes(specialBranchId)) {
     return true;
   }
   const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : null;
@@ -102,19 +98,11 @@ async function canActorAccessLead(actor: User, leadId: string): Promise<boolean>
     return (
       (ownerId ? teamIds.has(ownerId) : false) ||
       (assignedToId ? teamIds.has(assignedToId) : false) ||
-      (branchId ? (actor.branchIds ?? []).includes(branchId) : false)
+      (branchIds.some(b => (actor.branchIds ?? []).includes(b)))
     );
   }
 
-  if (actor.role === "manager" || actor.role === "assistant_manager") {
-    return (
-      ownerId === actor.$id ||
-      assignedToId === actor.$id ||
-      (branchId ? (actor.branchIds ?? []).includes(branchId) : false)
-    );
-  }
-
-  return false;
+    return false;
 }
 
 function mapRecord(doc: any): ClientPaymentRecord {
@@ -346,26 +334,13 @@ export async function listClientPaymentSummariesAction(input: {
     const teamIds = new Set<string>([actor.$id, ...agents.documents.map((doc: any) => doc.$id)]);
 
     for (const lead of leadDocuments) {
-      const branchId = typeof lead.branchId === "string" ? lead.branchId : null;
+      const branchIds = Array.isArray(lead.branchIds) ? (lead.branchIds as string[]) : [];
       const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : null;
       const assignedToId = typeof lead.assignedToId === "string" ? lead.assignedToId : null;
       if (
         (ownerId ? teamIds.has(ownerId) : false) ||
         (assignedToId ? teamIds.has(assignedToId) : false) ||
-        (branchId ? (actor.branchIds ?? []).includes(branchId) : false)
-      ) {
-        allowedLeadIds.add(lead.$id);
-      }
-    }
-  } else if (actor.role === "manager" || actor.role === "assistant_manager") {
-    for (const lead of leadDocuments) {
-      const branchId = typeof lead.branchId === "string" ? lead.branchId : null;
-      const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : null;
-      const assignedToId = typeof lead.assignedToId === "string" ? lead.assignedToId : null;
-      if (
-        ownerId === actor.$id ||
-        assignedToId === actor.$id ||
-        (branchId ? (actor.branchIds ?? []).includes(branchId) : false)
+        (branchIds.some(b => (actor.branchIds ?? []).includes(b)))
       ) {
         allowedLeadIds.add(lead.$id);
       }

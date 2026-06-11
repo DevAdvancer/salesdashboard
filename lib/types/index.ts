@@ -1,5 +1,5 @@
 // User types
-export type UserRole = 'admin' | 'developer' | 'manager' | 'assistant_manager' | 'team_lead' | 'agent' | 'lead_generation' | 'monitor' | 'operations';
+export type UserRole = 'admin' | 'developer' | 'team_lead' | 'agent' | 'lead_generation' | 'monitor' | 'operations';
 
 export const VALID_ROLES: UserRole[] = ['admin', 'developer', 'team_lead', 'agent', 'lead_generation', 'monitor', 'operations'];
 
@@ -12,10 +12,6 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
-  managerId: string | null; // @deprecated Use managerIds instead
-  managerIds?: string[]; // New field for multiple managers
-  assistantManagerId?: string | null; // @deprecated Use assistantManagerIds instead
-  assistantManagerIds?: string[]; // New field for multiple assistant managers
   teamLeadId: string | null;
   branchIds: string[];
   isActive?: boolean;
@@ -30,26 +26,7 @@ export interface CreateUserInput {
   email: string;
   password: string;
   role: UserRole;
-  managerId?: string;
-  managerIds?: string[];
-  assistantManagerId?: string;
-  assistantManagerIds?: string[];
   teamLeadId?: string;
-  branchIds: string[];
-}
-
-export interface CreateManagerInput {
-  name: string;
-  email: string;
-  password: string;
-  branchIds: string[];
-}
-
-export interface CreateAssistantManagerInput {
-  name: string;
-  email: string;
-  password: string;
-  managerIds?: string[];
   branchIds: string[];
 }
 
@@ -57,10 +34,6 @@ export interface CreateTeamLeadInput {
   name: string;
   email: string;
   password: string;
-  managerId?: string;
-  managerIds?: string[];
-  assistantManagerId?: string;
-  assistantManagerIds?: string[];
   branchIds: string[];
 }
 
@@ -70,10 +43,6 @@ export interface CreateAgentInput {
   password: string;
   role?: Extract<UserRole, 'agent' | 'lead_generation' | 'monitor' | 'operations'>;
   teamLeadId?: string;
-  managerId?: string;
-  managerIds?: string[];
-  assistantManagerId?: string;
-  assistantManagerIds?: string[];
   branchIds: string[];
 }
 
@@ -84,7 +53,7 @@ export interface Lead {
   status: string;
   ownerId: string;
   assignedToId: string | null;
-  branchId: string | null;
+  branchIds: string[];
   isClosed: boolean;
   closedAt: string | null;
   nextFollowUpAt?: string | null;
@@ -139,7 +108,7 @@ export interface CreateLeadInput {
   data: LeadData;
   assignedToId?: string;
   status: string;
-  branchId?: string | null;
+  branchIds?: string[];
 }
 
 export type LeadRequestStatus = 'pending' | 'moved' | 'rejected';
@@ -358,8 +327,6 @@ export interface AuthContext {
   user: User | null;
   isAdmin: boolean;
   isDeveloper: boolean;
-  isManager: boolean;
-  isAssistantManager: boolean;
   isTeamLead: boolean;
   isAgent: boolean;
   isLeadGeneration: boolean;
@@ -417,7 +384,7 @@ export interface ClientPaymentRecord {
   updatedByName?: string | null;
 }
 
-export type LeadNoteVisibility = 'team' | 'leadership' | 'manager_only';
+export type LeadNoteVisibility = 'team' | 'leadership' | 'private';
 
 export interface LeadNote {
   $id: string;
@@ -430,7 +397,7 @@ export interface LeadNote {
   updatedAt?: string | null;
 }
 
-export type CoachingNoteVisibility = 'manager_only' | 'leadership';
+export type CoachingNoteVisibility = 'private' | 'leadership';
 
 export interface CoachingNote {
   $id: string;
