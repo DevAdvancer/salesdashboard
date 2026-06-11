@@ -191,7 +191,7 @@ async function assertAssignmentAllowed(actor: User, agent: User, lead: Lead, dat
     const leadInScope =
         visibleUserIds.includes(lead.ownerId) ||
         (lead.assignedToId ? visibleUserIds.includes(lead.assignedToId) : false) ||
-        Boolean(Array.isArray(lead.branchIds) && lead.branchIds.some((b) => getUserBranchIds(actor).includes(b)));
+        Boolean(lead.branchId && getUserBranchIds(actor).includes(lead.branchId));
 
     if (!leadInScope) {
         throw new Error('Permission denied');
@@ -218,7 +218,7 @@ async function assertLeadAccessAllowed(actor: User, lead: Lead, databases: Admin
     const leadInScope =
         visibleUserIds.includes(lead.ownerId) ||
         (lead.assignedToId ? visibleUserIds.includes(lead.assignedToId) : false) ||
-        Boolean(Array.isArray(lead.branchIds) && lead.branchIds.some((b) => getUserBranchIds(actor).includes(b)));
+        Boolean(lead.branchId && getUserBranchIds(actor).includes(lead.branchId));
 
     if (!leadInScope) {
         throw new Error('Permission denied');
@@ -813,7 +813,7 @@ export async function closeLeadAction(
                             leadName: getLeadDisplayName(currentLead),
                             ownerId: currentLead.ownerId,
                             assignedToId: currentLead.assignedToId,
-                            branchIds: currentLead.branchIds || [],
+                            branchId: currentLead.branchId ?? null,
                             closedAt: lead.closedAt,
                             changes: {
                                 status: { from: currentLead.status, to: closedStatus },

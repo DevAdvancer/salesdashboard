@@ -240,8 +240,8 @@ function LegacyDashboardContent() {
             ...usersForInsights.flatMap(
               (visibleUser) => visibleUser.branchIds || [],
             ),
-            ...activeLeads.flatMap((lead) => lead.branchIds || []),
-            ...closedLeads.flatMap((lead) => lead.branchIds || []),
+            ...activeLeads.flatMap((lead) => (lead.branchId ? [lead.branchId] : [])),
+            ...closedLeads.flatMap((lead) => (lead.branchId ? [lead.branchId] : [])),
           ]);
           const branchesForInsights: Branch[] = allBranches.filter(
             (branch) => isAdmin || isReadOnlyAdminView || branchIdsInScope.has(branch.$id),

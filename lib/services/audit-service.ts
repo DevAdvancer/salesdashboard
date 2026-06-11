@@ -63,6 +63,10 @@ export async function getAuditLogs(
     actorId?: string;
     targetType?: string;
     targetId?: string;
+    actions?: string[];
+    action?: string;
+    dateFrom?: string;
+    dateTo?: string;
     limit?: number;
     offset?: number;
   }
@@ -84,6 +88,20 @@ export async function getAuditLogs(
 
     if (filters?.targetId) {
       queries.push(Query.equal('targetId', filters.targetId));
+    }
+
+    if (filters?.action) {
+      queries.push(Query.equal('action', filters.action));
+    } else if (filters?.actions && filters.actions.length > 0) {
+      queries.push(Query.equal('action', filters.actions));
+    }
+
+    if (filters?.dateFrom) {
+      queries.push(Query.greaterThanEqual('performedAt', filters.dateFrom));
+    }
+
+    if (filters?.dateTo) {
+      queries.push(Query.lessThanEqual('performedAt', filters.dateTo));
     }
 
     const response = await databases.listDocuments(

@@ -23,12 +23,31 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import { getAuditLogs } from '@/lib/services/audit-service';
 import { AuditLog } from '@/lib/types';
-import { RefreshCw, User as UserIcon, Eye } from 'lucide-react';
+import { RefreshCw, User as UserIcon, Eye, Filter } from 'lucide-react';
 import { ProtectedRoute } from '@/components/protected-route';
 import { databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { listBranches } from '@/lib/services/branch-service';
 import { buildAuditLogDetailModel, type AuditLogDetailModel } from '@/lib/utils/audit-log-details';
 import { Query } from 'appwrite';
+import { Label } from '@/components/ui/label';
+import { DatePicker } from '@/components/ui/date-picker';
+
+// Action types for filtering
+const AUDIT_ACTIONS = [
+  'USER_CREATE', 'USER_UPDATE', 'USER_DELETE',
+  'LEAD_CREATE', 'LEAD_UPDATE', 'LEAD_DELETE', 'LEAD_CLOSE', 'LEAD_REOPEN',
+  'LOGIN', 'LOGOUT',
+  'MOCK_EMAIL_SENT', 'INTERVIEW_EMAIL_SENT', 'ASSESSMENT_EMAIL_SENT',
+  'LINKEDIN_REQUEST_CREATE', 'LINKEDIN_REQUEST_ACCEPT', 'LINKEDIN_REQUEST_WITHDRAW', 'LINKEDIN_REQUEST_LINK_LEAD',
+  'FORM_CONFIG_UPDATE', 'SETTINGS_UPDATE',
+  'BRANCH_CREATE', 'BRANCH_UPDATE',
+];
+
+// Target types for filtering
+const AUDIT_TARGET_TYPES = [
+  'USER', 'LEAD', 'LINKEDIN_REQUEST', 'LINKEDIN_ACCOUNT',
+  'FORM_CONFIG', 'SETTINGS', 'BRANCH'
+];
 
 type MetadataRecord = Record<string, unknown>;
 
@@ -80,6 +99,16 @@ function AuditLogsContent() {
   const ITEMS_PER_PAGE = 10;
   const router = useRouter();
 
+  // Filter state
+  const [filterAction, setFilterAction] = useState<string>('');
+  const [filterTargetType, setFilterTargetType] = useState<string>('');
+  const [filterActorId, setFilterActorId] = useState<string>('');
+  const [filterDateFrom, setFilterDateFrom] = useState<string>('');
+  const [filterDateTo, setFilterDateTo] = useState<string>('');
+  const [showFilters, setShowFilters] = useState(false);
+
+  const [users, setUsers] = useState<Array<{ $id: string; name: string; email: string }>>([]);
+
   // Redirect if not admin
   useEffect(() => {
     if (!loading && user && !canReadAuditLogs) {
@@ -101,10 +130,18 @@ function AuditLogsContent() {
         COLLECTIONS.USERS,
         [Query.limit(1000)]
       );
+      const userList: Array<{ $id: string; name: string; email: string }> = [];
       users.documents.forEach((doc) => {
         const userDoc = doc as { $id: string; name?: unknown; email?: unknown };
-        map.set(userDoc.$id, getString(userDoc.name, getString(userDoc.email, userDoc.$id)));
+        const name = getString(userDoc.name, getString(userDoc.email, userDoc.$id));
+        map.set(userDoc.$id, name);
+        userList.push({
+          $id: userDoc.$id,
+          name,
+          email: getString(userDoc.email, ''),
+        });
       });
+      setUsers(userList);
 
       try {
         const leads = await databases.listDocuments(
@@ -132,9 +169,19 @@ function AuditLogsContent() {
   const fetchLogs = async () => {
     try {
       setRefreshing(true);
-      // Increased limit to 5000 to show more logs.
-      // Ideally, this should be server-side paginated, but for now we fetch more to support client-side pagination.
-      const { logs: fetchedLogs } = await getAuditLogs({ limit: 5000 });
+      // Build filters object, only including non-empty values
+      const auditFilters: any = { limit: 5000 };
+      if (filterAction) auditFilters.action = filterAction;
+      if (filterTargetType) auditFilters.targetType = filterTargetType;
+      if (filterActorId) auditFilters.actorId = filterActorId;
+      if (filterDateFrom) auditFilters.dateFrom = new Date(filterDateFrom).toISOString();
+      if (filterDateTo) {
+        // Add 1 day to include the entire end date
+        const toDate = new Date(filterDateTo);
+        toDate.setDate(toDate.getDate() + 1);
+        auditFilters.dateTo = toDate.toISOString();
+      }
+      const { logs: fetchedLogs } = await getAuditLogs(auditFilters);
       setLogs(fetchedLogs);
     } catch (error) {
       console.error('Failed to fetch audit logs:', error);
@@ -144,6 +191,14 @@ function AuditLogsContent() {
     }
   };
 
+  const clearFilters = () => {
+    setFilterAction('');
+    setFilterTargetType('');
+    setFilterActorId('');
+    setFilterDateFrom('');
+    setFilterDateTo('');
+  };
+
   useEffect(() => {
     if (canReadAuditLogs) {
       fetchLogs();
@@ -151,7 +206,8 @@ function AuditLogsContent() {
     } else if (user) {
       setLoading(false); // Stop loading to trigger redirect
     }
-  }, [canReadAuditLogs, user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canReadAuditLogs, user, filterAction, filterTargetType, filterActorId, filterDateFrom, filterDateTo]);
 
   const totalPages = Math.ceil(logs.length / ITEMS_PER_PAGE);
   const paginatedLogs = logs.slice(
@@ -446,16 +502,114 @@ function AuditLogsContent() {
             Track system activities and user actions.
           </p>
         </div>
-        <Button
-          variant="outline"
-          onClick={fetchLogs}
-          disabled={refreshing}
-          className="gap-2"
-        >
-          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setShowFilters(!showFilters)}
+            className="gap-2"
+          >
+            <Filter className="h-4 w-4" />
+            {showFilters ? 'Hide Filters' : 'Show Filters'}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={fetchLogs}
+            disabled={refreshing}
+            className="gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
+
+      {showFilters && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Filter Audit Logs</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="filter-action">Action</Label>
+                <select
+                  id="filter-action"
+                  value={filterAction}
+                  onChange={(e) => setFilterAction(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  <option value="">All Actions</option>
+                  {AUDIT_ACTIONS.map((a) => (
+                    <option key={a} value={a}>{a}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="filter-target">Target Type</Label>
+                <select
+                  id="filter-target"
+                  value={filterTargetType}
+                  onChange={(e) => setFilterTargetType(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  <option value="">All Target Types</option>
+                  {AUDIT_TARGET_TYPES.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="filter-actor">Actor</Label>
+                <select
+                  id="filter-actor"
+                  value={filterActorId}
+                  onChange={(e) => setFilterActorId(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  <option value="">All Actors</option>
+                  {users.map((u) => (
+                    <option key={u.$id} value={u.$id}>{u.name} ({u.email})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="filter-date-from">From Date</Label>
+                <DatePicker
+                  value={filterDateFrom}
+                  onChange={setFilterDateFrom}
+                  placeholder="Any date"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="filter-date-to">To Date</Label>
+                <DatePicker
+                  value={filterDateTo}
+                  onChange={setFilterDateTo}
+                  placeholder="Any date"
+                />
+              </div>
+
+              <div className="space-y-2 flex items-end">
+                <Button
+                  variant="outline"
+                  onClick={clearFilters}
+                  className="w-full"
+                >
+                  Clear Filters
+                </Button>
+              </div>
+            </div>
+
+            <div className="mt-3 text-sm text-muted-foreground">
+              Showing {logs.length} log{logs.length === 1 ? '' : 's'}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

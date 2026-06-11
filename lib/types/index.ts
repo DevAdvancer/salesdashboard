@@ -53,7 +53,7 @@ export interface Lead {
   status: string;
   ownerId: string;
   assignedToId: string | null;
-  branchIds: string[];
+  branchId: string | null;
   isClosed: boolean;
   closedAt: string | null;
   nextFollowUpAt?: string | null;
@@ -108,7 +108,7 @@ export interface CreateLeadInput {
   data: LeadData;
   assignedToId?: string;
   status: string;
-  branchIds?: string[];
+  branchId?: string | null;
 }
 
 export type LeadRequestStatus = 'pending' | 'moved' | 'rejected';

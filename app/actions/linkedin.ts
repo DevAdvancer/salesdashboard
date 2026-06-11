@@ -748,13 +748,56 @@ export async function getLinkedinConnectionHistoryAction(input: {
   );
 
   const requests = requestsResponse.documents as unknown as LinkedinRequest[];
-  const leadIds = Array.from(
-    new Set(
-      requests
-        .map((r) => (typeof r.leadId === "string" && r.leadId ? r.leadId : null))
-        .filter((v): v is string => Boolean(v)),
-    ),
+
+  // Some requests may have had their leadId cleared (e.g., after a "Not Interested"
+  // sync reopens the request). To still surface the lead-related events in the
+  // history, fall back to looking up the leadId from the LINKEDIN_REQUEST_LINK_LEAD
+  // audit log associated with each request.
+  const requestToLeadId = new Map<string, string>();
+  for (const r of requests) {
+    if (typeof r.leadId === "string" && r.leadId) {
+      requestToLeadId.set(r.$id, r.leadId);
+    }
+  }
+  const requestsMissingLead = requests.filter(
+    (r) => !requestToLeadId.has(r.$id),
   );
+  if (requestsMissingLead.length > 0) {
+    await Promise.all(
+      requestsMissingLead.map(async (r) => {
+        try {
+          const response = await databases.listDocuments(
+            DATABASE_ID,
+            COLLECTIONS.AUDIT_LOGS,
+            [
+              Query.equal("targetType", "linkedin_request"),
+              Query.equal("targetId", r.$id),
+              Query.equal("action", "LINKEDIN_REQUEST_LINK_LEAD"),
+              Query.orderDesc("performedAt"),
+              Query.limit(1),
+            ],
+          );
+          for (const doc of response.documents) {
+            const meta = (doc as any).metadata;
+            let parsed: any = meta;
+            if (typeof meta === "string") {
+              try { parsed = JSON.parse(meta); } catch { parsed = null; }
+            }
+            const leadId =
+              parsed && typeof parsed === "object" && typeof parsed.leadId === "string"
+                ? parsed.leadId
+                : null;
+            if (leadId) requestToLeadId.set(r.$id, leadId);
+            break;
+          }
+        } catch {
+          // Ignore — history can still render without a linked lead.
+        }
+      }),
+    );
+  }
+
+  const leadIds = Array.from(new Set(requestToLeadId.values()));
 
   const leadById = new Map<string, { leadId: string; status: string; isClosed: boolean }>();
   if (leadIds.length > 0) {
@@ -819,7 +862,7 @@ export async function getLinkedinConnectionHistoryAction(input: {
         metadata: (doc as any).metadata ?? null,
       }));
 
-      const leadId = typeof req.leadId === "string" && req.leadId ? req.leadId : null;
+      const leadId = requestToLeadId.get(req.$id) ?? null;
       return {
         request: req,
         logs,

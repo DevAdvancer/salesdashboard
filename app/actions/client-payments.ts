@@ -71,9 +71,9 @@ async function canActorAccessLead(actor: User, leadId: string): Promise<boolean>
 
   if (isAdminLikeReadRole(actor.role)) return true;
 
-  const branchIds = Array.isArray(lead.branchIds) ? (lead.branchIds as string[]) : [];
+  const branchId = typeof lead.branchId === "string" ? lead.branchId : null;
   const specialBranchId = getSpecialBranchLeadAccess(actor.email);
-  if (specialBranchId && branchIds.includes(specialBranchId)) {
+  if (specialBranchId && branchId === specialBranchId) {
     return true;
   }
   const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : null;
@@ -98,7 +98,7 @@ async function canActorAccessLead(actor: User, leadId: string): Promise<boolean>
     return (
       (ownerId ? teamIds.has(ownerId) : false) ||
       (assignedToId ? teamIds.has(assignedToId) : false) ||
-      (branchIds.some(b => (actor.branchIds ?? []).includes(b)))
+      (branchId && actor.branchIds?.includes(branchId))
     );
   }
 
@@ -334,13 +334,13 @@ export async function listClientPaymentSummariesAction(input: {
     const teamIds = new Set<string>([actor.$id, ...agents.documents.map((doc: any) => doc.$id)]);
 
     for (const lead of leadDocuments) {
-      const branchIds = Array.isArray(lead.branchIds) ? (lead.branchIds as string[]) : [];
+      const branchId = typeof lead.branchId === "string" ? lead.branchId : null;
       const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : null;
       const assignedToId = typeof lead.assignedToId === "string" ? lead.assignedToId : null;
       if (
         (ownerId ? teamIds.has(ownerId) : false) ||
         (assignedToId ? teamIds.has(assignedToId) : false) ||
-        (branchIds.some(b => (actor.branchIds ?? []).includes(b)))
+        (branchId && actor.branchIds?.includes(branchId))
       ) {
         allowedLeadIds.add(lead.$id);
       }

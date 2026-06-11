@@ -120,7 +120,7 @@ export function findLeadRequestDuplicateWarnings(
       warnings.push({
         field: 'email',
         existingLeadId: lead.$id,
-        existingBranchId: Array.isArray(lead.branchIds) ? lead.branchIds[0] : undefined,
+        existingBranchId: lead.branchId ?? undefined,
       });
     }
 
@@ -132,7 +132,7 @@ export function findLeadRequestDuplicateWarnings(
       warnings.push({
         field: 'phone',
         existingLeadId: lead.$id,
-        existingBranchId: Array.isArray(lead.branchIds) ? lead.branchIds[0] : undefined,
+        existingBranchId: lead.branchId ?? undefined,
       });
     }
 
@@ -147,7 +147,7 @@ export function findLeadRequestDuplicateWarnings(
       warnings.push({
         field: 'linkedinProfileUrl',
         existingLeadId: lead.$id,
-        existingBranchId: Array.isArray(lead.branchIds) ? lead.branchIds[0] : undefined,
+        existingBranchId: lead.branchId ?? undefined,
       });
     }
 

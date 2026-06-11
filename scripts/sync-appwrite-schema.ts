@@ -84,7 +84,7 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'status', type: 'string', required: true, size: 50 },
       { key: 'ownerId', type: 'string', required: true, size: 255 },
       { key: 'assignedToId', type: 'string', required: false, size: 255 },
-      { key: 'branchIds', type: 'string', array: true, required: false, size: 255 },
+      { key: 'branchId', type: 'string', required: false, size: 255 },
       { key: 'isClosed', type: 'boolean', required: false, default: false },
       { key: 'closedAt', type: 'datetime', required: false },
       { key: 'nextFollowUpAt', type: 'datetime', required: false },
@@ -96,7 +96,7 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'owner_idx', type: 'key', attributes: ['ownerId'] },
       { key: 'assigned_idx', type: 'key', attributes: ['assignedToId'] },
       { key: 'status_idx', type: 'key', attributes: ['status'] },
-      { key: 'branch_idx', type: 'key', attributes: ['branchIds'] },
+      { key: 'branch_idx', type: 'key', attributes: ['branchId'] },
       { key: 'closed_status_idx', type: 'key', attributes: ['isClosed', 'status'] },
     ],
   },
@@ -112,8 +112,14 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
   },
 };
 
-// Fields to remove (retired manager/assistant_manager fields)
+// Fields to remove (retired manager/assistant_manager fields, plus the
+// branchIds attribute on the leads collection which is now branchId)
 const deprecatedFields = ['managerId', 'managerIds', 'assistantManagerId', 'assistantManagerIds'];
+
+// Per-collection fields to remove (scoped by collectionId)
+const deprecatedFieldsByCollection: Record<string, string[]> = {
+  [COLLECTIONS.LEADS]: ['branchIds'],
+};
 
 async function syncAttr(
   collectionId: string,
@@ -255,8 +261,9 @@ async function syncCollection(collectionId: string, schema: typeof collectionSch
   console.log(`  Current attributes: ${currentAttrs.length}`);
 
   // Check for deprecated fields in live data
+  const deprecatedFieldsForCollection = [...deprecatedFields, ...(deprecatedFieldsByCollection[collectionId] ?? [])];
   for (const liveAttr of currentAttrs) {
-    if (deprecatedFields.includes(liveAttr.key)) {
+    if (deprecatedFieldsForCollection.includes(liveAttr.key)) {
       console.log(`  🔥 Deprecated field in live data: ${liveAttr.key}`);
       if (!dryRun) {
         try {

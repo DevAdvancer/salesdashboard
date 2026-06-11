@@ -144,7 +144,7 @@ async function validateLeadUniqueness(
                         isValid: false,
                         duplicateField: 'email',
                         existingLeadId: doc.$id,
-                        existingBranchId: Array.isArray(doc.branchIds) ? (doc.branchIds as string[])[0] : undefined,
+                        existingBranchId: typeof doc.branchId === "string" ? doc.branchId : undefined,
                     };
                 }
             } catch {}
@@ -162,7 +162,7 @@ async function validateLeadUniqueness(
                         isValid: false,
                         duplicateField: 'phone',
                         existingLeadId: doc.$id,
-                        existingBranchId: Array.isArray(doc.branchIds) ? (doc.branchIds as string[])[0] : undefined,
+                        existingBranchId: typeof doc.branchId === "string" ? doc.branchId : undefined,
                     };
                 }
             } catch {}
@@ -187,7 +187,7 @@ async function validateLeadUniqueness(
                             isValid: false,
                             duplicateField: 'linkedinProfileUrl',
                             existingLeadId: doc.$id,
-                            existingBranchId: Array.isArray(doc.branchIds) ? (doc.branchIds as string[])[0] : undefined,
+                            existingBranchId: typeof doc.branchId === "string" ? doc.branchId : undefined,
                         };
                     }
                 } catch {}
@@ -357,13 +357,13 @@ function appendHierarchyLeadVisibilityQuery(
   ];
 
   if (specialBranchId) {
-    orConditions.push(Query.contains('branchIds', [specialBranchId]));
+    orConditions.push(Query.equal('branchId', specialBranchId));
   }
 
   if (includeBackedOutForBranches && branchIds && branchIds.length > 0) {
     orConditions.push(
       Query.and([
-        Query.contains('branchIds', branchIds),
+        Query.equal('branchId', branchIds[0]),
         Query.equal('isClosed', true),
         Query.equal('status', ['Backout', 'Backed Out', 'Backedout', 'Backed out']),
       ]),
@@ -387,13 +387,13 @@ function appendTeamLeadLeadVisibilityQuery(
   ];
 
   if (specialBranchId) {
-    orConditions.push(Query.contains('branchIds', [specialBranchId]));
+    orConditions.push(Query.equal('branchId', specialBranchId));
   }
 
   if (includeBackedOutForBranches && branchIds && branchIds.length > 0) {
     orConditions.push(
       Query.and([
-        Query.contains('branchIds', branchIds),
+        Query.equal('branchId', branchIds[0]),
         Query.equal('isClosed', true),
         Query.equal('status', ['Backout', 'Backed Out', 'Backedout', 'Backed out']),
       ]),
@@ -444,7 +444,7 @@ async function assertLeadReopenAllowed(
   }
 
   const specialBranchId = getSpecialBranchLeadAccess(actorDoc.email);
-  if (specialBranchId && Array.isArray(lead.branchIds) && lead.branchIds.includes(specialBranchId)) return;
+  if (specialBranchId && lead.branchId === specialBranchId) return;
 
   const visibleUserIds = await getLeadVisibilityUserIds(databases, actorDoc.$id, actorDoc.role);
   if (
@@ -474,7 +474,7 @@ async function assertLeadUpdateAllowed(
   if (actorDoc.role === 'admin' || actorDoc.role === 'developer') return;
 
   const specialBranchId = getSpecialBranchLeadAccess(actorDoc.email);
-  if (specialBranchId && Array.isArray(lead.branchIds) && lead.branchIds.includes(specialBranchId)) return;
+  if (specialBranchId && lead.branchId === specialBranchId) return;
 
   if (lead.ownerId === actorDoc.$id || lead.assignedToId === actorDoc.$id) {
     return;
@@ -619,7 +619,7 @@ export async function createLeadAction(
                 status: input.status || 'New',
                 ownerId: finalOwnerId,
                 assignedToId: input.assignedToId || null,
-                branchIds: input.branchIds || [],
+                branchId: input.branchId ?? null,
                 isClosed: false,
                 closedAt: null,
             },
@@ -646,7 +646,7 @@ export async function createLeadAction(
                         actorName: creatingUserName || 'System',
                         targetId: lead.$id,
                         targetType: 'LEAD',
-                        metadata: JSON.stringify({ ...input.data, branchIds: input.branchIds || [] }),
+                        metadata: JSON.stringify({ ...input.data, branchId: input.branchId ?? null }),
                         performedAt: new Date().toISOString()
                      }
                  );
@@ -862,7 +862,7 @@ export async function getLeadAction(
     }
 
     const specialBranchId = getSpecialBranchLeadAccess(viewerDoc.email);
-    if (specialBranchId && Array.isArray(lead.branchIds) && lead.branchIds.includes(specialBranchId)) {
+    if (specialBranchId && lead.branchId === specialBranchId) {
       return lead;
     }
 
@@ -921,7 +921,7 @@ export async function listLeadsAction(
           Query.equal('ownerId', userId),
       ];
       if (specialBranchId) {
-        orConditions.push(Query.contains('branchIds', [specialBranchId]));
+        orConditions.push(Query.equal('branchId', specialBranchId));
       }
       queries.push(Query.or(orConditions));
     } else if (userRole === 'lead_generation') {
@@ -987,7 +987,7 @@ export async function listLeadsAction(
 
     // Apply branch filter
     if (filters.branchId) {
-      queries.push(Query.contains('branchIds', [filters.branchId]));
+      queries.push(Query.equal('branchId', filters.branchId));
     }
 
     // Apply date range filters
@@ -1140,7 +1140,7 @@ export async function listLeadCountsAction(
         Query.equal('ownerId', userId),
       ];
       if (specialBranchId) {
-        orConditions.push(Query.contains('branchIds', [specialBranchId]));
+        orConditions.push(Query.equal('branchId', specialBranchId));
       }
       visibilityQueries.push(Query.or(orConditions));
     } else if (userRole === 'lead_generation') {
@@ -1186,7 +1186,7 @@ export async function listLeadCountsAction(
     // Optional filter scope (branch / date / status). These are applied
     // on top of the visibility scope.
     if (filters?.branchId) {
-      visibilityQueries.push(Query.contains('branchIds', [filters.branchId]));
+      visibilityQueries.push(Query.equal('branchId', filters.branchId));
     }
     if (filters?.dateFrom) {
       visibilityQueries.push(Query.greaterThanEqual('$createdAt', filters.dateFrom));

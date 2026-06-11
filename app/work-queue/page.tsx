@@ -131,8 +131,8 @@ function WorkQueueContent() {
           ...usersForInsights.flatMap(
             (visibleUser) => visibleUser.branchIds || [],
           ),
-          ...activeLeads.flatMap((lead) => lead.branchIds || []),
-          ...closedLeads.flatMap((lead) => lead.branchIds || []),
+          ...activeLeads.flatMap((lead) => (lead.branchId ? [lead.branchId] : [])),
+          ...closedLeads.flatMap((lead) => (lead.branchId ? [lead.branchId] : [])),
         ]);
         const branches: Branch[] = allBranches.filter((branch) =>
           branchIds.has(branch.$id),

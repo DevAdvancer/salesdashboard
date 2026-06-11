@@ -316,7 +316,7 @@ function LeadGenerationNewLeadContent() {
         {
           data: leadData,
           status: "Generated",
-          branchIds: branchId ? [branchId] : [],
+          branchId: branchId ?? null,
         },
         user.$id,
         user.name,
@@ -828,7 +828,7 @@ function LegacyNewLeadContent() {
           status: isLinkedinRequestLead
             ? LINKEDIN_INITIAL_STATUS
             : finalData.status || "Interested",
-          branchIds: branchId ? [branchId] : [],
+          branchId: branchId ?? null,
         },
         user.$id,
         user.name,

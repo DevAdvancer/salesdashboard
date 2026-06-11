@@ -156,7 +156,7 @@ function appendHierarchyLeadVisibilityQuery(queries: string[], visibleUserIds: s
   ];
 
   if (specialBranchId) {
-    orConditions.push(Query.contains('branchIds', [specialBranchId]));
+    orConditions.push(Query.equal('branchId', specialBranchId));
   }
 
   queries.push(Query.or(orConditions));
@@ -174,7 +174,7 @@ function appendTeamLeadLeadVisibilityQuery(
   ];
 
   if (specialBranchId) {
-    orConditions.push(Query.contains('branchIds', [specialBranchId]));
+    orConditions.push(Query.equal('branchId', specialBranchId));
   }
 
   queries.push(Query.or(orConditions));
@@ -315,7 +315,7 @@ export async function createLead(
         status: input.status || 'New',
         ownerId: finalOwnerId,
         assignedToId: input.assignedToId || null,
-        branchIds: input.branchIds || [],
+        branchId: input.branchId ?? null,
         isClosed: false,
         closedAt: null,
       },
@@ -332,7 +332,7 @@ export async function createLead(
             actorName: creatingUserName || 'System',
             targetId: createdLead.$id,
             targetType: 'LEAD',
-            metadata: { leadName: getLeadAuditName(input.data), ...input.data, branchIds: input.branchIds || [] }
+            metadata: { leadName: getLeadAuditName(input.data), ...input.data, branchId: input.branchId ?? null }
         });
     }
 
@@ -529,7 +529,7 @@ export async function listLeads(
           Query.equal('ownerId', userId),
       ];
       if (specialBranchId) {
-        orConditions.push(Query.contains('branchIds', [specialBranchId]));
+        orConditions.push(Query.equal('branchId', specialBranchId));
       }
       queries.push(Query.or(orConditions));
     } else if (userRole === 'lead_generation') {
@@ -651,7 +651,7 @@ export async function listLeads(
 
     // Apply branch filter
     if (filters.branchId) {
-      queries.push(Query.contains('branchIds', [filters.branchId]));
+      queries.push(Query.equal('branchId', filters.branchId));
     }
 
     // Apply date range filters
@@ -779,7 +779,7 @@ export async function closeLead(
               source: leadData.sourceName || leadData.source || '',
               ownerId: currentLead.ownerId,
               assignedToId: currentLead.assignedToId,
-              branchIds: currentLead.branchIds || [],
+              branchId: currentLead.branchId ?? null,
               closedAt: lead.closedAt,
               changes: {
                 status: { from: currentLead.status, to: closedStatus },

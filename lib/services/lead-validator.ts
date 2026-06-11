@@ -128,7 +128,7 @@ async function checkDuplicateField(
             isValid: false,
             duplicateField: field,
             existingLeadId: doc.$id,
-            existingBranchId: Array.isArray(doc.branchIds) ? (doc.branchIds as string[])[0] : undefined,
+            existingBranchId: typeof doc.branchId === "string" ? doc.branchId : undefined,
           };
         }
       } else if (
@@ -139,7 +139,7 @@ async function checkDuplicateField(
           isValid: false,
           duplicateField: field,
           existingLeadId: doc.$id,
-          existingBranchId: Array.isArray(doc.branchIds) ? (doc.branchIds as string[])[0] : undefined,
+          existingBranchId: typeof doc.branchId === "string" ? doc.branchId : undefined,
         };
       }
     } catch {
