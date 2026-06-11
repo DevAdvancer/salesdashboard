@@ -14,7 +14,9 @@
     "verify:appwrite": "tsx scripts/verify-setup.ts",
     "promote-admin": "tsx scripts/promote-to-admin.ts",
     "sync:appwrite": "tsx scripts/sync-appwrite-schema.ts",
-    "sync:appwrite:dry": "tsx scripts/sync-appwrite-schema.ts --dry-run"
+    "sync:appwrite:dry": "tsx scripts/sync-appwrite-schema.ts --dry-run",
+    "migrate:uk": "tsx scripts/migrate-uk-database.ts",
+    "migrate:uk:dry": "tsx scripts/migrate-uk-database.ts -- --dry-run"
   },
   "dependencies": {
     "@azure/msal-browser": "^4.29.0",
