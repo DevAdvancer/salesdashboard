@@ -318,19 +318,28 @@ export function LeadershipDashboard({
             <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              <MetricValue value={currencyFormatter.format(summary?.totalUpfrontValue ?? 0)} isLoading={isLoading} />
+            <div className="space-y-1">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-xs font-medium text-muted-foreground">Total</span>
+                <span className="text-2xl font-bold tabular-nums">
+                  <MetricValue value={currencyFormatter.format(summary?.totalUpfrontValue ?? 0)} isLoading={isLoading} />
+                </span>
+              </div>
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-xs font-medium text-muted-foreground">Paid</span>
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openDrillDown('fullyPaidLeads');
+                  }}
+                  className="text-sm font-semibold tabular-nums hover:text-foreground hover:underline transition-colors cursor-pointer"
+                >
+                  <MetricValue value={currencyFormatter.format(summary?.fullyPaidUpfrontValue ?? 0)} isLoading={isLoading} />
+                </span>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openDrillDown('fullyPaidLeads');
-                }}
-                className="hover:text-foreground hover:underline transition-colors cursor-pointer"
-              >
-                {currencyFormatter.format(summary?.fullyPaidUpfrontValue ?? 0)} fully paid
-              </span>
+            <p className="text-[11px] text-muted-foreground mt-2">
+              From the client_payments table. Total = partial + paid; Paid = fully paid only.
             </p>
           </CardContent>
         </Card>

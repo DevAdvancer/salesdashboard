@@ -369,11 +369,13 @@ export function buildLeadershipDashboardInsights({
   }
 
   for (const currentLead of leads) {
-    let amount = getLeadAmount(currentLead);
     const payment = paymentMap.get(currentLead.$id);
-    if (payment && payment.paymentPlan && payment.paymentPlan.percent > 0) {
-      amount = (payment.paymentPlan.upfrontAmount * 100) / payment.paymentPlan.percent;
-    }
+    // Use the exact amount entered on the lead. Do NOT back-calculate the
+    // total deal value from the payment plan — that was producing inflated
+    // numbers in the leadership dashboard. The exact amount on the payment
+    // plan (upfrontAmount) is tracked separately on the Upfront Collected
+    // card, where it is summed as-is from `payment.paymentPlan.upfrontAmount`.
+    const amount = getLeadAmount(currentLead);
     const leadIsStale = isStaleLead(currentLead, now);
     const followUpDate = getFollowUpDate(currentLead);
     const hasPendingFollowUp = Boolean(followUpDate && !currentLead.isClosed && currentLead.followUpStatus !== 'completed');
