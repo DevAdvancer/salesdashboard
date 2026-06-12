@@ -102,6 +102,10 @@ const drillDownCopy: Record<DrillDownKey, Omit<DrillDownConfig, 'key'>> = {
     title: 'Fully Paid',
     description: 'Clients who have completed their full upfront payment.',
   },
+  partiallyPaidLeads: {
+    title: 'Partially Paid',
+    description: 'Clients who have made an upfront deposit but have not yet completed the full upfront amount.',
+  },
 };
 
 function formatDate(value: string | null) {
@@ -311,39 +315,76 @@ export function LeadershipDashboard({
         </Card>
         </button>
 
-        <button type="button" onClick={() => openDrillDown('upfrontCollectedLeads')} className="block w-full text-left">
         <Card className="h-full transition-colors hover:border-foreground/40 hover:bg-accent">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Upfront Collected</CardTitle>
             <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="space-y-1">
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-xs font-medium text-muted-foreground">Total</span>
-                <span className="text-2xl font-bold tabular-nums">
-                  <MetricValue value={currencyFormatter.format(summary?.totalUpfrontValue ?? 0)} isLoading={isLoading} />
-                </span>
-              </div>
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-xs font-medium text-muted-foreground">Paid</span>
-                <span
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openDrillDown('fullyPaidLeads');
-                  }}
-                  className="text-sm font-semibold tabular-nums hover:text-foreground hover:underline transition-colors cursor-pointer"
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => openDrillDown('upfrontCollectedLeads')}
+                className="block w-full text-left"
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-xs font-medium text-muted-foreground">Total</span>
+                  <span className="text-2xl font-bold tabular-nums">
+                    <MetricValue
+                      value={currencyFormatter.format(summary?.totalUpfrontValue ?? 0)}
+                      isLoading={isLoading}
+                    />
+                  </span>
+                </div>
+              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => openDrillDown('fullyPaidLeads')}
+                  className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-left transition-colors hover:border-emerald-500/70 hover:bg-emerald-500/20"
                 >
-                  <MetricValue value={currencyFormatter.format(summary?.fullyPaidUpfrontValue ?? 0)} isLoading={isLoading} />
-                </span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                      Fully Paid
+                    </span>
+                    <span className="text-[10px] font-medium text-emerald-700/80 dark:text-emerald-300/80 tabular-nums">
+                      {isLoading ? <Skeleton className="h-3 w-8" /> : `${insights?.details.fullyPaidLeads.length ?? 0} leads`}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-base font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
+                    <MetricValue
+                      value={currencyFormatter.format(summary?.fullyPaidUpfrontValue ?? 0)}
+                      isLoading={isLoading}
+                    />
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openDrillDown('partiallyPaidLeads')}
+                  className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-left transition-colors hover:border-amber-500/70 hover:bg-amber-500/20"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                      Partially Paid
+                    </span>
+                    <span className="text-[10px] font-medium text-amber-700/80 dark:text-amber-300/80 tabular-nums">
+                      {isLoading ? <Skeleton className="h-3 w-8" /> : `${insights?.details.partiallyPaidLeads.length ?? 0} leads`}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-base font-bold tabular-nums text-amber-700 dark:text-amber-300">
+                    <MetricValue
+                      value={currencyFormatter.format(summary?.partiallyPaidUpfrontValue ?? 0)}
+                      isLoading={isLoading}
+                    />
+                  </div>
+                </button>
               </div>
             </div>
             <p className="text-[11px] text-muted-foreground mt-2">
-              From the client_payments table. Total = partial + paid; Paid = fully paid only.
+              From the client_payments table. Total = partially paid + fully paid.
             </p>
           </CardContent>
         </Card>
-        </button>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-3">

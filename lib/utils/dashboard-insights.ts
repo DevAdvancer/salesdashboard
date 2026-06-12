@@ -13,6 +13,7 @@ export interface LeadershipDashboardSummary {
   totalPipelineValue: number;
   totalUpfrontValue: number;
   fullyPaidUpfrontValue: number;
+  partiallyPaidUpfrontValue: number;
   closedRevenue: number;
 }
 
@@ -113,6 +114,7 @@ export interface LeadershipDashboardDetails {
   pipelineValue: DashboardLeadDetailRow[];
   upfrontCollectedLeads: DashboardLeadDetailRow[];
   fullyPaidLeads: DashboardLeadDetailRow[];
+  partiallyPaidLeads: DashboardLeadDetailRow[];
 }
 
 export interface LeadershipDashboardInsights {
@@ -323,6 +325,7 @@ export function buildLeadershipDashboardInsights({
     totalPipelineValue: 0,
     totalUpfrontValue: 0,
     fullyPaidUpfrontValue: 0,
+    partiallyPaidUpfrontValue: 0,
     closedRevenue: 0,
   };
   const followUpQueue: FollowUpQueue = {
@@ -338,6 +341,7 @@ export function buildLeadershipDashboardInsights({
     pipelineValue: [],
     upfrontCollectedLeads: [],
     fullyPaidLeads: [],
+    partiallyPaidLeads: [],
   };
 
   const normalizeStatus = (value: unknown) => {
@@ -447,6 +451,9 @@ export function buildLeadershipDashboardInsights({
       if (payment.status === 'fully_paid') {
         summary.fullyPaidUpfrontValue += payment.paymentPlan.upfrontAmount;
         details.fullyPaidLeads.push(detailRow);
+      } else if (payment.status === 'partially_paid') {
+        summary.partiallyPaidUpfrontValue += payment.paymentPlan.upfrontAmount;
+        details.partiallyPaidLeads.push(detailRow);
       }
     }
 
