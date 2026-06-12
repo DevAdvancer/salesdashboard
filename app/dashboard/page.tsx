@@ -30,6 +30,7 @@ import {
 } from "@/lib/utils/dashboard-insights";
 import { listAllPaymentInsightsAction, listClientPaymentSummariesAction, type PaymentInsightRecord } from "@/app/actions/client-payments";
 import { FinancialInsightsSection } from "@/components/dashboard/financial-insights-section";
+import { AttendanceSelfToggle } from "@/components/attendance-self-toggle";
 
 
 
@@ -437,9 +438,14 @@ function LegacyDashboardContent() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">Welcome back, {user.name}</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold">Dashboard</h1>
+          <p className="text-muted-foreground mt-1">Welcome back, {user.name}</p>
+        </div>
+        <div className="shrink-0 self-start">
+          <AttendanceSelfToggle />
+        </div>
       </div>
 
       {/* Metrics Cards */}

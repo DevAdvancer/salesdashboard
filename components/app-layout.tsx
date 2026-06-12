@@ -10,7 +10,6 @@ import {
   markAttendancePresenceAction,
 } from '@/app/actions/attendance';
 import { upsertAppwritePresence } from '@/lib/utils/appwrite-presences';
-import { AttendanceSelfToggle } from '@/components/attendance-self-toggle';
 
 const PUBLIC_ROUTES = ['/login', '/referral'];
 const ADMIN_ATTENDANCE_PING_COOLDOWN_MS = 30 * 60 * 1000;
@@ -25,7 +24,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
-  const showAttendanceToggle = pathname === '/dashboard';
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const lastRedirectPath = useRef<string | null>(null);
   const lastAttendancePingAt = useRef(0);
@@ -137,7 +135,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         isCollapsed={isSidebarCollapsed}
         onCollapsedChange={setIsSidebarCollapsed}
       />
-      {showAttendanceToggle ? <AttendanceSelfToggle /> : null}
       <main
         className={`flex-1 p-4 pt-16 transition-[margin] duration-300 sm:p-6 sm:pt-16 lg:p-8 lg:pt-8 ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}
         style={{ minWidth: 0 }}

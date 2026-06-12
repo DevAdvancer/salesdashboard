@@ -103,17 +103,15 @@ export function AttendanceSelfToggle() {
   };
 
   return (
-    <div className="fixed right-16 top-3 z-50 sm:right-20 lg:right-24">
-      <Button
-        type="button"
-        size="sm"
-        variant={view.variant}
-        disabled={view.disabled}
-        loading={loading}
-        className={view.className}
-        onClick={handleClick}>
-        {view.label}
-      </Button>
-    </div>
+    <Button
+      type="button"
+      size="sm"
+      variant={view.variant}
+      disabled={view.disabled}
+      loading={loading}
+      className={view.className}
+      onClick={handleClick}>
+      {view.label}
+    </Button>
   );
 }
