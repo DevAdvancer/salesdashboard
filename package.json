@@ -16,7 +16,9 @@
     "sync:appwrite": "tsx scripts/sync-appwrite-schema.ts",
     "sync:appwrite:dry": "tsx scripts/sync-appwrite-schema.ts --dry-run",
     "migrate:uk": "tsx scripts/migrate-uk-database.ts",
-    "migrate:uk:dry": "tsx scripts/migrate-uk-database.ts -- --dry-run"
+    "migrate:uk:dry": "tsx scripts/migrate-uk-database.ts -- --dry-run",
+    "migrate:not-interested": "tsx scripts/migrate-not-interested-leads.ts",
+    "migrate:not-interested:apply": "tsx scripts/migrate-not-interested-leads.ts -- --apply"
   },
   "dependencies": {
     "@azure/msal-browser": "^4.29.0",

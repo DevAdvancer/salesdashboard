@@ -347,4 +347,102 @@ describe('buildLeadershipDashboardInsights', () => {
       share: 75,
     });
   });
+
+  it('surfaces pending follow-ups for every status except Not Interested and Backed Out', () => {
+    // Work queue follow-ups should show ALL pending follow-ups EXCEPT for
+    // leads that are already terminal for the "needs action" flow
+    // (Not Interested / Backed Out). Every other status — New, Contacted,
+    // Interested, Pipeline / Follow up, Signed/Closure, etc. — must
+    // continue to surface per team.
+    const users = [
+      user({ $id: 'tl-1', name: 'Tara TL', role: 'team_lead', branchIds: ['branch-1'] }),
+      user({ $id: 'tl-2', name: 'Theo TL', role: 'team_lead', branchIds: ['branch-1'] }),
+      user({ $id: 'a-1', name: 'Alex Agent', role: 'agent', teamLeadId: 'tl-1', branchIds: ['branch-1'] }),
+      user({ $id: 'a-2', name: 'Avery Agent', role: 'agent', teamLeadId: 'tl-2', branchIds: ['branch-1'] }),
+    ];
+
+    const followUpToday = '2026-05-06T18:00:00.000Z'; // due today vs `now`
+    const followUpUpcoming = '2026-05-09T18:00:00.000Z'; // upcoming
+
+    const leads = [
+      // team 1: every non-excluded status should appear
+      lead({ $id: 't1-new', ownerId: 'a-1', branchId: 'branch-1', status: 'New', nextFollowUpAt: followUpToday }),
+      lead({ $id: 't1-contacted', ownerId: 'a-1', branchId: 'branch-1', status: 'Contacted', nextFollowUpAt: followUpToday }),
+      lead({ $id: 't1-interested', ownerId: 'a-1', branchId: 'branch-1', status: 'Interested', nextFollowUpAt: followUpToday }),
+      lead({ $id: 't1-pipeline', ownerId: 'a-1', branchId: 'branch-1', status: 'Pipeline / Follow up', nextFollowUpAt: followUpToday }),
+      lead({ $id: 't1-signed', ownerId: 'a-1', branchId: 'branch-1', status: 'Signed/Closure', nextFollowUpAt: followUpToday }),
+      lead({ $id: 't1-pipeline-variant', ownerId: 'a-1', branchId: 'branch-1', status: 'Pipeline', nextFollowUpAt: followUpToday }),
+      // team 2: same coverage
+      lead({ $id: 't2-new', ownerId: 'a-2', branchId: 'branch-1', status: 'New', nextFollowUpAt: followUpToday }),
+      lead({ $id: 't2-pipeline', ownerId: 'a-2', branchId: 'branch-1', status: 'Pipeline / Follow up', nextFollowUpAt: followUpToday }),
+      // excluded: must NOT appear in the follow-up queue
+      lead({ $id: 't1-not-interested', ownerId: 'a-1', branchId: 'branch-1', status: 'Not Interested', nextFollowUpAt: followUpToday }),
+      lead({ $id: 't1-not-interested-variant', ownerId: 'a-1', branchId: 'branch-1', status: 'Not-Interested', nextFollowUpAt: followUpToday }),
+      lead({ $id: 't2-backed-out', ownerId: 'a-2', branchId: 'branch-1', status: 'Backed Out', nextFollowUpAt: followUpToday }),
+      lead({ $id: 't1-backed-out-variant', ownerId: 'a-1', branchId: 'branch-1', status: 'Backedout', nextFollowUpAt: followUpToday }),
+      // upcoming
+      lead({ $id: 't1-pipeline-upcoming', ownerId: 'a-1', branchId: 'branch-1', status: 'Pipeline / Follow up', nextFollowUpAt: followUpUpcoming }),
+    ];
+
+    const insights = buildLeadershipDashboardInsights({
+      leads,
+      users,
+      branches,
+      now,
+    });
+
+    const allQueueIds = [
+      ...insights.followUpQueue.overdue.map((i) => i.leadId),
+      ...insights.followUpQueue.dueToday.map((i) => i.leadId),
+      ...insights.followUpQueue.upcoming.map((i) => i.leadId),
+    ];
+
+    // Every non-excluded lead with a pending follow-up must appear.
+    expect(allQueueIds).toEqual(
+      expect.arrayContaining([
+        't1-new',
+        't1-contacted',
+        't1-interested',
+        't1-pipeline',
+        't1-signed',
+        't1-pipeline-variant',
+        't2-new',
+        't2-pipeline',
+        't1-pipeline-upcoming',
+      ]),
+    );
+
+    // Excluded statuses must NOT appear in the follow-up queue.
+    expect(allQueueIds).not.toContain('t1-not-interested');
+    expect(allQueueIds).not.toContain('t1-not-interested-variant');
+    expect(allQueueIds).not.toContain('t2-backed-out');
+    expect(allQueueIds).not.toContain('t1-backed-out-variant');
+
+    // Overdue / due-today counts must also exclude the terminal statuses.
+    expect(insights.summary.overdueFollowUps).toBe(0);
+    expect(insights.summary.dueTodayFollowUps).toBe(
+      ['t1-new', 't1-contacted', 't1-interested', 't1-pipeline', 't1-signed', 't1-pipeline-variant', 't2-new', 't2-pipeline'].length,
+    );
+
+    // Per-team branchSummary counts reflect the same scope.
+    const branch = insights.branchSummaries.find((b) => b.branchId === 'branch-1');
+    expect(branch?.dueTodayFollowUps).toBe(insights.summary.dueTodayFollowUps);
+    expect(branch?.overdueFollowUps).toBe(0);
+
+    // Other insights (workload, statusBreakdown, branch summaries, summary
+    // activeLeads, etc.) must STILL include the excluded leads so other
+    // pages that consume them aren't shorted.
+    expect(insights.summary.activeLeads).toBe(leads.length);
+    // statusBreakdown normalizes "Backed Out" / "Backedout" to the
+    // canonical "Backed Out" (count 2). "Not Interested" / "Not-Interested"
+    // remain distinct because the local normalizeStatus only unifies the
+    // backed-out variants.
+    expect(insights.statusBreakdown).toEqual(
+      expect.arrayContaining([
+        { status: 'Not Interested', count: 1 },
+        { status: 'Not-Interested', count: 1 },
+        { status: 'Backed Out', count: 2 },
+      ]),
+    );
+  });
 });

@@ -1,4 +1,5 @@
 import type { Branch, Lead, User, ClientPaymentPlan } from '@/lib/types';
+import { normalizeLeadStatus } from '@/lib/utils/lead-status-workflow';
 
 export const STALE_LEAD_DAYS = 14;
 
@@ -346,6 +347,17 @@ export function buildLeadershipDashboardInsights({
     return text || 'Unknown';
   };
 
+  // Work-queue follow-ups skip leads that are already terminal for the
+  // "needs action" flow: Not Interested and Backed Out. These leads
+  // have either been re-queued into the unassigned pool (Not Interested)
+  // or closed out (Backed Out), so surfacing them in the follow-up
+  // queue would be noise. Active pipeline / signed-closure / contacted
+  // leads continue to appear.
+  const isExcludedFromFollowUpQueue = (lead: Lead) => {
+    const normalized = normalizeLeadStatus(lead.status);
+    return normalized === 'notinterested' || normalized === 'backedout';
+  };
+
   const paymentMap = new Map(paymentSummaries.map((p) => [p.leadId, p]));
   for (const currentUser of users) {
     if (currentUser.role === 'team_lead') roleCounts.teamLeads += 1;
@@ -367,6 +379,8 @@ export function buildLeadershipDashboardInsights({
     const hasPendingFollowUp = Boolean(followUpDate && !currentLead.isClosed && currentLead.followUpStatus !== 'completed');
     const followUpIsOverdue = Boolean(hasPendingFollowUp && followUpDate && followUpDate.getTime() < now.getTime() && !isSameLocalDay(followUpDate, now));
     const followUpIsDueToday = Boolean(hasPendingFollowUp && followUpDate && isSameLocalDay(followUpDate, now));
+    const inFollowUpScope = hasPendingFollowUp && !isExcludedFromFollowUpQueue(currentLead);
+    const followUpCountsTowardQueue = inFollowUpScope && (followUpIsOverdue || followUpIsDueToday);
     const status = normalizeStatus(currentLead.status);
     const branchId = typeof currentLead.branchId === "string" && currentLead.branchId ? currentLead.branchId : 'unassigned-branch';
     const branchSummary = branchMap.get(branchId);
@@ -457,11 +471,11 @@ export function buildLeadershipDashboardInsights({
       details.staleLeads.push(detailRow);
     }
 
-    if (followUpIsOverdue) {
+    if (followUpIsOverdue && followUpCountsTowardQueue) {
       summary.overdueFollowUps += 1;
     }
 
-    if (followUpIsDueToday) {
+    if (followUpIsDueToday && followUpCountsTowardQueue) {
       summary.dueTodayFollowUps += 1;
     }
 
@@ -479,10 +493,10 @@ export function buildLeadershipDashboardInsights({
       if (leadIsStale) {
         branchSummary.staleLeads += 1;
       }
-      if (followUpIsOverdue) {
+      if (followUpIsOverdue && followUpCountsTowardQueue) {
         branchSummary.overdueFollowUps += 1;
       }
-      if (followUpIsDueToday) {
+      if (followUpIsDueToday && followUpCountsTowardQueue) {
         branchSummary.dueTodayFollowUps += 1;
       }
     }
@@ -503,7 +517,7 @@ export function buildLeadershipDashboardInsights({
       workloadMap.set(workloadAssignee.$id, workload);
     }
 
-    if (hasPendingFollowUp && followUpDate) {
+    if (inFollowUpScope && followUpDate) {
       const queueItem: FollowUpQueueItem = {
         leadId: currentLead.$id,
         leadName: getLeadName(currentLead),
