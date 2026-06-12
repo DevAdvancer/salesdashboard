@@ -136,6 +136,7 @@ export async function updateBranch(branchId: string, input: UpdateBranchInput): 
 export async function deleteBranch(branchId: string): Promise<void> {
   try {
     // Check for assigned team leads
+    // Users use `branchIds` (array attribute) — see scripts/sync-appwrite-schema.ts
     const teamLeads = await databases.listDocuments(
       DATABASE_ID,
       COLLECTIONS.USERS,
@@ -149,12 +150,15 @@ export async function deleteBranch(branchId: string): Promise<void> {
       throw new Error('Cannot delete branch with assigned team leads');
     }
 
-    // Check for active leads
+    // Leads use `branchId` (singular string attribute) — see scripts/sync-appwrite-schema.ts
+    // Do NOT query `branchIds` here: that field does not exist on the leads collection
+    // and Appwrite would silently return 0 results, letting you delete a branch that
+    // still owns active leads.
     const leads = await databases.listDocuments(
       DATABASE_ID,
       COLLECTIONS.LEADS,
       [
-        Query.contains('branchIds', [branchId]),
+        Query.equal('branchId', branchId),
         Query.equal('isClosed', false),
       ]
     );
@@ -214,11 +218,14 @@ export function invalidateBranchesCache(): void {
  */
 export async function getBranchStats(branchId: string): Promise<{ leadCount: number }> {
   try {
+    // Leads use `branchId` (singular string attribute) — see scripts/sync-appwrite-schema.ts
+    // Do NOT query `branchIds` here: that field does not exist on the leads collection,
+    // and Appwrite would silently return 0, making the lead count column always read 0.
     const [leads] = await Promise.all([
       databases.listDocuments(
         DATABASE_ID,
         COLLECTIONS.LEADS,
-        [Query.contains('branchIds', [branchId])]
+        [Query.equal('branchId', branchId)]
       ),
     ]);
 

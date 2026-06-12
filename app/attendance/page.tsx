@@ -423,6 +423,7 @@ function AttendanceContent() {
                   <>
                     <Button
                       className="w-full sm:w-auto"
+                      loading={isSavingAll}
                       disabled={isSavingAll || isPastSelectedDate}
                       onClick={() => {
                         const actions = getModifiedActions("team_leads");
@@ -435,10 +436,11 @@ function AttendanceContent() {
                         }
                         setRemarkDialog({ bulkActions: actions, target: "team_leads" });
                       }}>
-                      {isSavingAll ? "Saving..." : "Save Team Leads"}
+                      Save Team Leads
                     </Button>
                     <Button
                       className="w-full sm:w-auto"
+                      loading={isSavingAll}
                       disabled={isSavingAll || isPastSelectedDate}
                       onClick={() => {
                         const actions = getModifiedActions("team_attendance");
@@ -451,7 +453,7 @@ function AttendanceContent() {
                         }
                         setRemarkDialog({ bulkActions: actions, target: "team_attendance" });
                       }}>
-                      {isSavingAll ? "Saving..." : "Save Team Attendance"}
+                      Save Team Attendance
                     </Button>
                   </>
                 )}
@@ -460,6 +462,7 @@ function AttendanceContent() {
               !teamLoading && (
                 <Button
                   className="w-full sm:w-auto"
+                  loading={isSavingAll}
                   disabled={isSavingAll || isPastSelectedDate}
                   onClick={() => {
                     const actions = getModifiedActions("all");
@@ -472,7 +475,7 @@ function AttendanceContent() {
                     }
                     setRemarkDialog({ bulkActions: actions, target: "all" });
                   }}>
-                  {isSavingAll ? "Saving..." : "Save All Changes"}
+                  Save All Changes
                 </Button>
               )
             )}
@@ -768,8 +771,9 @@ function AttendanceContent() {
               </Button>
               <Button
                 onClick={submitRemarkDialog}
+                loading={isSavingAll}
                 disabled={isSavingAll}>
-                {isSavingAll ? "Saving..." : "Save All"}
+                Save All
               </Button>
             </div>
           </div>

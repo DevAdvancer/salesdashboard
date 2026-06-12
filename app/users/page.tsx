@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, useEffect } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/contexts/auth-context";
+import { useConfirmDialog } from "@/lib/hooks/use-confirm-dialog";
 import {
   createAdminAction,
   createTeamLeadAction,
@@ -23,14 +24,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ProtectedRoute } from "@/components/protected-route";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { client, databases } from "@/lib/appwrite";
 
 export default function UserManagementPage() {
@@ -820,23 +813,21 @@ function UserManagementContent() {
                                             u.isActive === false,
                                           )
                                         }
+                                        loading={activeStatusUserId === u.$id}
                                         disabled={activeStatusUserId === u.$id}>
-                                        {activeStatusUserId === u.$id
-                                          ? "Updating..."
-                                          : u.isActive === false
-                                            ? "Reactivate"
-                                            : "Inactivate"}
+                                        {u.isActive === false
+                                          ? "Reactivate"
+                                          : "Inactivate"}
                                       </Button>
                                     )}
                                     <Button
                                       variant="outline"
                                       size="sm"
                                       onClick={() => handleDeleteUser(u)}
+                                      loading={deletingUserId === u.$id}
                                       disabled={deletingUserId === u.$id}
                                       className="text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-900 dark:hover:bg-red-950/20">
-                                      {deletingUserId === u.$id
-                                        ? "Deleting..."
-                                        : "Delete"}
+                                      Delete
                                     </Button>
                                   </>
                                 )}
@@ -1098,9 +1089,10 @@ function UserManagementContent() {
                   <Button
                     type="button"
                     onClick={handleCreate}
+                    loading={isCreating}
                     disabled={isCreating}
                     className="w-full sm:w-auto">
-                    {isCreating ? "Creating..." : createButtonLabel}
+                    {createButtonLabel}
                   </Button>
                 </div>
               </div>
@@ -1220,9 +1212,10 @@ function UserManagementContent() {
                   <Button
                     type="button"
                     onClick={handleUpdateUser}
+                    loading={isUpdating}
                     disabled={isUpdating}
                     className="w-full sm:w-auto">
-                    {isUpdating ? "Updating..." : "Update User"}
+                    Update User
                   </Button>
                 </div>
               </div>
@@ -1234,68 +1227,4 @@ function UserManagementContent() {
       <ConfirmDialog />
     </div>
   );
-}
-
-function useConfirmDialog() {
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState<string | null>(null);
-  const [confirmText, setConfirmText] = useState("Confirm");
-  const [cancelText, setCancelText] = useState("Cancel");
-  const [destructive, setDestructive] = useState(false);
-  const resolverRef = useRef<((value: boolean) => void) | null>(null);
-
-  const close = (value: boolean) => {
-    const resolver = resolverRef.current;
-    resolverRef.current = null;
-    setOpen(false);
-    resolver?.(value);
-  };
-
-  const confirm = (options: {
-    title: string;
-    description?: string;
-    confirmText?: string;
-    cancelText?: string;
-    destructive?: boolean;
-  }) => {
-    setTitle(options.title);
-    setDescription(options.description ?? null);
-    setConfirmText(options.confirmText ?? "Confirm");
-    setCancelText(options.cancelText ?? "Cancel");
-    setDestructive(Boolean(options.destructive));
-    setOpen(true);
-
-    return new Promise<boolean>((resolve) => {
-      resolverRef.current = resolve;
-    });
-  };
-
-  const ConfirmDialog = () => (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen && open) close(false);
-      }}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          {description && <DialogDescription>{description}</DialogDescription>}
-        </DialogHeader>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => close(false)}>
-            {cancelText}
-          </Button>
-          <Button
-            type="button"
-            variant={destructive ? "destructive" : "default"}
-            onClick={() => close(true)}>
-            {confirmText}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-
-  return { confirm, ConfirmDialog };
 }

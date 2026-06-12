@@ -24,6 +24,10 @@ function NotificationsContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
+  // Track per-notification "marking" state so that rapid clicks on the
+  // Mark read button only fire ONE markNotificationRead API call.
+  const [markingIds, setMarkingIds] = useState<Set<string>>(() => new Set());
+  const isMarking = (id: string) => markingIds.has(id);
 
   const loadNotifications = useCallback(async () => {
     if (!user) return;
@@ -46,12 +50,25 @@ function NotificationsContent() {
 
   const read = async (notificationId: string) => {
     if (!user) return;
+    // Guard: bail if this notification is already being marked read.
+    setMarkingIds((prev) => {
+      if (prev.has(notificationId)) return prev;
+      const next = new Set(prev);
+      next.add(notificationId);
+      return next;
+    });
     try {
       await markNotificationRead(user.$id, notificationId);
       await loadNotifications();
     } catch (error) {
       console.error('Failed to mark notification read:', error);
       setError('You are not authorized to update this notification.');
+    } finally {
+      setMarkingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(notificationId);
+        return next;
+      });
     }
   };
 
@@ -89,9 +106,10 @@ function NotificationsContent() {
               variant="outline"
               size="sm"
               onClick={markAllRead}
-              disabled={loading || markingAll || unreadCount === 0}
+              loading={markingAll}
+              disabled={loading || unreadCount === 0}
             >
-              {markingAll ? 'Marking...' : 'Mark All Read'}
+              Mark All Read
             </Button>
           </div>
         </CardHeader>
@@ -115,7 +133,12 @@ function NotificationsContent() {
                   </p>
                 </div>
                 {!notification.readAt && (
-                  <Button size="sm" variant="outline" onClick={() => read(notification.$id)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => read(notification.$id)}
+                    loading={isMarking(notification.$id)}
+                  >
                     Mark read
                   </Button>
                 )}

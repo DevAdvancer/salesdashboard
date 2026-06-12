@@ -282,6 +282,7 @@ function LeadRequestsContent() {
                             variant="outline"
                             size="sm"
                             onClick={() => void reject(request.$id)}
+                            loading={busyId === request.$id}
                             disabled={busyId === request.$id}
                           >
                             <X size={16} />

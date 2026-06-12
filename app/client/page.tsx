@@ -45,6 +45,10 @@ function HistoryContent() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
+  // Tracks which row's Copy button is mid-flight. Rapid clicks on the same
+  // row's Copy button otherwise fire multiple navigator.clipboard.writeText
+  // calls (and the audit-log writes that some installations also do).
+  const [copyingLeadId, setCopyingLeadId] = useState<string | null>(null);
   const [filters, setFilters] = useState<HistoryFilters>({});
   const [dateRange, setDateRange] = useState<{
     from?: string;
@@ -147,19 +151,26 @@ function HistoryContent() {
   };
 
   const handleCopy = async (lead: Lead) => {
-    const data = getLeadData(lead);
-    const payment = paymentByLeadId[lead.$id];
-    const status = payment?.status ?? "no_record";
-    const personalDetails = payment?.personalDetails ?? {};
-    let closedByName = closedByMap[lead.$id] || "";
-    if (!closedByName) {
-      closedByName = await fetchClosedByName(lead.$id);
-      if (closedByName) {
-        setClosedByMap((prev) => ({ ...prev, [lead.$id]: closedByName }));
+    // Single-click guard: bail if this row is already being copied.
+    if (copyingLeadId === lead.$id) return;
+    setCopyingLeadId(lead.$id);
+    try {
+      const data = getLeadData(lead);
+      const payment = paymentByLeadId[lead.$id];
+      const status = payment?.status ?? "no_record";
+      const personalDetails = payment?.personalDetails ?? {};
+      let closedByName = closedByMap[lead.$id] || "";
+      if (!closedByName) {
+        closedByName = await fetchClosedByName(lead.$id);
+        if (closedByName) {
+          setClosedByMap((prev) => ({ ...prev, [lead.$id]: closedByName }));
+        }
       }
+      const text = buildCopyText(lead, data, personalDetails, status, closedByName);
+      await navigator.clipboard.writeText(text);
+    } finally {
+      setCopyingLeadId(null);
     }
-    const text = buildCopyText(lead, data, personalDetails, status, closedByName);
-    await navigator.clipboard.writeText(text);
   };
 
   const filteredLeads = useMemo(() => {
@@ -565,6 +576,7 @@ function HistoryContent() {
                           <Button
                             variant="outline"
                             size="sm"
+                            loading={copyingLeadId === lead.$id}
                             onClick={async (e) => {
                               e.stopPropagation();
                               await handleCopy(lead);

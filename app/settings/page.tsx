@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Lock, Moon, ShieldCheck, Sun, UserRound } from 'lucide-react';
+import { Info, Lock, Moon, ShieldCheck, Sun, UserRound } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { updateOwnProfileAction } from '@/app/actions/profile';
 import { ProtectedRoute } from '@/components/protected-route';
@@ -22,6 +22,10 @@ function formatRoleLabel(role: UserRole) {
   if (role === 'operations') return 'Operations';
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
+
+// Bump this string every time you ship a new release. It is shown on the
+// Settings page so users can confirm which build they are running.
+const APP_VERSION = '3.5';
 
 export default function SettingsPage() {
   return (
@@ -323,6 +327,29 @@ function SettingsContent() {
                 Dark
               </button>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Info className="h-4 w-4" />
+              About
+            </CardTitle>
+            <CardDescription>Build information for the CRM you are running.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+              <span className="text-muted-foreground">Version</span>
+              <span
+                className="inline-flex items-center rounded-full bg-[var(--soft-cloud)] px-3 py-1 text-xs font-medium"
+                aria-label={`Current version ${APP_VERSION}`}>
+                v{APP_VERSION}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              You are currently running version {APP_VERSION} of SalesHub CRM.
+            </p>
           </CardContent>
         </Card>
       </div>

@@ -44,6 +44,14 @@ function ReviewQueueContent() {
   const [saving, setSaving] = useState(false);
   const [loadingItems, setLoadingItems] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Track per-item status-update in-flight to disable the action buttons while a
+  // status change is being persisted. Keyed by `${item.$id}::${status}` so that
+  // a pending Approve doesn't also block a subsequent Reject.
+  const [pendingStatusUpdates, setPendingStatusUpdates] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const isStatusUpdatePending = (itemId: string, status: string) =>
+    pendingStatusUpdates.has(`${itemId}::${status}`);
   const canResolve = isAdmin || isTeamLead;
   const selectedTarget = findReviewTargetOption(targetOptions, targetInput);
 
@@ -131,6 +139,16 @@ function ReviewQueueContent() {
 
   const updateStatus = async (itemId: string, status: string) => {
     if (!user) return;
+    const key = `${itemId}::${status}`;
+    // Guard against double-click: bail out if THIS (item, status) is already in flight.
+    // Note: we intentionally key by both id AND status so a Reject can still be
+    // clicked while an Approve is pending, but the same button is blocked.
+    setPendingStatusUpdates((prev) => {
+      if (prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
     try {
       await updateReviewQueueStatus(user.$id, itemId, status);
       await loadItems();
@@ -140,6 +158,12 @@ function ReviewQueueContent() {
         title: 'Error',
         description: 'You are not authorized to update this review item.',
         variant: 'destructive',
+      });
+    } finally {
+      setPendingStatusUpdates((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
       });
     }
   };
@@ -207,7 +231,13 @@ function ReviewQueueContent() {
               <Label htmlFor="reason">Reason</Label>
               <Textarea id="reason" value={reason} onChange={(e) => setReason(e.target.value)} />
             </div>
-            <Button onClick={submitRequest} disabled={saving || !targetInput.trim()}>{saving ? 'Creating...' : 'Create Request'}</Button>
+            <Button
+              onClick={submitRequest}
+              loading={saving}
+              disabled={!targetInput.trim()}
+            >
+              Create Request
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -235,9 +265,30 @@ function ReviewQueueContent() {
                 </div>
                 {canResolve && (
                   <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => updateStatus(item.$id, 'approved')}>Approve</Button>
-                    <Button size="sm" variant="outline" onClick={() => updateStatus(item.$id, 'rejected')}>Reject</Button>
-                    <Button size="sm" variant="outline" onClick={() => updateStatus(item.$id, 'resolved')}>Resolve</Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => updateStatus(item.$id, 'approved')}
+                      loading={isStatusUpdatePending(item.$id, 'approved')}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => updateStatus(item.$id, 'rejected')}
+                      loading={isStatusUpdatePending(item.$id, 'rejected')}
+                    >
+                      Reject
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => updateStatus(item.$id, 'resolved')}
+                      loading={isStatusUpdatePending(item.$id, 'resolved')}
+                    >
+                      Resolve
+                    </Button>
                   </div>
                 )}
               </div>

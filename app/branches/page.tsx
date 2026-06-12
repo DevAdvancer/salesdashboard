@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import {
   listBranches,
@@ -24,18 +24,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ProtectedRoute } from "@/components/protected-route";
+import { useConfirmDialog } from "@/lib/hooks/use-confirm-dialog";
 
 const branchNameSchema = z.object({
   name: z
@@ -63,13 +56,20 @@ function BranchManagementContent() {
   const [branches, setBranches] = useState<BranchWithStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Per-row delete in-flight state. Prevents rapid double-clicks on the
+  // Delete button from firing two deleteBranch() calls.
+  const [deletingBranchId, setDeletingBranchId] = useState<string | null>(null);
+  // Per-row active/inactive toggle in-flight state.
+  const [togglingBranchId, setTogglingBranchId] = useState<string | null>(null);
+  // Per-row team-lead removal in-flight state.
+  const [removingTeamLeadId, setRemovingTeamLeadId] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { confirm, ConfirmDialog } = useConfirmDialog();
 
-  // Manager state
-  const [branchManagers, setBranchManagers] = useState<Record<string, User[]>>(
+  // Team Leads grouped by branch id
+  const [branchTeamLeads, setBranchTeamLeads] = useState<Record<string, User[]>>(
     {},
   );
 
@@ -125,7 +125,7 @@ function BranchManagementContent() {
             }
           }),
         );
-        setBranchManagers(teamLeadsMap);
+        setBranchTeamLeads(teamLeadsMap);
       } catch (err: any) {
         console.error("Error fetching team lead data:", err);
       }
@@ -179,6 +179,9 @@ function BranchManagementContent() {
   };
 
   const handleDelete = async (branchId: string) => {
+    // Single-click guard: the confirm dialog already opens, but rapid double
+    // clicks on the row's Delete button still queue up a second invocation.
+    if (deletingBranchId) return;
     const confirmed = await confirm({
       title: "Delete branch?",
       description: "This will permanently delete the branch.",
@@ -187,6 +190,7 @@ function BranchManagementContent() {
       destructive: true,
     });
     if (!confirmed) return;
+    setDeletingBranchId(branchId);
     try {
       setError(null);
       await deleteBranch(branchId);
@@ -194,10 +198,16 @@ function BranchManagementContent() {
     } catch (err: any) {
       console.error("Error deleting branch:", err);
       setError(err.message || "Failed to delete branch");
+    } finally {
+      setDeletingBranchId(null);
     }
   };
 
   const handleToggleStatus = async (branch: Branch) => {
+    // Single-click guard: avoid duplicate updateBranch() calls from rapid clicks
+    // on the same row's status pill.
+    if (togglingBranchId) return;
+    setTogglingBranchId(branch.$id);
     try {
       setError(null);
       await updateBranch(branch.$id, { isActive: !branch.isActive });
@@ -205,6 +215,8 @@ function BranchManagementContent() {
     } catch (err: any) {
       console.error("Error toggling branch status:", err);
       setError(err.message || "Failed to update branch status");
+    } finally {
+      setTogglingBranchId(null);
     }
   };
 
@@ -264,7 +276,7 @@ function BranchManagementContent() {
                       Status
                     </th>
                     <th className="text-left py-3 px-4 font-semibold">
-                      Managers
+                      Team Leads
                     </th>
                     <th className="text-left py-3 px-4 font-semibold">Leads</th>
                     <th className="text-left py-3 px-4 font-semibold">
@@ -281,19 +293,27 @@ function BranchManagementContent() {
                       <td className="py-3 px-4">
                         <button
                           onClick={() => !isMonitor && handleToggleStatus(branch)}
-                          disabled={isMonitor}
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isMonitor ? 'cursor-default' : 'cursor-pointer'} ${
+                          disabled={isMonitor || togglingBranchId === branch.$id}
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium transition-opacity ${
+                            isMonitor || togglingBranchId === branch.$id
+                              ? 'cursor-default opacity-60'
+                              : 'cursor-pointer hover:opacity-80'
+                          } ${
                             branch.isActive
                               ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
                               : "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
                           }`}>
-                          {branch.isActive ? "Active" : "Inactive"}
+                          {togglingBranchId === branch.$id
+                            ? "Updating…"
+                            : branch.isActive
+                              ? "Active"
+                              : "Inactive"}
                         </button>
                       </td>
                       <td className="py-3 px-4">
-                        {branchManagers[branch.$id]?.length > 0 ? (
+                        {branchTeamLeads[branch.$id]?.length > 0 ? (
                           <div className="space-y-1">
-                            {branchManagers[branch.$id].map((teamLead) => (
+                            {branchTeamLeads[branch.$id].map((teamLead) => (
                               <div
                                 key={teamLead.$id}
                                 className="flex items-center gap-2 text-sm">
@@ -301,6 +321,12 @@ function BranchManagementContent() {
                                 {isAdmin && (
                                   <button
                                     onClick={async () => {
+                                      // Single-click guard for the team-lead
+                                      // remove (✕) button. Re-running while the
+                                      // first removal is in flight is wasteful.
+                                      if (removingTeamLeadId) return;
+                                      const removalKey = `${branch.$id}::${teamLead.$id}`;
+                                      setRemovingTeamLeadId(removalKey);
                                       try {
                                         await removeUserFromBranch(
                                           teamLead.$id,
@@ -312,11 +338,20 @@ function BranchManagementContent() {
                                           err.message ||
                                             "Failed to remove team lead",
                                         );
+                                      } finally {
+                                        setRemovingTeamLeadId(null);
                                       }
                                     }}
-                                    className="text-red-500 hover:text-red-700 text-xs"
+                                    disabled={
+                                      removingTeamLeadId ===
+                                      `${branch.$id}::${teamLead.$id}`
+                                    }
+                                    className="text-red-500 hover:text-red-700 text-xs disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
                                     title="Remove from this branch">
-                                    ✕
+                                    {removingTeamLeadId ===
+                                    `${branch.$id}::${teamLead.$id}`
+                                      ? "…"
+                                      : "✕"}
                                   </button>
                                 )}
                               </div>
@@ -341,6 +376,7 @@ function BranchManagementContent() {
                             <Button
                               variant="outline"
                               size="sm"
+                              loading={deletingBranchId === branch.$id}
                               onClick={() => handleDelete(branch.$id)}
                               className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
                               Delete
@@ -398,9 +434,10 @@ function BranchManagementContent() {
                   </Button>
                   <Button
                     type="submit"
+                    loading={isSubmitting}
                     disabled={isSubmitting}
                     className="w-full sm:w-auto">
-                    {isSubmitting ? "Creating..." : "Create Branch"}
+                    Create Branch
                   </Button>
                 </div>
               </form>
@@ -450,9 +487,10 @@ function BranchManagementContent() {
                   </Button>
                   <Button
                     type="submit"
+                    loading={isSubmitting}
                     disabled={isSubmitting}
                     className="w-full sm:w-auto">
-                    {isSubmitting ? "Saving..." : "Save Changes"}
+                    Save Changes
                   </Button>
                 </div>
               </form>
@@ -464,68 +502,4 @@ function BranchManagementContent() {
       <ConfirmDialog />
     </div>
   );
-}
-
-function useConfirmDialog() {
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState<string | null>(null);
-  const [confirmText, setConfirmText] = useState("Confirm");
-  const [cancelText, setCancelText] = useState("Cancel");
-  const [destructive, setDestructive] = useState(false);
-  const resolverRef = useRef<((value: boolean) => void) | null>(null);
-
-  const close = (value: boolean) => {
-    const resolver = resolverRef.current;
-    resolverRef.current = null;
-    setOpen(false);
-    resolver?.(value);
-  };
-
-  const confirm = (options: {
-    title: string;
-    description?: string;
-    confirmText?: string;
-    cancelText?: string;
-    destructive?: boolean;
-  }) => {
-    setTitle(options.title);
-    setDescription(options.description ?? null);
-    setConfirmText(options.confirmText ?? "Confirm");
-    setCancelText(options.cancelText ?? "Cancel");
-    setDestructive(Boolean(options.destructive));
-    setOpen(true);
-
-    return new Promise<boolean>((resolve) => {
-      resolverRef.current = resolve;
-    });
-  };
-
-  const ConfirmDialog = () => (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen && open) close(false);
-      }}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          {description && <DialogDescription>{description}</DialogDescription>}
-        </DialogHeader>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => close(false)}>
-            {cancelText}
-          </Button>
-          <Button
-            type="button"
-            variant={destructive ? "destructive" : "default"}
-            onClick={() => close(true)}>
-            {confirmText}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-
-  return { confirm, ConfirmDialog };
 }

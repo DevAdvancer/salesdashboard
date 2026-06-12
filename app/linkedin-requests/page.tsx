@@ -589,12 +589,13 @@ function LinkedinRequestsContent() {
                 <Button
                   variant="outline"
                   onClick={onCheck}
+                  loading={checking}
                   disabled={checking || !selectedAccount}>
-                  {checking ? "Checking..." : "Check"}
+                  Check
                 </Button>
                 {isDuplicate === false && (
-                  <Button onClick={onAdd} disabled={adding}>
-                    {adding ? "Adding..." : "Add"}
+                  <Button onClick={onAdd} loading={adding} disabled={adding}>
+                    Add
                   </Button>
                 )}
                 {isDuplicate === null && (

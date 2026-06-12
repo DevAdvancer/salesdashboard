@@ -162,6 +162,9 @@ function LeadDetailContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  // Tracks when the assignment <select> is mid-flight so rapid changes don't
+  // fire multiple assignLead() calls before the lead data has been reloaded.
+  const [isAssigning, setIsAssigning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | null>>({});
   const [showCloseDialog, setShowCloseDialog] = useState(false);
@@ -578,7 +581,11 @@ function LeadDetailContent() {
     if (user.role === "operations") return;
     if (user.role === "agent" || user.role === "lead_generation") return;
     if (user.role === "monitor" && lead.ownerId !== user.$id) return;
-
+    // Single-click guard: the assignment <select> fires onChange synchronously
+    // and re-fires on every keystroke when the user reopens it; coalesce
+    // concurrent calls so only one assignLead() request goes out at a time.
+    if (isAssigning) return;
+    setIsAssigning(true);
     try {
       await assignLead(leadId, agentId, user.$id, user.name);
       toast({
@@ -593,6 +600,8 @@ function LeadDetailContent() {
         description: getErrorMessage(err, "Failed to assign lead"),
         variant: "destructive",
       });
+    } finally {
+      setIsAssigning(false);
     }
   };
 
@@ -1128,7 +1137,7 @@ function LeadDetailContent() {
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     value={lead.assignedToId || ""}
                     onChange={(e) => handleAssignAgent(e.target.value)}
-                    disabled={lead.isClosed}>
+                    disabled={lead.isClosed || isAssigning}>
                     <option value="">Unassigned</option>
                     {agents.map((agent) => (
                       <option key={agent.$id} value={agent.$id}>
