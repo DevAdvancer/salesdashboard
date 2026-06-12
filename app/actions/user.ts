@@ -453,9 +453,10 @@ export async function updateUserAction(input: {
     role?: UserRole;
     teamLeadId?: string | null;
     branchIds?: string[];
+    email?: string;
     currentUserId: string;
 }) {
-    const { userId, role, teamLeadId, branchIds, currentUserId } = input;
+    const { userId, role, teamLeadId, branchIds, email, currentUserId } = input;
 
     await assertAuthenticatedUserId(currentUserId);
 
@@ -473,10 +474,29 @@ export async function updateUserAction(input: {
         throw new Error("Permission denied");
     }
 
-    const { databases } = await createAdminClient();
+    const { users, databases } = await createAdminClient();
 
     try {
         const updates: any = {};
+        let newAuthEmail: string | null = null;
+
+        if (email && email !== targetUserDoc.email) {
+            if (!isCallerAdmin) {
+                throw new Error("Only admins or developers can update email addresses.");
+            }
+
+            const normalizedNewEmail = normalizeEmail(email);
+            const existingAuth = await users.list([
+                Query.equal('email', normalizedNewEmail)
+            ]);
+
+            if (existingAuth.total > 0 && existingAuth.users[0].$id !== userId) {
+                throw new Error("A user with this email already exists");
+            }
+
+            updates.email = normalizedNewEmail;
+            newAuthEmail = normalizedNewEmail;
+        }
 
         if (role && role !== targetUserDoc.role) {
              if (!isCallerAdmin) {
@@ -510,6 +530,11 @@ export async function updateUserAction(input: {
         }
 
         if (Object.keys(updates).length === 0) return { success: true };
+
+        // Update auth user if email changed
+        if (newAuthEmail) {
+            await users.updateEmail(userId, newAuthEmail);
+        }
 
         let permissions: string[] | undefined;
 

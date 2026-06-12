@@ -66,6 +66,7 @@ function UserManagementContent() {
     null,
   );
   const [editRole, setEditRole] = useState<UserRole | null>(null); // Only for Edit
+  const [editEmail, setEditEmail] = useState(""); // Only for Edit
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [availableTeamLeads, setAvailableTeamLeads] = useState<User[]>([]);
 
@@ -356,6 +357,7 @@ function UserManagementContent() {
     setSelectedBranchIds(userToEdit.branchIds || []);
     setSelectedTeamLeadId(userToEdit.teamLeadId || null);
     setEditRole(userToEdit.role);
+    setEditEmail(userToEdit.email || "");
     setError(null);
   }, []);
 
@@ -379,6 +381,16 @@ function UserManagementContent() {
         return;
       }
 
+      // Only send email update when the value actually changed and the caller
+      // is an admin/developer (server action enforces this as well).
+      const trimmedEmail = editEmail.trim();
+      const emailChanged = trimmedEmail && trimmedEmail !== editingUser.email;
+      if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+        setError("Invalid email address");
+        setIsUpdating(false);
+        return;
+      }
+
       await updateUserAction({
         userId: editingUser.$id,
         role,
@@ -387,11 +399,13 @@ function UserManagementContent() {
             ? selectedTeamLeadId
             : null,
         branchIds: selectedBranchIds,
+        email: emailChanged ? trimmedEmail : undefined,
         currentUserId: user.$id,
       });
 
       setEditingUser(null);
       setSelectedBranchIds([]);
+      setEditEmail("");
       invalidateUsersCache();
       await fetchUsers();
     } catch (err: any) {
@@ -404,6 +418,7 @@ function UserManagementContent() {
     editingUser,
     user,
     editRole,
+    editEmail,
     selectedTeamLeadId,
     selectedBranchIds,
     fetchUsers,
@@ -1134,6 +1149,24 @@ function UserManagementContent() {
                   </div>
                 )}
 
+                {/* Email (admin/developer only) — used as the Appwrite auth login email */}
+                {(isAdmin || isDeveloper) && (
+                  <div>
+                    <Label htmlFor="edit-email">Email (Login ID)</Label>
+                    <Input
+                      id="edit-email"
+                      type="email"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                      placeholder="user@example.com"
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Changing this updates the user's Appwrite login email.
+                    </p>
+                  </div>
+                )}
+
                 {/* Team Lead Selection */}
                 {isAdmin &&
                   (editingUser.role === "agent" ||
@@ -1203,6 +1236,7 @@ function UserManagementContent() {
                     onClick={() => {
                       setEditingUser(null);
                       setSelectedBranchIds([]);
+                      setEditEmail("");
                       setError(null);
                     }}
                     disabled={isUpdating}
