@@ -27,6 +27,10 @@ function isAttendanceAdminLikeReadRole(role: User["role"]) {
   return role === "admin" || role === "developer" || role === "monitor" || role === "operations";
 }
 
+function isAttendanceAdminWriteRole(role: User["role"]) {
+  return role === "admin" || role === "operations";
+}
+
 function getEtHour(now: Date) {
   const hourText = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
@@ -429,7 +433,7 @@ export async function markAttendancePresentByTeamLeadAction(input: {
 }) {
   await assertAuthenticatedUserId(input.currentUserId);
   const actor = await getAuthenticatedUserDoc();
-  if (actor.role !== "team_lead" && actor.role !== "admin") {
+  if (actor.role !== "team_lead" && !isAttendanceAdminWriteRole(actor.role)) {
     throw new Error("Unauthorized");
   }
 
@@ -442,8 +446,8 @@ export async function markAttendancePresentByTeamLeadAction(input: {
   const todayKey = getEtDateKey(now);
   const dateKey = input.dateKey ? assertDateKey(input.dateKey) : todayKey;
   const isPastDate = dateKey < todayKey;
-  if (isPastDate && actor.role !== "admin") {
-    throw new Error("Only admin can update past attendance");
+  if (isPastDate && !isAttendanceAdminWriteRole(actor.role)) {
+    throw new Error("Only admin or operations can update past attendance");
   }
   const { databases } = await createAdminClient();
 
@@ -503,7 +507,7 @@ export async function markAttendancePresentByTeamLeadAction(input: {
       absentNotifiedAt: null,
       adminEscalatedAt: null,
       presentWithDelegateFlag: shouldFlagPresentWithDelegate,
-      ...(actor.role === "admin"
+      ...(isAttendanceAdminWriteRole(actor.role)
         ? { delegateUserId: null, assignedById: null, assignedAt: null }
         : {}),
     },
@@ -801,7 +805,7 @@ export async function assignAttendanceDelegateAction(input: {
 }) {
   await assertAuthenticatedUserId(input.currentUserId);
   const user = await getAuthenticatedUserDoc();
-  if (user.role !== "team_lead" && user.role !== "admin") {
+  if (user.role !== "team_lead" && !isAttendanceAdminWriteRole(user.role)) {
     throw new Error("Unauthorized");
   }
 
@@ -814,8 +818,8 @@ export async function assignAttendanceDelegateAction(input: {
   const todayKey = getEtDateKey(now);
   const dateKey = input.dateKey ? assertDateKey(input.dateKey) : todayKey;
   const isPastDate = dateKey < todayKey;
-  if (isPastDate && user.role !== "admin") {
-    throw new Error("Only admin can update past attendance");
+  if (isPastDate && !isAttendanceAdminWriteRole(user.role)) {
+    throw new Error("Only admin or operations can update past attendance");
   }
   const { databases } = await createAdminClient();
 
@@ -899,7 +903,7 @@ export async function assignAttendanceDelegateAction(input: {
   }
 
   if (absentUser.role === "team_lead") {
-    if (user.role !== "admin") {
+    if (!isAttendanceAdminWriteRole(user.role)) {
       throw new Error("Unauthorized");
     }
 
@@ -1036,7 +1040,7 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
 }) {
   await assertAuthenticatedUserId(input.currentUserId);
   const user = await getAuthenticatedUserDoc();
-  if (user.role !== "admin") {
+  if (!isAttendanceAdminWriteRole(user.role)) {
     return { dateKey: getEtDateKey(new Date()), teamLeadAbsentNotified: 0, agentAbsentNotified: 0, agentEscalated: 0 };
   }
 
@@ -1050,7 +1054,7 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
   const { databases } = await createAdminClient();
 
   const adminUsersResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
-    Query.equal("role", "admin"),
+    Query.equal("role", ["admin", "operations"]),
     Query.limit(2000),
   ]);
   const adminUsers = (adminUsersResponse.documents as unknown as User[]).filter(

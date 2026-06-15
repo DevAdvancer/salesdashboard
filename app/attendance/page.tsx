@@ -86,13 +86,15 @@ function AttendanceContent() {
   const isPastSelectedDate =
     Boolean(selectedDateKey) &&
     selectedDateKey < todayKey &&
-    user?.role !== "admin";
+    user?.role !== "admin" &&
+    user?.role !== "operations";
   const isAdminLikeAttendance =
     user?.role === "admin" ||
     user?.role === "developer" ||
     user?.role === "monitor" ||
     user?.role === "operations";
-  const canEditAttendance = user?.role === "admin" || user?.role === "team_lead";
+  const canEditAttendance =
+    user?.role === "admin" || user?.role === "operations" || user?.role === "team_lead";
 
   const loadOverview = useCallback(async () => {
     if (!user) return;
@@ -133,7 +135,7 @@ function AttendanceContent() {
           return next;
         });
       } else if (isAdminLikeAttendance) {
-        if (user.role === "admin") {
+        if (user.role === "admin" || user.role === "operations") {
           void checkAndNotifyAdminAttendanceEscalationsAction({
             currentUserId: user.$id,
           }).catch(() => {});

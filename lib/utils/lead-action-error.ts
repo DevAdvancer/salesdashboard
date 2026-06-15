@@ -10,6 +10,7 @@ export interface ParsedLeadActionError {
   code: LeadActionErrorCode;
   field?: string;
   message: string;
+  meta?: Record<string, unknown>;
   isLeadActionError: true;
 }
 
@@ -36,6 +37,11 @@ export function parseLeadActionError(
       typeof e.message === 'string' && e.message.length > 0
         ? e.message
         : 'An error occurred',
+    meta: isRecord(e.meta) ? e.meta : undefined,
     isLeadActionError: true,
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

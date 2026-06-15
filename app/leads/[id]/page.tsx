@@ -62,6 +62,7 @@ import {
 } from "@/lib/utils/lead-linkedin-field";
 import { getErrorMessage } from "@/lib/utils";
 import { parseLeadActionError } from "@/lib/utils/lead-action-error";
+import { shouldShowRequiredAsterisk } from "@/lib/utils/required-lead-fields";
 
 function isBackoutStatus(value: unknown) {
   const text = typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -412,6 +413,31 @@ function LeadDetailContent() {
     } catch (err: unknown) {
       console.error("Error saving lead:", err);
       const parsed = parseLeadActionError(err);
+      if (parsed && parsed.code === "MISSING_REQUIRED_FIELD") {
+        const missingFields = (
+          parsed.meta as { missingFields?: Array<{ key: string; label: string }> } | undefined
+        )?.missingFields;
+        if (missingFields && missingFields.length > 1) {
+          const labels = missingFields.map((m) => m.label);
+          setFieldErrors((prev) => {
+            const next = { ...prev };
+            for (const m of missingFields) {
+              next[m.key] = `${m.label} is required.`;
+            }
+            return next;
+          });
+          toast({
+            title: "Missing required fields",
+            description: `Please fill: ${labels.join(", ")}.`,
+            variant: "destructive",
+          });
+          return;
+        }
+        if (parsed.field) {
+          setFieldErrors((prev) => ({ ...prev, [parsed.field!]: parsed.message }));
+          return;
+        }
+      }
       if (parsed && parsed.field) {
         setFieldErrors((prev) => ({ ...prev, [parsed.field!]: parsed.message }));
         return;
@@ -1071,7 +1097,7 @@ function LeadDetailContent() {
                   <div key={field.id}>
                     <Label htmlFor={field.key}>
                       {field.label}
-                      {field.required && (
+                      {shouldShowRequiredAsterisk(field.key, field.required) && (
                         <span className="text-red-500 ml-1">*</span>
                       )}
                     </Label>

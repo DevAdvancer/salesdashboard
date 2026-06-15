@@ -16,6 +16,7 @@ import {
   isAllowedLeadStatusTransition,
   normalizeLeadStatus,
 } from "@/lib/utils/lead-status-workflow";
+import { REQUIRED_LEAD_FIELD_KEYS } from "@/lib/utils/required-lead-fields";
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const LEADS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_LEADS_COLLECTION_ID!;
@@ -92,15 +93,28 @@ function shouldIgnoreLinkedinDuplicate(
 }
 
 function assertRequiredLeadData(data: LeadData) {
-    for (const [key, label] of Object.entries(REQUIRED_LEAD_FIELD_LABELS)) {
+    const missing: Array<{ key: string; label: string }> = [];
+    for (const key of REQUIRED_LEAD_FIELD_KEYS) {
         if (Object.prototype.hasOwnProperty.call(data, key) && isBlankLeadValue(data[key])) {
-            throw new LeadActionError(
-                'MISSING_REQUIRED_FIELD',
-                `${label} is required.`,
-                { field: key },
-            );
+            missing.push({ key, label: REQUIRED_LEAD_FIELD_LABELS[key] ?? key });
         }
     }
+    if (missing.length === 0) return;
+
+    if (missing.length === 1) {
+        throw new LeadActionError(
+            'MISSING_REQUIRED_FIELD',
+            `${missing[0].label} is required.`,
+            { field: missing[0].key },
+        );
+    }
+
+    const missingLabels = missing.map((m) => m.label);
+    const summary = `${missingLabels.length} required fields are missing: ${missingLabels.join(', ')}.`;
+    throw new LeadActionError('MISSING_REQUIRED_FIELD', summary, {
+        field: missing[0].key,
+        meta: { missingFields: missing, missingLabels },
+    });
 }
 
 async function validateLeadUniqueness(

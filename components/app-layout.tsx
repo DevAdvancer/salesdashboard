@@ -54,7 +54,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user || isPublicRoute) return;
-    if (user.role !== 'admin') return;
+    if (user.role !== 'admin' && user.role !== 'operations') return;
 
     const now = Date.now();
     const storedLastPingAt = Number(

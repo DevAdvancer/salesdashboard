@@ -194,6 +194,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isLeadGeneration = user?.role === 'lead_generation';
   const isMonitor = user?.role === 'monitor';
   const isOperations = user?.role === 'operations';
+  const canManageAttendance = user?.role === 'admin' || user?.role === 'operations';
 
   const value = useMemo<AuthContextType>(
     () => ({
@@ -205,6 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isLeadGeneration,
       isMonitor,
       isOperations,
+      canManageAttendance,
       loading,
       login,
       logout,
@@ -219,6 +221,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isLeadGeneration,
       isMonitor,
       isOperations,
+      canManageAttendance,
       loading,
       login,
       logout,

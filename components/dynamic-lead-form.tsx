@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { LeadAssignmentDropdown } from "@/components/lead-assignment-dropdown";
+import { shouldShowRequiredAsterisk } from "@/lib/utils/required-lead-fields";
 
 interface DynamicLeadFormProps {
   formConfig: FormField[];
@@ -204,7 +205,9 @@ export function DynamicLeadForm({
           <div key={field.id} className="space-y-2">
             <Label htmlFor={field.key}>
               {field.label}
-              {field.required && <span className="text-red-500 ml-1">*</span>}
+              {shouldShowRequiredAsterisk(field.key, field.required) && (
+                <span className="text-red-500 ml-1">*</span>
+              )}
             </Label>
             <Input
               id={field.key}
@@ -232,7 +235,9 @@ export function DynamicLeadForm({
           <div key={field.id} className="space-y-2">
             <Label htmlFor={field.key}>
               {field.label}
-              {field.required && <span className="text-red-500 ml-1">*</span>}
+              {shouldShowRequiredAsterisk(field.key, field.required) && (
+                <span className="text-red-500 ml-1">*</span>
+              )}
             </Label>
             <textarea
               id={field.key}
@@ -261,7 +266,9 @@ export function DynamicLeadForm({
           <div key={field.id} className="space-y-2">
             <Label htmlFor={field.key}>
               {field.label}
-              {field.required && <span className="text-red-500 ml-1">*</span>}
+              {shouldShowRequiredAsterisk(field.key, field.required) && (
+                <span className="text-red-500 ml-1">*</span>
+              )}
             </Label>
             <select
               id={field.key}
@@ -294,7 +301,9 @@ export function DynamicLeadForm({
           <div key={field.id} className="space-y-2">
             <Label>
               {field.label}
-              {field.required && <span className="text-red-500 ml-1">*</span>}
+              {shouldShowRequiredAsterisk(field.key, field.required) && (
+                <span className="text-red-500 ml-1">*</span>
+              )}
             </Label>
             <div className="space-y-2">
               {checklistOptions?.map((option, index) => (

@@ -353,6 +353,31 @@ function LeadGenerationNewLeadContent() {
       console.error("Error generating lead:", err);
       const parsed = parseLeadActionError(err);
       if (parsed) {
+        if (parsed.code === "MISSING_REQUIRED_FIELD") {
+          const missingFields = (
+            parsed.meta as { missingFields?: Array<{ key: string; label: string }> } | undefined
+          )?.missingFields;
+          if (missingFields && missingFields.length > 1) {
+            const labels = missingFields.map((m) => m.label);
+            setFieldErrors((prev) => {
+              const next = { ...prev };
+              for (const m of missingFields) {
+                next[m.key] = `${m.label} is required.`;
+              }
+              return next;
+            });
+            toast({
+              title: "Missing required fields",
+              description: `Please fill: ${labels.join(", ")}.`,
+              variant: "destructive",
+            });
+            return;
+          }
+          if (parsed.field) {
+            setFieldErrors((prev) => ({ ...prev, [parsed.field!]: parsed.message }));
+            return;
+          }
+        }
         if (parsed.code === "DUPLICATE_FIELD" && parsed.field) {
           setDuplicateError(parsed.message);
           setFieldErrors((prev) => ({ ...prev, [parsed.field!]: parsed.message }));
@@ -958,6 +983,31 @@ function LegacyNewLeadContent() {
       console.error("Error creating lead:", err);
       const parsed = parseLeadActionError(err);
       if (parsed) {
+        if (parsed.code === "MISSING_REQUIRED_FIELD") {
+          const missingFields = (
+            parsed.meta as { missingFields?: Array<{ key: string; label: string }> } | undefined
+          )?.missingFields;
+          if (missingFields && missingFields.length > 1) {
+            const labels = missingFields.map((m) => m.label);
+            setExternalErrors((prev) => {
+              const next = { ...prev };
+              for (const m of missingFields) {
+                next[m.key] = `${m.label} is required.`;
+              }
+              return next;
+            });
+            toast({
+              title: "Missing required fields",
+              description: `Please fill: ${labels.join(", ")}.`,
+              variant: "destructive",
+            });
+            return;
+          }
+          if (parsed.field) {
+            setExternalErrors((prev) => ({ ...prev, [parsed.field!]: parsed.message }));
+            return;
+          }
+        }
         if (parsed.code === "DUPLICATE_FIELD" && parsed.field) {
           // Keep the existing duplicate banner (no regression) AND
           // surface the field so the input gets a red border.
