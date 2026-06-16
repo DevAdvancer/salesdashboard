@@ -206,7 +206,8 @@ export type ComponentKey =
   | 'lead-requests'
   | 'linkedin-requests'
   | 'linkedin-account-management'
-  | 'linkedin-reports';
+  | 'linkedin-reports'
+  | 'payments-report';
 
 export interface AccessRule {
   $id?: string;
@@ -369,6 +370,9 @@ export interface ClientPaymentUpdate {
   actorId: string;
   actorName: string;
   createdAt: string;
+  /** Amount paid on this specific update, if any. Stored in the
+   * `updates` JSON string; older records have no amount. */
+  amount?: number | null;
 }
 
 export interface ClientPaymentRecord {

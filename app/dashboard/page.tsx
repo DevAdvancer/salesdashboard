@@ -871,7 +871,8 @@ function LeadGenerationDashboardContent() {
           <h1 className="text-2xl font-bold md:text-3xl">Lead Generation</h1>
           <p className="text-muted-foreground">Create new leads with the basic details and hand them off for assignment.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <AttendanceSelfToggle />
           {/* Generate Lead button removed, leads are generated through Linkedin Requests */}
           <Button variant="outline" onClick={() => router.push('/settings')}>Profile Settings</Button>
         </div>

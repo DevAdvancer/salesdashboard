@@ -76,6 +76,7 @@ export function Navigation({
   const adminItemKeys = new Set(["branch-management", "hierarchy", "lead-requests", "audit-logs", "settings"]);
   const technicalItemKeys = new Set(["mock", "interview-support", "assessment-support"]);
   const linkedinItemKeys = new Set(["linkedin-requests", "linkedin-account-management", "linkedin-reports"]);
+  const paymentsItemKeys = new Set(["payments-report"]);
 
   // Filter items by section
   const agentItems = visibleItems.filter((item) => agentItemKeys.has(item.key));
@@ -84,6 +85,7 @@ export function Navigation({
   const adminItems = visibleItems.filter((item) => adminItemKeys.has(item.key));
   const technicalItems = visibleItems.filter((item) => technicalItemKeys.has(item.key));
   const linkedinItems = visibleItems.filter((item) => linkedinItemKeys.has(item.key));
+  const paymentsItems = visibleItems.filter((item) => paymentsItemKeys.has(item.key));
   const chatItem = visibleItems.find((item) => item.key === "chat") ?? null;
 
   // Helper to render a standard nav button
@@ -298,11 +300,12 @@ export function Navigation({
   }
 
   // 2. Team Lead Dashboard
-  if (teamLeadItems.length > 0) {
+  if (teamLeadItems.length > 0 || paymentsItems.length > 0) {
     renderedItems.push(
       <div key="section-tl">
         {renderSectionHeader(managementTitle)}
         {teamLeadItems.map(renderNavButton)}
+        {paymentsItems.map(renderNavButton)}
       </div>
     );
   }

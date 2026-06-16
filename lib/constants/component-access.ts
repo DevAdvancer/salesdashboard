@@ -27,6 +27,7 @@ export const COMPONENT_ACCESS: RoleAccessMap = {
   'linkedin-requests': ['team_lead', 'agent', 'lead_generation'],
   'linkedin-account-management': ['admin', 'monitor', 'operations', 'team_lead'],
   'linkedin-reports': ['admin', 'developer', 'monitor', 'operations', 'team_lead'],
+  'payments-report': ['admin', 'developer', 'monitor', 'operations'],
 };
 
 export function isRoleEligibleForComponent(

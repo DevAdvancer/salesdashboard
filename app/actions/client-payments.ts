@@ -176,6 +176,15 @@ export async function upsertClientPaymentRecordAction(input: {
   const status = input.initialStatus ?? (existing?.status as PaymentStatus) ?? "not_paid";
   const updates = existing ? parseJsonOr<ClientPaymentUpdate[]>(existing.updates, []) : [];
   const shouldCreateInitialUpdate = updates.length === 0;
+  // When the record is first created, the planned upfrontAmount represents
+  // the first payment — store it on the initial update so the running
+  // total of paid amounts reflects what the user entered.
+  const initialAmount =
+    typeof input.paymentPlan?.upfrontAmount === "number" &&
+    Number.isFinite(input.paymentPlan.upfrontAmount) &&
+    input.paymentPlan.upfrontAmount > 0
+      ? input.paymentPlan.upfrontAmount
+      : null;
   const nextUpdates = shouldCreateInitialUpdate
     ? [
         {
@@ -185,6 +194,7 @@ export async function upsertClientPaymentRecordAction(input: {
           actorId: actor.$id,
           actorName: actor.name,
           createdAt: now,
+          amount: initialAmount,
         } satisfies ClientPaymentUpdate,
       ]
     : updates;
@@ -213,6 +223,7 @@ export async function addClientPaymentUpdateAction(input: {
   leadId: string;
   status: PaymentStatus;
   note?: string | null;
+  amount?: number | null;
 }): Promise<ClientPaymentRecord> {
   const actor = await getActor(input.actorId);
   ensureComponentAccess(actor.role, "history");
@@ -229,6 +240,8 @@ export async function addClientPaymentUpdateAction(input: {
 
   const updates = parseJsonOr<ClientPaymentUpdate[]>(existing.updates, []);
   const now = new Date().toISOString();
+  const sanitizedAmount =
+    typeof input.amount === "number" && Number.isFinite(input.amount) ? input.amount : null;
   const nextUpdates: ClientPaymentUpdate[] = [
     {
       id: crypto.randomUUID(),
@@ -237,6 +250,7 @@ export async function addClientPaymentUpdateAction(input: {
       actorId: actor.$id,
       actorName: actor.name,
       createdAt: now,
+      amount: sanitizedAmount,
     },
     ...updates,
   ];
@@ -487,4 +501,167 @@ export async function listAllPaymentInsightsAction(
   }
 
   return results;
+}
+
+export interface PaymentsReportRow {
+  $id: string;
+  leadId: string;
+  company: string;
+  legalName: string;
+  status: PaymentStatus;
+  paymentPlan: ClientPaymentPlan;
+  /** Most recent ClientPaymentUpdate entry, or null if the record has no updates. */
+  lastUpdate: {
+    id: string;
+    createdAt: string;
+    actorName: string;
+    note: string | null;
+    amount: number | null;
+  } | null;
+  /** Total amount to be paid for this lead, from the lead form. */
+  leadAmount: number;
+  /**
+   * Sum of every update's `amount` field on this record (i.e. the running
+   * total actually collected so far). Null when no update carried an amount.
+   */
+  totalPaid: number | null;
+  /** Number of updates on this record that carried an `amount`. */
+  paidUpdateCount: number;
+  createdAt: string;
+}
+
+/**
+ * Operations/admin/developer/monitor report: lists every client payment record
+ * with the most recent update's metadata (note, actor, timestamp, amount paid)
+ * and the agreed payment plan. Powers the /payments-report page.
+ */
+export async function listPaymentsReportAction(
+  actorId: string
+): Promise<PaymentsReportRow[]> {
+  const actor = await getActor(actorId);
+
+  if (!isAdminLikeReadRole(actor.role)) {
+    throw new Error("Not authorized");
+  }
+
+  const { databases } = await createAdminClient();
+
+  const paymentDocs = await listAllDocuments<any>({
+    databases,
+    databaseId: DATABASE_ID,
+    collectionId: COLLECTIONS.CLIENT_PAYMENTS,
+    queries: [],
+    pageLimit: 100,
+    maxPages: 500,
+  });
+
+  if (paymentDocs.length === 0) return [];
+
+  const leadIds = Array.from(
+    new Set(
+      paymentDocs
+        .map((doc: any) => (typeof doc.leadId === "string" ? doc.leadId : ""))
+        .filter(Boolean)
+    )
+  );
+
+  const leadDocs =
+    leadIds.length > 0
+      ? await listAllDocuments<any>({
+          databases,
+          databaseId: DATABASE_ID,
+          collectionId: COLLECTIONS.LEADS,
+          queries: [Query.equal("$id", leadIds)],
+          pageLimit: 100,
+          maxPages: 500,
+        })
+      : [];
+
+  const leadDataMap = new Map<string, string>();
+  const leadLegalNameMap = new Map<string, string>();
+  const leadAmountMap = new Map<string, number>();
+  for (const lead of leadDocs as any[]) {
+    let company = "";
+    let legalName = "";
+    let leadAmount = 0;
+    try {
+      const parsed = JSON.parse(lead.data ?? "{}") as Record<string, unknown>;
+      const fromCompany = typeof parsed.company === "string" ? parsed.company.trim() : "";
+      const first = typeof parsed.firstName === "string" ? parsed.firstName.trim() : "";
+      const last = typeof parsed.lastName === "string" ? parsed.lastName.trim() : "";
+      const fromName = [first, last].filter(Boolean).join(" ");
+      const fromEmail = typeof parsed.email === "string" ? parsed.email.trim() : "";
+      company = fromCompany || fromName || fromEmail;
+      if (typeof parsed.legalName === "string") {
+        legalName = parsed.legalName.trim();
+      }
+      // The lead form stores the total amount on the leadAmount key. Some
+      // legacy leads may have been written under "totalAmount" — accept that
+      // too so the report keeps working for previously-saved leads.
+      const rawAmount =
+        parsed.leadAmount ?? parsed.totalAmount ?? parsed.amount;
+      if (typeof rawAmount === "number" && Number.isFinite(rawAmount)) {
+        leadAmount = rawAmount;
+      } else if (typeof rawAmount === "string" && rawAmount.trim() !== "") {
+        const num = Number(rawAmount);
+        if (Number.isFinite(num)) leadAmount = num;
+      }
+    } catch {
+      // ignore parse errors
+    }
+    leadDataMap.set(lead.$id, company || "Unknown");
+    leadLegalNameMap.set(lead.$id, legalName);
+    leadAmountMap.set(lead.$id, leadAmount);
+  }
+
+  const rows: PaymentsReportRow[] = [];
+  for (const doc of paymentDocs as any[]) {
+    const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
+    if (!leadId) continue;
+
+    const paymentPlan = parseJsonOr<ClientPaymentPlan>(doc.paymentPlan ?? doc.paymentPlanJson, {
+      percent: 0,
+      months: 0,
+      upfrontAmount: 0,
+    });
+    const status = (doc.status as PaymentStatus) ?? "not_paid";
+    const updates = parseJsonOr<ClientPaymentUpdate[]>(doc.updates ?? doc.updatesJson, []);
+    const head = updates[0] ?? null;
+
+    // Sum the `amount` of every update. This is the running total actually
+    // collected so far across every status change on this record.
+    let totalPaid = 0;
+    let paidUpdateCount = 0;
+    for (const u of updates) {
+      if (typeof u?.amount === "number" && Number.isFinite(u.amount)) {
+        totalPaid += u.amount;
+        paidUpdateCount += 1;
+      }
+    }
+
+    rows.push({
+      $id: doc.$id,
+      leadId,
+      company: leadDataMap.get(leadId) ?? "Unknown",
+      legalName: leadLegalNameMap.get(leadId) ?? "",
+      status,
+      paymentPlan,
+      leadAmount: leadAmountMap.get(leadId) ?? 0,
+      totalPaid: paidUpdateCount > 0 ? totalPaid : null,
+      paidUpdateCount,
+      createdAt: typeof doc.$createdAt === "string" ? doc.$createdAt : new Date().toISOString(),
+      lastUpdate: head
+        ? {
+            id: head.id,
+            createdAt: head.createdAt,
+            actorName: head.actorName,
+            note: head.note ?? null,
+            amount:
+              typeof head.amount === "number" && Number.isFinite(head.amount) ? head.amount : null,
+          }
+        : null,
+    });
+  }
+
+  return rows;
 }

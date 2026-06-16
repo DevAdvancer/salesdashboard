@@ -35,7 +35,8 @@ export type ComponentKey =
   | 'lead-requests'
   | 'linkedin-requests'
   | 'linkedin-account-management'
-  | 'linkedin-reports';
+  | 'linkedin-reports'
+  | 'payments-report';
 
 interface AccessControlContextType {
   canAccess: (componentKey: ComponentKey) => boolean;

@@ -60,6 +60,12 @@ import {
   getLinkedinProfileValue,
   isLinkedinProfileField,
 } from "@/lib/utils/lead-linkedin-field";
+import {
+  getLeadAmountValue,
+  isCloseRequiredFieldsMissing,
+  isAmountMissing,
+  getMissingCloseRequiredFields,
+} from "@/lib/utils/lead-close-gate";
 import { getErrorMessage } from "@/lib/utils";
 import { parseLeadActionError } from "@/lib/utils/lead-action-error";
 import { shouldShowRequiredAsterisk } from "@/lib/utils/required-lead-fields";
@@ -139,6 +145,65 @@ function withLastNameField(fields: FormField[]): FormField[] {
     ];
   }
   return [injected, ...fields];
+}
+
+// Ensures a "legalName" text field is always present and rendered near the
+// top of the Lead Information card. The Close Lead button requires Legal
+// Name to be filled, so we must always show it even if the saved form
+// config was created before Legal Name was a default field.
+function withLegalNameField(fields: FormField[]): FormField[] {
+  if (fields.some((f) => f.key === "legalName")) return fields;
+
+  const firstNameField = fields.find((f) => f.key === "firstName");
+  const injected: FormField = {
+    id: "static-legalname",
+    key: "legalName",
+    label: "Legal Name",
+    type: "text",
+    required: true,
+    visible: true,
+    order: firstNameField ? firstNameField.order + 0.5 : 1.5,
+  };
+
+  const firstNameIndex = fields.findIndex((f) => f.key === "firstName");
+  if (firstNameIndex !== -1) {
+    return [
+      ...fields.slice(0, firstNameIndex + 1),
+      injected,
+      ...fields.slice(firstNameIndex + 1),
+    ];
+  }
+  return [injected, ...fields];
+}
+
+// Ensures an "amount" text field is always present so historical leads
+// created under the legacy `field_15` key can be edited and migrated. We
+// only inject when neither the uniform key nor any legacy alias is
+// present in the form config — the new DEFAULT_FIELDS already has
+// `amount`, but older Appwrite form_config documents may not.
+function withAmountField(fields: FormField[]): FormField[] {
+  if (fields.some((f) => f.key === "amount" || f.key === "field_15")) {
+    return fields;
+  }
+  const firstNameField = fields.find((f) => f.key === "firstName");
+  const injected: FormField = {
+    id: "static-amount",
+    key: "amount",
+    label: "Amount ($)",
+    type: "text",
+    required: true,
+    visible: true,
+    order: firstNameField ? firstNameField.order + 1.5 : 12.5,
+  };
+  const firstNameIndex = fields.findIndex((f) => f.key === "firstName");
+  if (firstNameIndex !== -1) {
+    return [
+      ...fields.slice(0, firstNameIndex + 1),
+      injected,
+      ...fields.slice(firstNameIndex + 1),
+    ];
+  }
+  return [...fields, injected];
 }
 
 export default function LeadDetailPage() {
@@ -457,6 +522,26 @@ function LeadDetailContent() {
     if (user.role === "operations") return;
     if (user.role === "monitor" && lead.ownerId !== user.$id) return;
 
+    // Safety net: don't allow closing (except for Backout) when any of
+    // the required close-time fields (Amount, LastName, Legal Name) is
+    // missing. The Close Lead button is already disabled, but block this
+    // path too in case the dialog is opened by another flow.
+    if (!isBackoutStatus(closeStatus)) {
+      const missing = getMissingCloseRequiredFields(
+        leadData as Record<string, unknown>,
+      );
+      if (missing.length > 0) {
+        toast({
+          title: "Required fields missing",
+          description: `Fill ${missing.join(
+            ", ",
+          )} before closing the lead. N/A, blank, or whitespace is not accepted.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     try {
       setIsSaving(true);
       if (isBackoutStatus(closeStatus)) {
@@ -603,9 +688,11 @@ function LeadDetailContent() {
   const handleAssignAgent = async (agentId: string) => {
     if (!lead || !user) return;
     // Agents cannot assign leads — the assignment workflow is controlled by
-    // team leads, lead generation, and admins only.
+    // team leads, lead generation, and admins only. Lead generation may
+    // assign any of their own leads to any team lead.
     if (user.role === "operations") return;
-    if (user.role === "agent" || user.role === "lead_generation") return;
+    if (user.role === "agent") return;
+    if (user.role === "lead_generation" && lead.ownerId !== user.$id) return;
     if (user.role === "monitor" && lead.ownerId !== user.$id) return;
     // Single-click guard: the assignment <select> fires onChange synchronously
     // and re-fires on every keystroke when the user reopens it; coalesce
@@ -763,6 +850,14 @@ function LeadDetailContent() {
         );
 
       default:
+        // Inline "missing" message for fields that gate the Close button.
+        // We only show this when the lead is open and not in backout
+        // status — closed leads don't need to be edited, and backout
+        // bypasses the close-time gate entirely.
+        const isCloseRequiredField =
+          field.key === "lastName" || field.key === "legalName";
+        const isCloseRequiredFieldMissing =
+          isCloseRequiredField && Boolean(lead && !lead.isClosed);
         return (
           <>
             <Input
@@ -772,11 +867,21 @@ function LeadDetailContent() {
               onChange={(e) => handleFieldChange(field.key, e.target.value)}
               disabled={isReadOnly}
               placeholder={field.placeholder}
-              aria-invalid={Boolean(fieldError)}
-              className={fieldError ? "border-red-500" : undefined}
+              aria-invalid={Boolean(fieldError) || isCloseRequiredFieldMissing}
+              className={
+                fieldError || isCloseRequiredFieldMissing
+                  ? "border-red-500"
+                  : undefined
+              }
             />
             {fieldError && (
               <p className="text-sm text-red-500 mt-1">{fieldError}</p>
+            )}
+            {isCloseRequiredFieldMissing && (
+              <p className="text-sm text-red-500 mt-1">
+                {field.label} is required before the lead can be closed. N/A,
+                blank, or whitespace is not accepted.
+              </p>
             )}
           </>
         );
@@ -923,6 +1028,27 @@ function LeadDetailContent() {
   const isOperations = user.role === "operations";
   const isLeadOwner = lead.ownerId === user.$id;
   const canModifyLead = !isOperations && (!isMonitor || isLeadOwner);
+  // Read the current lead-amount value from the lead's parsed `data` JSON.
+  // The Amount key was previously `leadAmount` (still recognized as a
+  // legacy alias by the payments report) and is now the uniform `amount`
+  // key. We also accept `field_15` from the older form-config so historical
+  // leads count as having a real Amount. Anything blank, whitespace-only,
+  // "N/A", or unparseable is treated as missing — closing a lead for $0
+  // or with no value is not a real closure.
+  const rawLeadAmount = getLeadAmountValue(leadData as Record<string, unknown>);
+  const isLeadAmountMissing = isAmountMissing(rawLeadAmount);
+  // Close button gate: Amount + LastName + Legal Name all required.
+  // Backout is exempt (a backout means the lead is being abandoned, not
+  // closed, so those fields are not expected to be filled).
+  const isCloseRequiredFieldsMissingFlag = isCloseRequiredFieldsMissing({
+    isClosed: lead.isClosed,
+    closeStatus,
+    leadData: leadData as Record<string, unknown>,
+    isBackoutStatus,
+  });
+  const missingCloseRequiredFields = isCloseRequiredFieldsMissingFlag
+    ? getMissingCloseRequiredFields(leadData as Record<string, unknown>)
+    : [];
   const canAssignLead =
     canModifyLead &&
     Boolean(lead) &&
@@ -972,7 +1098,15 @@ function LeadDetailContent() {
                             : "Closed",
                         );
                         setShowCloseDialog(true);
-                      }}>
+                      }}
+                      disabled={isCloseRequiredFieldsMissingFlag}
+                      title={
+                        isCloseRequiredFieldsMissingFlag
+                          ? `Fill ${missingCloseRequiredFields.join(
+                              ", ",
+                            )} in the form above before closing the lead. N/A, blank, or whitespace is not accepted.`
+                          : undefined
+                      }>
                       Close Lead
                     </Button>
                   )}
@@ -1083,8 +1217,15 @@ function LeadDetailContent() {
               </div>
             )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {withLastNameField(formFields)
+              {withAmountField(withLegalNameField(withLastNameField(formFields)))
                 .filter((field) => {
+                  // The static "Total Amount to be Paid" input below is
+                  // the canonical editor for Amount. Skip the dynamic
+                  // `amount` row (and the legacy `field_15` alias) so we
+                  // don't render two Amount inputs on the same page.
+                  if (field.key === "amount" || field.key === "field_15") {
+                    return false;
+                  }
                   if (isLeadGeneration) {
                     return (
                       leadGenerationVisibleKeys.has(field.key) ||
@@ -1104,6 +1245,68 @@ function LeadDetailContent() {
                     {renderField(field)}
                   </div>
                 ))}
+              <div>
+                <Label htmlFor="leadAmount">
+                  Total Amount to be Paid
+                  <span className="text-red-500 ml-1" aria-label="required">
+                    *
+                  </span>
+                </Label>
+                <Input
+                  id="leadAmount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={
+                    typeof rawLeadAmount === "number" ||
+                    typeof rawLeadAmount === "string"
+                      ? String(rawLeadAmount)
+                      : ""
+                  }
+                  onChange={(e) =>
+                    setLeadData((prev) => {
+                      const next: LeadData = {
+                        ...prev,
+                        amount: e.target.value,
+                      };
+                      // Mirror to `leadAmount` so the payments report
+                      // (which reads `leadAmount` first) keeps working
+                      // for any historical reads that haven't migrated.
+                      next.leadAmount = e.target.value;
+                      return next;
+                    })
+                  }
+                  placeholder="0.00"
+                  disabled={
+                    !isEditing ||
+                    lead?.isClosed ||
+                    user?.role === "operations" ||
+                    (user?.role === "monitor" && lead?.ownerId !== user?.$id)
+                  }
+                  aria-required="true"
+                  aria-invalid={isLeadAmountMissing}
+                  className={isLeadAmountMissing ? "border-red-500" : undefined}
+                />
+                {isLeadAmountMissing && (
+                  <p className="mt-1 text-xs text-red-500">
+                    Total Amount to be Paid is required before the lead can be
+                    closed. N/A, blank, or whitespace is not accepted. (The
+                    upfront value entered under Payments is the portion that
+                    has already been collected.)
+                  </p>
+                )}
+                {!isLeadAmountMissing &&
+                  typeof rawLeadAmount === "string" &&
+                  rawLeadAmount.trim() &&
+                  leadData.amount === undefined &&
+                  (leadData as Record<string, unknown>).field_15 !==
+                    undefined && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Showing a legacy value. Save the lead to migrate it to
+                      the new field.
+                    </p>
+                  )}
+              </div>
             </div>
 
             {/* Follow-Up summary — reflects the latest values saved from the Follow-Up Plan card */}
@@ -1405,7 +1608,19 @@ function LeadDetailContent() {
                   ) : (
                     <Button
                       onClick={handleCloseLead}
-                      disabled={isSaving}
+                      disabled={
+                        isSaving ||
+                        (!isBackoutStatus(closeStatus) &&
+                          isCloseRequiredFieldsMissingFlag)
+                      }
+                      title={
+                        !isBackoutStatus(closeStatus) &&
+                        isCloseRequiredFieldsMissingFlag
+                          ? `Fill ${missingCloseRequiredFields.join(
+                              ", ",
+                            )} in the lead form before closing. N/A, blank, or whitespace is not accepted.`
+                          : undefined
+                      }
                       variant="destructive"
                       className="w-full sm:w-auto">
                       {isSaving ? "Closing..." : "Close Lead"}

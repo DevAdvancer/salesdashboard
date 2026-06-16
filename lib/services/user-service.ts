@@ -202,6 +202,7 @@ export async function getUsersByBranches(branchIds: string[]): Promise<User[]> {
 
 /**
  * Get users assignable to a lead based on the creator's role and branches.
+ * - Admin/Developer/Monitor/Operations: all active users across all branches
  * - Team Lead: agents with overlapping branchIds (excluding self)
  * - Agent: empty array
  */
@@ -220,13 +221,32 @@ export async function getAssignableUsers(
 
   return cached(cacheKey, 5 * 60 * 1000, async () => {
     if (creatorRole === 'agent' || creatorRole === 'lead_generation') return [];
-    if (creatorRole !== 'admin' && creatorRole !== 'developer' && !creatorBranchIds.length) return [];
+
+    // Operations is a read-only leadership role that mirrors admin/dev
+    // visibility (no branch scoping). The shared branchIds guard below
+    // was previously short-circuiting operations users to an empty list
+    // when their branchIds were unset, which made the "Assigned To"
+    // filter on the leads page and the dashboard insights render as
+    // empty for operations.
+    if (
+      creatorRole !== 'admin' &&
+      creatorRole !== 'developer' &&
+      creatorRole !== 'monitor' &&
+      creatorRole !== 'operations' &&
+      !creatorBranchIds.length
+    ) {
+      return [];
+    }
 
     try {
       const allowedRoles: UserRole[] =
-        (creatorRole === 'admin' || creatorRole === 'developer') ? ['admin', 'developer', 'team_lead', 'agent'] :
-        creatorRole === 'team_lead' ? ['agent'] :
-        [];
+        creatorRole === 'admin' || creatorRole === 'developer'
+          ? ['admin', 'developer', 'team_lead', 'agent', 'operations', 'monitor']
+          : creatorRole === 'team_lead'
+            ? ['agent']
+            : creatorRole === 'monitor' || creatorRole === 'operations'
+              ? ['admin', 'developer', 'team_lead', 'agent', 'operations', 'monitor']
+              : [];
 
       if (!allowedRoles.length) return [];
 
@@ -236,8 +256,12 @@ export async function getAssignableUsers(
           : Query.equal('role', allowedRoles)
       ];
 
-      if (creatorRole !== 'admin' && creatorRole !== 'developer') {
-        queries.push(Query.contains('branchIds', creatorBranchIds));
+      // Only team_lead scopes by branchIds; admin/developer/monitor/operations
+      // see across all branches by design.
+      if (creatorRole !== 'admin' && creatorRole !== 'developer' && creatorRole !== 'monitor' && creatorRole !== 'operations') {
+        if (creatorBranchIds.length) {
+          queries.push(Query.contains('branchIds', creatorBranchIds));
+        }
       }
 
       if (creatorRole === 'team_lead' && creatorId) {

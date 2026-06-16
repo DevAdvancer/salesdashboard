@@ -639,6 +639,15 @@ function HistoryDetailContent() {
       const newUpfront = Number(editUpfrontAmount);
       let currentRecord = paymentRecord;
 
+      // If the user entered a new upfront value, also store it on the
+      // payment update as the "amount paid" — that way the running total
+      // of paid amounts (and the Upfront (collected) stat) reflects what
+      // they actually entered. The plan's upfrontAmount stays as the
+      // planned value when the entered value matches it; otherwise it
+      // becomes the new plan value AND the amount paid for this update.
+      const enteredAmount =
+        !isNaN(newUpfront) && newUpfront > 0 ? newUpfront : null;
+
       if (!isNaN(newUpfront) && newUpfront !== currentRecord.paymentPlan.upfrontAmount) {
         currentRecord = await upsertClientPaymentRecord({
           actorId: user.$id,
@@ -653,6 +662,7 @@ function HistoryDetailContent() {
         leadId,
         status: paymentStatus,
         note: note,
+        amount: enteredAmount,
       });
       setPaymentRecord(updated);
       if (updated) {
@@ -957,7 +967,7 @@ function HistoryDetailContent() {
                 )}
 
                 <div className="space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                     <div className="space-y-2">
                       <Label htmlFor="paymentStatus">Update Status</Label>
                       <select
@@ -980,16 +990,19 @@ function HistoryDetailContent() {
                         onChange={(e) => setPaymentNote(e.target.value)}
                         placeholder="Add a follow-up update..."
                         disabled={!canEditClientPayments || paymentSaving}
+                        className="min-h-[84px]"
                       />
                     </div>
                   </div>
-                  <div className="flex justify-end">
-                    <Button
-                      onClick={handleAddPaymentUpdate}
-                      disabled={!canEditClientPayments || paymentSaving}
-                    >
-                      {paymentSaving ? "Saving..." : "Add Update"}
-                    </Button>
+                  <div className="space-y-1">
+                    <div className="flex justify-end">
+                      <Button
+                        onClick={handleAddPaymentUpdate}
+                        disabled={!canEditClientPayments || paymentSaving}
+                      >
+                        {paymentSaving ? "Saving..." : "Add Update"}
+                      </Button>
+                    </div>
                   </div>
                 </div>
 

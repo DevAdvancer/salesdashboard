@@ -2,8 +2,10 @@ import {
   addClientPaymentUpdateAction,
   getClientPaymentRecordAction,
   listClientPaymentSummariesAction,
+  listPaymentsReportAction,
   updateClientPersonalDetailsAction,
   upsertClientPaymentRecordAction,
+  type PaymentsReportRow,
 } from "@/app/actions/client-payments";
 import { cacheClientRead, clearClientReadCache } from "@/lib/utils/client-read-cache";
 import type { ClientPaymentPlan, ClientPaymentRecord, PaymentStatus } from "@/lib/types";
@@ -32,6 +34,7 @@ export function addClientPaymentUpdate(input: {
   leadId: string;
   status: PaymentStatus;
   note?: string | null;
+  amount?: number | null;
 }): Promise<ClientPaymentRecord> {
   return addClientPaymentUpdateAction(input).finally(clearClientReadCache);
 }
@@ -49,4 +52,8 @@ export function listClientPaymentSummaries(input: {
   leadIds: string[];
 }): Promise<Array<{ leadId: string; status: PaymentStatus; personalDetails: Record<string, unknown> }>> {
   return listClientPaymentSummariesAction(input);
+}
+
+export function listPaymentsReport(actorId: string): Promise<PaymentsReportRow[]> {
+  return listPaymentsReportAction(actorId);
 }

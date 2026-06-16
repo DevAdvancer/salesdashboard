@@ -3,7 +3,17 @@ import { FormField } from "@/lib/types";
 const LINKEDIN_PROFILE_FIELD_KEYS = new Set([
   "linkedinProfileUrl",
   "linkedinProfile",
+  "field_16", // legacy alias — read-only, do not write back
 ]);
+
+/**
+ * Keys we explicitly recognize as a LinkedIn profile field on read, but
+ * MUST NOT be used as the destination for new writes. New leads should
+ * always save under `linkedinProfileUrl`. The legacy `field_16` key is
+ * kept as a read alias so historical leads created with the generic
+ * form-config still render their LinkedIn URL on the lead detail page.
+ */
+const LEGACY_LINKEDIN_READ_ONLY_KEYS = new Set(["field_16"]);
 
 function normalizeFieldText(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -34,7 +44,9 @@ export function getLinkedinProfileValue(
     if (typeof value === "string" && value.trim()) return value.trim();
   }
 
-  const fallback = data.linkedinProfileUrl ?? data.linkedinProfile;
+  // Fall back to the canonical LinkedIn keys, then to the legacy alias.
+  const fallback =
+    data.linkedinProfileUrl ?? data.linkedinProfile ?? data.field_16;
   return typeof fallback === "string" ? fallback.trim() : "";
 }
 
@@ -50,9 +62,11 @@ export function getLinkedinProfileDefaultValues(
   };
 
   for (const field of fields) {
-    if (isLinkedinProfileField(field)) {
-      defaults[field.key] = trimmed;
-    }
+    if (!isLinkedinProfileField(field)) continue;
+    // Never write back to legacy aliases. New leads save only to the
+    // uniform `linkedinProfileUrl` key.
+    if (LEGACY_LINKEDIN_READ_ONLY_KEYS.has(field.key)) continue;
+    defaults[field.key] = trimmed;
   }
 
   return defaults;

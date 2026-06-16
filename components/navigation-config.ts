@@ -21,6 +21,7 @@ import {
   UserCog,
   Users,
   Video,
+  Wallet,
 } from 'lucide-react';
 
 export type AppIcon = ComponentType<{ className?: string; size?: number }>;
@@ -57,6 +58,7 @@ export const appIcons = {
   linkedinAccounts: UserCog,
   linkedinReports: ChartColumn,
   leadRequests: ClipboardList,
+  paymentsReport: Wallet,
 } satisfies Record<string, AppIcon>;
 
 export const NAV_ITEMS: NavItem[] = [
@@ -75,6 +77,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'linkedin-requests', label: 'Linkedin Request', href: '/linkedin-requests', icon: appIcons.linkedinRequests },
   { key: 'linkedin-account-management', label: 'Manage Linkedin IDs', href: '/linkedin-accounts', icon: appIcons.linkedinAccounts },
   { key: 'linkedin-reports', label: 'Linkedin Reports', href: '/linkedin-reports', icon: appIcons.linkedinReports },
+  { key: 'payments-report', label: 'Payments Report', href: '/payments-report', icon: appIcons.paymentsReport },
   { key: 'mock', label: 'Mock Interview', href: '/mock', icon: appIcons.mock },
   { key: 'assessment-support', label: 'Assessment Support', href: '/assessment-support', icon: appIcons.assessmentSupport },
   { key: 'interview-support', label: 'Interview Support', href: '/interview-support', icon: appIcons.interviewSupport },

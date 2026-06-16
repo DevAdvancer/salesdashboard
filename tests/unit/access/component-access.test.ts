@@ -40,6 +40,7 @@ describe("component access eligibility", () => {
       "lead-requests",
       "linkedin-account-management",
       "linkedin-reports",
+      "payments-report",
     ] as const;
 
     adminVisibleComponents.forEach((component) => {
@@ -73,6 +74,7 @@ describe("component access eligibility", () => {
       "lead-requests",
       "linkedin-account-management",
       "linkedin-reports",
+      "payments-report",
     ] as const;
 
     adminVisibleComponents.forEach((component) => {
@@ -82,5 +84,15 @@ describe("component access eligibility", () => {
     expect(isRoleEligibleForComponent("field-management", "operations" as never)).toBe(false);
     expect(isRoleEligibleForComponent("audit-logs", "operations" as never)).toBe(false);
     expect(isRoleEligibleForComponent("linkedin-requests", "operations" as never)).toBe(false);
+  });
+
+  it("restricts payments-report to admin/developer/monitor/operations", () => {
+    expect(isRoleEligibleForComponent("payments-report", "admin")).toBe(true);
+    expect(isRoleEligibleForComponent("payments-report", "developer")).toBe(true);
+    expect(isRoleEligibleForComponent("payments-report", "monitor")).toBe(true);
+    expect(isRoleEligibleForComponent("payments-report", "operations" as never)).toBe(true);
+    expect(isRoleEligibleForComponent("payments-report", "team_lead")).toBe(false);
+    expect(isRoleEligibleForComponent("payments-report", "agent")).toBe(false);
+    expect(isRoleEligibleForComponent("payments-report", "lead_generation")).toBe(false);
   });
 });
