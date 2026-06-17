@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -A 2 -E \"auth-context\\\\.tsx$|navigation\\\\.tsx$|navigation-config\\\\.ts$|user-service\\\\.ts$|component-access\\\\.ts$|access-control-context\\\\.tsx$|page\\\\.tsx$|resume-dashboard\\\\\\\\page\\\\.tsx$|auth-context\\\\.test\\\\.tsx$|component-access\\\\.test\\\\.ts$|schema-definitions\\\\.ts$|sync-appwrite-schema\\\\.ts$|APPWRITE_SCHEMA\\\\.md\")",
+      "Bash(grep -A 1 -E \"resume-dashboard\\\\\\\\page\\\\.tsx|lib\\\\\\\\contexts\\\\\\\\auth-context\\\\.tsx|components\\\\\\\\navigation\\\\.tsx|lib\\\\\\\\contexts\\\\\\\\access-control-context\\\\.tsx\")"
+    ]
+  }
+}

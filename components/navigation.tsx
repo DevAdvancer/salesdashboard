@@ -5,13 +5,16 @@ import { useAccess, ComponentKey } from "@/lib/contexts/access-control-context";
 import { useRouter, usePathname } from "next/navigation";
 import {
   Bell,
+  Briefcase,
   ChevronDown,
+  FileText,
   LogOut,
   Map,
   Menu,
   MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
+  Repeat,
   Wrench,
   X,
 } from "lucide-react";
@@ -35,6 +38,17 @@ function formatRoleLabel(role: string): string {
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
+// Universal sidebar items that the Resume team should keep alongside the
+// Resume Dashboard. The dashboard and chat are not department-specific and
+// the leadership roles always see them too. `user-management` is also
+// surfaced to resume team members so a resume team lead can manage their
+// own roster without switching to the sales view; access control still
+// gates the page itself (only roles eligible for `user-management` see it).
+const RESUME_UNIVERSAL_ITEM_KEYS = new Set([
+  "resume-chat",
+  "user-management",
+]);
+
 interface NavigationProps {
   isCollapsed?: boolean;
   onCollapsedChange?: (isCollapsed: boolean) => void;
@@ -44,7 +58,7 @@ export function Navigation({
   isCollapsed = false,
   onCollapsedChange = () => {},
 }: NavigationProps = {}) {
-  const { user, logout } = useAuth();
+  const { user, logout, isResumeTeam, canSwitchDashboard, activeDashboard, setActiveDashboard } = useAuth();
   const { canAccess, isLoading: accessLoading } = useAccess();
   const router = useRouter();
   const pathname = usePathname();
@@ -77,16 +91,50 @@ export function Navigation({
   const technicalItemKeys = new Set(["mock", "interview-support", "assessment-support"]);
   const linkedinItemKeys = new Set(["linkedin-requests", "linkedin-account-management", "linkedin-reports"]);
   const paymentsItemKeys = new Set(["payments-report"]);
+  const resumeItemKeys = new Set(["resume-dashboard"]);
+
+  // Resume-team members get a slim sidebar: the Resume Dashboard, the
+  // Resume Team chat, and (for the resume team lead) User Management so
+  // they can manage their own roster. Sales-only modules are filtered
+  // out so resume users don't see Leads, Reports, etc. Admin / Monitor
+  // / Operations continue to see every section because canAccess()
+  // opens them all.
+  const itemsForUser = isResumeTeam
+    ? visibleItems.filter(
+        (item) => resumeItemKeys.has(item.key) || RESUME_UNIVERSAL_ITEM_KEYS.has(item.key)
+      )
+    : visibleItems;
 
   // Filter items by section
-  const agentItems = visibleItems.filter((item) => agentItemKeys.has(item.key));
-  const attendanceItems = visibleItems.filter((item) => attendanceItemKeys.has(item.key));
-  const teamLeadItems = visibleItems.filter((item) => teamLeadItemKeys.has(item.key));
-  const adminItems = visibleItems.filter((item) => adminItemKeys.has(item.key));
-  const technicalItems = visibleItems.filter((item) => technicalItemKeys.has(item.key));
-  const linkedinItems = visibleItems.filter((item) => linkedinItemKeys.has(item.key));
-  const paymentsItems = visibleItems.filter((item) => paymentsItemKeys.has(item.key));
-  const chatItem = visibleItems.find((item) => item.key === "chat") ?? null;
+  const agentItems = itemsForUser.filter((item) => agentItemKeys.has(item.key));
+  const attendanceItems = itemsForUser.filter((item) => attendanceItemKeys.has(item.key));
+  // `user-management` is rendered inside the Resume Team section when
+  // the Resume Team section is visible (resume team members always, plus
+  // leadership on the resume view). Strip it from the sales team-lead
+  // section whenever the resume section is going to be rendered to
+  // avoid a duplicate.
+  const teamLeadItems = itemsForUser.filter(
+    (item) =>
+      teamLeadItemKeys.has(item.key) &&
+      !(item.key === "user-management" && (isResumeTeam || activeDashboard === "resume")),
+  );
+  const adminItems = itemsForUser.filter((item) => adminItemKeys.has(item.key));
+  const technicalItems = itemsForUser.filter((item) => technicalItemKeys.has(item.key));
+  const linkedinItems = itemsForUser.filter((item) => linkedinItemKeys.has(item.key));
+  const paymentsItems = itemsForUser.filter((item) => paymentsItemKeys.has(item.key));
+  const resumeItems = itemsForUser.filter((item) => resumeItemKeys.has(item.key));
+  // Resume section includes the resume dashboard, the resume team's
+  // own chat channel, and (for leadership / resume team_lead) the
+  // user-management page so admins and the resume team lead can manage
+  // the resume roster from the resume sidebar without having to scroll
+  // through the sales team-lead / admin sections.
+  const resumeSectionItems = itemsForUser.filter(
+    (item) =>
+      resumeItemKeys.has(item.key) ||
+      item.key === "resume-chat" ||
+      item.key === "user-management",
+  );
+  const chatItem = itemsForUser.find((item) => item.key === "chat") ?? null;
 
   // Helper to render a standard nav button
   const renderNavButton = (item: typeof NAV_ITEMS[0]) => {
@@ -288,6 +336,18 @@ export function Navigation({
     );
   }
 
+  // 1a. Resume Team — own section so resume members see only the resume
+  // dashboard and the chat channel. Leadership roles (admin / monitor /
+  // operations) also see it because canAccess() opens the resume route.
+  if (resumeSectionItems.length > 0) {
+    renderedItems.push(
+      <div key="section-resume">
+        {renderSectionHeader("Resume Team")}
+        {resumeSectionItems.map(renderNavButton)}
+      </div>
+    );
+  }
+
   // 1b. Attendance Section
   if (attendanceItems.length > 0) {
     const CalendarIcon = appIcons.attendance;
@@ -396,7 +456,7 @@ export function Navigation({
                   margin: 0,
                   textTransform: "uppercase",
                 }}>
-                SalesHub CRM
+                {activeDashboard === "resume" ? "RESUMEHUB CRM" : "SalesHub CRM"}
               </h1>
               <p
                 style={{
@@ -406,7 +466,7 @@ export function Navigation({
                   color: "var(--muted-foreground)",
                   marginTop: "0.1875rem",
                 }}>
-                Sales Intelligence
+                {activeDashboard === "resume" ? "Resume Intelligence" : "Sales Intelligence"}
               </p>
             </div>
           </div>
@@ -435,6 +495,129 @@ export function Navigation({
             {renderedItems}
           </div>
         </nav>
+
+        {/* View-as switcher — visible only to leadership roles
+            (admin/developer/monitor/operations) who can preview both
+            dashboards from a single login. Segmented toggle, not a
+            <select>, so the active state is obvious at a glance. */}
+        {canSwitchDashboard && (
+          <div
+            style={{
+              padding: "0.75rem",
+              paddingBottom: 0,
+              borderTop: "1px solid var(--border)",
+            }}>
+            <div
+              className={isCollapsed ? "lg:justify-center lg:gap-0" : ""}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                padding: "0.375rem 0.625rem",
+                marginBottom: "0.375rem",
+              }}
+              title={`Currently viewing: ${activeDashboard === "resume" ? "Resume" : "Sales"} dashboard`}>
+              <Repeat
+                size={14}
+                style={{ color: "var(--muted-foreground)", flexShrink: 0 }}
+                aria-hidden
+              />
+              <span
+                className={isCollapsed ? "lg:sr-only" : ""}
+                style={{
+                  fontSize: "0.6875rem",
+                  fontWeight: 600,
+                  color: "var(--muted-foreground)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                }}>
+                View as
+              </span>
+            </div>
+
+            <div
+              role="tablist"
+              aria-label="View as dashboard"
+              className={isCollapsed ? "lg:flex lg:flex-col lg:gap-1" : ""}
+              style={{
+                display: "flex",
+                gap: "0.25rem",
+                padding: "0.25rem",
+                borderRadius: "0.5rem",
+                background: "var(--soft-cloud)",
+                border: "1px solid var(--border)",
+                marginBottom: "0.5rem",
+              }}>
+              {(
+                [
+                  { value: "sales", label: "Sales", Icon: Briefcase },
+                  { value: "resume", label: "Resume", Icon: FileText },
+                ] as const
+              ).map(({ value, label, Icon }) => {
+                const selected = activeDashboard === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    aria-label={`View as ${label} dashboard`}
+                    onClick={() => {
+                      if (selected) return;
+                      setActiveDashboard(value);
+                      // Route the user to the matching dashboard so the
+                      // change is immediately visible. ProtectedRoute will
+                      // then decide whether to keep them.
+                      const target = value === "resume" ? "/resume-dashboard" : "/dashboard";
+                      if (pathname !== target) {
+                        router.push(target);
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "0.375rem",
+                      height: "1.875rem",
+                      padding: "0 0.5rem",
+                      border: "none",
+                      borderRadius: "0.375rem",
+                      background: selected ? "var(--canvas)" : "transparent",
+                      boxShadow: selected
+                        ? "0 1px 2px rgba(0,0,0,0.08), 0 0 0 1px var(--border)"
+                        : "none",
+                      color: selected
+                        ? "var(--foreground)"
+                        : "var(--muted-foreground)",
+                      fontSize: "0.8125rem",
+                      fontWeight: selected ? 600 : 500,
+                      cursor: selected ? "default" : "pointer",
+                      transition:
+                        "background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease",
+                      whiteSpace: "nowrap",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (selected) return;
+                      (e.currentTarget as HTMLButtonElement).style.color =
+                        "var(--foreground)";
+                    }}
+                    onMouseLeave={(e) => {
+                      if (selected) return;
+                      (e.currentTarget as HTMLButtonElement).style.color =
+                        "var(--muted-foreground)";
+                    }}>
+                    <Icon size={13} aria-hidden />
+                    <span className={isCollapsed ? "lg:sr-only" : ""}>
+                      {label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* User */}
         <div

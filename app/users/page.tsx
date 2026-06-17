@@ -12,7 +12,7 @@ import {
 import { getVisibleUserBranches } from "@/lib/utils/branch-visibility";
 import { listBranches } from "@/lib/services/branch-service";
 import { invalidateUsersCache } from "@/lib/services/user-service";
-import { User, Branch, UserRole } from "@/lib/types";
+import { User, Branch, UserRole, Department } from "@/lib/types";
 import {
   Card,
   CardContent,
@@ -36,8 +36,15 @@ export default function UserManagementPage() {
 
 function UserManagementContent() {
   const searchParams = useSearchParams();
-  const { user, isAdmin, isDeveloper, isTeamLead, isMonitor, isOperations } =
-    useAuth();
+  const {
+    user,
+    isAdmin,
+    isDeveloper,
+    isTeamLead,
+    isMonitor,
+    isOperations,
+    activeDashboard,
+  } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [usersTotal, setUsersTotal] = useState(0);
   const [currentUsersPage, setCurrentUsersPage] = useState(1);
@@ -65,8 +72,47 @@ function UserManagementContent() {
   const [selectedTeamLeadId, setSelectedTeamLeadId] = useState<string | null>(
     null,
   );
+  // Department picker on the Create dialog. Only relevant for non-leadership
+  // target roles (team_lead / agent / lead_generation). Leadership roles
+  // (admin / developer / monitor / operations) are exempt from the split
+  // and always default to "sales". The Edit dialog handles department
+  // changes for existing users separately via `editDepartment`.
+  //
+  // Default follows the user's active view so admin opening the dialog
+  // from the Resume dashboard lands on the Resume department by default.
+  const [createDepartment, setCreateDepartment] = useState<Department>(
+    () => activeDashboard,
+  );
+
+  // Tabs at the top of the user table (admin/developer only). Lets the
+  // admin scope the table to one department at a time. Filter is applied
+  // client-side over the currently-loaded page of users.
+  //
+  // Initial value follows the user's active view: when the user is on the
+  // Resume dashboard, the page opens pre-filtered to Resume team members.
+  // An effect below keeps the filter in sync when the user switches
+  // dashboards from the sidebar without leaving the page.
+  const [departmentFilter, setDepartmentFilter] = useState<"all" | Department>(
+    () => (activeDashboard === "resume" ? "resume" : "all"),
+  );
+
+  // Keep the filter aligned with the sidebar's view-as choice. When the
+  // user switches to the Resume dashboard from the sidebar and lands on
+  // this page, the table should already be scoped to Resume team.
+  useEffect(() => {
+    if (activeDashboard === "resume" && departmentFilter === "all") {
+      setDepartmentFilter("resume");
+    } else if (activeDashboard === "sales" && departmentFilter === "all") {
+      // Don't auto-override "all" once the user has explicitly chosen it
+      // — only narrow when the view is the resume one.
+    }
+    // We intentionally do not widen back to "all" if the user picked a
+    // narrower filter — once chosen, the user's explicit filter wins.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDashboard]);
   const [editRole, setEditRole] = useState<UserRole | null>(null); // Only for Edit
   const [editEmail, setEditEmail] = useState(""); // Only for Edit
+  const [editDepartment, setEditDepartment] = useState<Department>("sales"); // Only for Edit
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [availableTeamLeads, setAvailableTeamLeads] = useState<User[]>([]);
 
@@ -140,6 +186,11 @@ function UserManagementContent() {
               'isActive',
               'teamLeadId',
               'branchIds',
+              // `department` is required for the per-view filter on this
+              // page (and the Sales / Resume tabs) to work. Without this
+              // selection every record came back as undefined and the
+              // filter defaulted everyone to "sales".
+              'department',
             ]),
           ],
         );
@@ -152,6 +203,7 @@ function UserManagementContent() {
           branchIds: doc.branchIds || [],
           isActive: doc.isActive !== false,
           branchId: doc.branchId || null,
+          department: (doc.department === 'resume' ? 'resume' : 'sales') as Department,
           $createdAt: doc.$createdAt,
           $updatedAt: doc.$updatedAt,
         }));
@@ -222,6 +274,7 @@ function UserManagementContent() {
         branchIds: doc.branchIds || [],
         isActive: doc.isActive !== false,
         branchId: doc.branchId || null,
+        department: (doc.department === 'resume' ? 'resume' : 'sales') as Department,
         $createdAt: doc.$createdAt,
         $updatedAt: doc.$updatedAt,
       }));
@@ -325,9 +378,12 @@ function UserManagementContent() {
     setFormPassword("");
     setSelectedBranchIds([]);
     setSelectedTeamLeadId(null);
+    // Default the new-user department to whichever team admin is currently
+    // viewing. Admin can still flip the segmented toggle in the dialog.
+    setCreateDepartment(activeDashboard);
     setFormErrors({});
     setError(null);
-  }, []);
+  }, [activeDashboard]);
 
   const validateForm = useCallback((): boolean => {
     const errs: Record<string, string> = {};
@@ -338,11 +394,24 @@ function UserManagementContent() {
     if (!formPassword) errs.password = "Password is required";
     else if (formPassword.length < 8)
       errs.password = "Password must be at least 8 characters";
-    if (createRole !== "admin" && createRole !== "developer" && createRole !== "monitor" && createRole !== "operations" && selectedBranchIds.length === 0)
+    // Branches are only required for non-leadership roles on the Sales
+    // side. The Resume team has no branches in this app, so creating a
+    // Resume user (team_lead / agent / lead_generation) is valid with
+    // an empty `selectedBranchIds` and the branch picker is hidden.
+    if (
+      createDepartment !== "resume" &&
+      activeDashboard !== "resume" &&
+      createRole !== "admin" &&
+      createRole !== "developer" &&
+      createRole !== "monitor" &&
+      createRole !== "operations" &&
+      selectedBranchIds.length === 0
+    ) {
       errs.branches = "At least one branch must be selected";
+    }
     setFormErrors(errs);
     return Object.keys(errs).length === 0;
-  }, [formName, formEmail, formPassword, createRole, selectedBranchIds]);
+  }, [formName, formEmail, formPassword, createRole, selectedBranchIds, activeDashboard, createDepartment]);
 
   const toggleBranch = (branchId: string) => {
     setSelectedBranchIds((prev) =>
@@ -358,6 +427,7 @@ function UserManagementContent() {
     setSelectedTeamLeadId(userToEdit.teamLeadId || null);
     setEditRole(userToEdit.role);
     setEditEmail(userToEdit.email || "");
+    setEditDepartment(userToEdit.department || "sales");
     setError(null);
   }, []);
 
@@ -372,8 +442,17 @@ function UserManagementContent() {
 
       const role = (editRole as UserRole) || undefined;
 
+      // Resume-team agents / lead_generation users don't report to a
+      // team lead, so a missing teamLeadId is fine when the edited
+      // user is on the Resume side (decided by the user's stored
+      // department, not the active dashboard — the operator could be
+      // editing from either view).
+      const isEditingResumeUser =
+        (editingUser.department ?? "sales") === "resume";
+
       if (
         (role === "agent" || role === "lead_generation") &&
+        !isEditingResumeUser &&
         !selectedTeamLeadId
       ) {
         setError("Agents must be assigned to a Team Lead");
@@ -396,10 +475,13 @@ function UserManagementContent() {
         role,
         teamLeadId:
           role === "agent" || role === "lead_generation"
-            ? selectedTeamLeadId
+            ? isEditingResumeUser
+              ? null
+              : selectedTeamLeadId
             : null,
         branchIds: selectedBranchIds,
         email: emailChanged ? trimmedEmail : undefined,
+        department: editDepartment,
         currentUserId: user.$id,
       });
 
@@ -531,10 +613,22 @@ function UserManagementContent() {
             email: formEmail.trim(),
             password: formPassword,
             branchIds: selectedBranchIds,
+            department: createDepartment,
             currentUserId: user.$id,
           });
         } else {
-          if (createRole !== "monitor" && createRole !== "operations" && !selectedTeamLeadId) {
+          // Resume-team agents / lead_generation users are flat — there
+          // is no team-lead reporting line on the Resume side, so a
+          // missing teamLeadId is fine when the new user is destined for
+          // the Resume team. The Sales side still requires a TL.
+          const isResumeTarget =
+            createDepartment === "resume" || activeDashboard === "resume";
+          if (
+            createRole !== "monitor" &&
+            createRole !== "operations" &&
+            !isResumeTarget &&
+            !selectedTeamLeadId
+          ) {
             setError(
               "Agents must be assigned to a Team Lead",
             );
@@ -554,8 +648,12 @@ function UserManagementContent() {
                   : createRole === "operations"
                     ? "operations"
                   : "agent",
-            teamLeadId: createRole === "monitor" || createRole === "operations" ? undefined : selectedTeamLeadId || undefined,
+            teamLeadId:
+              createRole === "monitor" || createRole === "operations" || isResumeTarget
+                ? undefined
+                : selectedTeamLeadId || undefined,
             branchIds: selectedBranchIds,
+            department: createDepartment,
             currentUserId: user.$id,
           });
         }
@@ -658,24 +756,77 @@ function UserManagementContent() {
 
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return users;
+    let result = users;
 
-    return users.filter((u) => {
-      const name = (u.name ?? "").toLowerCase();
-      const email = (u.email ?? "").toLowerCase();
-      const role = (u.role ?? "").toLowerCase();
-      const branches = (u.branchIds ?? [])
-        .map((id) => (branchMap.get(id) ?? id).toLowerCase())
-        .join(" ");
-
-      return (
-        name.includes(query) ||
-        email.includes(query) ||
-        role.includes(query) ||
-        branches.includes(query)
+    // Resume view scoping. When admin is on the Resume CRM dashboard,
+    // the page is meant to manage the Resume team. The Sales/All/Resume
+    // tabs are hidden in this view (the page is already implicitly
+    // scoped), so we still need to enforce the scope here so that any
+    // user that happened to slip past the projection / mapping is
+    // filtered out. We include Resume-team members plus the leadership
+    // roles (admin / developer / monitor / operations), because those
+    // accounts can switch dashboards and therefore belong on both
+    // sides. Sales-team members are excluded.
+    if (activeDashboard === "resume") {
+      const isLeadership = (role?: string) =>
+        role === "admin" ||
+        role === "developer" ||
+        role === "monitor" ||
+        role === "operations";
+      result = result.filter(
+        (u) => (u.department ?? "sales") === "resume" || isLeadership(u.role),
       );
-    });
-  }, [branchMap, search, users]);
+    } else if (departmentFilter !== "all") {
+      // Department filter (admin/developer tabs). Pinned to "all" for
+      // other roles — they don't see the tabs. Skipped on the Resume
+      // view because the scope above already covers it.
+      result = result.filter((u) => (u.department ?? "sales") === departmentFilter);
+    }
+
+    if (query) {
+      result = result.filter((u) => {
+        const name = (u.name ?? "").toLowerCase();
+        const email = (u.email ?? "").toLowerCase();
+        const role = (u.role ?? "").toLowerCase();
+        const branches = (u.branchIds ?? [])
+          .map((id) => (branchMap.get(id) ?? id).toLowerCase())
+          .join(" ");
+
+        return (
+          name.includes(query) ||
+          email.includes(query) ||
+          role.includes(query) ||
+          branches.includes(query)
+        );
+      });
+    }
+
+    return result;
+  }, [branchMap, search, users, departmentFilter, activeDashboard]);
+
+  // When creating or editing a user on the Resume CRM, the Assign Team
+  // Lead dropdown should only show Resume-team leads. Sales team leads
+  // are filtered out so a Resume agent / lead_generation user can't be
+  // parented to a Sales TL. On the Sales view the full list is shown.
+  const teamLeadOptions = useMemo(() => {
+    if (activeDashboard !== "resume" && createDepartment !== "resume") {
+      return availableTeamLeads;
+    }
+    return availableTeamLeads.filter(
+      (tl) => (tl.department ?? "sales") === "resume",
+    );
+  }, [availableTeamLeads, activeDashboard, createDepartment]);
+
+  // If the operator switches a Sale-team user into a Resume-team user
+  // (or vice versa), and the previously-selected team lead no longer
+  // belongs to the new team, clear the selection so we don't persist
+  // a stale cross-team reference. Done as an effect because it depends
+  // on props the user just changed.
+  useEffect(() => {
+    if (!selectedTeamLeadId) return;
+    const stillValid = teamLeadOptions.some((tl) => tl.$id === selectedTeamLeadId);
+    if (!stillValid) setSelectedTeamLeadId(null);
+  }, [teamLeadOptions, selectedTeamLeadId]);
 
   return (
     <div className="container mx-auto">
@@ -684,7 +835,13 @@ function UserManagementContent() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <CardTitle>User Management</CardTitle>
-              <CardDescription>Manage your team members</CardDescription>
+              <CardDescription>
+                {departmentFilter === "all"
+                  ? "Manage your team members"
+                  : departmentFilter === "resume"
+                    ? "Resume team members"
+                    : "Sales team members"}
+              </CardDescription>
             </div>
             {canCreate && (
               <Button
@@ -703,6 +860,44 @@ function UserManagementContent() {
           {error && !showCreateDialog && (
             <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
               <p className="text-red-800 dark:text-red-200">{error}</p>
+            </div>
+          )}
+
+          {/* Department tabs (admin/developer only). Lets the admin scope
+              the table to one department at a time so Resume-team management
+              is one click away instead of needing a separate page.
+
+              On the Resume view, the entire page is already implicitly
+              scoped to the Resume team (sidebar entry, page heading,
+              create dialog, table), so the tabs are redundant. Hide them
+              there to keep the view focused — admin can switch to the
+              Sales dashboard to manage Sales users. */}
+          {(isAdmin || isDeveloper) && activeDashboard === "sales" && (
+            <div className="mb-4 inline-flex items-center gap-1 rounded-md border border-input p-1 bg-muted/30">
+              {(
+                [
+                  { value: "all", label: "All" },
+                  { value: "sales", label: "Sales" },
+                  { value: "resume", label: "Resume" },
+                ] as const
+              ).map((opt) => {
+                const selected = departmentFilter === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    onClick={() => setDepartmentFilter(opt.value)}
+                    className={`h-8 px-3 rounded text-sm font-medium transition-colors ${
+                      selected
+                        ? "bg-background shadow-sm text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}>
+                    {opt.label}
+                  </button>
+                );
+              })}
             </div>
           )}
 
@@ -735,7 +930,11 @@ function UserManagementContent() {
               {filteredUsers.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-gray-500 dark:text-gray-400">
-                    No users match your search.
+                    {activeDashboard === "resume"
+                      ? "No Resume-team or leadership users match your search."
+                      : departmentFilter === "all"
+                        ? "No users match your search."
+                        : `No ${departmentFilter === "resume" ? "Resume" : "Sales"}-team users match your search.`}
                   </p>
                 </div>
               ) : (
@@ -954,6 +1153,72 @@ function UserManagementContent() {
                   )}
                 </div>
 
+                {/* Department picker — only for non-leadership target roles
+                    (team_lead / agent / lead_generation). Admin / developer /
+                    monitor / operations are exempt from the split and always
+                    default to "sales", so we hide the picker for them.
+
+                    On the Resume user-management view the toggle is hidden
+                    entirely and the new user is locked to the Resume team.
+                    The createDepartment state still tracks "resume" via the
+                    init effect, and the saved record carries that value
+                    forward — we just don't show the segmented control. */}
+                {(isAdmin || isDeveloper) &&
+                  (createRole === "team_lead" ||
+                    createRole === "agent" ||
+                    createRole === "lead_generation") &&
+                  activeDashboard === "sales" && (
+                    <div>
+                      <Label htmlFor="create-department">Department</Label>
+                      <div className="mt-1 grid grid-cols-2 gap-1 rounded-md border border-input p-1 bg-muted/30">
+                        {(["sales", "resume"] as Department[]).map((d) => {
+                          const selected = createDepartment === d;
+                          const label = d === "sales" ? "Sales" : "Resume";
+                          return (
+                            <button
+                              key={d}
+                              type="button"
+                              role="radio"
+                              aria-checked={selected}
+                              onClick={() => setCreateDepartment(d)}
+                              className={`h-9 rounded text-sm font-medium transition-colors ${
+                                selected
+                                  ? "bg-background shadow-sm text-foreground"
+                                  : "text-muted-foreground hover:text-foreground"
+                              }`}>
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Sales users land on the main dashboard; Resume users
+                        land on the Resume team dashboard.
+                      </p>
+                    </div>
+                  )}
+
+                {/* On the Resume user-management view, show a static
+                    "Resume team" badge instead of the picker so the operator
+                    can see at a glance which team new users will be added to. */}
+                {(isAdmin || isDeveloper) &&
+                  (createRole === "team_lead" ||
+                    createRole === "agent" ||
+                    createRole === "lead_generation") &&
+                  activeDashboard === "resume" && (
+                    <div>
+                      <Label>Department</Label>
+                      <div className="mt-1 inline-flex h-9 items-center rounded-md border border-input bg-muted/30 px-3 text-sm font-medium">
+                        Resume team
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        New users created from the Resume view are added to
+                        the Resume team. Switch to the Sales dashboard to
+                        add Sales-team members.
+                      </p>
+                    </div>
+                  )}
+
                 {/* Team Lead Selection (for Agents created by Admin) */}
                 {isAdmin &&
                   (createRole === "agent" ||
@@ -971,7 +1236,7 @@ function UserManagementContent() {
                           <option value="">
                             Select a Team Lead (Optional)
                           </option>
-                          {availableTeamLeads.map((tl) => (
+                          {teamLeadOptions.map((tl) => (
                             <option key={tl.$id} value={tl.$id}>
                               {tl.name}
                             </option>
@@ -981,8 +1246,16 @@ function UserManagementContent() {
                     </div>
                   )}
 
-                {/* Branch multi-select */}
-                {createRole !== "admin" && createRole !== "developer" && (
+                {/* Branch multi-select. The Resume team has no branches in
+                    this app, so the picker is hidden whenever the new user
+                    is destined for the Resume team (via the active view
+                    or the explicit createDepartment toggle). Admin /
+                    developer / monitor / operations are branch-less roles
+                    globally and also don't see the picker. */}
+                {createRole !== "admin" &&
+                  createRole !== "developer" &&
+                  createDepartment !== "resume" &&
+                  activeDashboard !== "resume" && (
                   <div>
                     <Label>Branches</Label>
                     {availableBranches.length === 0 ? (
@@ -1167,6 +1440,34 @@ function UserManagementContent() {
                   </div>
                 )}
 
+                {/* Department (admin/developer only) — controls which dashboard
+                    the user lands on at login. Admin/Developer/Monitor/Operations
+                    are exempt from the split, so the picker is hidden for those
+                    roles. */}
+                {(isAdmin || isDeveloper) &&
+                  editRole !== "admin" &&
+                  editRole !== "developer" &&
+                  editRole !== "monitor" &&
+                  editRole !== "operations" && (
+                    <div>
+                      <Label htmlFor="edit-department">Department</Label>
+                      <select
+                        id="edit-department"
+                        className="mt-1 w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        value={editDepartment}
+                        onChange={(e) =>
+                          setEditDepartment(e.target.value as Department)
+                        }>
+                        <option value="sales">Sales</option>
+                        <option value="resume">Resume</option>
+                      </select>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Sales users land on the main dashboard; Resume users
+                        land on the Resume team dashboard.
+                      </p>
+                    </div>
+                  )}
+
                 {/* Team Lead Selection */}
                 {isAdmin &&
                   (editingUser.role === "agent" ||
@@ -1186,7 +1487,7 @@ function UserManagementContent() {
                           <option value="">
                             Select a Team Lead (Optional)
                           </option>
-                          {availableTeamLeads.map((tl) => (
+                          {teamLeadOptions.map((tl) => (
                             <option key={tl.$id} value={tl.$id}>
                               {tl.name}
                             </option>
@@ -1237,6 +1538,7 @@ function UserManagementContent() {
                       setEditingUser(null);
                       setSelectedBranchIds([]);
                       setEditEmail("");
+                      setEditDepartment("sales");
                       setError(null);
                     }}
                     disabled={isUpdating}

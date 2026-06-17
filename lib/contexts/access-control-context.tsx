@@ -36,7 +36,9 @@ export type ComponentKey =
   | 'linkedin-requests'
   | 'linkedin-account-management'
   | 'linkedin-reports'
-  | 'payments-report';
+  | 'payments-report'
+  | 'resume-dashboard'
+  | 'resume-chat';
 
 interface AccessControlContextType {
   canAccess: (componentKey: ComponentKey) => boolean;
@@ -87,6 +89,40 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
 
   const canAccess = useCallback((componentKey: ComponentKey): boolean => {
     if (!user) {
+      return false;
+    }
+
+    // Department-aware component: only the resume team and the leadership
+    // roles (admin / developer / monitor / operations) can see the resume
+    // dashboard. Sales-team members are blocked here regardless of role
+    // eligibility, and the empty `COMPONENT_ACCESS` entry for this key
+    // means no role-only path opens it.
+    if (componentKey === 'resume-dashboard') {
+      if (user.department === 'resume') return true;
+      if (
+        user.role === 'admin' ||
+        user.role === 'developer' ||
+        user.role === 'monitor' ||
+        user.role === 'operations'
+      ) {
+        return true;
+      }
+      return false;
+    }
+
+    // Same gating as the resume dashboard. The resume chat is a
+    // separate route so leadership switching views can compare the two
+    // teams' announcements / messages side by side.
+    if (componentKey === 'resume-chat') {
+      if (user.department === 'resume') return true;
+      if (
+        user.role === 'admin' ||
+        user.role === 'developer' ||
+        user.role === 'monitor' ||
+        user.role === 'operations'
+      ) {
+        return true;
+      }
       return false;
     }
 

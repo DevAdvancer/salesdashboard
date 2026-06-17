@@ -330,4 +330,61 @@ describe('AuthContext', () => {
       expect(result.current.isManager).toBe(false);
     });
   });
+
+  describe('department helpers', () => {
+    it('should treat users with department="resume" as the resume team', async () => {
+      const mockUserDoc = {
+        $id: 'user-resume',
+        name: 'Resume User',
+        email: 'resume@test.com',
+        role: 'agent' as const,
+        department: 'resume',
+        teamLeadId: null,
+        branchIds: [],
+        branchId: null,
+        $createdAt: '2024-01-01T00:00:00.000Z',
+        $updatedAt: '2024-01-01T00:00:00.000Z',
+      };
+
+      mockAccount.get.mockResolvedValue({ $id: 'user-resume' } as any);
+      mockDatabases.getDocument.mockResolvedValue(mockUserDoc as any);
+
+      const { result } = renderHook(() => useAuth(), { wrapper });
+
+      await waitFor(() => {
+        expect(result.current.user).toMatchObject(mockUserDoc);
+      });
+
+      expect(result.current.user?.department).toBe('resume');
+      expect(result.current.isResumeTeam).toBe(true);
+      expect(result.current.isSalesTeam).toBe(false);
+    });
+
+    it('should default to the sales team when the department field is missing', async () => {
+      const mockUserDoc = {
+        $id: 'user-legacy',
+        name: 'Legacy User',
+        email: 'legacy@test.com',
+        role: 'agent' as const,
+        teamLeadId: null,
+        branchIds: [],
+        branchId: null,
+        $createdAt: '2024-01-01T00:00:00.000Z',
+        $updatedAt: '2024-01-01T00:00:00.000Z',
+      };
+
+      mockAccount.get.mockResolvedValue({ $id: 'user-legacy' } as any);
+      mockDatabases.getDocument.mockResolvedValue(mockUserDoc as any);
+
+      const { result } = renderHook(() => useAuth(), { wrapper });
+
+      await waitFor(() => {
+        expect(result.current.user).toMatchObject(mockUserDoc);
+      });
+
+      expect(result.current.user?.department).toBe('sales');
+      expect(result.current.isResumeTeam).toBe(false);
+      expect(result.current.isSalesTeam).toBe(true);
+    });
+  });
 });

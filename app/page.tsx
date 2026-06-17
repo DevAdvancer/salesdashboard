@@ -11,7 +11,7 @@ let isRedirecting = false;
 function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, loading } = useAuth();
+  const { user, loading, activeDashboard } = useAuth();
   const code = searchParams.get('code');
   const hasRedirected = useRef(false);
 
@@ -27,12 +27,16 @@ function HomeContent() {
     if (!loading && !hasRedirected.current) {
       hasRedirected.current = true;
       if (user) {
-        window.location.replace('/dashboard');
+        // activeDashboard respects user.department for non-leadership users
+        // and the user's in-app choice for leadership roles (admin/developer/
+        // monitor/operations). So a single source of truth here is enough.
+        const target = activeDashboard === 'resume' ? '/resume-dashboard' : '/dashboard';
+        window.location.replace(target);
       } else {
         window.location.replace('/login');
       }
     }
-  }, [user, loading, router, code]);
+  }, [user, loading, activeDashboard, router, code]);
 
   if (code) {
     return (

@@ -64,6 +64,7 @@ type UserDocument = {
   teamLeadId?: string | null;
   branchIds?: string[];
   branchId?: string | null;
+  department?: string;
   $createdAt: string;
   $updatedAt: string;
 };
@@ -75,6 +76,10 @@ function ensureComponentAccess(role: UserRole, componentKey: Parameters<typeof i
 }
 
 function mapUser(doc: UserDocument): User {
+  const department: User["department"] =
+    doc.department === "resume" || doc.department === "sales"
+      ? doc.department
+      : "sales";
   return {
     $id: doc.$id,
     name: doc.name,
@@ -83,6 +88,7 @@ function mapUser(doc: UserDocument): User {
     teamLeadId: doc.teamLeadId || null,
     branchIds: doc.branchIds || [],
     branchId: doc.branchId || null,
+    department,
     $createdAt: doc.$createdAt,
     $updatedAt: doc.$updatedAt,
   };

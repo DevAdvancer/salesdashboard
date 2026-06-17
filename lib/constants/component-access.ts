@@ -28,6 +28,13 @@ export const COMPONENT_ACCESS: RoleAccessMap = {
   'linkedin-account-management': ['admin', 'monitor', 'operations', 'team_lead'],
   'linkedin-reports': ['admin', 'developer', 'monitor', 'operations', 'team_lead'],
   'payments-report': ['admin', 'developer', 'monitor', 'operations'],
+  // Empty by design — `resume-dashboard` opens only via the department
+  // short-circuit in AccessControlProvider.canAccess (resume team members
+  // and the leadership roles). Sales-team members are blocked at that gate.
+  'resume-dashboard': [],
+  // Same gating as resume-dashboard — opened only by the department
+  // short-circuit in canAccess, never by role eligibility alone.
+  'resume-chat': [],
 };
 
 export function isRoleEligibleForComponent(

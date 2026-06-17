@@ -11,7 +11,9 @@ bun run lint             # ESLint check
 bun run test             # Jest tests
 bun run test:watch       # Watch mode
 bun run test:coverage   # With coverage report
-bun run setup:appwrite  # Initialize Appwrite collections (run once)
+bun run setup:appwrite  # Initialize Appwrite collections + backfill user.department (run once)
+bun run setup:appwrite:dry  # Dry-run — report changes without writing
+bun run sync:appwrite      # Alias for setup:appwrite
 # docker-compose up --build  # Docker build, runs on port 5000
 ```
 

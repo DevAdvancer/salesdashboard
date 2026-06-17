@@ -4,7 +4,7 @@
  * Run: bun run sync:appwrite
  * Dry-run (read-only): bun run sync:appwrite --dry-run
  */
-import { Client, Databases } from 'node-appwrite';
+import { Client, Databases, Query } from 'node-appwrite';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { DATABASE_ID, COLLECTIONS } from '../lib/constants/appwrite';
@@ -70,12 +70,20 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'branchIds', type: 'string', array: true, required: false, size: 255 },
       { key: 'branchId', type: 'string', required: false, size: 255 },
       { key: 'isActive', type: 'boolean', required: false, default: true },
+      {
+        key: 'department',
+        type: 'enum',
+        required: false,
+        default: 'sales',
+        values: ['sales', 'resume'],
+      },
     ],
     indexes: [
       { key: 'email_idx', type: 'unique', attributes: ['email'] },
       { key: 'role_idx', type: 'key', attributes: ['role'] },
       { key: 'team_lead_idx', type: 'key', attributes: ['teamLeadId'] },
       { key: 'branch_idx', type: 'key', attributes: ['branchIds'] },
+      { key: 'department_idx', type: 'key', attributes: ['department'] },
     ],
   },
   [COLLECTIONS.LEADS]: {
@@ -108,6 +116,28 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
     indexes: [
       { key: 'name_idx', type: 'key', attributes: ['name'] },
       { key: 'active_idx', type: 'key', attributes: ['isActive'] },
+    ],
+  },
+  [COLLECTIONS.CHAT_MESSAGES]: {
+    attributes: [
+      { key: 'channel', type: 'string', required: true, size: 32 },
+      { key: 'body', type: 'string', required: true, size: 8000 },
+      { key: 'createdById', type: 'string', required: true, size: 64 },
+      { key: 'createdByName', type: 'string', required: true, size: 255 },
+      { key: 'createdAt', type: 'datetime', required: true },
+      {
+        key: 'department',
+        type: 'enum',
+        required: false,
+        default: 'sales',
+        values: ['sales', 'resume'],
+      },
+    ],
+    indexes: [
+      { key: 'channel_idx', type: 'key', attributes: ['channel'] },
+      { key: 'department_idx', type: 'key', attributes: ['department'] },
+      // Composite index — both filters always co-occur in list queries.
+      { key: 'channel_department_idx', type: 'key', attributes: ['channel', 'department'] },
     ],
   },
 };
@@ -242,9 +272,9 @@ async function syncIndex(
     await databases.createIndex(
       DATABASE_ID,
       collectionId,
-      idx.attributes,
       idx.key,
-      idx.type as any
+      idx.type as any,
+      idx.attributes,
     );
     console.log(`    ✅ Created`);
   } catch (e: any) {
@@ -307,7 +337,126 @@ async function main() {
     await syncCollection(collectionId, schema, dryRun);
   }
 
+  // One-time backfill: ensure every user has a `department` value.
+  // Idempotent — skips docs that already have it set.
+  if (!dryRun) {
+    await backfillUserDepartments(false);
+  } else {
+    console.log('\n🧪 [DRY RUN] Would backfill user department defaults to "sales"');
+  }
+
+  // One-time backfill: chat messages that pre-date the per-department chat
+  // split are tagged as "sales" so they appear in the Sales team stream
+  // (the only stream that existed before the split). Idempotent.
+  if (!dryRun) {
+    await backfillChatMessageDepartments(false);
+  } else {
+    console.log('\n🧪 [DRY RUN] Would backfill chat_messages.department defaults to "sales"');
+  }
+
   console.log(`\n🎉 Done! ${dryRun ? '(dry run - no changes written)' : '(changes applied)'}`);
+}
+
+/**
+ * Backfill `department = 'sales'` on every user document that does not have
+ * the attribute set. Safe to re-run — docs that already have a value are skipped.
+ */
+async function backfillUserDepartments(dryRun: boolean): Promise<void> {
+  console.log(`\n🧪 Backfilling users.department (${dryRun ? 'DRY RUN' : 'APPLY'})`);
+
+  const PAGE_SIZE = 100;
+  let offset = 0;
+  let totalScanned = 0;
+  let totalUpdated = 0;
+
+  while (true) {
+    const page = await databases.listDocuments(
+      DATABASE_ID,
+      COLLECTIONS.USERS,
+      [Query.limit(PAGE_SIZE), Query.offset(offset)]
+    );
+
+    if (page.documents.length === 0) break;
+
+    for (const doc of page.documents) {
+      totalScanned += 1;
+      if (doc.department) continue;
+
+      if (dryRun) {
+        console.log(`  [DRY RUN] Would set department='sales' on user ${doc.$id}`);
+        continue;
+      }
+
+      try {
+        await databases.updateDocument(
+          DATABASE_ID,
+          COLLECTIONS.USERS,
+          doc.$id,
+          { department: 'sales' }
+        );
+        totalUpdated += 1;
+      } catch (e: any) {
+        console.log(`  ⚠️  Failed to update user ${doc.$id}: ${e?.message ?? e}`);
+      }
+    }
+
+    offset += page.documents.length;
+    if (page.documents.length < PAGE_SIZE) break;
+  }
+
+  console.log(`  Scanned ${totalScanned} user(s); updated ${totalUpdated}.`);
+}
+
+/**
+ * Backfill `department = 'sales'` on every chat message that does not have
+ * the attribute set. Pre-split messages are by definition Sales-team
+ * messages because the Resume team is brand new. Safe to re-run — docs
+ * that already have a value are skipped.
+ */
+async function backfillChatMessageDepartments(dryRun: boolean): Promise<void> {
+  console.log(`\n🧪 Backfilling chat_messages.department (${dryRun ? 'DRY RUN' : 'APPLY'})`);
+
+  const PAGE_SIZE = 100;
+  let offset = 0;
+  let totalScanned = 0;
+  let totalUpdated = 0;
+
+  while (true) {
+    const page = await databases.listDocuments(
+      DATABASE_ID,
+      COLLECTIONS.CHAT_MESSAGES,
+      [Query.limit(PAGE_SIZE), Query.offset(offset)]
+    );
+
+    if (page.documents.length === 0) break;
+
+    for (const doc of page.documents) {
+      totalScanned += 1;
+      if (doc.department) continue;
+
+      if (dryRun) {
+        console.log(`  [DRY RUN] Would set department='sales' on chat message ${doc.$id}`);
+        continue;
+      }
+
+      try {
+        await databases.updateDocument(
+          DATABASE_ID,
+          COLLECTIONS.CHAT_MESSAGES,
+          doc.$id,
+          { department: 'sales' }
+        );
+        totalUpdated += 1;
+      } catch (e: any) {
+        console.log(`  ⚠️  Failed to update chat message ${doc.$id}: ${e?.message ?? e}`);
+      }
+    }
+
+    offset += page.documents.length;
+    if (page.documents.length < PAGE_SIZE) break;
+  }
+
+  console.log(`  Scanned ${totalScanned} chat message(s); updated ${totalUpdated}.`);
 }
 
 main().catch((e) => {

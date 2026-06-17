@@ -215,7 +215,7 @@ export default function LeadDetailPage() {
 }
 
 function LeadDetailContent() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, activeDashboard } = useAuth();
   const router = useRouter();
   const params = useParams();
   const { toast } = useToast();
@@ -637,6 +637,11 @@ function LeadDetailContent() {
         await sendChatMessageAction({
           currentUserId: user.$id,
           channel: "general",
+          // Lead-closure celebration is a sales-only flow; the closed lead
+          // goes to the user's pinned department chat. Defaulting to
+          // "sales" covers the very first run before the user doc has a
+          // department attribute (backfill script sets it for everyone).
+          department: user.department ?? "sales",
           body: leadName
             ? `Congratulations ${user.name} for closing ${leadName}!`
             : `Congratulations ${user.name} for closing a lead!`,
@@ -1065,6 +1070,23 @@ function LeadDetailContent() {
   const resumeFileName =
     typeof leadData.resumeFileName === "string" ? leadData.resumeFileName : "";
 
+  // When admin is viewing leads from the Resume CRM, the assign-leads
+  // dropdown should only show people who can actually work this lead —
+  // Resume-team agents (and the leadership roles that can switch
+  // dashboards). Sales-team agents are filtered out so an admin can't
+  // accidentally cross-assign a Resume lead to a Sales agent.
+  const isResumeLeadership = (role?: string) =>
+    role === "admin" ||
+    role === "developer" ||
+    role === "monitor" ||
+    role === "operations";
+  const assignableAgents =
+    activeDashboard === "resume"
+      ? agents.filter(
+          (a) => (a.department ?? "sales") === "resume" || isResumeLeadership(a.role),
+        )
+      : agents;
+
   return (
     <div className="container mx-auto">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
@@ -1368,7 +1390,7 @@ function LeadDetailContent() {
                     onChange={(e) => handleAssignAgent(e.target.value)}
                     disabled={lead.isClosed || isAssigning}>
                     <option value="">Unassigned</option>
-                    {agents.map((agent) => (
+                    {assignableAgents.map((agent) => (
                       <option key={agent.$id} value={agent.$id}>
                         {agent.name}
                       </option>

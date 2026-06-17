@@ -43,6 +43,7 @@ function deletedUserPlaceholder(userId: string): User {
     teamLeadId: null,
     branchIds: [],
     isActive: false,
+    department: 'sales',
   };
 }
 

@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Bell,
   CalendarClock,
+  FileSpreadsheet,
   FileText,
   FormInput,
   LayoutDashboard,
@@ -59,6 +60,7 @@ export const appIcons = {
   linkedinReports: ChartColumn,
   leadRequests: ClipboardList,
   paymentsReport: Wallet,
+  resumeDashboard: FileSpreadsheet,
 } satisfies Record<string, AppIcon>;
 
 export const NAV_ITEMS: NavItem[] = [
@@ -66,6 +68,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'attendance', label: 'Attendance', href: '/attendance', icon: appIcons.attendance },
   { key: 'attendance-report', label: 'Attendance Report', href: '/attendance-report', icon: appIcons.attendanceReport },
   { key: 'chat', label: 'Chatting', href: '/chat/announcement', icon: appIcons.chat },
+  { key: 'resume-chat', label: 'Resume Chat', href: '/resume-chat/announcement', icon: appIcons.chat },
   { key: 'branch-management', label: 'Branches', href: '/branches', icon: appIcons.branches },
   { key: 'leads', label: 'Leads', href: '/leads', icon: appIcons.leads },
   { key: 'lead-requests', label: 'Lead Requests', href: '/lead-requests', icon: appIcons.leadRequests },
@@ -78,6 +81,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'linkedin-account-management', label: 'Manage Linkedin IDs', href: '/linkedin-accounts', icon: appIcons.linkedinAccounts },
   { key: 'linkedin-reports', label: 'Linkedin Reports', href: '/linkedin-reports', icon: appIcons.linkedinReports },
   { key: 'payments-report', label: 'Payments Report', href: '/payments-report', icon: appIcons.paymentsReport },
+  { key: 'resume-dashboard', label: 'Resume Dashboard', href: '/resume-dashboard', icon: appIcons.resumeDashboard },
   { key: 'mock', label: 'Mock Interview', href: '/mock', icon: appIcons.mock },
   { key: 'assessment-support', label: 'Assessment Support', href: '/assessment-support', icon: appIcons.assessmentSupport },
   { key: 'interview-support', label: 'Interview Support', href: '/interview-support', icon: appIcons.interviewSupport },

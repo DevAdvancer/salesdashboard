@@ -62,12 +62,20 @@ export const collectionSchemas: Record<string, CollectionSchema> = {
       { key: 'branchIds', type: 'string', array: true, required: false, size: 255 },
       { key: 'branchId', type: 'string', required: false, size: 255 },
       { key: 'isActive', type: 'boolean', required: false, default: true },
+      {
+        key: 'department',
+        type: 'enum',
+        required: false,
+        default: 'sales',
+        values: ['sales', 'resume'],
+      },
     ],
     indexes: [
       { key: 'email_idx', type: 'unique', attributes: ['email'] },
       { key: 'role_idx', type: 'key', attributes: ['role'] },
       { key: 'team_lead_idx', type: 'key', attributes: ['teamLeadId'] },
       { key: 'branch_idx', type: 'key', attributes: ['branchIds'] },
+      { key: 'department_idx', type: 'key', attributes: ['department'] },
     ],
   },
 

@@ -3,10 +3,10 @@
 import { ProtectedRoute } from "@/components/protected-route";
 import { ChatChannelView } from "@/components/chat-channel";
 
-export default function ChatChannelPage() {
+export default function ResumeChatChannelPage() {
   return (
     <ProtectedRoute componentKey="chat">
-      <ChatChannelView department="sales" />
+      <ChatChannelView department="resume" />
     </ProtectedRoute>
   );
 }

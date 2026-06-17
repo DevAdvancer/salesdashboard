@@ -7,7 +7,8 @@ import {
   getAuthenticatedUserDoc,
 } from "@/lib/server/current-user";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
-import type { ChatChannelType, ChatMessage, User } from "@/lib/types";
+import type { ChatChannelType, ChatMessage, Department, User } from "@/lib/types";
+import { isValidDepartment } from "@/lib/types";
 import { createNotificationsForRecipients } from "@/lib/server/notifications";
 
 async function logAuditAction(
@@ -45,14 +46,26 @@ function truncateNotificationBody(value: string) {
 export async function listChatMessagesAction(input: {
   currentUserId: string;
   channel?: ChatChannelType;
+  /**
+   * Department the chat belongs to. Each department has its own pair of
+   * channels (announcement / general). Required so the same chat page
+   * can serve both teams without leaking messages across departments.
+   */
+  department: Department;
   limit?: number;
 }) {
   await assertAuthenticatedUserId(input.currentUserId);
+
+  if (!isValidDepartment(input.department)) {
+    throw new Error("Invalid department");
+  }
+
   const channel: ChatChannelType = input.channel ?? "general";
 
   const { databases } = await createAdminClient();
   const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.CHAT_MESSAGES, [
     Query.equal("channel", channel),
+    Query.equal("department", input.department),
     Query.orderAsc("createdAt"),
     Query.limit(Math.min(Math.max(input.limit ?? 200, 1), 200)),
   ]);
@@ -63,9 +76,20 @@ export async function listChatMessagesAction(input: {
 export async function sendChatMessageAction(input: {
   currentUserId: string;
   channel?: ChatChannelType;
+  /**
+   * Department the message is being posted in. The chat page always
+   * supplies this from the user's active view (or pinned department for
+   * non-leadership users).
+   */
+  department: Department;
   body: string;
 }) {
   await assertAuthenticatedUserId(input.currentUserId);
+
+  if (!isValidDepartment(input.department)) {
+    throw new Error("Invalid department");
+  }
+
   const user = await getAuthenticatedUserDoc();
 
   const body = input.body.trim();
@@ -87,6 +111,7 @@ export async function sendChatMessageAction(input: {
     ID.unique(),
     {
       channel,
+      department: input.department,
       body,
       createdById: user.$id,
       createdByName: user.name,
@@ -100,7 +125,7 @@ export async function sendChatMessageAction(input: {
     actorName: user.name,
     targetType: "chat_message",
     targetId: doc.$id,
-    metadata: { channel, bodyLength: body.length },
+    metadata: { channel, department: input.department, bodyLength: body.length },
   });
 
   if (channel === "announcement" && user.role === "admin") {
@@ -110,6 +135,18 @@ export async function sendChatMessageAction(input: {
     const recipients = (usersResponse.documents as unknown as User[])
       .filter((u) => (u as unknown as { isActive?: unknown }).isActive !== false)
       .filter((u) => u.role !== "admin")
+      .filter((u) => {
+        // Leadership roles (admin/developer/monitor/operations) are exempt
+        // from the split — they should get announcements from either team
+        // since they can switch dashboards. Everyone else is matched on
+        // their pinned department.
+        const r = u.role;
+        if (r === "admin" || r === "developer" || r === "monitor" || r === "operations") {
+          return true;
+        }
+        const dept = (u as unknown as { department?: string }).department;
+        return dept === input.department;
+      })
       .map((u) => u.$id);
 
     await createNotificationsForRecipients(databases, recipients, {
@@ -126,7 +163,7 @@ export async function sendChatMessageAction(input: {
       actorName: user.name,
       targetType: "chat_message",
       targetId: doc.$id,
-      metadata: { recipientCount: recipients.length },
+      metadata: { recipientCount: recipients.length, department: input.department },
     });
   }
 

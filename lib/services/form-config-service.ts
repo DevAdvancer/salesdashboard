@@ -152,6 +152,10 @@ export const DEFAULT_CLIENT_INTAKE_FIELDS: FormField[] = [
   { id: '15', type: 'dropdown', label: 'Open to Relocation (Yes/No)', key: 'openToRelocation', required: true, visible: true, order: 15, options: ['Yes', 'No'] },
   { id: '16', type: 'text', label: 'Availability for Marketing', key: 'availabilityForMarketing', required: true, visible: true, order: 16 },
   { id: '17', type: 'text', label: 'Agreement', key: 'agreement', required: true, visible: true, order: 17 },
+  // `upfront` is the field stored on the client's personal-details record.
+  // The label reads "Upfront". The form auto-fills this with the value
+  // of the lead's `amount` field on first render so the agent doesn't
+  // have to retype it; the agent can override it before saving.
   { id: '18', type: 'text', label: 'Upfront', key: 'upfront', required: true, visible: true, order: 18 },
   { id: '19', type: 'text', label: 'BGC', key: 'bgc', required: true, visible: true, order: 19 },
   { id: '20', type: 'text', label: 'LinkedIn profile link', key: 'linkedinProfileUrl', required: true, visible: true, order: 20 },

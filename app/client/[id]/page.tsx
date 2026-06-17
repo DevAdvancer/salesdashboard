@@ -337,23 +337,40 @@ function HistoryDetailContent() {
       next.linkedinProfileUrl =
         typeof (leadData as any).linkedinProfileUrl === "string" ? (leadData as any).linkedinProfileUrl : "";
     }
+    // Pre-fill the Upfront field from the lead's quoted amount when the
+    // personal-details record doesn't already have a value saved. The
+    // agent can override this before saving — the saved value wins on
+    // subsequent loads. This is a one-time default, not a live sync:
+    // changes to `leadData.amount` after the form has been opened do not
+    // overwrite what the agent has already typed.
+    if (!next.upfront) {
+      const leadAmount = typeof (leadData as any).amount === "string"
+        ? (leadData as any).amount.trim()
+        : typeof (leadData as any).amount === "number"
+          ? String((leadData as any).amount)
+          : "";
+      if (leadAmount) next.upfront = leadAmount;
+    }
 
     setClientIntakeValues(next);
     setClientIntakeInitializedForRecord(paymentRecord.$id);
   }, [paymentRecord, leadData, assignedTo, owner, clientIntakeInitializedForRecord]);
 
-  // Keep `agreement` and `upfront` in sync with the latest payment plan. They
-  // are derived from `paymentRecord.paymentPlan` (not user-edited), so they
-  // should reflect every change the user makes in the Payments section.
+  // Keep `agreement` in sync with the latest payment plan (it's a
+  // description of the plan, not a free-text field). `upfront` is
+  // user-entered (pre-filled once on first render from the lead's
+  // amount; see the init effect above) and intentionally decoupled from
+  // `paymentRecord.paymentPlan.upfrontAmount`, so we don't overwrite it
+  // when the payment plan changes. Whatever the agent typed in this
+  // field on the previous save stays as the starting value.
   useEffect(() => {
     if (!paymentRecord) return;
     const derivedAgreement = `${paymentRecord.paymentPlan.percent}% in ${paymentRecord.paymentPlan.months} Months`;
-    const derivedUpfront = String(paymentRecord.paymentPlan.upfrontAmount);
     setClientIntakeValues((prev) => {
-      if (prev.agreement === derivedAgreement && prev.upfront === derivedUpfront) {
+      if (prev.agreement === derivedAgreement) {
         return prev;
       }
-      return { ...prev, agreement: derivedAgreement, upfront: derivedUpfront };
+      return { ...prev, agreement: derivedAgreement };
     });
   }, [paymentRecord]);
 
@@ -551,30 +568,33 @@ function HistoryDetailContent() {
 
     const derivedSalesperson = assignedTo?.name || owner?.name || "";
     const derivedAgreement = `${paymentRecord.paymentPlan.percent}% in ${paymentRecord.paymentPlan.months} Months`;
-    const derivedUpfront = String(paymentRecord.paymentPlan.upfrontAmount);
 
-    // Admin and TL can override the derived agreement/upfront with their edit.
-    // For other roles, always re-derive from the live payment plan.
-    const canOverrideAgreementUpfront = isAdmin || isTeamLead;
+    // Admin and TL can override the derived agreement with their edit.
+    // For other roles, always re-derive the agreement from the live
+    // payment plan. `upfront` is user-entered (pre-filled from the
+    // lead's `amount` field on first render; the agent can override
+    // before saving) and is no longer auto-derived from the payment
+    // plan — we just take whatever the user typed in the form.
+    const canOverrideAgreement = isAdmin || isTeamLead;
     const editedAgreement = typeof clientIntakeValues.agreement === "string"
       ? clientIntakeValues.agreement.trim()
       : "";
     const editedUpfront = typeof clientIntakeValues.upfront === "string"
       ? clientIntakeValues.upfront.trim()
       : "";
-    const finalAgreement = canOverrideAgreementUpfront && editedAgreement
+    const finalAgreement = canOverrideAgreement && editedAgreement
       ? editedAgreement
       : derivedAgreement;
-    const finalUpfront = canOverrideAgreementUpfront && editedUpfront
-      ? editedUpfront
-      : derivedUpfront;
 
     const merged: Record<string, unknown> = {
       ...(paymentRecord.personalDetails ?? {}),
       ...clientIntakeValues,
       salesperson: derivedSalesperson,
       agreement: finalAgreement,
-      upfront: finalUpfront,
+      // Persist the user-entered value as-is (including empty string when
+      // the user cleared the field). The required-field validation below
+      // will block the save if it's empty for a new record.
+      upfront: editedUpfront,
     };
 
     const missing: string[] = [];
@@ -900,11 +920,21 @@ function HistoryDetailContent() {
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label>Plan</Label>
+                    {/* The Payments section used to render a "Plan" row
+                        that read `percent / months / upfrontAmount` from
+                        the stored payment plan. The plan-based row was
+                        removed because the actual figure the operator
+                        cares about is the lead's quoted amount, captured
+                        on the lead form. We pull that from `leadData.amount`
+                        here. If the lead has no amount set (legacy data),
+                        we show a dash rather than fabricating a value. */}
+                    <Label>Amount (from Lead Details)</Label>
                     <p className="mt-2 text-sm text-muted-foreground">
-                      {paymentRecord.paymentPlan.percent}% in{" "}
-                      {paymentRecord.paymentPlan.months} months, upfront{" "}
-                      {paymentRecord.paymentPlan.upfrontAmount}
+                      {(typeof (leadData as any).amount === "string"
+                        ? (leadData as any).amount.trim()
+                        : typeof (leadData as any).amount === "number"
+                          ? String((leadData as any).amount)
+                          : "") || "—"}
                     </p>
                   </div>
                   <div>

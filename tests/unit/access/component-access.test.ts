@@ -1,4 +1,4 @@
-import { isRoleEligibleForComponent } from "@/lib/constants/component-access";
+import { isRoleEligibleForComponent, COMPONENT_ACCESS } from "@/lib/constants/component-access";
 
 describe("component access eligibility", () => {
   it("allows team leads to use Linkedin Requests, manage Linkedin accounts, and view Linkedin reports", () => {
@@ -94,5 +94,20 @@ describe("component access eligibility", () => {
     expect(isRoleEligibleForComponent("payments-report", "team_lead")).toBe(false);
     expect(isRoleEligibleForComponent("payments-report", "agent")).toBe(false);
     expect(isRoleEligibleForComponent("payments-report", "lead_generation")).toBe(false);
+  });
+});
+
+describe("resume-dashboard eligibility", () => {
+  it("is empty in COMPONENT_ACCESS — only opens via department or admin short-circuit", () => {
+    expect(COMPONENT_ACCESS["resume-dashboard"]).toEqual([]);
+  });
+
+  it("blocks sales-role users at the role-eligibility layer", () => {
+    expect(isRoleEligibleForComponent("resume-dashboard", "team_lead")).toBe(false);
+    expect(isRoleEligibleForComponent("resume-dashboard", "agent")).toBe(false);
+    expect(isRoleEligibleForComponent("resume-dashboard", "lead_generation")).toBe(false);
+    expect(isRoleEligibleForComponent("resume-dashboard", "admin")).toBe(false);
+    expect(isRoleEligibleForComponent("resume-dashboard", "monitor")).toBe(false);
+    expect(isRoleEligibleForComponent("resume-dashboard", "operations" as never)).toBe(false);
   });
 });

@@ -2,15 +2,34 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { account, databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
-import { User, UserRole, AuthContext as AuthContextType } from '@/lib/types';
+import { User, UserRole, Department, AuthContext as AuthContextType } from '@/lib/types';
 import { deleteAppwritePresence } from '@/lib/utils/appwrite-presences';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const SERVER_SESSION_SYNC_COOLDOWN_MS = 5 * 60 * 1000;
+const ACTIVE_DASHBOARD_STORAGE_KEY = 'crm.activeDashboard';
+
+/**
+ * Leadership roles (admin/developer/monitor/operations) can preview either
+ * dashboard from a single login. The rest are pinned to their assigned
+ * department. The active view is persisted in localStorage so it survives
+ * refresh; for non-leadership users it's always derived from user.department.
+ */
+function canSwitchDashboard(role: UserRole | undefined): boolean {
+  return role === 'admin' || role === 'developer' || role === 'monitor' || role === 'operations';
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  // Sales-team members and resume-team members are pinned; only leadership
+  // roles may flip this. We store it in state for re-render, but read the
+  // initial value from localStorage so the choice survives a refresh.
+  const [activeDashboard, setActiveDashboardState] = useState<Department>(() => {
+    if (typeof window === 'undefined') return 'sales';
+    const stored = window.localStorage.getItem(ACTIVE_DASHBOARD_STORAGE_KEY);
+    return stored === 'resume' ? 'resume' : 'sales';
+  });
   const lastServerSessionSyncAt = useRef(0);
   const serverSessionSyncPromise = useRef<Promise<void> | null>(null);
 
@@ -63,6 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         name: userDoc.name as string,
         email: userDoc.email as string,
         role: userDoc.role as UserRole,
+        department: ((userDoc.department as Department) ?? 'sales') as Department,
         teamLeadId: (userDoc.teamLeadId as string) || null,
         branchIds: Array.isArray(userDoc.branchIds) ? (userDoc.branchIds as string[]) : [],
         isActive: userDoc.isActive !== false,
@@ -194,7 +214,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isLeadGeneration = user?.role === 'lead_generation';
   const isMonitor = user?.role === 'monitor';
   const isOperations = user?.role === 'operations';
+  const canSwitchDashboardFlag = canSwitchDashboard(user?.role);
+
+  // Non-leadership users are pinned to their own department. Leadership users
+  // (admin/developer/monitor/operations) can preview either dashboard from a
+  // single login, so isResumeTeam / isSalesTeam follow the active view.
+  const effectiveDepartment: Department =
+    canSwitchDashboardFlag && user
+      ? activeDashboard
+      : (user?.department ?? 'sales');
+
+  const isResumeTeam = effectiveDepartment === 'resume';
+  const isSalesTeam = !isResumeTeam;
   const canManageAttendance = user?.role === 'admin' || user?.role === 'operations';
+
+  // Setter for the active dashboard. Persists to localStorage so the choice
+  // survives a refresh. No-op for non-leadership users so a stale localStorage
+  // value from a previously-admin account can't leak into a non-admin login.
+  const setActiveDashboard = useCallback((next: Department) => {
+    if (!canSwitchDashboardFlag) return;
+    setActiveDashboardState(next);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(ACTIVE_DASHBOARD_STORAGE_KEY, next);
+    }
+  }, [canSwitchDashboardFlag]);
 
   const value = useMemo<AuthContextType>(
     () => ({
@@ -206,7 +249,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isLeadGeneration,
       isMonitor,
       isOperations,
+      isResumeTeam,
+      isSalesTeam,
       canManageAttendance,
+      activeDashboard: effectiveDepartment,
+      canSwitchDashboard: canSwitchDashboardFlag,
+      setActiveDashboard,
       loading,
       login,
       logout,
@@ -221,7 +269,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isLeadGeneration,
       isMonitor,
       isOperations,
+      isResumeTeam,
+      isSalesTeam,
       canManageAttendance,
+      effectiveDepartment,
+      canSwitchDashboardFlag,
+      setActiveDashboard,
       loading,
       login,
       logout,

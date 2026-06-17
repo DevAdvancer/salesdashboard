@@ -7,11 +7,24 @@ export function isValidRole(value: string): value is UserRole {
   return VALID_ROLES.includes(value as UserRole);
 }
 
+// Department splits the workforce between the existing Sales team and a
+// parallel Resume team. Defaults to 'sales' for legacy user docs that predate
+// the field; the schema-sync backfill sets 'sales' on every existing record.
+export type Department = 'sales' | 'resume';
+
+export const VALID_DEPARTMENTS: Department[] = ['sales', 'resume'];
+
+export function isValidDepartment(value: string): value is Department {
+  return VALID_DEPARTMENTS.includes(value as Department);
+}
+
 export interface User {
   $id: string;
   name: string;
   email: string;
   role: UserRole;
+  /** @default 'sales' — set explicitly to 'resume' for Resume team members. */
+  department: Department;
   teamLeadId: string | null;
   branchIds: string[];
   isActive?: boolean;
@@ -26,6 +39,7 @@ export interface CreateUserInput {
   email: string;
   password: string;
   role: UserRole;
+  department?: Department;
   teamLeadId?: string;
   branchIds: string[];
 }
@@ -34,6 +48,7 @@ export interface CreateTeamLeadInput {
   name: string;
   email: string;
   password: string;
+  department?: Department;
   branchIds: string[];
 }
 
@@ -42,6 +57,7 @@ export interface CreateAgentInput {
   email: string;
   password: string;
   role?: Extract<UserRole, 'agent' | 'lead_generation' | 'monitor' | 'operations'>;
+  department?: Department;
   teamLeadId?: string;
   branchIds: string[];
 }
@@ -207,7 +223,9 @@ export type ComponentKey =
   | 'linkedin-requests'
   | 'linkedin-account-management'
   | 'linkedin-reports'
-  | 'payments-report';
+  | 'payments-report'
+  | 'resume-dashboard'
+  | 'resume-chat';
 
 export interface AccessRule {
   $id?: string;
@@ -286,6 +304,15 @@ export type ChatChannelType = 'announcement' | 'general';
 export interface ChatMessage {
   $id: string;
   channel: ChatChannelType;
+  /**
+   * Department the message belongs to. Each team (Sales / Resume) has its
+   * own pair of channels (announcement / general) — messages are never
+   * shared across departments. Leadership roles (admin/developer/monitor/
+   * operations) can read and post in either department by switching the
+   * sidebar view; the department on the message is what was active at
+   * post time.
+   */
+  department: Department;
   body: string;
   createdById: string;
   createdByName: string;
@@ -333,7 +360,26 @@ export interface AuthContext {
   isLeadGeneration: boolean;
   isMonitor: boolean;
   isOperations: boolean;
+  isResumeTeam: boolean;
+  isSalesTeam: boolean;
   canManageAttendance: boolean;
+  /**
+   * The dashboard the user is currently viewing. For leadership roles
+   * (admin/developer/monitor/operations) this can differ from
+   * `user.department` because they can switch dashboards from the sidebar.
+   * For all other users it always matches `user.department`.
+   */
+  activeDashboard: Department;
+  /**
+   * True when the current role is allowed to switch dashboards in-app.
+   * Only leadership roles (admin/developer/monitor/operations) get this.
+   */
+  canSwitchDashboard: boolean;
+  /**
+   * Switch the active dashboard. Only takes effect when `canSwitchDashboard`
+   * is true; otherwise it is a no-op.
+   */
+  setActiveDashboard: (next: Department) => void;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;

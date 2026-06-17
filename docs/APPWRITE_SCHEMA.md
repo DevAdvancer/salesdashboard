@@ -61,12 +61,14 @@ Display Name: Users
 | branchIds | string[] | No       | 255  | []      | Array of assigned branch IDs. Team leads can have multiple; agents inherit. |
 | branchId  | string   | No       | 255  | null    | Legacy single branch ID (still maintained for compatibility)                |
 | isActive  | boolean  | No       | -    | true    | Whether the user account is active                                          |
+| department| enum     | No       | -    | `sales` | `sales` or `resume` team assignment. Drives login redirect and sidebar filtering. |
 
 Indexes:
 - `email_idx` — unique on `[email]`
 - `role_idx` — key on `[role]`
 - `team_lead_idx` — key on `[teamLeadId]`
 - `branch_idx` — key on `[branchIds]` (array index for querying users by branch)
+- `department_idx` — key on `[department]` (for department-scoped queries)
 
 Permissions:
 - Read: any

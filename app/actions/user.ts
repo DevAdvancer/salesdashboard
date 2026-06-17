@@ -3,7 +3,7 @@
 import { ID, Permission, Query, Role } from 'node-appwrite';
 import { createAdminClient, createSessionClient } from '@/lib/server/appwrite';
 import { assertAuthenticatedUserId } from '@/lib/server/current-user';
-import { CreateTeamLeadInput, CreateAgentInput, UserRole } from '@/lib/types';
+import { CreateTeamLeadInput, CreateAgentInput, Department, UserRole, isValidDepartment } from '@/lib/types';
 import { COLLECTIONS } from '@/lib/constants/appwrite';
 import { normalizeEmail } from '@/lib/utils/user-hierarchy';
 import { getErrorMessage } from '@/lib/utils';
@@ -212,6 +212,7 @@ export async function createAdminAction(input: CreateAdminInput & { currentUserI
                 teamLeadId: null,
                 isActive: true,
                 branchIds: [],
+                department: 'sales',
             },
             [
                 Permission.read(Role.user(userId)),
@@ -273,6 +274,7 @@ export async function createDeveloperAction(input: CreateAdminInput & { currentU
                 teamLeadId: null,
                 isActive: true,
                 branchIds: [],
+                department: 'sales',
             },
             [
                 Permission.read(Role.user(userId)),
@@ -311,7 +313,7 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
         throw new Error("Permission denied: Only admins and developers can create team leads");
     }
 
-    const { name, email, password, branchIds } = teamLeadInput;
+    const { name, email, password, branchIds, department } = teamLeadInput;
     const { users, databases } = await createAdminClient();
     const userId = ID.unique();
 
@@ -333,7 +335,8 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
                 role: 'team_lead',
                 teamLeadId: null,
                 isActive: true,
-                branchIds
+                branchIds,
+                ...(department ? { department } : {}),
             },
             [
                  Permission.read(Role.user(userId)),
@@ -350,7 +353,7 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
             callerDoc.name,
             userId,
             'team_lead',
-            { role: 'team_lead', email, name, branchIds }
+            { role: 'team_lead', email, name, branchIds, department: department ?? 'sales' }
         );
 
         return { success: true };
@@ -388,7 +391,7 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
         throw new Error('Permission denied: Only admins and developers can create this role');
     }
 
-    const { name, email, password, branchIds } = agentInput;
+    const { name, email, password, branchIds, department } = agentInput;
     const { users, databases } = await createAdminClient();
     const userId = ID.unique();
 
@@ -424,7 +427,8 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
                 role,
                 teamLeadId,
                 isActive: true,
-                branchIds
+                branchIds,
+                ...(department ? { department } : {}),
             },
             permissions
         );
@@ -437,7 +441,7 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
             callerDoc.name,
             userId,
             role,
-            { role, email, name, branchIds, teamLeadId }
+            { role, email, name, branchIds, teamLeadId, department: department ?? 'sales' }
         );
 
         return { success: true };
@@ -454,9 +458,10 @@ export async function updateUserAction(input: {
     teamLeadId?: string | null;
     branchIds?: string[];
     email?: string;
+    department?: Department;
     currentUserId: string;
 }) {
-    const { userId, role, teamLeadId, branchIds, email, currentUserId } = input;
+    const { userId, role, teamLeadId, branchIds, email, department, currentUserId } = input;
 
     await assertAuthenticatedUserId(currentUserId);
 
@@ -527,6 +532,16 @@ export async function updateUserAction(input: {
                  }
              }
              updates.branchIds = branchIds;
+        }
+
+        if (department !== undefined && department !== targetUserDoc.department) {
+            if (!isCallerAdmin) {
+                throw new Error("Only admins or developers can change a user's department.");
+            }
+            if (!isValidDepartment(department)) {
+                throw new Error("Invalid department");
+            }
+            updates.department = department;
         }
 
         if (Object.keys(updates).length === 0) return { success: true };

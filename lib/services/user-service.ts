@@ -1,7 +1,7 @@
 import { ID, Permission, Role, Query } from 'appwrite';
 import { account, databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { logAction } from '@/lib/services/audit-service';
-import { User, UserRole, CreateAgentInput, CreateTeamLeadInput } from '@/lib/types';
+import { User, UserRole, Department, CreateAgentInput, CreateTeamLeadInput } from '@/lib/types';
 import { cached, clearCache } from '@/lib/utils/resource-cache';
 
 const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
@@ -15,6 +15,7 @@ function mapDocToUser(doc: any): User {
     name: doc.name as string,
     email: doc.email as string,
     role: doc.role as UserRole,
+    department: ((doc.department as Department) ?? 'sales') as Department,
     teamLeadId: (doc.teamLeadId as string) || null,
     branchIds: Array.isArray(doc.branchIds) ? doc.branchIds : [],
     isActive: doc.isActive !== false,
@@ -31,7 +32,7 @@ function mapDocToUser(doc: any): User {
  * 2. Creates a user document with role='team_lead' and branchIds
  */
 export async function createTeamLead(input: CreateTeamLeadInput, currentUser?: User): Promise<User> {
-  const { name, email, password, branchIds } = input;
+  const { name, email, password, branchIds, department } = input;
 
   if (!branchIds.length) {
     throw new Error('At least one branch must be assigned');
@@ -57,6 +58,7 @@ export async function createTeamLead(input: CreateTeamLeadInput, currentUser?: U
         role: 'team_lead',
         teamLeadId: null,
         branchIds,
+        ...(department ? { department } : {}),
       },
       permissions
     );
@@ -93,7 +95,7 @@ export async function createTeamLead(input: CreateTeamLeadInput, currentUser?: U
  * 3. Creates a user document with role='agent', teamLeadId, and branchIds
  */
 export async function createAgent(input: CreateAgentInput, currentUser?: User): Promise<User> {
-  const { name, email, password, teamLeadId, branchIds } = input;
+  const { name, email, password, teamLeadId, branchIds, department } = input;
 
   if (!branchIds.length) {
     throw new Error('At least one branch must be assigned');
@@ -130,6 +132,7 @@ export async function createAgent(input: CreateAgentInput, currentUser?: User): 
         role: 'agent',
         teamLeadId,
         branchIds,
+        ...(department ? { department } : {}),
       },
       [
         Permission.read(Role.user(userId)),

@@ -936,7 +936,24 @@ function LeadGenerationDashboardContent() {
 }
 
 function DashboardContent() {
-  const { user } = useAuth();
+  const { user, isAdmin, isMonitor, isOperations, activeDashboard } = useAuth();
+  const router = useRouter();
+
+  // If the user's *active* dashboard view is Resume, the Resume dashboard
+  // is the right home for them. Admin / Monitor / Operations can pick
+  // either view from the sidebar, so this redirect respects their choice
+  // (not just their stored user.department).
+  const isOnResumeView = activeDashboard === "resume";
+
+  useEffect(() => {
+    if (user && isOnResumeView) {
+      router.replace("/resume-dashboard");
+    }
+  }, [user, isOnResumeView, router]);
+
+  if (user && isOnResumeView) {
+    return null; // effect handles redirect; avoid flash
+  }
 
   if (user?.role === 'lead_generation') {
     return <LeadGenerationDashboardContent />;
