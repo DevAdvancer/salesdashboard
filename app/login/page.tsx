@@ -88,7 +88,7 @@ export default function LoginPage() {
             fontWeight: 500, fontSize: '1.625rem',
             color: 'var(--foreground)', lineHeight: 1.15, margin: 0,
           }}>
-            SalesHub CRM
+            CRM HUB
           </h1>
           <p style={{ marginTop: '0.375rem', fontSize: '0.875rem', color: 'var(--muted-foreground)', lineHeight: 1.50 }}>
             Sign in to your workspace
