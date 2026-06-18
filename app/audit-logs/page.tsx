@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useState, type CSSProperties } from 'react';
 import { useAuth } from '@/lib/contexts/auth-context';
@@ -25,12 +25,10 @@ import { getAuditLogs } from '@/lib/services/audit-service';
 import { AuditLog } from '@/lib/types';
 import { RefreshCw, User as UserIcon, Eye, Filter } from 'lucide-react';
 import { ProtectedRoute } from '@/components/protected-route';
-import { databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
-import { listBranches } from '@/lib/services/branch-service';
 import { buildAuditLogDetailModel, type AuditLogDetailModel } from '@/lib/utils/audit-log-details';
-import { Query } from 'appwrite';
 import { Label } from '@/components/ui/label';
 import { DatePicker } from '@/components/ui/date-picker';
+import { loadAuditLogReferences } from '@/lib/services/audit-log-reference-service';
 
 // Action types for filtering
 const AUDIT_ACTIONS = [
@@ -68,21 +66,6 @@ interface FormAuditModifiedField {
   changes: Record<string, FormAuditChange>;
 }
 
-function parseLeadNameFromData(data: unknown): string | null {
-  if (typeof data !== 'string') return null;
-
-  try {
-    const parsed = JSON.parse(data) as Record<string, unknown>;
-    const firstName = typeof parsed.firstName === 'string' ? parsed.firstName : '';
-    const lastName = typeof parsed.lastName === 'string' ? parsed.lastName : '';
-    const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
-    const fallback = parsed.legalName || parsed.name || parsed.company || parsed.email || parsed.phone;
-    return fullName || (typeof fallback === 'string' ? fallback : null);
-  } catch {
-    return null;
-  }
-}
-
 function getString(value: unknown, fallback = 'N/A'): string {
   return typeof value === 'string' && value.trim() ? value : fallback;
 }
@@ -118,49 +101,9 @@ function AuditLogsContent() {
 
   const fetchNames = async () => {
     try {
-      const map = new Map<string, string>();
-
-      // Fetch branches
-      const branches = await listBranches();
-      branches.forEach(b => map.set(b.$id, b.name));
-
-      // Fetch users (limit 1000 for now)
-      const users = await databases.listDocuments(
-        DATABASE_ID,
-        COLLECTIONS.USERS,
-        [Query.limit(1000)]
-      );
-      const userList: Array<{ $id: string; name: string; email: string }> = [];
-      users.documents.forEach((doc) => {
-        const userDoc = doc as { $id: string; name?: unknown; email?: unknown };
-        const name = getString(userDoc.name, getString(userDoc.email, userDoc.$id));
-        map.set(userDoc.$id, name);
-        userList.push({
-          $id: userDoc.$id,
-          name,
-          email: getString(userDoc.email, ''),
-        });
-      });
-      setUsers(userList);
-
-      try {
-        const leads = await databases.listDocuments(
-          DATABASE_ID,
-          COLLECTIONS.LEADS,
-          [Query.limit(1000)]
-        );
-        leads.documents.forEach((doc) => {
-          const leadDoc = doc as { $id: string; data?: unknown };
-          const leadName = parseLeadNameFromData(leadDoc.data);
-          if (leadName) {
-            map.set(leadDoc.$id, leadName);
-          }
-        });
-      } catch (leadError) {
-        console.warn('Could not load lead names for audit logs:', leadError);
-      }
-
-      setIdToNameMap(map);
+      const references = await loadAuditLogReferences();
+      setUsers(references.users);
+      setIdToNameMap(references.idToNameMap);
     } catch (err) {
       console.error('Error fetching names for audit logs:', err);
     }
@@ -201,10 +144,17 @@ function AuditLogsContent() {
 
   useEffect(() => {
     if (canReadAuditLogs) {
-      fetchLogs();
       fetchNames();
     } else if (user) {
-      setLoading(false); // Stop loading to trigger redirect
+      setLoading(false);
+    }
+  }, [canReadAuditLogs, user]);
+
+  useEffect(() => {
+    if (canReadAuditLogs) {
+      fetchLogs();
+    } else if (user) {
+      setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canReadAuditLogs, user, filterAction, filterTargetType, filterActorId, filterDateFrom, filterDateTo]);

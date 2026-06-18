@@ -1,5 +1,6 @@
 import { Query } from 'appwrite';
-import { databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
+import { databases, DATABASE_ID, COLLECTIONS, invalidateCollectionReads } from '@/lib/appwrite';
+import { invalidateAuditLogReferenceCache } from '@/lib/services/audit-log-reference-service';
 import { Branch, CreateBranchInput, UpdateBranchInput } from '@/lib/types';
 import { cached, clearCache } from '@/lib/utils/resource-cache';
 
@@ -205,9 +206,14 @@ export async function listBranches(): Promise<Branch[]> {
 /**
  * Invalidate the cached branches list. Call this after create/update/delete
  * so the changes appear on the next fetch.
+ *
+ * Surgical on the read-through cache (only `branches` reads drop) and
+ * prefix-scoped on the resource-cache so other service caches stay warm.
  */
 export function invalidateBranchesCache(): void {
   clearCache('branches:');
+  invalidateCollectionReads(COLLECTIONS.BRANCHES);
+  invalidateAuditLogReferenceCache();
 }
 
 /**

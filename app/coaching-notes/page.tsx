@@ -39,7 +39,7 @@ function CoachingNotesContent() {
       setLoading(true);
       setError(null);
       const [visibleUsers, fetchedNotes] = await Promise.all([
-        getAssignableUsers(user.role, user.branchIds || [], user.$id),
+        getAssignableUsers(user.role, user.branchIds || [], user.$id, 'sales'),
         listCoachingNotes(user.$id),
       ]);
       setUsers(visibleUsers);

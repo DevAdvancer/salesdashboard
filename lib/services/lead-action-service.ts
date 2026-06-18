@@ -11,7 +11,9 @@ import {
   listLeadAssignableAgentsAction,
   notInterestedLeadAction,
 } from "@/lib/actions/lead-actions";
+import { invalidateAuditLogReferenceCache } from "@/lib/services/audit-log-reference-service";
 import { cacheClientRead, clearClientReadCache } from "@/lib/utils/client-read-cache";
+import { clearDashboardDataCache } from "@/lib/services/dashboard-data-service";
 import type { CreateLeadInput, Lead, LeadData, LeadListFilters, User, UserRole } from "@/lib/types";
 
 const LEAD_READ_SCOPE_PREFIX = "lead:";
@@ -27,6 +29,8 @@ export type PaginatedLeads = {
 
 export function clearLeadReadCache() {
   clearClientReadCache(LEAD_READ_SCOPE_PREFIX);
+  clearDashboardDataCache();
+  invalidateAuditLogReferenceCache();
 }
 
 /**

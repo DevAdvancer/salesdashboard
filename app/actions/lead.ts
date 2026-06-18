@@ -3,7 +3,7 @@
 import { createAdminClient } from "@/lib/server/appwrite";
 import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
 import { LeadActionError } from "@/lib/server/lead-errors";
-import { Lead, LeadData, LeadListFilters, UserRole, CreateLeadInput } from "@/lib/types";
+import { Lead, LeadData, LeadListFilters, UserRole, CreateLeadInput, Department } from "@/lib/types";
 import { Query, ID, Permission, Role } from "node-appwrite";
 import { COLLECTIONS } from "@/lib/constants/appwrite";
 import { getSpecialBranchLeadAccess } from '@/lib/constants/special-lead-access';
@@ -435,6 +435,37 @@ type UserDocument = {
   department?: string;
 };
 
+function normalizeDepartment(value: unknown): Department {
+  return value === 'resume' ? 'resume' : 'sales';
+}
+
+async function getDepartmentScopedUserIds(
+  databases: Awaited<ReturnType<typeof createAdminClient>>['databases'],
+  department: Department,
+): Promise<Set<string>> {
+  const users = await listAllDocuments<{ $id: string; department?: string }>({
+    databases,
+    databaseId: DATABASE_ID,
+    collectionId: COLLECTIONS.USERS,
+    queries: [Query.orderAsc('$id')],
+    pageLimit: 100,
+    maxPages: 500,
+  });
+
+  return new Set(
+    users
+      .filter((user) => normalizeDepartment(user.department) === department)
+      .map((user) => user.$id),
+  );
+}
+
+function leadMatchesDepartmentScope(lead: Lead, visibleUserIds: Set<string>) {
+  return (
+    visibleUserIds.has(lead.ownerId) ||
+    (typeof lead.assignedToId === 'string' && visibleUserIds.has(lead.assignedToId))
+  );
+}
+
 function isMonitorRole(role: UserRole) {
   return role === 'monitor';
 }
@@ -445,6 +476,12 @@ function isOperationsRole(role: UserRole) {
 
 function isAdminLikeReadAllRole(role: UserRole) {
   return role === 'admin' || role === 'developer' || role === 'monitor' || role === 'operations';
+}
+
+function assertSalesCrmAccess(userDoc: UserDocument) {
+  if (userDoc.department === 'resume' && !isAdminLikeReadAllRole(userDoc.role)) {
+    throw new LeadActionError('PERMISSION_DENIED', 'Resume users cannot access the Sales CRM.');
+  }
 }
 
 async function assertLeadReopenAllowed(
@@ -971,6 +1008,7 @@ export async function getLeadAction(
       COLLECTIONS.USERS,
       viewerId
     ) as unknown as UserDocument;
+    assertSalesCrmAccess(viewerDoc);
 
     const lead = await databases.getDocument(
       DATABASE_ID,
@@ -979,6 +1017,10 @@ export async function getLeadAction(
     ) as unknown as Lead;
 
     if (isAdminLikeReadAllRole(viewerDoc.role)) {
+      const salesUserIds = await getDepartmentScopedUserIds(databases, 'sales');
+      if (!leadMatchesDepartmentScope(lead, salesUserIds)) {
+        throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
+      }
       return lead;
     }
 
@@ -1036,7 +1078,12 @@ export async function listLeadsAction(
 
     // Role-based filtering
     const userDoc = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, userId) as unknown as UserDocument;
+    assertSalesCrmAccess(userDoc);
     const userRole = userDoc.role;
+    const salesUserIds =
+      isAdminLikeReadAllRole(userRole)
+        ? await getDepartmentScopedUserIds(databases, 'sales')
+        : null;
 
     const specialBranchId = getSpecialBranchLeadAccess(userDoc.email as string | undefined);
 
@@ -1068,7 +1115,11 @@ export async function listLeadsAction(
           maxPages: 100,
         });
 
-        const teamIds = [filters.teamLeadId, ...agents.map((agent) => agent.$id)];
+        const teamIds = [filters.teamLeadId, ...agents.map((agent) => agent.$id)]
+          .filter((candidateId) => salesUserIds?.has(candidateId) ?? true);
+        if (teamIds.length === 0) {
+          return { leads: [], total: 0, page: 1, pageSize: 0 };
+        }
         queries.push(
           Query.or([Query.equal('ownerId', teamIds), Query.equal('assignedToId', teamIds)]),
         );
@@ -1134,31 +1185,26 @@ export async function listLeadsAction(
     const page = wantExport ? 1 : Math.max(1, options?.page ?? 1);
     const pageSize = wantExport ? 10000 : Math.min(100, Math.max(1, options?.pageSize ?? 20));
 
-    if (!wantExport) {
-      queries.push(Query.limit(pageSize));
-      queries.push(Query.offset((page - 1) * pageSize));
-    }
-
-    // Apply Query.select projection to trim the per-page payload. Skip
-    // when search is active so all fields are available for in-memory
-    // filtering (the in-memory filter does a substring scan over data).
+    const projectedQueries = [...queries];
     if (!filters.searchQuery) {
-      queries.push(Query.select(LEADS_LIST_SELECT));
+      projectedQueries.push(Query.select(LEADS_LIST_SELECT));
     }
 
-    if (wantExport) {
-      // Use cursor-based pagination to fetch ALL matching documents
-      // (no artificial cap). High maxPages = 500 × 5000 default limit = 2.5M
-      // rows max — more than any realistic tenant will have.
+    if (wantExport || Boolean(salesUserIds)) {
       const allLeads = await listAllDocuments<Lead>({
         databases,
         databaseId: DATABASE_ID,
         collectionId: LEADS_COLLECTION_ID,
-        queries,
+        queries: projectedQueries,
         pageLimit: 100,
         maxPages: 500,
       });
+
       let leads = allLeads;
+      if (salesUserIds) {
+        leads = leads.filter((lead) => leadMatchesDepartmentScope(lead, salesUserIds));
+      }
+
       if (filters.searchQuery) {
         const searchLower = filters.searchQuery.toLowerCase();
         leads = leads.filter((lead) => {
@@ -1172,8 +1218,29 @@ export async function listLeadsAction(
           }
         });
       }
+
+      if (!wantExport) {
+        const start = (page - 1) * pageSize;
+        return {
+          leads: leads.slice(start, start + pageSize),
+          total: leads.length,
+          page,
+          pageSize,
+        };
+      }
+
       return { leads, total: leads.length, page: 1, pageSize: leads.length };
     }
+
+    if (!wantExport) {
+      queries.push(Query.limit(pageSize));
+      queries.push(Query.offset((page - 1) * pageSize));
+    }
+
+    // Apply Query.select projection to trim the per-page payload. Skip
+    // when search is active so all fields are available for in-memory
+    // filtering (the in-memory filter does a substring scan over data).
+    queries.push(...(!filters.searchQuery ? [Query.select(LEADS_LIST_SELECT)] : []));
 
     // Paginated list path
     const response = await databases.listDocuments(
@@ -1248,10 +1315,15 @@ export async function listLeadCountsAction(
       USERS_COLLECTION_ID,
       userId
     ) as unknown as UserDocument;
+    assertSalesCrmAccess(userDoc);
     const userRole = userDoc.role;
     const specialBranchId = getSpecialBranchLeadAccess(
       userDoc.email as string | undefined
     );
+    const salesUserIds =
+      isAdminLikeReadAllRole(userRole)
+        ? await getDepartmentScopedUserIds(databases, 'sales')
+        : null;
 
     // Build the same visibility queries listLeadsAction would build for
     // this user. We mirror the role-based branch here (admin/team-lead/
@@ -1288,7 +1360,23 @@ export async function listLeadCountsAction(
           pageLimit: 100,
           maxPages: 100,
         });
-        const teamIds = [filters.teamLeadId, ...agents.map((a) => a.$id)];
+        const teamIds = [filters.teamLeadId, ...agents.map((a) => a.$id)]
+          .filter((candidateId) => salesUserIds?.has(candidateId) ?? true);
+        if (teamIds.length === 0) {
+          return {
+            active: 0,
+            closed: 0,
+            unassigned: 0,
+            byStatus: {
+              New: 0,
+              Contacted: 0,
+              Interested: 0,
+              'Not Interested': 0,
+              Backout: 0,
+              Closed: 0,
+            },
+          };
+        }
         visibilityQueries.push(
           Query.or([
             Query.equal('ownerId', teamIds),
@@ -1378,6 +1466,31 @@ export async function listLeadCountsAction(
       'Backout',
       'Closed',
     ];
+
+    if (salesUserIds) {
+      const leads = await listAllDocuments<Lead>({
+        databases,
+        databaseId: DATABASE_ID,
+        collectionId: LEADS_COLLECTION_ID,
+        queries: [...visibilityQueries, Query.select(['$id', 'ownerId', 'assignedToId', 'isClosed', 'status'])],
+        pageLimit: 100,
+        maxPages: 500,
+      });
+      const scopedLeads = leads.filter((lead) => leadMatchesDepartmentScope(lead, salesUserIds));
+      const byStatus: Record<string, number> = {};
+      STATUS_BUCKETS.forEach((status) => {
+        byStatus[status] = scopedLeads.filter((lead) => lead.status === status).length;
+      });
+
+      return {
+        active: scopedLeads.filter((lead) => lead.isClosed !== true).length,
+        closed: scopedLeads.filter((lead) => lead.isClosed === true).length,
+        unassigned: scopedLeads.filter(
+          (lead) => lead.isClosed !== true && (!lead.assignedToId || !lead.ownerId),
+        ).length,
+        byStatus,
+      };
+    }
 
     const [activeRes, closedRes, unassignedRes, ...statusResults] =
       await Promise.all([

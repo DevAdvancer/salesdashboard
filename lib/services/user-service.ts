@@ -1,10 +1,23 @@
 import { ID, Permission, Role, Query } from 'appwrite';
-import { account, databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
+import { account, databases, DATABASE_ID, invalidateCollectionReads } from '@/lib/appwrite';
 import { logAction } from '@/lib/services/audit-service';
+import { invalidateAuditLogReferenceCache } from '@/lib/services/audit-log-reference-service';
 import { User, UserRole, Department, CreateAgentInput, CreateTeamLeadInput } from '@/lib/types';
 import { cached, clearCache } from '@/lib/utils/resource-cache';
 
 const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
+
+function normalizeDepartment(value: unknown): Department {
+  return value === 'resume' ? 'resume' : 'sales';
+}
+
+function matchesDepartmentScope(user: User, departmentScope?: Department | 'all'): boolean {
+  if (!departmentScope || departmentScope === 'all') {
+    return true;
+  }
+
+  return normalizeDepartment(user.department) === departmentScope;
+}
 
 /**
  * Map an Appwrite document to a User object
@@ -203,6 +216,22 @@ export async function getUsersByBranches(branchIds: string[]): Promise<User[]> {
   }
 }
 
+export async function getAllActiveUsers(limit = 5000): Promise<User[]> {
+  return cached(`users:all-active:${limit}`, 5 * 60 * 1000, async () => {
+    try {
+      const response = await databases.listDocuments(
+        DATABASE_ID,
+        USERS_COLLECTION_ID,
+        [Query.limit(limit)]
+      );
+      return response.documents.map(mapDocToUser).filter((user) => user.isActive);
+    } catch (error: any) {
+      console.error('Error fetching all active users:', error);
+      throw new Error(error.message || 'Failed to fetch all active users');
+    }
+  });
+}
+
 /**
  * Get users assignable to a lead based on the creator's role and branches.
  * - Admin/Developer/Monitor/Operations: all active users across all branches
@@ -212,7 +241,8 @@ export async function getUsersByBranches(branchIds: string[]): Promise<User[]> {
 export async function getAssignableUsers(
   creatorRole: UserRole,
   creatorBranchIds: string[],
-  creatorId?: string
+  creatorId?: string,
+  departmentScope?: Department | 'all'
 ): Promise<User[]> {
   // Build a stable cache key from the args that change the result.
   // branchIds is normalized (sorted) so [{a,b}] and [{b,a}] hit the same entry.
@@ -220,7 +250,9 @@ export async function getAssignableUsers(
     `users:assignable:${creatorRole}:` +
     (creatorBranchIds || []).slice().sort().join(',') +
     ':' +
-    (creatorId || '');
+    (creatorId || '') +
+    ':' +
+    (departmentScope || 'all');
 
   return cached(cacheKey, 5 * 60 * 1000, async () => {
     if (creatorRole === 'agent' || creatorRole === 'lead_generation') return [];
@@ -278,7 +310,10 @@ export async function getAssignableUsers(
       );
 
       // Filter out inactive users and the creator themselves
-      const users = response.documents.map(mapDocToUser).filter(u => u.isActive);
+      const users = response.documents
+        .map(mapDocToUser)
+        .filter((u) => u.isActive)
+        .filter((u) => matchesDepartmentScope(u, departmentScope));
       return creatorId ? users.filter(u => u.$id !== creatorId) : users;
     } catch (error: any) {
       console.error('Error fetching assignable users:', error);
@@ -290,8 +325,11 @@ export async function getAssignableUsers(
 /**
  * Get all agents for a specific team lead
  */
-export async function getAgentsByTeamLead(teamLeadId: string): Promise<User[]> {
-  return cached(`users:agents:${teamLeadId}`, 5 * 60 * 1000, async () => {
+export async function getAgentsByTeamLead(
+  teamLeadId: string,
+  departmentScope?: Department | 'all',
+): Promise<User[]> {
+  return cached(`users:agents:${teamLeadId}:${departmentScope || 'all'}`, 5 * 60 * 1000, async () => {
     try {
       const response = await databases.listDocuments(
         DATABASE_ID,
@@ -301,7 +339,9 @@ export async function getAgentsByTeamLead(teamLeadId: string): Promise<User[]> {
           Query.or([Query.equal('role', 'agent'), Query.equal('role', 'lead_generation')]),
         ]
       );
-      return response.documents.map(mapDocToUser);
+      return response.documents
+        .map(mapDocToUser)
+        .filter((user) => matchesDepartmentScope(user, departmentScope));
     } catch (error: any) {
       console.error('Error fetching agents by team lead:', error);
       throw new Error(error.message || 'Failed to fetch agents by team lead');
@@ -312,9 +352,16 @@ export async function getAgentsByTeamLead(teamLeadId: string): Promise<User[]> {
 /**
  * Invalidate every cached user-related entry. Call this from user
  * create/update/delete flows so the change shows up immediately.
+ *
+ * This now performs surgical invalidation on the underlying
+ * appwrite-read-cache (so only `users` collection reads are dropped),
+ * while still clearing the resource-cache prefixes that other services
+ * (assignable users, agents-by-team-lead, etc.) rely on.
  */
 export function invalidateUsersCache(): void {
   clearCache('users:');
+  invalidateCollectionReads(USERS_COLLECTION_ID);
+  invalidateAuditLogReferenceCache();
 }
 
 /**
@@ -605,7 +652,10 @@ export async function getSubordinates(userId: string): Promise<User[]> {
 /**
  * Get all team leads (optionally filtered by branchIds)
  */
-export async function getTeamLeads(branchIds?: string[]): Promise<User[]> {
+export async function getTeamLeads(
+  branchIds?: string[],
+  departmentScope?: Department | 'all',
+): Promise<User[]> {
   try {
     const queries = [Query.equal('role', 'team_lead')];
 
@@ -618,7 +668,9 @@ export async function getTeamLeads(branchIds?: string[]): Promise<User[]> {
       USERS_COLLECTION_ID,
       queries
     );
-    return response.documents.map(mapDocToUser);
+    return response.documents
+      .map(mapDocToUser)
+      .filter((user) => matchesDepartmentScope(user, departmentScope));
   } catch (error: any) {
     console.error('Error fetching team leads:', error);
     throw new Error(error.message || 'Failed to fetch team leads');

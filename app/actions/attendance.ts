@@ -7,7 +7,7 @@ import {
   getAuthenticatedUserDoc,
 } from "@/lib/server/current-user";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
-import type { AttendanceRecord, LinkedinAccount, User } from "@/lib/types";
+import type { AttendanceRecord, Department, LinkedinAccount, User } from "@/lib/types";
 import {
   createNotificationRecord,
   createNotificationsForRecipients,
@@ -29,6 +29,18 @@ function isAttendanceAdminLikeReadRole(role: User["role"]) {
 
 function isAttendanceAdminWriteRole(role: User["role"]) {
   return role === "admin" || role === "operations";
+}
+
+function normalizeDepartment(value: unknown): Department {
+  return value === "resume" ? "resume" : "sales";
+}
+
+function matchesDepartmentScope(user: User, departmentScope?: Department | "all") {
+  if (!departmentScope || departmentScope === "all") {
+    return true;
+  }
+
+  return normalizeDepartment(user.department) === departmentScope;
 }
 
 function getEtHour(now: Date) {
@@ -145,11 +157,14 @@ async function upsertAttendanceDoc(databases: Awaited<ReturnType<typeof createAd
   userId: string;
   teamLeadId: string | null;
   patch: Partial<Omit<AttendanceRecord, "$id">>;
+  existing?: AttendanceRecord | null;
 }) {
-  const existing = await getAttendanceDoc(databases, {
-    dateKey: input.dateKey,
-    userId: input.userId,
-  });
+  const existing = input.existing === undefined
+    ? await getAttendanceDoc(databases, {
+        dateKey: input.dateKey,
+        userId: input.userId,
+      })
+    : input.existing;
 
   const permissions = [
     Permission.read(Role.user(input.userId)),
@@ -960,6 +975,7 @@ export async function assignAttendanceDelegateAction(input: {
 export async function listTeamLeadsAttendanceForAdminAction(input: {
   currentUserId: string;
   dateKey?: string;
+  departmentScope?: Department | "all";
 }) {
   await assertAuthenticatedUserId(input.currentUserId);
   const user = await getAuthenticatedUserDoc();
@@ -977,6 +993,7 @@ export async function listTeamLeadsAttendanceForAdminAction(input: {
   ]);
   const teamLeads = (teamLeadsResponse.documents as unknown as User[])
     .filter((teamLead) => (teamLead as unknown as { isActive?: unknown }).isActive !== false)
+    .filter((teamLead) => matchesDepartmentScope(teamLead, input.departmentScope ?? "sales"))
     .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
   const teamLeadIds = teamLeads.map((t) => t.$id);
@@ -1037,6 +1054,7 @@ export async function listTeamLeadsAttendanceForAdminAction(input: {
 
 export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
   currentUserId: string;
+  departmentScope?: Department | "all";
 }) {
   await assertAuthenticatedUserId(input.currentUserId);
   const user = await getAuthenticatedUserDoc();
@@ -1053,43 +1071,70 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
 
   const { databases } = await createAdminClient();
 
-  const adminUsersResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
-    Query.equal("role", ["admin", "operations"]),
-    Query.limit(2000),
+  const [adminUsersResponse, teamLeadsResponse] = await Promise.all([
+    databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
+      Query.equal("role", ["admin", "operations"]),
+      Query.limit(2000),
+    ]),
+    databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
+      Query.equal("role", "team_lead"),
+      Query.limit(2000),
+    ]),
   ]);
   const adminUsers = (adminUsersResponse.documents as unknown as User[]).filter(
     (adminUser) => (adminUser as unknown as { isActive?: unknown }).isActive !== false,
   );
   const adminRecipientIds = adminUsers.map((a) => a.$id);
-
-  const teamLeadsResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
-    Query.equal("role", "team_lead"),
-    Query.limit(2000),
-  ]);
   const teamLeads = (teamLeadsResponse.documents as unknown as User[]).filter(
     (teamLead) => (teamLead as unknown as { isActive?: unknown }).isActive !== false,
-  );
+  ).filter((teamLead) => matchesDepartmentScope(teamLead, input.departmentScope ?? "sales"));
 
   let teamLeadAbsentNotified = 0;
   let agentAbsentNotified = 0;
   let agentEscalated = 0;
 
   const teamLeadIds = teamLeads.map((t) => t.$id);
-  const teamLeadAttendanceResponse =
+  const [agentsResponse, attendanceResponse] = await Promise.all([
     teamLeadIds.length > 0
-      ? await databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
-          Query.equal("dateKey", dateKey),
-          Query.equal("userId", teamLeadIds),
-          Query.limit(2000),
+      ? databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
+          Query.equal("role", ["agent", "lead_generation"]),
+          Query.equal("teamLeadId", teamLeadIds),
+          Query.limit(5000),
         ])
-      : { documents: [] as unknown[] };
-  const teamLeadAttendanceDocs =
-    teamLeadAttendanceResponse.documents as unknown as AttendanceRecord[];
-  const teamLeadAttendanceByUserId = new Map<string, AttendanceRecord>();
-  teamLeadAttendanceDocs.forEach((doc) => teamLeadAttendanceByUserId.set(doc.userId, doc));
+      : Promise.resolve({ documents: [] as unknown[] }),
+    databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
+      Query.equal("dateKey", dateKey),
+      Query.limit(5000),
+    ]),
+  ]);
+  const agents = (agentsResponse.documents as unknown as User[]).filter(
+    (agent) => (agent as unknown as { isActive?: unknown }).isActive !== false,
+  ).filter((agent) => matchesDepartmentScope(agent, input.departmentScope ?? "sales"));
+  const agentsByTeamLeadId = new Map<string, User[]>();
+  for (const agent of agents) {
+    if (!agent.teamLeadId) continue;
+    const existingAgents = agentsByTeamLeadId.get(agent.teamLeadId) ?? [];
+    existingAgents.push(agent);
+    agentsByTeamLeadId.set(agent.teamLeadId, existingAgents);
+  }
+  const attendanceByUserId = new Map<string, AttendanceRecord>();
+  (attendanceResponse.documents as unknown as AttendanceRecord[]).forEach((doc) => {
+    attendanceByUserId.set(doc.userId, doc);
+  });
+  const notifyAgentJobs: Array<{
+    agentId: string;
+    agentName: string;
+    recipientTeamLeadId: string;
+  }> = [];
+  const escalateAgentJobs: Array<{
+    agentId: string;
+    agentName: string;
+    teamLeadId: string;
+    teamLeadName: string;
+  }> = [];
 
   for (const teamLead of teamLeads) {
-    const teamLeadAttendance = teamLeadAttendanceByUserId.get(teamLead.$id) ?? null;
+    const teamLeadAttendance = attendanceByUserId.get(teamLead.$id) ?? null;
     const teamLeadIsPresent = teamLeadAttendance?.present === true;
     if (!teamLeadIsPresent && !teamLeadAttendance?.absentNotifiedAt) {
       const updatedTl = await upsertAttendanceDoc(databases, {
@@ -1100,8 +1145,9 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
           present: false,
           absentNotifiedAt: now.toISOString(),
         },
+        existing: teamLeadAttendance,
       });
-      teamLeadAttendanceByUserId.set(teamLead.$id, updatedTl);
+      attendanceByUserId.set(teamLead.$id, updatedTl);
       await createNotificationsForRecipients(databases, adminRecipientIds, {
         type: "ATTENDANCE_TL_ABSENT",
         title: `TL Absent: ${teamLead.name}`,
@@ -1112,34 +1158,14 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
       teamLeadAbsentNotified += 1;
     }
 
-    const recipientTeamLeadId = teamLeadAttendance?.delegateUserId ?? teamLead.$id;
-
-    const agentsResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
-      Query.equal("role", ["agent", "lead_generation"]),
-      Query.equal("teamLeadId", teamLead.$id),
-      Query.limit(2000),
-    ]);
-    const agents = (agentsResponse.documents as unknown as User[]).filter(
-      (agent) => (agent as unknown as { isActive?: unknown }).isActive !== false,
-    );
-    if (agents.length === 0) {
+    const refreshedTeamLeadAttendance = attendanceByUserId.get(teamLead.$id) ?? teamLeadAttendance;
+    const recipientTeamLeadId = refreshedTeamLeadAttendance?.delegateUserId ?? teamLead.$id;
+    const teamLeadAgents = agentsByTeamLeadId.get(teamLead.$id) ?? [];
+    if (teamLeadAgents.length === 0) {
       continue;
     }
 
-    const attendanceResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
-      Query.equal("dateKey", dateKey),
-      Query.equal("teamLeadId", teamLead.$id),
-      Query.limit(2000),
-    ]);
-    const attendanceDocs = attendanceResponse.documents as unknown as AttendanceRecord[];
-    const attendanceByUserId = new Map<string, AttendanceRecord>();
-    attendanceDocs.forEach((doc) => attendanceByUserId.set(doc.userId, doc));
-
-    const notifyAgentIds: string[] = [];
-    const notifyAgentNameById = new Map<string, string>();
-    const escalateAgentIds = new Set<string>();
-
-    for (const agent of agents) {
+    for (const agent of teamLeadAgents) {
       const existing = attendanceByUserId.get(agent.$id) ?? null;
       const isPresent = existing?.present === true;
       if (isPresent) {
@@ -1147,21 +1173,34 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
       }
 
       const shouldNotifyTeamLead = !existing || !existing.absentNotifiedAt;
-      const updated = await upsertAttendanceDoc(databases, {
-        dateKey,
-        userId: agent.$id,
-        teamLeadId: teamLead.$id,
-        patch: {
-          present: false,
-          absentNotifiedAt: shouldNotifyTeamLead ? now.toISOString() : (existing?.absentNotifiedAt ?? null),
-          adminEscalatedAt: existing?.adminEscalatedAt ?? null,
-        },
-      });
+      const needsAbsentWrite =
+        !existing ||
+        existing.present !== false ||
+        (shouldNotifyTeamLead && !existing.absentNotifiedAt);
+      const updated = needsAbsentWrite
+        ? await upsertAttendanceDoc(databases, {
+            dateKey,
+            userId: agent.$id,
+            teamLeadId: teamLead.$id,
+            patch: {
+              present: false,
+              absentNotifiedAt: shouldNotifyTeamLead ? now.toISOString() : (existing?.absentNotifiedAt ?? null),
+              adminEscalatedAt: existing?.adminEscalatedAt ?? null,
+            },
+            existing,
+          })
+        : existing;
+      if (!updated) {
+        continue;
+      }
       attendanceByUserId.set(agent.$id, updated);
 
       if (shouldNotifyTeamLead) {
-        notifyAgentIds.push(agent.$id);
-        notifyAgentNameById.set(agent.$id, agent.name);
+        notifyAgentJobs.push({
+          agentId: agent.$id,
+          agentName: agent.name,
+          recipientTeamLeadId,
+        });
         agentAbsentNotified += 1;
       }
 
@@ -1176,48 +1215,59 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
       if (!needsEscalation) {
         continue;
       }
-      escalateAgentIds.add(agent.$id);
-    }
-
-    const accountLookupIds = Array.from(new Set([...notifyAgentIds, ...Array.from(escalateAgentIds)]));
-    const accountsByUserId = await getActiveLinkedinAccountsForUsers(databases, accountLookupIds);
-
-    await Promise.all(
-      notifyAgentIds.map(async (agentId) => {
-        const name = notifyAgentNameById.get(agentId) ?? "Agent";
-        const accounts = accountsByUserId.get(agentId) ?? [];
-        await createNotificationRecord(databases, {
-          recipientId: recipientTeamLeadId,
-          type: "ATTENDANCE_ABSENT",
-          title: `Absent: ${name}`,
-          body: `No in-app presence detected in 9-10 ET. Linkedin IDs: ${formatLinkedinAccountsForNotification(accounts)}`,
-          targetType: "attendance",
-          targetId: agentId,
-        });
-      }),
-    );
-
-    for (const agentId of escalateAgentIds) {
-      const agent = agents.find((a) => a.$id === agentId);
-      const name = agent?.name ?? "Agent";
-      const accounts = accountsByUserId.get(agentId) ?? [];
-      await upsertAttendanceDoc(databases, {
-        dateKey,
-        userId: agentId,
+      escalateAgentJobs.push({
+        agentId: agent.$id,
+        agentName: agent.name,
         teamLeadId: teamLead.$id,
-        patch: {
-          adminEscalatedAt: now.toISOString(),
-        },
+        teamLeadName: teamLead.name,
       });
-      await createNotificationsForRecipients(databases, adminRecipientIds, {
-        type: "ATTENDANCE_UNASSIGNED",
-        title: `Unassigned absence: ${name}`,
-        body: `Agent ${name} is absent (Team Lead: ${teamLead.name}) and no delegate was assigned within 30 minutes. Linkedin IDs: ${formatLinkedinAccountsForNotification(accounts)}`,
-        targetType: "attendance",
-        targetId: agentId,
-      });
-      agentEscalated += 1;
     }
+  }
+
+  const accountLookupIds = Array.from(
+    new Set([
+      ...notifyAgentJobs.map((job) => job.agentId),
+      ...escalateAgentJobs.map((job) => job.agentId),
+    ]),
+  );
+  const accountsByUserId = await getActiveLinkedinAccountsForUsers(databases, accountLookupIds);
+
+  await Promise.all(
+    notifyAgentJobs.map(async (job) => {
+      const accounts = accountsByUserId.get(job.agentId) ?? [];
+      await createNotificationRecord(databases, {
+        recipientId: job.recipientTeamLeadId,
+        type: "ATTENDANCE_ABSENT",
+        title: `Absent: ${job.agentName}`,
+        body: `No in-app presence detected in 9-10 ET. Linkedin IDs: ${formatLinkedinAccountsForNotification(accounts)}`,
+        targetType: "attendance",
+        targetId: job.agentId,
+      });
+    }),
+  );
+
+  for (const job of escalateAgentJobs) {
+    const existing = attendanceByUserId.get(job.agentId) ?? null;
+    const updated = await upsertAttendanceDoc(databases, {
+      dateKey,
+      userId: job.agentId,
+      teamLeadId: job.teamLeadId,
+      patch: {
+        adminEscalatedAt: now.toISOString(),
+      },
+      existing,
+    });
+    attendanceByUserId.set(job.agentId, updated);
+
+    const accounts = accountsByUserId.get(job.agentId) ?? [];
+    await createNotificationsForRecipients(databases, adminRecipientIds, {
+      type: "ATTENDANCE_UNASSIGNED",
+      title: `Unassigned absence: ${job.agentName}`,
+      body: `Agent ${job.agentName} is absent (Team Lead: ${job.teamLeadName}) and no delegate was assigned within 30 minutes. Linkedin IDs: ${formatLinkedinAccountsForNotification(accounts)}`,
+      targetType: "attendance",
+      targetId: job.agentId,
+    });
+    agentEscalated += 1;
   }
 
   return { dateKey, teamLeadAbsentNotified, agentAbsentNotified, agentEscalated };
@@ -1228,6 +1278,7 @@ export async function getAttendanceReportAction(input: {
   startDateKey?: string;
   endDateKey?: string;
   teamLeadId?: string; // for admin/monitor to filter by specific team
+  departmentScope?: Department | "all";
 }) {
   await assertAuthenticatedUserId(input.currentUserId);
   const user = await getAuthenticatedUserDoc();
@@ -1253,6 +1304,7 @@ export async function getAttendanceReportAction(input: {
     ]);
     const allTLs = (teamLeadsResponse.documents as unknown as User[])
       .filter((tl) => (tl as unknown as { isActive?: unknown }).isActive !== false)
+      .filter((tl) => matchesDepartmentScope(tl, input.departmentScope ?? "sales"))
       .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
     allTeamLeadOptions = allTLs.map((tl) => ({ userId: tl.$id, userName: tl.name }));
@@ -1310,6 +1362,7 @@ export async function getAttendanceReportAction(input: {
       ]);
       const agents = (agentsResponse.documents as unknown as User[])
         .filter((a) => (a as unknown as { isActive?: unknown }).isActive !== false)
+        .filter((a) => matchesDepartmentScope(a, input.departmentScope ?? "sales"))
         .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
       // Attendance records for this team on the selected date range

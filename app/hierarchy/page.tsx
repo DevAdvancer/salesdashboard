@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { ProtectedRoute } from '@/components/protected-route';
 import {
@@ -15,6 +15,7 @@ import { User as UserIcon, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { listBranches } from '@/lib/services/branch-service';
 import { client, databases } from '@/lib/appwrite';
+import { getAllActiveUsers, getUsersByBranches } from '@/lib/services/user-service';
 import {
   TreeNode,
   hasExistingParent,
@@ -36,26 +37,18 @@ function HierarchyContent() {
   const [users, setUsers] = useState<User[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const reloadTimeoutRef = useRef<number | null>(null);
 
   const loadData = useCallback(async () => {
     if (!user) return;
 
     try {
       setIsLoading(true);
-      const { Query } = await import('appwrite');
-      let allUsers: unknown[] = [];
+      let allUsers: User[] = [];
 
       if (canReadAllHierarchy) {
-        const response = await databases.listDocuments(
-          process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
-          process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
-          [Query.limit(5000)],
-        );
-        allUsers = response.documents;
+        allUsers = await getAllActiveUsers();
       } else if (isTeamLead && user.branchIds && user.branchIds.length > 0) {
-        const { getUsersByBranches } = await import(
-          '@/lib/services/user-service'
-        );
         allUsers = await getUsersByBranches(user.branchIds);
       }
 
@@ -66,11 +59,9 @@ function HierarchyContent() {
       // assigned to it; Resume-only branches never appear here.
       const userDeptById = new Map<string, string>();
       for (const raw of allUsers) {
-        const id = String((raw as { $id?: unknown }).$id ?? '');
+        const id = String(raw.$id ?? '');
         if (!id) continue;
-        const dept = String(
-          (raw as { department?: unknown }).department ?? 'sales',
-        );
+        const dept = String(raw.department ?? 'sales');
         userDeptById.set(id, dept);
       }
       setBranches(
@@ -78,14 +69,10 @@ function HierarchyContent() {
           if (!canReadAllHierarchy) {
             if (!(user.branchIds || []).includes(branch.$id)) return false;
           }
-          const assignedUserIds = (
-            allUsers as Array<{ branchIds?: unknown }>
-          ).flatMap((u) => {
-            const branchIds = Array.isArray(u.branchIds)
-              ? (u.branchIds as string[])
-              : [];
+          const assignedUserIds = allUsers.flatMap((u) => {
+            const branchIds = Array.isArray(u.branchIds) ? u.branchIds : [];
             return branchIds.includes(branch.$id)
-              ? [String((u as { $id?: unknown }).$id ?? '')]
+              ? [String(u.$id ?? '')]
               : [];
           });
           return assignedUserIds.some(
@@ -94,25 +81,6 @@ function HierarchyContent() {
         }),
       );
 
-      const mappedUsers = allUsers.map((rawDoc) => {
-        const doc = rawDoc as Record<string, unknown>;
-
-        return {
-          $id: String(doc.$id),
-          name: String(doc.name ?? ''),
-          email: String(doc.email ?? ''),
-          role: doc.role as User['role'],
-          teamLeadId: (doc.teamLeadId as string) || null,
-          branchIds: Array.isArray(doc.branchIds)
-            ? (doc.branchIds as string[])
-            : [],
-          isActive: doc.isActive !== false,
-          branchId: (doc.branchId as string) || null,
-          $createdAt: doc.$createdAt as string | undefined,
-          $updatedAt: doc.$updatedAt as string | undefined,
-        };
-      }) as User[];
-
       // Hard split: this page is the Sales hierarchy. Users with
       // department === 'resume' are never shown here, even if the
       // query above returned them. Resume Team Leads belong on
@@ -120,11 +88,10 @@ function HierarchyContent() {
       // is 'sales' for legacy users, so a missing department still
       // counts as Sales — matching the assumption the rest of the
       // app makes.
-      const salesOnly = mappedUsers.filter(
+      const salesOnly = allUsers.filter(
         (mapped) =>
           mapped.isActive !== false &&
-          (mapped as unknown as { department?: string }).department !==
-            'resume',
+          mapped.department !== 'resume',
       );
       setUsers(salesOnly);
     } catch (error) {
@@ -147,14 +114,22 @@ function HierarchyContent() {
     const unsubscribe = client.subscribe(
       `databases.${databaseId}.collections.${collectionId}.documents`,
       () => {
-        try {
-          databases.clearReadCache();
-        } catch {}
-        void loadData();
+        if (reloadTimeoutRef.current !== null) {
+          window.clearTimeout(reloadTimeoutRef.current);
+        }
+        reloadTimeoutRef.current = window.setTimeout(() => {
+          try {
+            databases.clearReadCache();
+          } catch {}
+          void loadData();
+        }, 250);
       },
     );
 
     return () => {
+      if (reloadTimeoutRef.current !== null) {
+        window.clearTimeout(reloadTimeoutRef.current);
+      }
       unsubscribe();
     };
   }, [user, loadData]);

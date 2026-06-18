@@ -1,15 +1,12 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
-import { databases } from '@/lib/appwrite';
 import { useAuth } from './auth-context';
 import {
   getDefaultComponentAccess,
   isRoleEligibleForComponent,
 } from '@/lib/constants/component-access';
-
-const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
-const ACCESS_CONFIG_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_ACCESS_CONFIG_COLLECTION_ID!;
+import { listAccessRules } from '@/lib/services/access-config-service';
 
 export type ComponentKey =
   | 'dashboard'
@@ -48,32 +45,66 @@ interface AccessControlContextType {
 }
 
 const AccessControlContext = createContext<AccessControlContextType | undefined>(undefined);
+const SALES_ONLY_COMPONENTS = new Set<ComponentKey>([
+  'dashboard',
+  'chat',
+  'leads',
+  'history',
+  'branch-management',
+  'audit-logs',
+  'mock',
+  'assessment-support',
+  'interview-support',
+  'hierarchy',
+  'work-queue',
+  'reports',
+  'coaching-notes',
+  'review-queue',
+  'attendance-report',
+  'lead-requests',
+  'linkedin-requests',
+  'linkedin-account-management',
+  'linkedin-reports',
+  'payments-report',
+]);
+
+function canCrossDashboards(role: NonNullable<ReturnType<typeof useAuth>['user']>['role']) {
+  return (
+    role === 'admin' ||
+    role === 'developer' ||
+    role === 'monitor' ||
+    role === 'operations'
+  );
+}
 
 export function AccessControlProvider({ children }: { children: React.ReactNode }) {
   const { user, isAdmin } = useAuth();
   const [rules, setRules] = useState<Map<string, boolean>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
+  // Track the user that the current `rules` map was fetched for. When
+  // user changes we re-fetch; when user is reference-equal to lastFetchedFor
+  // we skip the effect entirely (page navigation alone does not refetch).
+  const lastFetchedFor = React.useRef<{ id: string; role: string } | null>(null);
 
-  const fetchRules = useCallback(async () => {
+  const fetchRules = useCallback(async ({ forceRefresh = false }: { forceRefresh?: boolean } = {}) => {
     if (!user) {
+      lastFetchedFor.current = null;
+      setRules(new Map());
       setIsLoading(false);
       return;
     }
 
     try {
       setIsLoading(true);
-      const response = await databases.listDocuments(
-        DATABASE_ID,
-        ACCESS_CONFIG_COLLECTION_ID
-      );
+      const response = await listAccessRules(`${user.$id}:${user.role}`, { forceRefresh });
 
       const rulesMap = new Map<string, boolean>();
-      response.documents.forEach((doc) => {
-        const rule = doc as unknown as { componentKey: string; role: string; allowed: boolean };
+      response.forEach((rule) => {
         const key = `${rule.componentKey}-${rule.role}`;
         rulesMap.set(key, rule.allowed);
       });
 
+      lastFetchedFor.current = { id: user.$id, role: user.role };
       setRules(rulesMap);
     } catch (error) {
       console.error('Error fetching access rules:', error);
@@ -85,11 +116,28 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
   }, [user]);
 
   useEffect(() => {
-    fetchRules();
-  }, [fetchRules]);
+    // Skip the network round-trip when the user we already fetched rules
+    // for is still the active user. This keeps access-control stable
+    // across page navigations within a session.
+    if (user) {
+      const last = lastFetchedFor.current;
+      if (last && last.id === user.$id && last.role === user.role) {
+        return;
+      }
+    }
+    void fetchRules();
+  }, [fetchRules, user]);
 
   const canAccess = useCallback((componentKey: ComponentKey): boolean => {
     if (!user) {
+      return false;
+    }
+
+    if (
+      user.department === 'resume' &&
+      SALES_ONLY_COMPONENTS.has(componentKey) &&
+      !canCrossDashboards(user.role)
+    ) {
       return false;
     }
 
@@ -177,7 +225,7 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
   }, [user, isAdmin, rules]);
 
   const refreshRules = useCallback(async () => {
-    await fetchRules();
+    await fetchRules({ forceRefresh: true });
   }, [fetchRules]);
 
   const value = useMemo<AccessControlContextType>(

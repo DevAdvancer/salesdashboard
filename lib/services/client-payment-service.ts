@@ -2,13 +2,20 @@ import {
   addClientPaymentUpdateAction,
   getClientPaymentRecordAction,
   listClientPaymentSummariesAction,
+  listAllPaymentInsightsAction,
   listPaymentsReportAction,
   updateClientPersonalDetailsAction,
   upsertClientPaymentRecordAction,
+  type PaymentInsightRecord,
   type PaymentsReportRow,
 } from "@/app/actions/client-payments";
 import { cacheClientRead, clearClientReadCache } from "@/lib/utils/client-read-cache";
+import { clearDashboardDataCache } from "@/lib/services/dashboard-data-service";
 import type { ClientPaymentPlan, ClientPaymentRecord, PaymentStatus } from "@/lib/types";
+
+// Re-export the action-layer type so consumers don't need a separate import
+// path just to read the shape.
+export type { PaymentInsightRecord };
 
 export function getClientPaymentRecord(
   actorId: string,
@@ -26,7 +33,10 @@ export function upsertClientPaymentRecord(input: {
   paymentPlan: ClientPaymentPlan;
   initialStatus?: PaymentStatus;
 }): Promise<ClientPaymentRecord> {
-  return upsertClientPaymentRecordAction(input).finally(clearClientReadCache);
+  return upsertClientPaymentRecordAction(input).finally(() => {
+    clearClientReadCache();
+    clearDashboardDataCache();
+  });
 }
 
 export function addClientPaymentUpdate(input: {
@@ -36,7 +46,10 @@ export function addClientPaymentUpdate(input: {
   note?: string | null;
   amount?: number | null;
 }): Promise<ClientPaymentRecord> {
-  return addClientPaymentUpdateAction(input).finally(clearClientReadCache);
+  return addClientPaymentUpdateAction(input).finally(() => {
+    clearClientReadCache();
+    clearDashboardDataCache();
+  });
 }
 
 export function updateClientPersonalDetails(input: {
@@ -44,16 +57,31 @@ export function updateClientPersonalDetails(input: {
   leadId: string;
   personalDetails: Record<string, unknown>;
 }): Promise<ClientPaymentRecord> {
-  return updateClientPersonalDetailsAction(input).finally(clearClientReadCache);
+  return updateClientPersonalDetailsAction(input).finally(() => {
+    clearClientReadCache();
+    clearDashboardDataCache();
+  });
 }
 
 export function listClientPaymentSummaries(input: {
   actorId: string;
   leadIds: string[];
 }): Promise<Array<{ leadId: string; status: PaymentStatus; personalDetails: Record<string, unknown> }>> {
-  return listClientPaymentSummariesAction(input);
+  return cacheClientRead(
+    "clientPayments:listSummaries",
+    [input.actorId, [...input.leadIds].sort()],
+    () => listClientPaymentSummariesAction(input),
+  );
 }
 
 export function listPaymentsReport(actorId: string): Promise<PaymentsReportRow[]> {
   return listPaymentsReportAction(actorId);
+}
+
+export function listAllPaymentInsights(actorId: string): Promise<PaymentInsightRecord[]> {
+  return cacheClientRead(
+    "clientPayments:listAllInsights",
+    [actorId],
+    () => listAllPaymentInsightsAction(actorId),
+  );
 }

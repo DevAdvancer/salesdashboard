@@ -5,7 +5,7 @@ import { ChatChannelView } from "@/components/chat-channel";
 
 export default function ResumeChatChannelPage() {
   return (
-    <ProtectedRoute componentKey="chat">
+    <ProtectedRoute componentKey="resume-chat">
       <ChatChannelView department="resume" />
     </ProtectedRoute>
   );

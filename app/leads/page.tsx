@@ -351,6 +351,7 @@ function LeadsContent() {
           user.role,
           user.branchIds || [],
           user.$id,
+          "sales",
         );
       } else {
         // Team leads can only see agents assigned to them

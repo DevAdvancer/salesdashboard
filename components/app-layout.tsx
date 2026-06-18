@@ -28,6 +28,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const lastRedirectPath = useRef<string | null>(null);
   const lastAttendancePingAt = useRef(0);
   const lastPresencePingAt = useRef(0);
+  const lastPresenceSyncKey = useRef<string | null>(null);
 
   useEffect(() => {
     // Reset redirect tracking if we've successfully navigated
@@ -73,14 +74,25 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     if (!user || isPublicRoute) return;
 
     const ping = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+
       const now = Date.now();
       const storedLastPingAt = Number(
         window.sessionStorage.getItem(PRESENCE_PING_STORAGE_KEY) || 0
       );
       const lastPingAt = Math.max(lastPresencePingAt.current, storedLastPingAt);
-      if (now - lastPingAt < PRESENCE_PING_COOLDOWN_MS) return;
+      const presenceSyncKey = `${user.$id}:${pathname}`;
+      if (
+        now - lastPingAt < PRESENCE_PING_COOLDOWN_MS &&
+        lastPresenceSyncKey.current === presenceSyncKey
+      ) {
+        return;
+      }
 
       lastPresencePingAt.current = now;
+      lastPresenceSyncKey.current = presenceSyncKey;
       window.sessionStorage.setItem(PRESENCE_PING_STORAGE_KEY, String(now));
 
       const expiresAt = new Date(Date.now() + PRESENCE_EXPIRES_AFTER_MS).toISOString();

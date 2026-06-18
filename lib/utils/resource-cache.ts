@@ -18,13 +18,21 @@ type Entry<T> = { value: T; expiresAt: number };
 const store = new Map<string, Entry<unknown>>();
 
 /**
+ * Default TTL: 2 hours. Matches the underlying appwrite-read-cache window
+ * and the TanStack QueryClient staleTime. Pages stay sticky across
+ * navigation; mutations are the only invalidation path; after 2 hours a
+ * background refetch happens on next call.
+ */
+const DEFAULT_TTL_MS = 2 * 60 * 60 * 1000;
+
+/**
  * Run `loader` and cache the result for `ttlMs` under `key`. Subsequent
  * calls within the TTL return the cached value without hitting the
  * underlying service.
  */
 export async function cached<T>(
   key: string,
-  ttlMs: number,
+  ttlMs: number = DEFAULT_TTL_MS,
   loader: () => Promise<T>,
 ): Promise<T> {
   const now = Date.now();
@@ -41,7 +49,7 @@ export async function cached<T>(
 /**
  * Invalidate cached entries. Pass a `prefix` to drop only matching keys
  * (e.g. after a user-management CRUD action: `clearCache("users:")`).
- * Omit the prefix to clear everything.
+ * Omit the prefix to clear everything (used by manual refresh).
  */
 export function clearCache(prefix?: string): void {
   if (!prefix) {

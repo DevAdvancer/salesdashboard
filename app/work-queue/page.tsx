@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { listLeads } from "@/lib/services/lead-action-service";
 import { FollowUpQueueCard } from "@/components/dashboard/follow-up-queue";
 import { RoleWorkDashboard } from "@/components/dashboard/role-work-dashboard";
 import { ProtectedRoute } from "@/components/protected-route";
@@ -9,20 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/contexts/auth-context";
 import {
-  buildLeadershipDashboardInsights,
-  resolveLeadUsersForInsights,
   type LeadershipDashboardInsights,
 } from "@/lib/utils/dashboard-insights";
-import { listBranches } from "@/lib/services/branch-service";
-import {
-  getAgentsByTeamLead,
-  getAssignableUsers,
-  getTeamLeads,
-  getUserByIdOrNull,
-} from "@/lib/services/user-service";
-import type { Branch, User } from "@/lib/types";
-import { listClientPaymentSummariesAction } from "@/app/actions/client-payments";
-import { listLgHandoffsAction } from "@/app/actions/lg-handoffs";
+import { getTeamLeads } from "@/lib/services/user-service";
+import type { User } from "@/lib/types";
+import { loadDashboardData } from "@/lib/services/dashboard-data-service";
 
 export default function WorkQueuePage() {
   return (
@@ -50,7 +40,7 @@ function WorkQueueContent() {
 
     async function loadTeamLeads() {
       try {
-        const leads = await getTeamLeads();
+        const leads = await getTeamLeads(undefined, "sales");
         if (cancelled) return;
         setTeamLeads(leads);
         if (leads.length > 0) {
@@ -82,90 +72,15 @@ function WorkQueueContent() {
           setLoading(false);
           return;
         }
-        const [activeLeads, closedLeads] = await Promise.all([
-          listLeads(
-            { isClosed: false, teamLeadId },
-            user.$id,
-            user.role,
-            user.branchIds,
-          ),
-          listLeads(
-            { isClosed: true, teamLeadId },
-            user.$id,
-            user.role,
-            user.branchIds,
-          ),
-        ]);
-        let usersForInsights: User[] = [user];
-        if (canReadLikeAdmin) {
-          const selectedTeamLead = teamLeads.find(
-            (candidate) => candidate.$id === selectedTeamLeadId,
-          );
-          if (selectedTeamLead) {
-            usersForInsights = [
-              selectedTeamLead,
-              ...(await getAgentsByTeamLead(selectedTeamLead.$id)),
-            ];
-          }
-        } else if (isTeamLead) {
-          const visibleUsers = await getAssignableUsers(
-            user.role,
-            user.branchIds || [],
-            user.$id,
-          );
-          usersForInsights = [
-            user,
-            ...visibleUsers.filter(
-              (visibleUser) => visibleUser.$id !== user.$id,
-            ),
-          ];
-        } else if (isTeamLead) {
-          usersForInsights = [user, ...(await getAgentsByTeamLead(user.$id))];
-        }
-        usersForInsights = await resolveLeadUsersForInsights({
-          leads: [...activeLeads, ...closedLeads],
-          users: usersForInsights,
-          getUserByIdOrNull,
+        const data = await loadDashboardData({
+          user,
+          isAdminLike: canReadLikeAdmin,
+          isTeamLead,
+          teamLeadId,
+          includeAllBranchesForAdminLike: false,
+          departmentScope: "sales",
         });
-        const allBranches = await listBranches();
-        const branchIds = new Set([
-          ...usersForInsights.flatMap(
-            (visibleUser) => visibleUser.branchIds || [],
-          ),
-          ...activeLeads.flatMap((lead) => (lead.branchId ? [lead.branchId] : [])),
-          ...closedLeads.flatMap((lead) => (lead.branchId ? [lead.branchId] : [])),
-        ]);
-        const branches: Branch[] = allBranches.filter((branch) =>
-          branchIds.has(branch.$id),
-        );
-
-        const visibleLeadIds = Array.from(
-          new Set([...activeLeads, ...closedLeads].map((lead) => lead.$id)),
-        );
-
-        const paymentSummaries = visibleLeadIds.length > 0
-          ? await listClientPaymentSummariesAction({ actorId: user.$id, leadIds: visibleLeadIds })
-          : [];
-
-        // Pull LG→TL handoff rows. Used by the "Lead Gen Team
-        // Handoffs" insight. Best-effort: a failure here still leaves
-        // the page functional, just with an empty handoff table.
-        let lgHandoffs: Awaited<ReturnType<typeof listLgHandoffsAction>> = [];
-        try {
-          lgHandoffs = await listLgHandoffsAction();
-        } catch (handoffErr) {
-          console.error("Error loading LG handoffs:", handoffErr);
-        }
-
-        setInsights(
-          buildLeadershipDashboardInsights({
-            leads: [...activeLeads, ...closedLeads],
-            users: usersForInsights,
-            branches,
-            lgHandoffs,
-            paymentSummaries,
-          }),
-        );
+        setInsights(data.insights);
       } catch (error) {
         console.error("Failed to load work queue:", error);
         setInsights(null);

@@ -345,6 +345,7 @@ function LeadDetailContent() {
           user.role,
           user.branchIds || [],
           user.$id,
+          "sales",
         );
         setAgents(
           fetchedAgents.filter((candidate) => candidate.role === "agent"),

@@ -369,7 +369,7 @@ function UserManagementContent() {
 
           let teamLeads: User[] = [];
           if (isAdmin) {
-            teamLeads = await getTeamLeads();
+            teamLeads = await getTeamLeads(undefined, activeDashboard);
           }
 
           setAvailableTeamLeads(teamLeads);
@@ -382,7 +382,7 @@ function UserManagementContent() {
     if (showCreateDialog || editingUser) {
       loadTeamLeads();
     }
-  }, [showCreateDialog, editingUser, createRole, isAdmin, user]);
+  }, [showCreateDialog, editingUser, createRole, isAdmin, user, activeDashboard]);
 
   const resetForm = useCallback(() => {
     setFormName("");

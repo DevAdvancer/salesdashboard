@@ -4,19 +4,34 @@ import { QueryClient } from "@tanstack/react-query";
 
 /**
  * Build a fresh QueryClient with the defaults appropriate for this CRM.
- *  - staleTime: 5 min — matches the server-side read-through cache TTL
- *  - gcTime: 30 min — pages can come back without an immediate refetch
+ *
+ *  - staleTime: 2 hr — matches the underlying appwrite-read-cache TTL. A
+ *    page that returns within the window renders instantly from cache.
+ *  - gcTime: 4 hr — keeps query data alive through a couple of return
+ *    visits and a tab restore, even past staleTime. Once a query is
+ *    garbage-collected the next mount will refetch (one round-trip per
+ *    returned page, not per navigation).
  *  - refetchOnWindowFocus: false — we don't want surprise refreshes while
- *    a user is typing in a filter input
- *  - retry: 1 — one network retry is enough; further retries are noisy
+ *    a user is typing in a filter input or just looking at another window.
+ *  - refetchOnReconnect: false — a brief network blip should not trigger
+ *    a cascade of refetches on every active page.
+ *  - refetchOnMount: false — page remounts hit the cache instead of
+ *    re-issuing identical requests. Mutations are the primary cache
+ *    invalidation path; a manual refresh button is the escape hatch.
+ *  - structuralSharing: true (default) — TanStack reuses object refs when
+ *    data is structurally identical, so consumers don't re-render
+ *    spuriously across page transitions.
+ *  - retry: 1 — one network retry is enough; further retries are noisy.
  */
 export function makeQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 5 * 60 * 1000,
-        gcTime: 30 * 60 * 1000,
+        staleTime: 2 * 60 * 60 * 1000,
+        gcTime: 4 * 60 * 60 * 1000,
         refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        refetchOnMount: false,
         retry: 1,
       },
       mutations: {
@@ -40,4 +55,12 @@ export function getQueryClient(): QueryClient {
   }
   if (!browserClient) browserClient = makeQueryClient();
   return browserClient;
+}
+
+export function clearBrowserQueryClient(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  getQueryClient().clear();
 }

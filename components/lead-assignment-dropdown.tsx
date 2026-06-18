@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { getAssignableUsers, getUserById } from "@/lib/services/user-service";
-import type { User, UserRole } from "@/lib/types";
+import type { Department, User, UserRole } from "@/lib/types";
 
 interface LeadAssignmentDropdownProps {
   creatorRole: UserRole;
   creatorBranchIds: string[];
   creatorId?: string;
+  departmentScope?: Department | "all";
   value: string | null;
   onChange: (userId: string | null) => void;
 }
@@ -27,6 +28,7 @@ export function LeadAssignmentDropdown({
   creatorRole,
   creatorBranchIds,
   creatorId,
+  departmentScope = "sales",
   value,
   onChange,
 }: LeadAssignmentDropdownProps) {
@@ -57,6 +59,7 @@ export function LeadAssignmentDropdown({
           creatorRole,
           creatorBranchIds,
           creatorId,
+          departmentScope,
         );
 
         // Also fetch creator information if creatorId is provided
@@ -92,7 +95,7 @@ export function LeadAssignmentDropdown({
     return () => {
       cancelled = true;
     };
-  }, [creatorRole, creatorBranchIds, creatorId]);
+  }, [creatorRole, creatorBranchIds, creatorId, departmentScope]);
 
   if (creatorRole === "agent" || creatorRole === "lead_generation") {
     return null;

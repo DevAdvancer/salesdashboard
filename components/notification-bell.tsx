@@ -39,6 +39,7 @@ export function NotificationBell({ className }: { className?: string }) {
   const [loading, setLoading] = useState(false);
   const toastedIdsRef = useRef<Set<string>>(new Set());
   const lastForceRefreshAt = useRef(0);
+  const lastLoadedAt = useRef(0);
 
   const canSeeNotifications = Boolean(user) && !accessLoading && canAccess('notifications');
   const unreadCount = useMemo(
@@ -68,6 +69,7 @@ export function NotificationBell({ className }: { className?: string }) {
         setLoading(true);
         const next = await listNotifications(user.$id, { forceRefresh });
         setNotifications(next);
+        lastLoadedAt.current = Date.now();
 
         const visibleToasts = next.filter(
           (notification) =>
@@ -98,6 +100,9 @@ export function NotificationBell({ className }: { className?: string }) {
   }, [canSeeNotifications, toast, user]);
 
   const forceLoad = useCallback(() => {
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+      return;
+    }
     const now = Date.now();
     if (now - lastForceRefreshAt.current < NOTIFICATION_FORCE_REFRESH_COOLDOWN_MS) {
       return;
@@ -115,7 +120,12 @@ export function NotificationBell({ className }: { className?: string }) {
     if (!canSeeNotifications) return;
 
     const intervalId = window.setInterval(() => {
-      void load({ forceRefresh: true });
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+      const shouldForceRefresh =
+        Date.now() - lastLoadedAt.current >= NOTIFICATION_FALLBACK_POLL_MS;
+      void load({ forceRefresh: shouldForceRefresh });
     }, NOTIFICATION_FALLBACK_POLL_MS);
     window.addEventListener('focus', forceLoad);
 

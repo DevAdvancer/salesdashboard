@@ -6,7 +6,7 @@ import { assertAuthenticatedUserId } from "@/lib/server/current-user";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { isRoleEligibleForComponent } from "@/lib/constants/component-access";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
-import type { ClientPaymentRecord, PaymentStatus, User, UserRole } from "@/lib/types";
+import type { ClientPaymentRecord, Department, Lead, PaymentStatus, User, UserRole } from "@/lib/types";
 
 type WeeklyReportRange = { from: string; to: string };
 
@@ -73,6 +73,22 @@ function ensureComponentAccess(role: UserRole, componentKey: Parameters<typeof i
   if (!isRoleEligibleForComponent(componentKey, role)) {
     throw new Error("Not authorized");
   }
+}
+
+function ensureSalesCrmAccess(user: User) {
+  if (
+    user.department === "resume" &&
+    user.role !== "admin" &&
+    user.role !== "developer" &&
+    user.role !== "monitor" &&
+    user.role !== "operations"
+  ) {
+    throw new Error("Resume users cannot access Sales CRM reports.");
+  }
+}
+
+function normalizeDepartment(value: unknown): Department {
+  return value === "resume" ? "resume" : "sales";
 }
 
 function mapUser(doc: UserDocument): User {
@@ -170,7 +186,10 @@ async function listTeamLeadAgents(databases: any, teamLeadId: string): Promise<U
     maxPages: 100,
   });
 
-  return docs.map(mapUser).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  return docs
+    .map(mapUser)
+    .filter((user) => normalizeDepartment(user.department) === "sales")
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
 
 async function listScopedUsers(databases: any, actor: User): Promise<User[]> {
@@ -193,7 +212,10 @@ async function listScopedUsers(databases: any, actor: User): Promise<User[]> {
     maxPages: 500,
   });
 
-  return docs.map(mapUser).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  return docs
+    .map(mapUser)
+    .filter((user) => normalizeDepartment(user.department) === "sales")
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
 
 async function listLeadsCreatedInRange(databases: any, range: WeeklyReportRange): Promise<LeadDocument[]> {
@@ -313,6 +335,7 @@ export async function getWeeklyReportAction(input: {
   to: string;
 }): Promise<WeeklyReportResult> {
   const actor = await getActor(input.actorId);
+  ensureSalesCrmAccess(actor);
   ensureComponentAccess(actor.role, "reports");
 
   const range: WeeklyReportRange = { from: input.from, to: input.to };

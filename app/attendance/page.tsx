@@ -138,11 +138,13 @@ function AttendanceContent() {
         if (user.role === "admin" || user.role === "operations") {
           void checkAndNotifyAdminAttendanceEscalationsAction({
             currentUserId: user.$id,
+            departmentScope: "sales",
           }).catch(() => {});
         }
         const overview = await listTeamLeadsAttendanceForAdminAction({
           currentUserId: user.$id,
           dateKey: selectedDateKey || undefined,
+          departmentScope: "sales",
         });
         setDateKey(overview.dateKey);
         setSelectedDateKey((prev) => prev || overview.dateKey);

@@ -24,21 +24,17 @@ import { LeadershipDashboard } from "@/components/dashboard/leadership-dashboard
 import { FollowUpQueueCard } from "@/components/dashboard/follow-up-queue";
 import { RoleWorkDashboard } from "@/components/dashboard/role-work-dashboard";
 import {
-  buildLeadershipDashboardInsights,
-  resolveLeadUsersForInsights,
   type LeadershipDashboardInsights,
 } from "@/lib/utils/dashboard-insights";
-import { listAllPaymentInsightsAction, listClientPaymentSummariesAction, type PaymentInsightRecord } from "@/app/actions/client-payments";
-import { listLgHandoffsAction } from "@/app/actions/lg-handoffs";
 import { FinancialInsightsSection } from "@/components/dashboard/financial-insights-section";
 import { AttendanceSelfToggle } from "@/components/attendance-self-toggle";
-
-
-
-
-type AssignedAgent = User & {
-  branchNames: string;
-};
+import {
+  loadDashboardAttemptCounts,
+  loadDashboardData,
+  loadDashboardPaymentInsights,
+  type AssignedDashboardAgent,
+} from "@/lib/services/dashboard-data-service";
+import { type PaymentInsightRecord } from "@/lib/services/client-payment-service";
 
 type LeadGenerationTeamAssignmentStat = {
   teamLeadId: string;
@@ -87,7 +83,7 @@ function LegacyDashboardContent() {
   }, [countsQuery.data, countsQuery.isLoading]);
 
   const [teamLeadName, setTeamLeadName] = useState<string | null>(null);
-  const [assignedAgents, setAssignedAgents] = useState<AssignedAgent[]>([]);
+  const [assignedAgents, setAssignedAgents] = useState<AssignedDashboardAgent[]>([]);
   const [isOutlookChecking, setIsOutlookChecking] = useState(true);
   const [dashboardInsights, setDashboardInsights] =
     useState<LeadershipDashboardInsights | null>(null);
@@ -160,121 +156,27 @@ function LegacyDashboardContent() {
       });
 
       try {
-        const userIsTeamLead = user.role === "team_lead";
-
-        const [activeLeads, closedLeads] = await Promise.all([
-          listLeads(
-            { isClosed: false },
-            user.$id,
-            user.role,
-            user.branchIds,
-          ),
-          listLeads(
-            { isClosed: true },
-            user.$id,
-            user.role,
-            user.branchIds,
-          ),
-        ]);
+        const {
+          activeLeads,
+          closedLeads,
+          visibleLeadIds,
+          insights,
+          assignedAgents: nextAssignedAgents,
+        } = await loadDashboardData({
+          user,
+          isAdminLike: isAdmin || isReadOnlyAdminView,
+          isTeamLead: user.role === "team_lead",
+          includeAllBranchesForAdminLike: true,
+          includeAssignedAgents: true,
+          departmentScope: "sales",
+        });
         console.log("[Dashboard] Active leads count:", activeLeads.length);
         console.log("[Dashboard] Closed leads count:", closedLeads.length);
 
-        // All dashboard consumers need the same unique lead id list.
-        const visibleLeadIds = Array.from(
-          new Set([...activeLeads, ...closedLeads].map((lead) => lead.$id)),
-        );
-
         setDashboardInsightsLoading(true);
         try {
-          const [userService, branchService] = await Promise.all([
-            import("@/lib/services/user-service"),
-            import("@/lib/services/branch-service"),
-          ]);
-          let usersForInsights: User[] = [user];
-
-          if (isAdmin || isReadOnlyAdminView) {
-            const visibleUsers = await userService.getAssignableUsers(
-              user.role,
-              user.branchIds || [],
-              user.$id,
-            );
-            usersForInsights = [
-              user,
-              ...visibleUsers.filter(
-                (visibleUser) => visibleUser.$id !== user.$id,
-              ),
-            ];
-          } else if (userIsTeamLead) {
-            const agents = await userService.getAgentsByTeamLead(user.$id);
-            usersForInsights = [user, ...agents];
-            // Pre-fetch all branches once and build a lookup map so we don't
-            // hit the database N-times-per-agent inside the loop.
-            const allBranchesForTeam = await branchService.listBranches();
-            const branchNameById = new Map(
-              allBranchesForTeam.map((b) => [b.$id, b.name] as const),
-            );
-            const agentsWithBranches = agents.map((agent) => {
-              if (!agent.branchIds || agent.branchIds.length === 0) {
-                return { ...agent, branchNames: "N/A" };
-              }
-              const names = agent.branchIds
-                .map((bid) => branchNameById.get(bid))
-                .filter((name): name is string => Boolean(name));
-              return {
-                ...agent,
-                branchNames: names.length > 0 ? names.join(", ") : "Unknown",
-              };
-            });
-
-            setAssignedAgents(agentsWithBranches);
-          }
-
-          usersForInsights = await resolveLeadUsersForInsights({
-            leads: [...activeLeads, ...closedLeads],
-            users: usersForInsights,
-            getUserByIdOrNull: userService.getUserByIdOrNull,
-          });
-
-          // Reuse the branches we already fetched for the team-lead table
-          // when applicable; otherwise fetch them now.
-          const allBranches = await branchService.listBranches();
-          const branchIdsInScope = new Set([
-            ...usersForInsights.flatMap(
-              (visibleUser) => visibleUser.branchIds || [],
-            ),
-            ...activeLeads.flatMap((lead) => (lead.branchId ? [lead.branchId] : [])),
-            ...closedLeads.flatMap((lead) => (lead.branchId ? [lead.branchId] : [])),
-          ]);
-          const branchesForInsights: Branch[] = allBranches.filter(
-            (branch) => isAdmin || isReadOnlyAdminView || branchIdsInScope.has(branch.$id),
-          );
-
-          // visibleLeadIds is hoisted above this try block; reuse it here.
-          const paymentSummaries = visibleLeadIds.length > 0
-            ? await listClientPaymentSummariesAction({ actorId: user.$id, leadIds: visibleLeadIds })
-            : [];
-
-          // Pull the LG→TL handoff rows from lg_handoffs. These are the
-          // source of truth for the "Lead Gen Team Handoffs" count
-          // (one row per original handoff, never updated on
-          // reassignment). Failures here are non-fatal: the dashboard
-          // will simply render an empty handoff table.
-          let lgHandoffs: Awaited<ReturnType<typeof listLgHandoffsAction>> = [];
-          try {
-            lgHandoffs = await listLgHandoffsAction();
-          } catch (handoffErr) {
-            console.error("Error loading LG handoffs:", handoffErr);
-          }
-
-          setDashboardInsights(
-            buildLeadershipDashboardInsights({
-              leads: [...activeLeads, ...closedLeads],
-              users: usersForInsights,
-              branches: branchesForInsights,
-              lgHandoffs,
-              paymentSummaries,
-            }),
-          );
+          setAssignedAgents(nextAssignedAgents);
+          setDashboardInsights(insights);
         } catch (error) {
           console.error("Error fetching dashboard insights:", error);
           setDashboardInsights(null);
@@ -283,26 +185,7 @@ function LegacyDashboardContent() {
         }
 
         // visibleLeadIds is hoisted above the try block; reuse it here.
-        const [mockAttempts, interviewAttempts, assessmentAttempts] =
-          visibleLeadIds.length > 0
-            ? await Promise.all([
-                getMockAttempts(user.$id, visibleLeadIds),
-                getInterviewAttempts(user.$id, visibleLeadIds),
-                getAssessmentAttempts(user.$id, visibleLeadIds),
-              ])
-            : [[], [], []];
-
-        const countCreatedRequests = (
-          attempts: { attemptCount?: number | string }[],
-        ) =>
-          attempts.reduce((total, attempt) => {
-            const count =
-              typeof attempt.attemptCount === "number"
-                ? attempt.attemptCount
-                : Number.parseInt(String(attempt.attemptCount ?? 0), 10);
-
-            return total + (Number.isFinite(count) ? count : 0);
-          }, 0);
+        const attemptCounts = await loadDashboardAttemptCounts(user.$id, visibleLeadIds);
 
         // Use the lightweight counts action as the primary count source.
         // The action returns uncapped totals (no document payload).
@@ -315,9 +198,9 @@ function LegacyDashboardContent() {
         setMetrics({
           activeLeads: activeCount,
           closedLeads: closedCount,
-          createdMocks: countCreatedRequests(mockAttempts),
-          createdInterviewSupport: countCreatedRequests(interviewAttempts),
-          createdAssessmentSupport: countCreatedRequests(assessmentAttempts),
+          createdMocks: attemptCounts.createdMocks,
+          createdInterviewSupport: attemptCounts.createdInterviewSupport,
+          createdAssessmentSupport: attemptCounts.createdAssessmentSupport,
           loading: false,
         });
 
@@ -326,7 +209,7 @@ function LegacyDashboardContent() {
         if (isAdmin || isReadOnlyAdminView) {
           setPaymentInsightsLoading(true);
           try {
-            const insights = await listAllPaymentInsightsAction(user.$id);
+            const insights = await loadDashboardPaymentInsights(user.$id);
             setPaymentInsights(insights);
           } catch (err) {
             console.error("Error fetching payment insights:", err);

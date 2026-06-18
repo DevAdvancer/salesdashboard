@@ -4,9 +4,11 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { account, databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { User, UserRole, Department, AuthContext as AuthContextType } from '@/lib/types';
 import { deleteAppwritePresence } from '@/lib/utils/appwrite-presences';
+import { clearBrowserQueryClient } from '@/lib/queries/client';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const SERVER_SESSION_SYNC_COOLDOWN_MS = 5 * 60 * 1000;
+const SERVER_SESSION_SYNC_STORAGE_KEY = 'crm.lastServerSessionSyncAt';
 const ACTIVE_DASHBOARD_STORAGE_KEY = 'crm.activeDashboard';
 
 /**
@@ -33,9 +35,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const lastServerSessionSyncAt = useRef(0);
   const serverSessionSyncPromise = useRef<Promise<void> | null>(null);
 
+  const readStoredServerSessionSyncAt = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return 0;
+    }
+
+    return Number(window.sessionStorage.getItem(SERVER_SESSION_SYNC_STORAGE_KEY) || 0);
+  }, []);
+
+  const writeStoredServerSessionSyncAt = useCallback((value: number) => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.sessionStorage.setItem(SERVER_SESSION_SYNC_STORAGE_KEY, String(value));
+  }, []);
+
   const syncServerSession = useCallback(async ({ force = false }: { force?: boolean } = {}) => {
     const now = Date.now();
-    if (!force && now - lastServerSessionSyncAt.current < SERVER_SESSION_SYNC_COOLDOWN_MS) {
+    const lastSyncedAt = Math.max(lastServerSessionSyncAt.current, readStoredServerSessionSyncAt());
+    if (!force && now - lastSyncedAt < SERVER_SESSION_SYNC_COOLDOWN_MS) {
       return serverSessionSyncPromise.current ?? Promise.resolve();
     }
 
@@ -54,19 +73,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error('Failed to sync server session');
         }
 
-        lastServerSessionSyncAt.current = Date.now();
+        const syncedAt = Date.now();
+        lastServerSessionSyncAt.current = syncedAt;
+        writeStoredServerSessionSyncAt(syncedAt);
       })
       .finally(() => {
         serverSessionSyncPromise.current = null;
       });
 
     return serverSessionSyncPromise.current;
-  }, []);
+  }, [readStoredServerSessionSyncAt, writeStoredServerSessionSyncAt]);
 
   const clearServerSession = useCallback(async () => {
     lastServerSessionSyncAt.current = 0;
+    writeStoredServerSessionSyncAt(0);
     await fetch('/api/auth/appwrite-session', { method: 'DELETE' }).catch(() => {});
-  }, []);
+  }, [writeStoredServerSessionSyncAt]);
 
   // Fetch user document from database
   const fetchUserDocument = useCallback(async (userId: string): Promise<User | null> => {
@@ -120,7 +142,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (!cancelled) setUser(null);
             return;
           }
-          setUser(userDoc);
+          if (!userDoc) {
+            if (!cancelled) setUser(null);
+            return;
+          }
+          const nextUser = userDoc;
+          setUser((prev) => {
+            // Skip re-render when the session restore yields the same user
+            // doc we already have. Cheap shallow equality: the provider
+            // always rebuilds the user object from Appwrite on every
+            // checkSession, so prev vs new is reference-equal only if
+            // the user object was already correct.
+            if (
+              prev &&
+              prev.$id === nextUser.$id &&
+              prev.email === nextUser.email &&
+              prev.role === nextUser.role &&
+              prev.department === nextUser.department &&
+              prev.isActive === nextUser.isActive &&
+              prev.teamLeadId === nextUser.teamLeadId &&
+              prev.branchId === nextUser.branchId &&
+              prev.$updatedAt === nextUser.$updatedAt
+            ) {
+              return prev;
+            }
+            return nextUser;
+          });
         }
       } catch {
         // No active session
@@ -142,6 +189,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
 
     const refreshServerSession = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
       syncServerSession().catch((error) => {
         console.error('Failed to refresh server session:', error);
       });
@@ -184,7 +234,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Login error:', error);
       throw error;
     }
-  }, [fetchUserDocument, syncServerSession]);
+  }, [clearServerSession, fetchUserDocument, syncServerSession]);
 
   // Logout function
   const logout = useCallback(async () => {
@@ -195,6 +245,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await account.deleteSession('current');
       await clearServerSession();
       databases.clearReadCache?.();
+      clearBrowserQueryClient();
       setUser(null);
     } catch (error) {
       console.error('Logout error:', error);

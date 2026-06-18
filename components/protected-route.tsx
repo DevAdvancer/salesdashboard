@@ -19,9 +19,13 @@ export function ProtectedRoute({
   componentKey,
   fallbackPath = '/dashboard'
 }: ProtectedRouteProps) {
-  const { user } = useAuth();
+  const { user, activeDashboard } = useAuth();
   const { canAccess, isLoading } = useAccess();
   const router = useRouter();
+  const resolvedFallbackPath =
+    fallbackPath === '/dashboard' && activeDashboard === 'resume'
+      ? '/resume-dashboard'
+      : fallbackPath;
 
   useEffect(() => {
     // Auth redirect is handled by AppLayout — only enforce permission here.
@@ -33,9 +37,9 @@ export function ProtectedRoute({
         `You don't have permission to access ${componentKey.replace('-', ' ')}`,
         { showToast: true }
       );
-      router.replace(fallbackPath);
+      router.replace(resolvedFallbackPath);
     }
-  }, [user, canAccess, componentKey, isLoading, router, fallbackPath]);
+  }, [user, canAccess, componentKey, isLoading, router, resolvedFallbackPath]);
 
   // Show loading state while checking permissions
   if (isLoading) {

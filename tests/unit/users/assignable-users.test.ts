@@ -35,4 +35,35 @@ describe("getAssignableUsers", () => {
       expect.arrayContaining(["lead_generation"]),
     );
   });
+
+  it("filters admin-like assignable users by department scope", async () => {
+    const { getAssignableUsers } = await import("@/lib/services/user-service");
+
+    mockListDocuments.mockResolvedValue({
+      documents: [
+        {
+          $id: "sales-tl",
+          name: "Sales TL",
+          email: "sales@example.com",
+          role: "team_lead",
+          department: "sales",
+          branchIds: [],
+          isActive: true,
+        },
+        {
+          $id: "resume-tl",
+          name: "Resume TL",
+          email: "resume@example.com",
+          role: "team_lead",
+          department: "resume",
+          branchIds: [],
+          isActive: true,
+        },
+      ],
+    });
+
+    const users = await getAssignableUsers("admin", [], "admin-1", "sales");
+
+    expect(users.map((user) => user.$id)).toEqual(["sales-tl"]);
+  });
 });

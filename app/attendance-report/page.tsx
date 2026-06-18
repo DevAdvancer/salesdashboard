@@ -76,6 +76,7 @@ function AttendanceReportContent() {
     listTeamLeadsAttendanceForAdminAction({
       currentUserId: user.$id,
       dateKey: todayKey,
+      departmentScope: "sales",
     }).then((data) => {
       setTeamLeadOptions(data.delegateOptions);
     }).catch(() => {});
@@ -91,6 +92,7 @@ function AttendanceReportContent() {
         startDateKey: selectedDateRange.from || undefined,
         endDateKey: selectedDateRange.to || undefined,
         teamLeadId: isAdminLike && selectedTeamLeadId ? selectedTeamLeadId : undefined,
+        departmentScope: "sales",
       });
       setReport(result);
       if (!selectedDateRange.from) {
