@@ -1,4 +1,4 @@
-import type { Branch, Lead, User, ClientPaymentPlan } from '@/lib/types';
+import type { Branch, Lead, LgHandoff, User, ClientPaymentPlan } from '@/lib/types';
 import { normalizeLeadStatus } from '@/lib/utils/lead-status-workflow';
 
 export const STALE_LEAD_DAYS = 14;
@@ -133,6 +133,15 @@ interface BuildLeadershipDashboardInsightsInput {
   leads: Lead[];
   users: User[];
   branches: Branch[];
+  /**
+   * Pre-fetched handoff rows from the lg_handoffs collection, one
+   * document per (lead, original TL) pair. The "Lead Gen Team Handoffs"
+   * dashboard count is computed from these — never from the lead's
+   * current `assignedToId`, which can change after a TL reassigns the
+   * lead. Optional for backwards-compat with the test suite: when
+   * omitted, the handoff section renders empty.
+   */
+  lgHandoffs?: LgHandoff[];
   paymentSummaries?: Array<{ leadId: string; status: string; paymentPlan: ClientPaymentPlan }>;
   now?: Date;
 }
@@ -302,6 +311,7 @@ export function buildLeadershipDashboardInsights({
   leads,
   users,
   branches,
+  lgHandoffs = [],
   paymentSummaries = [],
   now = new Date(),
 }: BuildLeadershipDashboardInsightsInput): LeadershipDashboardInsights {
@@ -393,13 +403,10 @@ export function buildLeadershipDashboardInsights({
     const branchName = branchSummary?.branchName ?? 'No branch';
     const owner = userMap.get(currentLead.ownerId);
     const assignee = currentLead.assignedToId ? userMap.get(currentLead.assignedToId) : null;
-    const assignedTeamLeadId =
-      assignee?.role === 'team_lead'
-        ? assignee.$id
-        : assignee?.role === 'agent' && assignee.teamLeadId
-          ? assignee.teamLeadId
-          : null;
-    const assignedTeamLead = assignedTeamLeadId ? userMap.get(assignedTeamLeadId) : null;
+    // assignedTeamLead used to be looked up here so the handoff
+    // block (now removed) could group the lead under its current
+    // TL. With the move to lg_handoffs, neither the lookup nor the
+    // agent→TL fallback chain is needed in the per-lead walk.
     const detailRow: DashboardLeadDetailRow = {
       leadId: currentLead.$id,
       leadName: getLeadName(currentLead),
@@ -419,32 +426,12 @@ export function buildLeadershipDashboardInsights({
     statusCounts.set(status, (statusCounts.get(status) ?? 0) + 1);
     summary.totalPipelineValue += amount;
 
-    if (!currentLead.isClosed && owner?.role === 'lead_generation' && assignedTeamLead?.role === 'team_lead') {
-      const teamSummary = teamLeadAssignmentMap.get(assignedTeamLead.$id) ?? {
-        teamLeadId: assignedTeamLead.$id,
-        teamLeadName: assignedTeamLead.name,
-        assignedLeads: 0,
-        assignmentShare: 0,
-        leadGenerationBreakdown: [],
-      };
-      teamSummary.assignedLeads += 1;
+    // Handoff counting moved off the per-lead walk. We read
+    // pre-fetched lg_handoffs rows instead — see the block below the
+    // lead loop — so a later reassignment does not change the
+    // original TL's count. The handoff row is keyed on leadId and
+    // recorded at creation time (app/actions/lg-handoffs.ts).
 
-      const leadGenerationEntry = teamSummary.leadGenerationBreakdown.find(
-        (entry) => entry.leadGenerationId === owner.$id
-      );
-      if (leadGenerationEntry) {
-        leadGenerationEntry.assignedLeads += 1;
-      } else {
-        teamSummary.leadGenerationBreakdown.push({
-          leadGenerationId: owner.$id,
-          leadGenerationName: owner.name,
-          assignedLeads: 1,
-        });
-      }
-
-      teamLeadAssignmentMap.set(assignedTeamLead.$id, teamSummary);
-    }
-    
     if (payment && (payment.status === 'partially_paid' || payment.status === 'fully_paid')) {
       summary.totalUpfrontValue += payment.paymentPlan.upfrontAmount;
       details.upfrontCollectedLeads.push(detailRow);
@@ -552,6 +539,41 @@ export function buildLeadershipDashboardInsights({
   followUpQueue.dueToday.sort((a, b) => a.nextFollowUpAt.localeCompare(b.nextFollowUpAt));
   followUpQueue.upcoming.sort((a, b) => a.nextFollowUpAt.localeCompare(b.nextFollowUpAt));
   details.pipelineValue.sort((a, b) => b.amount - a.amount || a.leadName.localeCompare(b.leadName));
+  // Build the Lead Gen Team Handoffs view from the pre-fetched
+  // lg_handoffs rows. Each row is one (lead, original TL) pair, so
+  // the per-TL count is exact by construction — a later reassignment
+  // never produces a new row. We look up TL / LG names from the
+  // already-loaded user map; rows that reference missing users are
+  // skipped (their lead is not visible in this dashboard anyway).
+  for (const handoff of lgHandoffs) {
+    const teamLead = userMap.get(handoff.teamLeadId);
+    const leadGeneration = userMap.get(handoff.leadGenerationId);
+    if (!teamLead || teamLead.role !== 'team_lead') continue;
+    if (!leadGeneration || leadGeneration.role !== 'lead_generation') continue;
+
+    const teamSummary = teamLeadAssignmentMap.get(teamLead.$id) ?? {
+      teamLeadId: teamLead.$id,
+      teamLeadName: teamLead.name,
+      assignedLeads: 0,
+      assignmentShare: 0,
+      leadGenerationBreakdown: [],
+    };
+    teamSummary.assignedLeads += 1;
+
+    const leadGenerationEntry = teamSummary.leadGenerationBreakdown.find(
+      (entry) => entry.leadGenerationId === leadGeneration.$id,
+    );
+    if (leadGenerationEntry) {
+      leadGenerationEntry.assignedLeads += 1;
+    } else {
+      teamSummary.leadGenerationBreakdown.push({
+        leadGenerationId: leadGeneration.$id,
+        leadGenerationName: leadGeneration.name,
+        assignedLeads: 1,
+      });
+    }
+    teamLeadAssignmentMap.set(teamLead.$id, teamSummary);
+  }
   const totalTeamAssignedLeads = Array.from(teamLeadAssignmentMap.values()).reduce(
     (total, team) => total + team.assignedLeads,
     0,

@@ -11,8 +11,7 @@ import {
   CardDescription,
 } from '@/components/ui/card';
 import { Branch, User } from '@/lib/types';
-import { User as UserIcon, Users } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { User as UserIcon } from 'lucide-react';
 import { listBranches } from '@/lib/services/branch-service';
 import { client, databases } from '@/lib/appwrite';
 import {
@@ -22,16 +21,18 @@ import {
   sortUsersForHierarchy,
 } from '@/components/hierarchy/hierarchy-tree';
 
-export default function HierarchyPage() {
+export default function ResumeHierarchyPage() {
   return (
-    <ProtectedRoute componentKey="hierarchy">
-      <HierarchyContent />
+    <ProtectedRoute componentKey="resume-hierarchy">
+      <ResumeHierarchyContent />
     </ProtectedRoute>
   );
 }
 
-function HierarchyContent() {
-  const { user, isAdmin, isTeamLead, isMonitor } = useAuth();
+function ResumeHierarchyContent() {
+  const { user, isAdmin, isMonitor } = useAuth();
+  // The resume page is only reachable for Resume-team members and the
+  // leadership roles. Both groups should see the full Resume tree.
   const canReadAllHierarchy = isAdmin || isMonitor;
   const [users, setUsers] = useState<User[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -46,24 +47,31 @@ function HierarchyContent() {
       let allUsers: unknown[] = [];
 
       if (canReadAllHierarchy) {
+        // Admin / monitor: pull every user, then filter to Resume below.
         const response = await databases.listDocuments(
           process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
           process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
           [Query.limit(5000)],
         );
         allUsers = response.documents;
-      } else if (isTeamLead && user.branchIds && user.branchIds.length > 0) {
+      } else {
+        // Resume-team member: pull only users in their branches, then
+        // narrow to the Resume department. This is a defense-in-depth
+        // filter — ProtectedRoute already gates by department, but the
+        // page itself must never display a Sales user even if the gate
+        // were misconfigured.
         const { getUsersByBranches } = await import(
           '@/lib/services/user-service'
         );
-        allUsers = await getUsersByBranches(user.branchIds);
+        allUsers = await getUsersByBranches(user.branchIds || []);
       }
 
       const branchList = await listBranches();
-      // Build a per-user department map once so we can scope the
-      // page to the Sales team. A branch is only shown on the
-      // Sales hierarchy if at least one Sales-department user is
-      // assigned to it; Resume-only branches never appear here.
+      // Build a per-user department map once, then use it to filter the
+      // branch list. A branch is only shown on the Resume page if at
+      // least one Resume-department user is assigned to it. Branches
+      // whose only assignees are Sales-team members are filtered out so
+      // the page never cross-contaminates the two teams.
       const userDeptById = new Map<string, string>();
       for (const raw of allUsers) {
         const id = String((raw as { $id?: unknown }).$id ?? '');
@@ -89,7 +97,7 @@ function HierarchyContent() {
               : [];
           });
           return assignedUserIds.some(
-            (uid) => userDeptById.get(uid) !== 'resume',
+            (uid) => userDeptById.get(uid) === 'resume',
           );
         }),
       );
@@ -113,26 +121,23 @@ function HierarchyContent() {
         };
       }) as User[];
 
-      // Hard split: this page is the Sales hierarchy. Users with
-      // department === 'resume' are never shown here, even if the
-      // query above returned them. Resume Team Leads belong on
-      // /resume-hierarchy, not on this tree. The default department
-      // is 'sales' for legacy users, so a missing department still
-      // counts as Sales — matching the assumption the rest of the
-      // app makes.
-      const salesOnly = mappedUsers.filter(
+      // Hard split: only users on the Resume team are rendered. A
+      // user with a missing or 'sales' department is never shown on
+      // this page, even if they were returned by the query above.
+      const resumeOnly = mappedUsers.filter(
         (mapped) =>
           mapped.isActive !== false &&
-          (mapped as unknown as { department?: string }).department !==
+          // Treat the default 'sales' users as out-of-scope here.
+          (mapped as unknown as { department?: string }).department ===
             'resume',
       );
-      setUsers(salesOnly);
+      setUsers(resumeOnly);
     } catch (error) {
-      console.error('Error loading hierarchy:', error);
+      console.error('Error loading resume hierarchy:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [user, canReadAllHierarchy, isTeamLead]);
+  }, [user, canReadAllHierarchy]);
 
   useEffect(() => {
     void loadData();
@@ -167,27 +172,19 @@ function HierarchyContent() {
     );
   }
 
-  // Determine root nodes for the tree
-  let rootUsers: User[] = [];
-
-  if (canReadAllHierarchy) {
-    rootUsers = sortUsersForHierarchy(
-      users.filter((u) => u.role === 'team_lead'),
-    );
-  } else if (user?.role === 'team_lead') {
-    rootUsers = users.filter((u) => u.$id === user.$id);
-  }
+  // Root nodes are the Resume team leads. We never include admin /
+  // monitor / operations / developer as roots here — the resume tree
+  // is the team-lead-and-below graph for the Resume department only.
+  const rootUsers = sortUsersForHierarchy(
+    users.filter((u) => u.role === 'team_lead'),
+  );
 
   const unassignedUsers = sortUsersForHierarchy(
     users.filter(
       (u) =>
-        u.role !== 'admin' &&
         (u.role === 'agent' || u.role === 'lead_generation') &&
         !hasExistingParent(u, users),
     ),
-  );
-  const unassignedIndividualContributors = unassignedUsers.filter(
-    (u) => u.role === 'agent' || u.role === 'lead_generation',
   );
   const branchMap = new Map(
     branches.map((branch) => [branch.$id, branch.name]),
@@ -197,13 +194,11 @@ function HierarchyContent() {
     <div className="container mx-auto space-y-6">
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold tracking-tight">
-          Sales Team Hierarchy
+          Resume Team Hierarchy
         </h1>
         <p className="text-muted-foreground">
-          View the reporting structure of the Sales team. Resume team
-          members are not shown on this page — see
-          <span className="font-medium"> Resume Team Hierarchy</span>{' '}
-          for the Resume tree.
+          View the reporting structure of the Resume team. Sales team
+          members are not shown on this page.
         </p>
       </div>
 
@@ -212,7 +207,7 @@ function HierarchyContent() {
           <CardTitle>Team Structure</CardTitle>
           <CardDescription>
             {canReadAllHierarchy
-              ? 'All Sales managers and their teams'
+              ? 'All Resume managers and their teams'
               : 'Your team structure'}
           </CardDescription>
         </CardHeader>
@@ -220,7 +215,7 @@ function HierarchyContent() {
           <div className="min-w-[500px] p-4">
             {rootUsers.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                No hierarchy data found.
+                No Resume hierarchy data found.
               </div>
             ) : (
               <div className="space-y-8">
@@ -241,57 +236,18 @@ function HierarchyContent() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Sales Branches</CardTitle>
-          <CardDescription>
-            {canReadAllHierarchy
-              ? 'All active and inactive branches with at least one Sales team member'
-              : 'Sales branches assigned to you'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {branches.length === 0 ? (
-            <div className="text-sm text-muted-foreground">
-              No branches found.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {branches.map((branch) => (
-                <div
-                  key={branch.$id}
-                  className="rounded-lg border bg-card p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-medium text-sm">{branch.name}</p>
-                    <span
-                      className={cn(
-                        'rounded border px-2 py-0.5 text-xs',
-                        branch.isActive
-                          ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900 dark:bg-green-950/30 dark:text-green-300'
-                          : 'border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-800 dark:bg-gray-950/30 dark:text-gray-400',
-                      )}>
-                      {branch.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {unassignedIndividualContributors.length > 0 && (
+      {unassignedUsers.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Sales Users Not Under Anyone</CardTitle>
+            <CardTitle>Resume Users Not Under Anyone</CardTitle>
             <CardDescription>
-              Sales agents / lead generation users with no existing
-              Manager, Assistant Manager, or Team Lead assignment
+              Resume agents / lead generation users with no assigned Team
+              Lead
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {unassignedIndividualContributors.map((agent) => (
+              {unassignedUsers.map((agent) => (
                 <div
                   key={agent.$id}
                   className="flex items-start gap-3 p-3 rounded-lg border bg-card text-card-foreground shadow-sm">

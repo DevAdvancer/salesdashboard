@@ -357,7 +357,13 @@ export async function getWeeklyReportAction(input: {
     const metadata = parseAuditMetadata(log.metadata);
     if (!metadata || metadata.kind !== "FOLLOW_UP") return;
     const snapshot = (metadata.snapshot ?? null) as any;
-    if (snapshot && snapshot.followUpStatus === "completed") {
+    // A "call" is counted whenever the agent saves a Follow-Up Plan with
+    // Next Action = Call, regardless of followUpStatus. This matches the
+    // operator's rule: scheduling a Call follow-up is the act that
+    // increments the Calls counter, not just completing one. Other
+    // scheduled follow-ups (with a future date) continue to count as
+    // generic follow-ups.
+    if (snapshot && snapshot.nextAction === "Call") {
       addMetrics(ensureMetrics(log.actorId), { calls: 1 });
     } else if (snapshot && snapshot.nextFollowUpAt) {
       addMetrics(ensureMetrics(log.actorId), { followups: 1 });

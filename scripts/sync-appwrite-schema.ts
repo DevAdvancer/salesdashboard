@@ -140,6 +140,30 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'channel_department_idx', type: 'key', attributes: ['channel', 'department'] },
     ],
   },
+
+  // ─── LG Handoffs ────────────────────────────────────────────────────────
+  // Source of truth for the "Lead Gen Team Handoffs" dashboard count.
+  // One document per (lead, original Team Lead) pair, written the
+  // moment a lead_generation actor hands a lead to a Team Lead. The
+  // row is NEVER updated or deleted on later reassignments, so the
+  // count grouped by `teamLeadId` is exact: it tracks the original
+  // handoff, not the current assignee. `leadGenerationId` lets the
+  // dashboard build the per-LG breakdown.
+  [COLLECTIONS.LG_HANDOFFS]: {
+    attributes: [
+      { key: 'leadId', type: 'string', required: true, size: 255 },
+      { key: 'teamLeadId', type: 'string', required: true, size: 255 },
+      { key: 'leadGenerationId', type: 'string', required: true, size: 255 },
+      { key: 'handedOffAt', type: 'datetime', required: true },
+      { key: 'branchId', type: 'string', required: false, size: 255 },
+    ],
+    indexes: [
+      { key: 'lead_idx', type: 'unique', attributes: ['leadId'] },
+      { key: 'team_lead_idx', type: 'key', attributes: ['teamLeadId'] },
+      { key: 'lead_generation_idx', type: 'key', attributes: ['leadGenerationId'] },
+      { key: 'handed_off_idx', type: 'key', attributes: ['handedOffAt'] },
+    ],
+  },
 };
 
 // Fields to remove (retired manager/assistant_manager fields, plus the

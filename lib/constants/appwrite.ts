@@ -20,6 +20,12 @@ export const COLLECTIONS = {
   LEAD_REQUESTS: process.env.NEXT_PUBLIC_APPWRITE_LEAD_REQUESTS_COLLECTION_ID ?? 'lead_requests',
   LINKEDIN_ACCOUNTS: process.env.NEXT_PUBLIC_APPWRITE_LINKEDIN_ACCOUNTS_COLLECTION_ID ?? 'linkedin_accounts',
   LINKEDIN_REQUESTS: process.env.NEXT_PUBLIC_APPWRITE_LINKEDIN_REQUESTS_COLLECTION_ID ?? 'linkedin_requests',
+  // One document per Lead Gen → Team Lead handoff. Written at lead-
+  // creation time when a lead_generation actor hands a lead to a TL,
+  // never updated. The "Lead Gen Team Handoffs" dashboard count is
+  // derived from this table grouped by `teamLeadId`. See
+  // app/actions/lg-handoffs.ts.
+  LG_HANDOFFS: process.env.NEXT_PUBLIC_APPWRITE_LG_HANDOFFS_COLLECTION_ID ?? 'lg_handoffs',
 };
 
 export const BUCKETS = {

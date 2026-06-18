@@ -22,6 +22,7 @@ import {
 } from "@/lib/services/user-service";
 import type { Branch, User } from "@/lib/types";
 import { listClientPaymentSummariesAction } from "@/app/actions/client-payments";
+import { listLgHandoffsAction } from "@/app/actions/lg-handoffs";
 
 export default function WorkQueuePage() {
   return (
@@ -146,11 +147,22 @@ function WorkQueueContent() {
           ? await listClientPaymentSummariesAction({ actorId: user.$id, leadIds: visibleLeadIds })
           : [];
 
+        // Pull LG→TL handoff rows. Used by the "Lead Gen Team
+        // Handoffs" insight. Best-effort: a failure here still leaves
+        // the page functional, just with an empty handoff table.
+        let lgHandoffs: Awaited<ReturnType<typeof listLgHandoffsAction>> = [];
+        try {
+          lgHandoffs = await listLgHandoffsAction();
+        } catch (handoffErr) {
+          console.error("Error loading LG handoffs:", handoffErr);
+        }
+
         setInsights(
           buildLeadershipDashboardInsights({
             leads: [...activeLeads, ...closedLeads],
             users: usersForInsights,
             branches,
+            lgHandoffs,
             paymentSummaries,
           }),
         );

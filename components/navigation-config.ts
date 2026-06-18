@@ -61,6 +61,7 @@ export const appIcons = {
   leadRequests: ClipboardList,
   paymentsReport: Wallet,
   resumeDashboard: FileSpreadsheet,
+  resumeHierarchy: Network,
 } satisfies Record<string, AppIcon>;
 
 export const NAV_ITEMS: NavItem[] = [
@@ -82,6 +83,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'linkedin-reports', label: 'Linkedin Reports', href: '/linkedin-reports', icon: appIcons.linkedinReports },
   { key: 'payments-report', label: 'Payments Report', href: '/payments-report', icon: appIcons.paymentsReport },
   { key: 'resume-dashboard', label: 'Resume Dashboard', href: '/resume-dashboard', icon: appIcons.resumeDashboard },
+  { key: 'resume-hierarchy', label: 'Resume Hierarchy', href: '/resume-hierarchy', icon: appIcons.resumeHierarchy },
   { key: 'mock', label: 'Mock Interview', href: '/mock', icon: appIcons.mock },
   { key: 'assessment-support', label: 'Assessment Support', href: '/assessment-support', icon: appIcons.assessmentSupport },
   { key: 'interview-support', label: 'Interview Support', href: '/interview-support', icon: appIcons.interviewSupport },

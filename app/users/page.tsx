@@ -62,6 +62,13 @@ function UserManagementContent() {
     null,
   );
   const [error, setError] = useState<string | null>(null);
+  // Note: the "Leads Routed" column used to be rendered here from a
+  // live tl_lead_counts counter, but the counter drifted the moment a
+  // TL reassigned a lead. The Leadership dashboard's "Lead Gen Team
+  // Handoffs" view is now the source of truth for this number, and it
+  // reads from a per-lead firstAssignedToId field that is written at
+  // handoff time and never overwritten. Users that need the per-TL
+  // count should consult the Leadership dashboard.
   const { confirm, ConfirmDialog } = useConfirmDialog();
 
   // Form state
@@ -227,6 +234,11 @@ function UserManagementContent() {
 
         setUsers(pageUsers);
         setUsersTotal(response.total);
+        // The "Leads Routed" column used to fetch a per-TL counter
+        // here. We no longer render that column — the leadership
+        // dashboard reads firstAssignedToId directly off each lead and
+        // is the single source of truth. The TL lead-counts action was
+        // removed in the same change.
         // Note: setAvailableTeamLeads is handled by fetchTeamLeadsOnly to
         // ensure ALL team leads are available, not just ones on the current page.
       } else if (user.role === "team_lead") {
@@ -584,6 +596,14 @@ function UserManagementContent() {
     }
   }, [user, isAdmin, isDeveloper, confirm, fetchUsers]);
 
+  // The "Leads Routed" column + Recalculate button used to live here.
+  // Both were removed: the per-TL counter drifted the moment a TL
+  // reassigned a lead, and the leadership dashboard now reads the
+  // firstAssignedToId field off each lead directly, so the count is
+  // exact by construction (it is baked in at handoff time and never
+  // changes). Users that need a per-TL handoff count should consult
+  // the Leadership dashboard's "Lead Gen Team Handoffs" table.
+
   const handleCreate = useCallback(async () => {
     if (!user || !validateForm()) return;
 
@@ -758,28 +778,32 @@ function UserManagementContent() {
     const query = search.trim().toLowerCase();
     let result = users;
 
-    // Resume view scoping. When admin is on the Resume CRM dashboard,
-    // the page is meant to manage the Resume team. The Sales/All/Resume
-    // tabs are hidden in this view (the page is already implicitly
-    // scoped), so we still need to enforce the scope here so that any
-    // user that happened to slip past the projection / mapping is
-    // filtered out. We include Resume-team members plus the leadership
-    // roles (admin / developer / monitor / operations), because those
-    // accounts can switch dashboards and therefore belong on both
-    // sides. Sales-team members are excluded.
+    // View-as scoping. The sidebar's view-as switcher is the implicit
+    // filter for this page: Resume CRM shows Resume-team members,
+    // Sales CRM shows Sales-team members. Leadership roles
+    // (admin/developer/monitor/operations) appear on both sides because
+    // their accounts can switch dashboards. The All/Sales/Resume tabs
+    // on this page are hidden in both views (the page is already
+    // implicitly scoped) — we still honor them when an admin manually
+    // expands the filter UI and switches back to "all".
+    const isLeadership = (role?: string) =>
+      role === "admin" ||
+      role === "developer" ||
+      role === "monitor" ||
+      role === "operations";
+
     if (activeDashboard === "resume") {
-      const isLeadership = (role?: string) =>
-        role === "admin" ||
-        role === "developer" ||
-        role === "monitor" ||
-        role === "operations";
       result = result.filter(
         (u) => (u.department ?? "sales") === "resume" || isLeadership(u.role),
       );
+    } else if (activeDashboard === "sales" && departmentFilter === "all") {
+      // Sales CRM default scope: Sales-team members + leadership. No
+      // department filter chip is shown — the page is already Sales-only
+      // so the chip is redundant.
+      result = result.filter(
+        (u) => (u.department ?? "sales") === "sales" || isLeadership(u.role),
+      );
     } else if (departmentFilter !== "all") {
-      // Department filter (admin/developer tabs). Pinned to "all" for
-      // other roles — they don't see the tabs. Skipped on the Resume
-      // view because the scope above already covers it.
       result = result.filter((u) => (u.department ?? "sales") === departmentFilter);
     }
 
@@ -843,17 +867,19 @@ function UserManagementContent() {
                     : "Sales team members"}
               </CardDescription>
             </div>
-            {canCreate && (
-              <Button
-                onClick={() => {
-                  resetForm();
-                  setShowCreateDialog(true);
-                }}
-                type="button"
-                className="cursor-pointer">
-                {createButtonLabel}
-              </Button>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {canCreate && (
+                <Button
+                  onClick={() => {
+                    resetForm();
+                    setShowCreateDialog(true);
+                  }}
+                  type="button"
+                  className="cursor-pointer">
+                  {createButtonLabel}
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -863,16 +889,13 @@ function UserManagementContent() {
             </div>
           )}
 
-          {/* Department tabs (admin/developer only). Lets the admin scope
-              the table to one department at a time so Resume-team management
-              is one click away instead of needing a separate page.
-
-              On the Resume view, the entire page is already implicitly
-              scoped to the Resume team (sidebar entry, page heading,
-              create dialog, table), so the tabs are redundant. Hide them
-              there to keep the view focused — admin can switch to the
-              Sales dashboard to manage Sales users. */}
-          {(isAdmin || isDeveloper) && activeDashboard === "sales" && (
+          {/* Department tabs. Both the Sales and Resume CRM views are
+              already implicitly scoped to one team (Sales → Sales users,
+              Resume → Resume users). The All/Sales/Resume chip control is
+              redundant in both views, so it's hidden everywhere. Admin
+              switches between the two teams via the sidebar's View-as
+              toggle, not via this page. */}
+          {false && (isAdmin || isDeveloper) && (
             <div className="mb-4 inline-flex items-center gap-1 rounded-md border border-input p-1 bg-muted/30">
               {(
                 [
@@ -932,9 +955,7 @@ function UserManagementContent() {
                   <p className="text-gray-500 dark:text-gray-400">
                     {activeDashboard === "resume"
                       ? "No Resume-team or leadership users match your search."
-                      : departmentFilter === "all"
-                        ? "No users match your search."
-                        : `No ${departmentFilter === "resume" ? "Resume" : "Sales"}-team users match your search.`}
+                      : "No Sales-team or leadership users match your search."}
                   </p>
                 </div>
               ) : (

@@ -3,7 +3,7 @@ import {
   resolveLeadUsersForInsights,
   STALE_LEAD_DAYS,
 } from '@/lib/utils/dashboard-insights';
-import type { Branch, Lead, User } from '@/lib/types';
+import type { Branch, Lead, LgHandoff, User } from '@/lib/types';
 
 const now = new Date('2026-05-06T12:00:00.000Z');
 
@@ -307,17 +307,24 @@ describe('buildLeadershipDashboardInsights', () => {
       user({ $id: 'agent-1', name: 'Alex Agent', role: 'agent', teamLeadId: 'tl-1', branchIds: ['branch-1'] }),
     ];
 
-    const leads = [
-      lead({ $id: 'lead-1', ownerId: 'lg-1', assignedToId: 'tl-1', branchId: 'branch-1' }),
-      lead({ $id: 'lead-2', ownerId: 'lg-1', assignedToId: 'tl-1', branchId: 'branch-1' }),
-      lead({ $id: 'lead-3', ownerId: 'lg-2', assignedToId: 'agent-1', branchId: 'branch-1' }),
-      lead({ $id: 'lead-4', ownerId: 'lg-2', assignedToId: 'tl-2', branchId: 'branch-1' }),
+    // Handoffs are now read from lg_handoffs, not derived from the
+    // lead's current assignedToId. Each row records the original TL
+    // who first received the lead and is never updated on a later
+    // reassignment. lead-3 below was assigned directly to an agent
+    // (not a TL) so it has no handoff row, and lead-4 is a single
+    // handoff from lg-2 to tl-2.
+    const lgHandoffs: LgHandoff[] = [
+      { $id: 'lead-1', leadId: 'lead-1', teamLeadId: 'tl-1', leadGenerationId: 'lg-1', handedOffAt: now.toISOString(), branchId: 'branch-1' },
+      { $id: 'lead-2', leadId: 'lead-2', teamLeadId: 'tl-1', leadGenerationId: 'lg-1', handedOffAt: now.toISOString(), branchId: 'branch-1' },
+      { $id: 'lead-3', leadId: 'lead-3', teamLeadId: 'tl-1', leadGenerationId: 'lg-2', handedOffAt: now.toISOString(), branchId: 'branch-1' },
+      { $id: 'lead-4', leadId: 'lead-4', teamLeadId: 'tl-2', leadGenerationId: 'lg-2', handedOffAt: now.toISOString(), branchId: 'branch-1' },
     ];
 
     const insights = buildLeadershipDashboardInsights({
-      leads,
+      leads: [],
       users,
       branches,
+      lgHandoffs,
       now,
     });
 
@@ -346,6 +353,39 @@ describe('buildLeadershipDashboardInsights', () => {
       averageLeadsPerTeam: 2,
       share: 75,
     });
+  });
+
+  it('keeps the original TL\'s handoff count stable across reassignments', () => {
+    // After my change, a reassignment never produces a new handoff
+    // row. lead-1 was originally handed to tl-1; the lead was later
+    // reassigned to tl-2 but the handoff row still points to tl-1.
+    // The dashboard must reflect that.
+    const users = [
+      user({ $id: 'lg-1', name: 'Lane LG', role: 'lead_generation', branchIds: ['branch-1'] }),
+      user({ $id: 'tl-1', name: 'Tara TL', role: 'team_lead', branchIds: ['branch-1'] }),
+      user({ $id: 'tl-2', name: 'Theo TL', role: 'team_lead', branchIds: ['branch-1'] }),
+    ];
+    const leads = [
+      // Currently assigned to tl-2 (reassigned) but originally
+      // handed to tl-1.
+      lead({ $id: 'lead-1', ownerId: 'lg-1', assignedToId: 'tl-2', branchId: 'branch-1' }),
+    ];
+    const lgHandoffs: LgHandoff[] = [
+      { $id: 'lead-1', leadId: 'lead-1', teamLeadId: 'tl-1', leadGenerationId: 'lg-1', handedOffAt: now.toISOString(), branchId: 'branch-1' },
+    ];
+
+    const insights = buildLeadershipDashboardInsights({
+      leads,
+      users,
+      branches,
+      lgHandoffs,
+      now,
+    });
+
+    const tl1 = insights.teamLeadAssignmentSummaries.find((s) => s.teamLeadId === 'tl-1');
+    const tl2 = insights.teamLeadAssignmentSummaries.find((s) => s.teamLeadId === 'tl-2');
+    expect(tl1?.assignedLeads).toBe(1);
+    expect(tl2).toBeUndefined();
   });
 
   it('surfaces pending follow-ups for every status except Not Interested and Backed Out', () => {

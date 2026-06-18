@@ -29,6 +29,7 @@ import {
   type LeadershipDashboardInsights,
 } from "@/lib/utils/dashboard-insights";
 import { listAllPaymentInsightsAction, listClientPaymentSummariesAction, type PaymentInsightRecord } from "@/app/actions/client-payments";
+import { listLgHandoffsAction } from "@/app/actions/lg-handoffs";
 import { FinancialInsightsSection } from "@/components/dashboard/financial-insights-section";
 import { AttendanceSelfToggle } from "@/components/attendance-self-toggle";
 
@@ -253,11 +254,24 @@ function LegacyDashboardContent() {
             ? await listClientPaymentSummariesAction({ actorId: user.$id, leadIds: visibleLeadIds })
             : [];
 
+          // Pull the LG→TL handoff rows from lg_handoffs. These are the
+          // source of truth for the "Lead Gen Team Handoffs" count
+          // (one row per original handoff, never updated on
+          // reassignment). Failures here are non-fatal: the dashboard
+          // will simply render an empty handoff table.
+          let lgHandoffs: Awaited<ReturnType<typeof listLgHandoffsAction>> = [];
+          try {
+            lgHandoffs = await listLgHandoffsAction();
+          } catch (handoffErr) {
+            console.error("Error loading LG handoffs:", handoffErr);
+          }
+
           setDashboardInsights(
             buildLeadershipDashboardInsights({
               leads: [...activeLeads, ...closedLeads],
               users: usersForInsights,
               branches: branchesForInsights,
+              lgHandoffs,
               paymentSummaries,
             }),
           );

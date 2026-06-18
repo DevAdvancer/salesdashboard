@@ -35,6 +35,10 @@ export const COMPONENT_ACCESS: RoleAccessMap = {
   // Same gating as resume-dashboard — opened only by the department
   // short-circuit in canAccess, never by role eligibility alone.
   'resume-chat': [],
+  // Same gating as resume-dashboard / resume-chat — the resume
+  // hierarchy page is a Resume-team-only view. Leadership roles can
+  // open it via the short-circuit in canAccess.
+  'resume-hierarchy': [],
 };
 
 export function isRoleEligibleForComponent(

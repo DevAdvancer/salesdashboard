@@ -81,6 +81,24 @@ export interface Lead {
   $permissions?: string[];
 }
 
+// One row per (lead, original TL) LG → TL handoff. Written at the
+// moment a lead_generation actor hands a lead to a Team Lead and
+// never updated. The "Lead Gen Team Handoffs" dashboard groups these
+// rows by `teamLeadId` to compute the per-TL count, which is exact
+// by construction because a later reassignment never produces a new
+// row. Indexed on `leadId` (unique) so each lead can have at most
+// one handoff row.
+export interface LgHandoff {
+  $id: string;
+  leadId: string;
+  teamLeadId: string;
+  leadGenerationId: string;
+  handedOffAt: string;
+  branchId?: string | null;
+  $createdAt?: string;
+  $updatedAt?: string;
+}
+
 export type LeadDataValue =
   | string
   | number
@@ -225,7 +243,8 @@ export type ComponentKey =
   | 'linkedin-reports'
   | 'payments-report'
   | 'resume-dashboard'
-  | 'resume-chat';
+  | 'resume-chat'
+  | 'resume-hierarchy';
 
 export interface AccessRule {
   $id?: string;
@@ -489,4 +508,14 @@ export interface NotificationRecord {
   targetType?: string | null;
   readAt?: string | null;
   createdAt: string;
+}
+
+// Aggregate counter of how many leads a Team Lead has received from
+// lead_generation actors. Document id == TL user id. See
+// app/actions/tl-lead-counts.ts.
+export interface TlLeadCount {
+  $id: string;
+  userId: string;
+  leadCount: number;
+  updatedAt: string;
 }

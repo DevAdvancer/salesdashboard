@@ -46,6 +46,7 @@ function formatRoleLabel(role: string): string {
 // gates the page itself (only roles eligible for `user-management` see it).
 const RESUME_UNIVERSAL_ITEM_KEYS = new Set([
   "resume-chat",
+  "resume-hierarchy",
   "user-management",
 ]);
 
@@ -91,7 +92,7 @@ export function Navigation({
   const technicalItemKeys = new Set(["mock", "interview-support", "assessment-support"]);
   const linkedinItemKeys = new Set(["linkedin-requests", "linkedin-account-management", "linkedin-reports"]);
   const paymentsItemKeys = new Set(["payments-report"]);
-  const resumeItemKeys = new Set(["resume-dashboard"]);
+  const resumeItemKeys = new Set(["resume-dashboard", "resume-hierarchy"]);
 
   // Resume-team members get a slim sidebar: the Resume Dashboard, the
   // Resume Team chat, and (for the resume team lead) User Management so
@@ -122,19 +123,12 @@ export function Navigation({
   const technicalItems = itemsForUser.filter((item) => technicalItemKeys.has(item.key));
   const linkedinItems = itemsForUser.filter((item) => linkedinItemKeys.has(item.key));
   const paymentsItems = itemsForUser.filter((item) => paymentsItemKeys.has(item.key));
-  const resumeItems = itemsForUser.filter((item) => resumeItemKeys.has(item.key));
-  // Resume section includes the resume dashboard, the resume team's
-  // own chat channel, and (for leadership / resume team_lead) the
-  // user-management page so admins and the resume team lead can manage
-  // the resume roster from the resume sidebar without having to scroll
-  // through the sales team-lead / admin sections.
-  const resumeSectionItems = itemsForUser.filter(
-    (item) =>
-      resumeItemKeys.has(item.key) ||
-      item.key === "resume-chat" ||
-      item.key === "user-management",
-  );
   const chatItem = itemsForUser.find((item) => item.key === "chat") ?? null;
+  // Resume CRM uses its own chat channels; route the collapsible chat
+  // section to /resume-chat/* when the user is on the Resume sidebar so
+  // announcement / general open the resume counterparts, not the sales
+  // ones. Sales sidebar keeps the original /chat/* URLs.
+  const chatHrefPrefix = activeDashboard === "resume" ? "/resume-chat" : "/chat";
 
   // Helper to render a standard nav button
   const renderNavButton = (item: typeof NAV_ITEMS[0]) => {
@@ -278,8 +272,8 @@ export function Navigation({
           }}
         >
           {[
-            { key: "chat-announcement", label: "Announcement", href: "/chat/announcement", icon: Bell },
-            { key: "chat-general", label: "General", href: "/chat/general", icon: MessageSquare },
+            { key: "chat-announcement", label: "Announcement", href: `${chatHrefPrefix}/announcement`, icon: Bell },
+            { key: "chat-general", label: "General", href: `${chatHrefPrefix}/general`, icon: MessageSquare },
           ].map((item) => {
             const ItemIcon = item.icon;
             const isActive =
@@ -309,86 +303,124 @@ export function Navigation({
 
   const renderedItems: ReactNode[] = [];
 
-  // Determine section titles based on role
-  let coreWorkspaceTitle = "My Workspace";
-  let managementTitle = "Team Management";
-  let adminTitle = "System Admin";
+  // Resume CRM sidebar is rendered as its own dedicated layout: Resume
+  // Dashboard at the top, a collapsible Chatting section (announcement +
+  // general), and Users under Management. Sales-only sections (Leads,
+  // Reports, Attendance, LinkedIn, etc.) are intentionally hidden — a
+  // user who flipped the switcher into Resume mode is operating the
+  // Resume workspace, not the Sales one. On the Sales CRM sidebar, no
+  // Resume section is rendered at all (it's pinned to the Resume view).
+  if (activeDashboard === "resume") {
+    const resumeDashboardItem =
+      itemsForUser.find((item) => item.key === "resume-dashboard") ?? null;
+    const resumeHierarchyItem =
+      itemsForUser.find((item) => item.key === "resume-hierarchy") ?? null;
+    const resumeUserMgmtItem =
+      itemsForUser.find((item) => item.key === "user-management") ?? null;
 
-  if (user.role === "admin" || user.role === "developer") {
-    coreWorkspaceTitle = "Main Menu";
-    managementTitle = "Management";
-    adminTitle = "System Administration";
-  } else if (user.role === "team_lead") {
-    coreWorkspaceTitle = "Main Menu";
-    managementTitle = "Team Management";
-  } else {
-    coreWorkspaceTitle = "My Workspace";
-  }
+    if (resumeDashboardItem) {
+      renderedItems.push(
+        <div key="section-resume-workspace">
+          {renderSectionHeader("Resume Workspace")}
+          {renderNavButton(resumeDashboardItem)}
+        </div>
+      );
+    }
 
-  // 1. Agent Workspace
-  if (agentItems.length > 0 || chatItem) {
+    if (resumeHierarchyItem) {
+      renderedItems.push(
+        <div key="section-resume-hierarchy">
+          {renderSectionHeader("Resume Structure")}
+          {renderNavButton(resumeHierarchyItem)}
+        </div>
+      );
+    }
+
     renderedItems.push(
-      <div key="section-agent">
-        {renderSectionHeader(coreWorkspaceTitle)}
-        {agentItems.map(renderNavButton)}
+      <div key="section-resume-chat">
+        {renderSectionHeader("Chatting")}
         {chatSection}
       </div>
     );
-  }
 
-  // 1a. Resume Team — own section so resume members see only the resume
-  // dashboard and the chat channel. Leadership roles (admin / monitor /
-  // operations) also see it because canAccess() opens the resume route.
-  if (resumeSectionItems.length > 0) {
-    renderedItems.push(
-      <div key="section-resume">
-        {renderSectionHeader("Resume Team")}
-        {resumeSectionItems.map(renderNavButton)}
-      </div>
-    );
-  }
+    if (resumeUserMgmtItem) {
+      renderedItems.push(
+        <div key="section-resume-management">
+          {renderSectionHeader("Management")}
+          {renderNavButton(resumeUserMgmtItem)}
+        </div>
+      );
+    }
+  } else {
+    // Determine section titles based on role
+    let coreWorkspaceTitle = "My Workspace";
+    let managementTitle = "Team Management";
+    let adminTitle = "System Admin";
 
-  // 1b. Attendance Section
-  if (attendanceItems.length > 0) {
-    const CalendarIcon = appIcons.attendance;
-    renderedItems.push(
-      <div key="section-attendance">
-        {renderSectionHeader("Attendance")}
-        {renderCollapsibleSection("Attendance", CalendarIcon, attendanceItems, attendanceOpen, setAttendanceOpen)}
-      </div>
-    );
-  }
+    if (user.role === "admin" || user.role === "developer") {
+      coreWorkspaceTitle = "Main Menu";
+      managementTitle = "Management";
+      adminTitle = "System Administration";
+    } else if (user.role === "team_lead") {
+      coreWorkspaceTitle = "Main Menu";
+      managementTitle = "Team Management";
+    } else {
+      coreWorkspaceTitle = "My Workspace";
+    }
 
-  // 2. Team Lead Dashboard
-  if (teamLeadItems.length > 0 || paymentsItems.length > 0) {
-    renderedItems.push(
-      <div key="section-tl">
-        {renderSectionHeader(managementTitle)}
-        {teamLeadItems.map(renderNavButton)}
-        {paymentsItems.map(renderNavButton)}
-      </div>
-    );
-  }
+    // 1. Agent Workspace
+    if (agentItems.length > 0 || chatItem) {
+      renderedItems.push(
+        <div key="section-agent">
+          {renderSectionHeader(coreWorkspaceTitle)}
+          {agentItems.map(renderNavButton)}
+          {chatSection}
+        </div>
+      );
+    }
 
-  // 3. Admin Console
-  if (adminItems.length > 0) {
-    renderedItems.push(
-      <div key="section-admin">
-        {renderSectionHeader(adminTitle)}
-        {adminItems.map(renderNavButton)}
-      </div>
-    );
-  }
+    // 1b. Attendance Section
+    if (attendanceItems.length > 0) {
+      const CalendarIcon = appIcons.attendance;
+      renderedItems.push(
+        <div key="section-attendance">
+          {renderSectionHeader("Attendance")}
+          {renderCollapsibleSection("Attendance", CalendarIcon, attendanceItems, attendanceOpen, setAttendanceOpen)}
+        </div>
+      );
+    }
 
-  // 4. Add-ons & Support
-  if (technicalItems.length > 0 || linkedinItems.length > 0) {
-    renderedItems.push(
-      <div key="section-addons">
-        {renderSectionHeader("Add-ons")}
-        {renderCollapsibleSection("Technical Support", Wrench, technicalItems, technicalOpen, setTechnicalOpen)}
-        {renderCollapsibleSection("Linkedin Tools", Map, linkedinItems, linkedinOpen, setLinkedinOpen)}
-      </div>
-    );
+    // 2. Team Lead Dashboard
+    if (teamLeadItems.length > 0 || paymentsItems.length > 0) {
+      renderedItems.push(
+        <div key="section-tl">
+          {renderSectionHeader(managementTitle)}
+          {teamLeadItems.map(renderNavButton)}
+          {paymentsItems.map(renderNavButton)}
+        </div>
+      );
+    }
+
+    // 3. Admin Console
+    if (adminItems.length > 0) {
+      renderedItems.push(
+        <div key="section-admin">
+          {renderSectionHeader(adminTitle)}
+          {adminItems.map(renderNavButton)}
+        </div>
+      );
+    }
+
+    // 4. Add-ons & Support
+    if (technicalItems.length > 0 || linkedinItems.length > 0) {
+      renderedItems.push(
+        <div key="section-addons">
+          {renderSectionHeader("Add-ons")}
+          {renderCollapsibleSection("Technical Support", Wrench, technicalItems, technicalOpen, setTechnicalOpen)}
+          {renderCollapsibleSection("Linkedin Tools", Map, linkedinItems, linkedinOpen, setLinkedinOpen)}
+        </div>
+      );
+    }
   }
 
 

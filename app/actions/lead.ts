@@ -12,6 +12,7 @@ import { assertAuthenticatedUserId } from "@/lib/server/current-user";
 import { notifyDuplicateLeadUpdateAttemptAction } from "@/app/actions/lead-duplicates";
 import { normalizeLinkedinProfileUrl } from "@/lib/utils/linkedin";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
+import { recordLgHandoffAction } from "@/app/actions/lg-handoffs";
 import {
   isAllowedLeadStatusTransition,
   normalizeLeadStatus,
@@ -428,6 +429,10 @@ type UserDocument = {
   role: UserRole;
   branchIds?: string[];
   branchId?: string | null;
+  // Optional on the wire — the lead_generation→team_lead counter below
+  // scopes by department, so we read it off the actor + assignee when
+  // it is present and fall back to "sales" for legacy users.
+  department?: string;
 };
 
 function isMonitorRole(role: UserRole) {
@@ -702,6 +707,42 @@ export async function createLeadAction(
         // unassigned lead; the lead appears in the unassigned queue
         // (already shown on the dashboard and in /leads) and the TL can
         // act on it from there. No in-app notification fires.
+
+        // Handoff row: when a lead_generation actor creates a lead and
+        // assigns it to a Team Lead, write a row to lg_handoffs that
+        // records the original TL. The row is keyed on `leadId` and is
+        // NEVER updated on later reassignments — the dashboard's "Lead
+        // Gen Team Handoffs" count is exact by construction because
+        // `firstAssignedToId` is baked in at this moment. We do this
+        // AFTER the lead is committed so a failure here never orphans a
+        // lead; the count is best-effort and will self-heal on the
+        // next LG->TL lead. Sales-only scope is enforced inside
+        // recordLgHandoffAction (cross-team pairs are silent no-ops),
+        // so callers don't have to remember the rule.
+        if (
+            actorDoc.role === "lead_generation" &&
+            input.assignedToId &&
+            isValidId(input.assignedToId)
+        ) {
+            try {
+                const assigneeDoc = await databases.getDocument(
+                    DATABASE_ID,
+                    USERS_COLLECTION_ID,
+                    input.assignedToId
+                ) as unknown as { role?: string };
+                if (assigneeDoc?.role === "team_lead") {
+                    await recordLgHandoffAction({
+                        leadId: lead.$id,
+                        teamLeadId: input.assignedToId,
+                        leadGenerationId: creatingUserId || finalOwnerId,
+                        branchId: input.branchId ?? null,
+                    });
+                }
+            } catch (e) {
+                // Handoff row is best-effort. Log and continue.
+                console.error("Failed to record LG handoff:", e);
+            }
+        }
 
         return lead as unknown as Lead;
     } catch (error: any) {

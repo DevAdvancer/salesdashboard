@@ -38,7 +38,8 @@ export type ComponentKey =
   | 'linkedin-reports'
   | 'payments-report'
   | 'resume-dashboard'
-  | 'resume-chat';
+  | 'resume-chat'
+  | 'resume-hierarchy';
 
 interface AccessControlContextType {
   canAccess: (componentKey: ComponentKey) => boolean;
@@ -114,6 +115,22 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
     // separate route so leadership switching views can compare the two
     // teams' announcements / messages side by side.
     if (componentKey === 'resume-chat') {
+      if (user.department === 'resume') return true;
+      if (
+        user.role === 'admin' ||
+        user.role === 'developer' ||
+        user.role === 'monitor' ||
+        user.role === 'operations'
+      ) {
+        return true;
+      }
+      return false;
+    }
+
+    // Same gating as the resume dashboard / chat. The resume hierarchy
+    // page is a Resume-team-only view; it never renders Sales-team
+    // members even if a Sales TL shares the same $id in their data.
+    if (componentKey === 'resume-hierarchy') {
       if (user.department === 'resume') return true;
       if (
         user.role === 'admin' ||
