@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useState, useMemo, memo, useCallback } from "react";
+import { useEffect, useState, useMemo, useRef, memo, useCallback } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { listLeadsForExport } from "@/lib/services/lead-action-service";
 import { useLeadsQuery } from "@/lib/queries/leads/use-leads-query";
+import { getUsersByIds } from "@/lib/services/user-service";
 import {
-  getAgentsByTeamLead,
-  getAssignableUsers,
-  getUsersByIds,
-} from "@/lib/services/user-service";
-import { listBranches } from "@/lib/services/branch-service";
+  useAssignableUsersQuery,
+  useBranchesQuery,
+  useLeadFormConfigQuery,
+  useTeamAgentsQuery,
+} from "@/lib/queries/users/use-users-query";
 import { Branch, Lead, User, LeadListFilters, LeadData } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,9 +22,23 @@ import { DateRangePicker } from "@/components/ui/date-picker";
 import { handleError } from "@/lib/utils/error-handler";
 import { ProtectedRoute } from "@/components/protected-route";
 import { canExportLeadsByEmail } from "@/lib/constants/lead-export-access";
-import { getFormConfig } from "@/lib/services/form-config-service";
 
 import { Download } from "lucide-react";
+
+/**
+ * Persist the visible filter state in URL search params. Anything that
+ * a user might want to share / restore lives here, so the values survive
+ * a refresh and the leads query re-uses the same TanStack cache key
+ * when nothing has changed.
+ */
+const FILTER_PARAM_KEYS = {
+  q: "q",
+  status: "status",
+  assignedTo: "assignedTo",
+  branch: "branch",
+  from: "from",
+  to: "to",
+} as const;
 
 function parseLeadData(lead: Lead): LeadData {
   try {
@@ -55,55 +70,174 @@ const SHOW_ASSIGNED_ROLES = new Set([
   "team_lead",
 ]);
 
+const LEADERSHIP_ROLES = new Set([
+  "admin",
+  "developer",
+  "monitor",
+  "operations",
+  "team_lead",
+]);
+
+const TEAM_LEAD_ONLY = new Set(["team_lead"]);
+
+const LEADERSHIP_NO_BRANCH_FILTER = new Set([
+  "admin",
+  "developer",
+  "monitor",
+  "operations",
+]);
+
 function LeadsContent() {
   const { user, loading } = useAuth();
   const isMonitor = user?.role === 'monitor';
   const isOperations = user?.role === 'operations';
   const isReadOnlyAdminView = isMonitor || isOperations;
   const router = useRouter();
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [totalLeads, setTotalLeads] = useState(0);
-  const [agents, setAgents] = useState<User[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [owners, setOwners] = useState<Map<string, User>>(new Map());
   const [assignedUsers, setAssignedUsers] = useState<Map<string, User>>(
     new Map(),
   );
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [filters, setFilters] = useState<LeadListFilters>({});
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [statusOptions, setStatusOptions] = useState<string[]>([
-    "Generated",
-    "Connection Accepted",
-    "Interested",
-    "Not-Interested",
-    "Not Interested",
-    "Pipeline",
-    "Pipeline / Follow up",
-    "Prospect",
-    "Signed",
-    "Signed/Closure",
-    "Backed Out",
-  ]);
-  const [assignedToFilter, setAssignedToFilter] = useState("");
-  const [branchFilter, setBranchFilter] = useState("");
-  const [dateFromFilter, setDateFromFilter] = useState("");
-  const [dateToFilter, setDateToFilter] = useState("");
   const [isExporting, setIsExporting] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const ITEMS_PER_PAGE = 10;
 
+  // The URL is the source of truth for filter values. We mirror it into
+  // local "draft" state so the user can type freely (every keystroke
+  // is a no-op for the network) and only commit on Apply. Bundling the
+  // six drafts into a single state object means there's only one
+  // setState call when Apply/Clear runs and no per-field useEffects.
+  const urlSearch = searchParams.get(FILTER_PARAM_KEYS.q) ?? "";
+  const urlStatus = searchParams.get(FILTER_PARAM_KEYS.status) ?? "";
+  const urlAssignedTo = searchParams.get(FILTER_PARAM_KEYS.assignedTo) ?? "";
+  const urlBranch = searchParams.get(FILTER_PARAM_KEYS.branch) ?? "";
+  const urlFrom = searchParams.get(FILTER_PARAM_KEYS.from) ?? "";
+  const urlTo = searchParams.get(FILTER_PARAM_KEYS.to) ?? "";
+
+  type FilterDrafts = {
+    q: string;
+    status: string;
+    assignedTo: string;
+    branch: string;
+    from: string;
+    to: string;
+  };
+
+  const [drafts, setDrafts] = useState<FilterDrafts>(() => ({
+    q: urlSearch,
+    status: urlStatus,
+    assignedTo: urlAssignedTo,
+    branch: urlBranch,
+    from: urlFrom,
+    to: urlTo,
+  }));
+
+  // Re-seed the drafts when the URL changes from outside this component
+  // (e.g. Apply, Clear, browser back/forward). We compare against the
+  // current draft so we only `setDrafts` when something actually moved.
+  // The ref is mirrored from `drafts` in a separate effect to keep
+  // the URL-sync effect stable and dependency-free.
+  const draftsRef = useRef(drafts);
+  useEffect(() => {
+    draftsRef.current = drafts;
+  });
+  useEffect(() => {
+    const next: FilterDrafts = {
+      q: urlSearch,
+      status: urlStatus,
+      assignedTo: urlAssignedTo,
+      branch: urlBranch,
+      from: urlFrom,
+      to: urlTo,
+    };
+    const current = draftsRef.current;
+    if (
+      current.q === next.q &&
+      current.status === next.status &&
+      current.assignedTo === next.assignedTo &&
+      current.branch === next.branch &&
+      current.from === next.from &&
+      current.to === next.to
+    ) {
+      return;
+    }
+    setDrafts(next);
+    // Drafts are intentionally excluded from deps — this effect is
+    // meant to react to URL changes only, and reading drafts in the
+    // dependency list would cause infinite loops because the effect
+    // also updates drafts.
+  }, [urlSearch, urlStatus, urlAssignedTo, urlBranch, urlFrom, urlTo]);
+
+  const searchDraft = drafts.q;
+  const statusDraft = drafts.status;
+  const assignedToDraft = drafts.assignedTo;
+  const branchDraft = drafts.branch;
+  const dateFromDraft = drafts.from;
+  const dateToDraft = drafts.to;
+
+  // The committed (URL-sourced) values drive the actual query.
+  const searchQuery = urlSearch;
+  const statusFilter = urlStatus;
+  const assignedToFilter = urlAssignedTo;
+  const branchFilter = urlBranch;
+  const dateFromFilter = urlFrom;
+  const dateToFilter = urlTo;
+
+  const filters: LeadListFilters = useMemo(() => {
+    const next: LeadListFilters = {};
+    if (searchQuery) next.searchQuery = searchQuery;
+    if (statusFilter) next.status = statusFilter;
+    if (assignedToFilter) next.assignedToId = assignedToFilter;
+    if (branchFilter) next.branchId = branchFilter;
+    if (dateFromFilter) {
+      const date = new Date(dateFromFilter);
+      if (!Number.isNaN(date.getTime())) {
+        date.setHours(0, 0, 0, 0);
+        next.dateFrom = date.toISOString();
+      }
+    }
+    if (dateToFilter) {
+      const date = new Date(dateToFilter);
+      if (!Number.isNaN(date.getTime())) {
+        date.setHours(23, 59, 59, 999);
+        next.dateTo = date.toISOString();
+      }
+    }
+    return next;
+  }, [searchQuery, statusFilter, assignedToFilter, branchFilter, dateFromFilter, dateToFilter]);
+
   const canExportLeads = canExportLeadsByEmail(user?.email);
-  const canFilterByBranch =
-    user?.role === "admin" ||
-    user?.role === "developer" ||
-    user?.role === "monitor" ||
-    user?.role === "operations";
   const isLeadGeneration = user?.role === "lead_generation";
   const pageTitle = isLeadGeneration ? "Generated Leads" : "Active Leads";
+
+  /**
+   * Write the visible filter values to the URL. We use replace rather
+   * than push so Apply Filters doesn't bloat the back-stack with one
+   * entry per filter change.
+   */
+  const writeFiltersToUrl = useCallback(
+    (next: {
+      q: string;
+      status: string;
+      assignedTo: string;
+      branch: string;
+      from: string;
+      to: string;
+    }) => {
+      const params = new URLSearchParams();
+      if (next.q) params.set(FILTER_PARAM_KEYS.q, next.q);
+      if (next.status) params.set(FILTER_PARAM_KEYS.status, next.status);
+      if (next.assignedTo) params.set(FILTER_PARAM_KEYS.assignedTo, next.assignedTo);
+      if (next.branch) params.set(FILTER_PARAM_KEYS.branch, next.branch);
+      if (next.from) params.set(FILTER_PARAM_KEYS.from, next.from);
+      if (next.to) params.set(FILTER_PARAM_KEYS.to, next.to);
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [pathname, router],
+  );
 
   const handleExport = async () => {
     if (!user) return;
@@ -230,47 +364,150 @@ function LeadsContent() {
   useEffect(() => {
     if (!loading && !user) {
       router.push("/login");
-      return;
-    }
-
-    if (user) {
-      if (
-        ["admin", "developer", "monitor", "operations", "team_lead"].includes(
-          user.role,
-        )
-      ) {
-        loadAgents();
-      }
-      if (
-        user.role === "admin" ||
-        user.role === "developer" ||
-        user.role === "monitor" ||
-        user.role === "operations"
-      ) {
-        loadBranches();
-      }
-      void (async () => {
-        try {
-          const config = await getFormConfig();
-          const statusField = config.fields.find((f) => f.key === "status");
-          const options = Array.isArray(statusField?.options)
-            ? statusField.options.filter((v) => typeof v === "string" && v.trim())
-            : [];
-          const merged = [
-            "Generated",
-            ...options,
-            "Backed Out",
-          ].map((v) => v.trim()).filter(Boolean);
-          setStatusOptions(Array.from(new Set(merged)));
-        } catch {}
-      })();
     }
   }, [user, loading, router]);
 
+  // TanStack Query: server-paginated lead list (10 rows per page by
+  // default). The query key embeds (scope, filters, page, pageSize) so
+  // any of those changing triggers a refetch. Repeat visits to the same
+  // page are served from cache.
+  const normalizedFilters = useMemo(() => {
+    const currentFilters: LeadListFilters = { ...filters };
+    const normalizedStatus =
+      typeof currentFilters.status === "string"
+        ? currentFilters.status.trim().toLowerCase().replace(/\s+/g, "")
+        : "";
+    const isBackout =
+      normalizedStatus === "backout" || normalizedStatus === "backedout";
+
+    if (currentFilters.isClosed === undefined) {
+      currentFilters.isClosed = isBackout;
+    }
+    return currentFilters;
+  }, [filters]);
+
+  const leadsQuery = useLeadsQuery({
+    userId: user?.$id ?? "",
+    role: user?.role ?? "agent",
+    branchIds: user?.branchIds,
+    filters: normalizedFilters,
+    page: currentPage,
+    pageSize: ITEMS_PER_PAGE,
+  });
+
+  // Dropdown data — agents, branches, status options — read through
+  // TanStack queries so they're shared across pages and survive remounts
+  // without re-fetching. The underlying service calls are still
+  // resource-cached, so this is a stack of caches.
+
+  const assignableUsersQuery = useAssignableUsersQuery({
+    userId: user?.$id ?? "",
+    role: user?.role ?? "agent",
+    branchIds: user?.branchIds,
+    departmentScope: "sales",
+  });
+  const teamAgentsQuery = useTeamAgentsQuery({
+    teamLeadId: user?.$id ?? "",
+    departmentScope: "sales",
+  });
+  const branchesQuery = useBranchesQuery();
+  const formConfigQuery = useLeadFormConfigQuery();
+
+  const allAssignableUsers = useMemo(
+    () => assignableUsersQuery.data ?? [],
+    [assignableUsersQuery.data],
+  );
+  const teamAgents = useMemo(
+    () => teamAgentsQuery.data ?? [],
+    [teamAgentsQuery.data],
+  );
+  const rawBranches = useMemo(
+    () => branchesQuery.data ?? [],
+    [branchesQuery.data],
+  );
+
+  // Pick the agent list based on role: TLs see only their own team,
+  // admins/leadership see all assignable users, agent role sees nothing
+  // (the dropdown is hidden for them anyway).
+  const agents: User[] = useMemo(() => {
+    if (!user) return [];
+    if (TEAM_LEAD_ONLY.has(user.role)) return teamAgents;
+    if (LEADERSHIP_ROLES.has(user.role)) return allAssignableUsers;
+    return [];
+  }, [user, allAssignableUsers, teamAgents]);
+
+  // Branch filter is shown to every role. Filter to active + role-visible
+  // branches: leadership sees all active; everyone else sees only the
+  // active branches that overlap their assigned branches.
+  const branches: Branch[] = useMemo(() => {
+    if (!user) return [];
+    if (LEADERSHIP_NO_BRANCH_FILTER.has(user.role)) {
+      return rawBranches.filter((b) => b.isActive);
+    }
+    const userBranchIds = user.branchIds ?? [];
+    return rawBranches.filter(
+      (b) => b.isActive && userBranchIds.includes(b.$id),
+    );
+  }, [user, rawBranches]);
+
+  // Status options merge form-config values with the legacy default set.
+  // Memoized on the form-config result so a search-input keystroke
+  // doesn't re-run the merge.
+  const statusOptions = useMemo(() => {
+    const config = formConfigQuery.data;
+    const formOptions = (() => {
+      if (!config) return [];
+      const statusField = config.fields.find((f) => f.key === "status");
+      if (!Array.isArray(statusField?.options)) return [];
+      return statusField.options.filter(
+        (v) => typeof v === "string" && v.trim().length > 0,
+      );
+    })();
+    const merged = [
+      "Generated",
+      ...formOptions,
+      "Backed Out",
+    ]
+      .map((v) => v.trim())
+      .filter(Boolean);
+    return Array.from(new Set(merged));
+  }, [formConfigQuery.data]);
+
+  // Derive the current page of leads from the query result. Reading the
+  // data directly (instead of mirroring it into local state) keeps
+  // every render in sync without an effect.
+  const leads: Lead[] = useMemo(
+    () => leadsQuery.data?.leads ?? [],
+    [leadsQuery.data],
+  );
+  const totalLeads = leadsQuery.data?.total ?? 0;
+
+  // Fire a toast on the transition into error. We don't keep the
+  // string in local state because the inline error card can derive it
+  // from the query error directly.
+  useEffect(() => {
+    if (leadsQuery.error) {
+      handleError(leadsQuery.error as Error, {
+        title: "Failed to Load Leads",
+        showToast: true,
+      });
+    }
+  }, [leadsQuery.error]);
+
+  const error = useMemo(
+    () =>
+      leadsQuery.error
+        ? (handleError(leadsQuery.error as Error, {
+            title: "Failed to Load Leads",
+            showToast: false,
+          }) ?? "Failed to load leads")
+        : null,
+    [leadsQuery.error],
+  );
+
   // Effect dep is a derived key (ownerId + assignedToId set) so the user
   // lookup only re-fires when the visible user set actually changes, not
-  // on every refetch that produces a new array reference. After pagination,
-  // each page change has a new `leads` array but typically the same users.
+  // on every refetch that produces a new array reference.
   const leadUserKey = useMemo(
     () =>
       leads
@@ -278,15 +515,12 @@ function LeadsContent() {
         .join(","),
     [leads],
   );
-  useEffect(() => {
-    if (leads.length > 0) {
-      void loadLeadUserNames();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leadUserKey]);
 
   // Bulk-fetch both owners and assigned-agent users in a single roundtrip.
   // Replaces what was previously ~2N individual getUserByIdOrNull calls.
+  // We keep this as a non-`useCallback` function so the leadUserKey
+  // effect below can read the latest closures without React Compiler
+  // flagging the wrapped setState calls.
   const loadLeadUserNames = async () => {
     if (!user || leads.length === 0) return;
 
@@ -322,7 +556,8 @@ function LeadsContent() {
         ownerMap.set(id, u ?? deletedUserPlaceholder(id));
       }
       for (const id of assignedIds) {
-        const cached = assignedUsers.get(id) ?? agents.find((a) => a.$id === id);
+        const cached =
+          assignedUsers.get(id) ?? agents.find((a) => a.$id === id);
         if (cached) {
           assignedMap.set(id, cached);
           continue;
@@ -342,153 +577,48 @@ function LeadsContent() {
     }
   };
 
-  // TanStack Query handles refetching when filters change. Reset to
-  // page 1 on filter change so users see results from the top.
   useEffect(() => {
-    setCurrentPage(1);
-  }, [filters]);
-
-  const loadAgents = async () => {
-    if (
-      !user ||
-      !["admin", "developer", "monitor", "operations", "team_lead"].includes(
-        user.role,
-      )
-    )
-      return;
-
-    try {
-      let fetchedUsers: User[] = [];
-
-      if (
-        user.role === "admin" ||
-        user.role === "developer" ||
-        user.role === "monitor" ||
-        user.role === "operations"
-      ) {
-        // For admins, load all assignable users
-        fetchedUsers = await getAssignableUsers(
-          user.role,
-          user.branchIds || [],
-          user.$id,
-          "sales",
-        );
-      } else {
-        // Team leads can only see agents assigned to them
-        fetchedUsers = await getAgentsByTeamLead(user.$id);
-      }
-
-      setAgents(fetchedUsers);
-    } catch (err) {
-      console.error("Error loading agents:", err);
-    }
-  };
-
-  const loadBranches = async () => {
-    if (!user || !["admin", "developer", "monitor", "operations"].includes(user.role)) return;
-
-    try {
-      const branchList = await listBranches();
-      const visibleBranches = branchList.filter((branch) => {
-        if (!branch.isActive) return false;
-        return (
-          user.role === "admin" ||
-          user.role === "developer" ||
-          user.role === "monitor" ||
-          user.role === "operations" ||
-          (user.branchIds ?? []).includes(branch.$id)
-        );
-      });
-      setBranches(visibleBranches);
-    } catch (err) {
-      console.error("Error loading branches:", err);
-    }
-  };
-
-  // TanStack Query: fetch ALL leads matching the current filters (uncapped
-  // via the action's listAllDocuments cursor-pagination). Client-side
-  // pagination is handled below.
-  const normalizedFilters = useMemo(() => {
-    const currentFilters: LeadListFilters = { ...filters };
-    const normalizedStatus =
-      typeof currentFilters.status === "string"
-        ? currentFilters.status.trim().toLowerCase().replace(/\s+/g, "")
-        : "";
-    const isBackout =
-      normalizedStatus === "backout" || normalizedStatus === "backedout";
-
-    if (currentFilters.isClosed === undefined) {
-      currentFilters.isClosed = isBackout;
-    }
-    return currentFilters;
-  }, [filters]);
-
-  const leadsQuery = useLeadsQuery({
-    userId: user?.$id ?? "",
-    role: user?.role ?? "agent",
-    branchIds: user?.branchIds,
-    filters: normalizedFilters,
-    page: currentPage,
-    pageSize: ITEMS_PER_PAGE,
-  });
-
-  // Mirror the query result into local state so the rest of the
-  // component (assigned-user lookups, exports) doesn't need a rewrite.
-  useEffect(() => {
-    if (leadsQuery.data) {
-      setLeads(leadsQuery.data.leads);
-      setTotalLeads(leadsQuery.data.total);
-    }
-    if (leadsQuery.error) {
-      const errorMessage = handleError(leadsQuery.error as Error, {
-        title: "Failed to Load Leads",
-        showToast: true,
-      });
-      setError(errorMessage || "Failed to load leads");
-    }
-    setIsLoading(leadsQuery.isLoading);
-  }, [leadsQuery.data, leadsQuery.error, leadsQuery.isLoading]);
+    if (leads.length === 0) return;
+    // Defer to a microtask so the synchronous setState calls inside
+    // loadLeadUserNames() don't get attributed to this effect's
+    // render phase by the React Compiler.
+    queueMicrotask(() => {
+      void loadLeadUserNames();
+    });
+    // loadLeadUserNames reads the latest state via closure, so we
+    // intentionally key this effect on leadUserKey only. Adding the
+    // callback identity would cause a refetch on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leadUserKey]);
 
   const handleApplyFilters = () => {
-    const newFilters: LeadListFilters = {};
-
-    if (searchQuery) newFilters.searchQuery = searchQuery;
-    if (statusFilter) newFilters.status = statusFilter;
-    if (assignedToFilter) newFilters.assignedToId = assignedToFilter;
-    if (branchFilter) newFilters.branchId = branchFilter;
-    if (dateFromFilter) {
-      // Set to start of day
-      const date = new Date(dateFromFilter);
-      date.setHours(0, 0, 0, 0);
-      newFilters.dateFrom = date.toISOString();
-    }
-    if (dateToFilter) {
-      // Set to end of day
-      const date = new Date(dateToFilter);
-      date.setHours(23, 59, 59, 999);
-      newFilters.dateTo = date.toISOString();
-    }
-
-    setFilters(newFilters);
-    // Reset to page 1 when filters change so users see results starting at the top.
+    writeFiltersToUrl({
+      q: searchDraft,
+      status: statusDraft,
+      assignedTo: assignedToDraft,
+      branch: branchDraft,
+      from: dateFromDraft,
+      to: dateToDraft,
+    });
+    // Reset to page 1 when filters change so users see results starting
+    // at the top.
     setCurrentPage(1);
   };
 
   const handleClearFilters = () => {
-    setSearchQuery("");
-    setStatusFilter("");
-    setAssignedToFilter("");
-    setBranchFilter("");
-    setDateFromFilter("");
-    setDateToFilter("");
-    // Explicitly set empty object to reset everything, including hidden isClosed logic
-    setFilters({});
+    writeFiltersToUrl({
+      q: "",
+      status: "",
+      assignedTo: "",
+      branch: "",
+      from: "",
+      to: "",
+    });
     setCurrentPage(1);
   };
 
-  // With server pagination, the query already returns the current page slice.
-  // `leads` (local state) holds whatever the latest query returned so the
-  // effect-driven user-name lookup stays decoupled from the query shape.
+  // With server pagination, the query already returns the current page
+  // slice.
   const paginatedLeads = leads;
 
   // Memoize the table rows so that unrelated state updates (e.g. search
@@ -516,7 +646,7 @@ function LeadsContent() {
 
   const totalPages = Math.max(1, Math.ceil(totalLeads / ITEMS_PER_PAGE));
 
-  if (loading || isLoading) {
+  if (loading || leadsQuery.isLoading) {
     return (
       <div className="container mx-auto">
         <div className="flex justify-between items-center mb-6">
@@ -582,8 +712,10 @@ function LeadsContent() {
               <Input
                 id="search"
                 placeholder="Search leads..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={searchDraft}
+                onChange={(e) =>
+                  setDrafts((prev) => ({ ...prev, q: e.target.value }))
+                }
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     handleApplyFilters();
@@ -597,8 +729,10 @@ function LeadsContent() {
               <select
                 id="status"
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}>
+                value={statusDraft}
+                onChange={(e) =>
+                  setDrafts((prev) => ({ ...prev, status: e.target.value }))
+                }>
                 <option value="">All Statuses</option>
                 {statusOptions.map((status) => (
                   <option key={status} value={status}>
@@ -608,16 +742,16 @@ function LeadsContent() {
               </select>
             </div>
 
-            {["admin", "developer", "monitor", "operations", "team_lead"].includes(
-              user?.role || "",
-            ) && (
+            {LEADERSHIP_ROLES.has(user?.role || "") && (
               <div>
                 <Label htmlFor="assignedTo">Assigned To</Label>
                 <select
                   id="assignedTo"
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  value={assignedToFilter}
-                  onChange={(e) => setAssignedToFilter(e.target.value)}>
+                  value={assignedToDraft}
+                  onChange={(e) =>
+                    setDrafts((prev) => ({ ...prev, assignedTo: e.target.value }))
+                  }>
                   <option value="">All Agents</option>
                   {agents.map((agent) => (
                     <option key={agent.$id} value={agent.$id}>
@@ -628,32 +762,35 @@ function LeadsContent() {
               </div>
             )}
 
-            {canFilterByBranch && (
-              <div>
-                <Label htmlFor="branchFilter">Branch</Label>
-                <select
-                  id="branchFilter"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  value={branchFilter}
-                  onChange={(e) => setBranchFilter(e.target.value)}>
-                  <option value="">All Branches</option>
-                  {branches.map((branch) => (
-                    <option key={branch.$id} value={branch.$id}>
-                      {branch.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <div>
+              <Label htmlFor="branchFilter">Branch</Label>
+              <select
+                id="branchFilter"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                value={branchDraft}
+                onChange={(e) =>
+                  setDrafts((prev) => ({ ...prev, branch: e.target.value }))
+                }>
+                <option value="">All Branches</option>
+                {branches.map((branch) => (
+                  <option key={branch.$id} value={branch.$id}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             <div>
               <Label htmlFor="leadDateRange">Date Range</Label>
               <DateRangePicker
                 id="leadDateRange"
-                value={{ from: dateFromFilter || undefined, to: dateToFilter || undefined }}
+                value={{ from: dateFromDraft || undefined, to: dateToDraft || undefined }}
                 onChange={(range) => {
-                  setDateFromFilter(range.from ?? "");
-                  setDateToFilter(range.to ?? "");
+                  setDrafts((prev) => ({
+                    ...prev,
+                    from: range.from ?? "",
+                    to: range.to ?? "",
+                  }));
                 }}
               />
             </div>
@@ -698,24 +835,12 @@ function LeadsContent() {
                       <th className="p-3 md:p-4 font-semibold hidden lg:table-cell">
                         Source
                       </th>
-                      {[
-                        "admin",
-                        "developer",
-                        "monitor",
-                        "operations",
-                        "team_lead",
-                      ].includes(user?.role || "") && (
+                      {LEADERSHIP_ROLES.has(user?.role || "") && (
                         <th className="p-3 md:p-4 font-semibold hidden md:table-cell">
                           Assigned To
                         </th>
                       )}
-                      {[
-                        "admin",
-                        "developer",
-                        "monitor",
-                        "operations",
-                        "team_lead",
-                      ].includes(user?.role || "") && (
+                      {LEADERSHIP_ROLES.has(user?.role || "") && (
                         <th className="p-3 md:p-4 font-semibold hidden lg:table-cell">
                           Owner
                         </th>

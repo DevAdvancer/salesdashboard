@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { listLeadsAction } from "@/app/actions/lead";
 import { buildScope, queryKeys } from "@/lib/queries/keys";
 import type { LeadListFilters, UserRole } from "@/lib/types";
@@ -17,6 +17,10 @@ export interface UseLeadsQueryArgs {
 /**
  * Server-paginated leads list. The query key embeds (scope, filters,
  * page, pageSize) so any of those changing triggers a refetch.
+ *
+ * `placeholderData: keepPreviousData` holds the previous page's rows
+ * visible while the next page loads, so the table doesn't flash empty
+ * during pagination.
  *
  * For UI that needs the full set (e.g. dashboard insights), use the
  * `forExport: true` path via {@link useLeadsForExportQuery} instead.
@@ -41,5 +45,6 @@ export function useLeadsQuery({
     queryFn: () =>
       listLeadsAction(filters, userId, role, branchIds, { page, pageSize }),
     enabled: Boolean(userId),
+    placeholderData: keepPreviousData,
   });
 }

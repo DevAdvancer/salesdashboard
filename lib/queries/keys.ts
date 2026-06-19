@@ -30,11 +30,17 @@ export const queryKeys = {
   users: {
     all: ["users"] as const,
     assignable: (scope: string) => ["users", "assignable", scope] as const,
+    teamAgents: (teamLeadId: string) =>
+      ["users", "teamAgents", teamLeadId] as const,
     list: (scope: string, page: number, pageSize: number) =>
       ["users", "list", scope, page, pageSize] as const,
   },
   branches: {
     all: ["branches"] as const,
+    list: () => ["branches", "list"] as const,
+  },
+  formConfig: {
+    lead: () => ["formConfig", "lead"] as const,
   },
   clientPayments: {
     detail: (leadId: string) => ["clientPayments", "detail", leadId] as const,

@@ -1244,6 +1244,11 @@ export async function listLeadsAction(
       queries
     );
     let leads = response.documents as unknown as Lead[];
+    // response.total is the full filtered count from Appwrite (NOT the
+    // current page size). We need it for the pagination controls on the
+    // client. Using leads.length here would always equal pageSize and
+    // hide every page beyond the first.
+    const totalBeforeSearch = response.total ?? leads.length;
 
     if (filters.searchQuery) {
       // Search-via-substring is performed on the current page only (we can
@@ -1266,7 +1271,7 @@ export async function listLeadsAction(
 
     return {
       leads,
-      total: leads.length,
+      total: totalBeforeSearch,
       page,
       pageSize,
     };
