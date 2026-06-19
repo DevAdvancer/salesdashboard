@@ -1,23 +1,27 @@
 import { revalidateTag, unstable_cache } from 'next/cache';
 import { Query } from 'node-appwrite';
 
-import type { Department } from '@/lib/types';
 import { COLLECTIONS } from '@/lib/constants/appwrite';
 import { listAllDocuments } from '@/lib/server/appwrite-pagination';
+import type { Department } from '@/lib/types';
 
 /**
- * Cached department-scoped user ID set. The underlying Appwrite query walks
- * up to 50K user docs; on a hot path (every listLeadsAction / listLeadCountsAction
- * call from admin / team_lead / monitor / operations roles) this dominates
- * server CPU and read throughput. Cache for 5 minutes on the Next.js data cache.
+ * Cached department-scoped user ID set.
  *
- * Invalidation: import and call {@link invalidateDepartmentScopedUserIds}
- * from any user-management write path (create / update / delete / setActive).
+ * The underlying Appwrite query walks every user in the database (up to 50K
+ * docs) and projects only `$id` + `department`. On a hot path — every
+ * `listLeadsAction` / `listLeadCountsAction` call from `admin`, `team_lead`,
+ * `monitor`, and `operations` roles — that walk dominates server CPU and
+ * Appwrite read throughput. The Next.js data cache gives us 5-minute stickiness
+ * for free and is invalidated explicitly by user-management write paths.
  *
- * Implementation note: this module lives under lib/server/ rather than
- * lib/utils/ so the `next/cache` import is only loaded for Server Components
- * and Server Actions. Client bundles and Jest test environments that don't
- * resolve `next/cache`'s web-spec-extension chain stay unaffected.
+ * Invalidation: call {@link invalidateDepartmentScopedUserIds} from any code
+ * path that creates, updates, retires, reactivates, or deletes a user
+ * (see app/actions/user.ts).
+ *
+ * The function lives under `lib/server/` rather than `lib/utils/` so the
+ * `next/cache` import is bundled only into server entry points. Client
+ * bundles are unaffected.
  */
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
@@ -32,9 +36,6 @@ const loaderFor = (department: Department) =>
       const { createAdminClient } = await import('@/lib/server/appwrite');
       const { databases } = await createAdminClient();
 
-      // Project just $id and department — the per-user payload is otherwise
-      // ~80% larger (avatar URL, prefs, timestamps, etc.) and we throw it
-      // away immediately. Cuts this 50K-user walk from ~30MB to ~3MB.
       const users = await listAllDocuments<{
         $id: string;
         department?: string;
@@ -42,6 +43,9 @@ const loaderFor = (department: Department) =>
         databases,
         databaseId: DATABASE_ID,
         collectionId: COLLECTIONS.USERS,
+        // Project just $id and department — the per-user payload is otherwise
+        // ~80% larger (avatar URL, prefs, timestamps, etc.) and we throw it
+        // away immediately. Cuts this 50K-user walk from ~30MB to ~3MB.
         queries: [
           Query.select(['$id', 'department']),
           Query.orderAsc('$id'),

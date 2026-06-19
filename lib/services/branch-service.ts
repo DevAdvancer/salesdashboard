@@ -193,7 +193,16 @@ export async function listBranches(): Promise<Branch[]> {
       const response = await databases.listDocuments(
         DATABASE_ID,
         COLLECTIONS.BRANCHES,
-        [Query.orderDesc('$createdAt')]
+        [
+          // Project just the fields the UI consumes. Appwrite rejects
+          // `Query.select` if any attribute is missing from the collection
+          // schema — this throws "Attribute not found in schema" for the
+          // whole request. Stick to fields declared on lib/types Branch.
+          // System fields ($id, $createdAt, $updatedAt) are returned
+          // automatically and don't need to be in the select list.
+          Query.select(['name', 'isActive']),
+          Query.orderDesc('$createdAt'),
+        ]
       );
       return response.documents as unknown as Branch[];
     } catch (error: any) {
@@ -227,11 +236,12 @@ export async function getBranchStats(branchId: string): Promise<{ leadCount: num
     // Leads use `branchId` (singular string attribute) — see scripts/sync-appwrite-schema.ts
     // Do NOT query `branchIds` here: that field does not exist on the leads collection,
     // and Appwrite would silently return 0, making the lead count column always read 0.
+    // Project only $id + limit(1) — we only need the `total` field returned by Appwrite.
     const [leads] = await Promise.all([
       databases.listDocuments(
         DATABASE_ID,
         COLLECTIONS.LEADS,
-        [Query.equal('branchId', branchId)]
+        [Query.equal('branchId', branchId), Query.select(['$id']), Query.limit(1)]
       ),
     ]);
 

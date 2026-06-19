@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState, useMemo, memo } from "react";
+import { useEffect, useState, useMemo, memo, useCallback } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter } from "next/navigation";
 import { listLeadsForExport } from "@/lib/services/lead-action-service";
-import { useLeadsForExportQuery } from "@/lib/queries/leads/use-leads-for-export-query";
+import { useLeadsQuery } from "@/lib/queries/leads/use-leads-query";
 import {
   getAgentsByTeamLead,
   getAssignableUsers,
@@ -46,6 +46,14 @@ function deletedUserPlaceholder(userId: string): User {
     department: 'sales',
   };
 }
+
+const SHOW_ASSIGNED_ROLES = new Set([
+  "admin",
+  "developer",
+  "monitor",
+  "operations",
+  "team_lead",
+]);
 
 function LeadsContent() {
   const { user, loading } = useAuth();
@@ -259,11 +267,23 @@ function LeadsContent() {
     }
   }, [user, loading, router]);
 
+  // Effect dep is a derived key (ownerId + assignedToId set) so the user
+  // lookup only re-fires when the visible user set actually changes, not
+  // on every refetch that produces a new array reference. After pagination,
+  // each page change has a new `leads` array but typically the same users.
+  const leadUserKey = useMemo(
+    () =>
+      leads
+        .map((l) => `${l.ownerId || ""}:${l.assignedToId || ""}`)
+        .join(","),
+    [leads],
+  );
   useEffect(() => {
     if (leads.length > 0) {
-      loadLeadUserNames();
+      void loadLeadUserNames();
     }
-  }, [leads]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leadUserKey]);
 
   // Bulk-fetch both owners and assigned-agent users in a single roundtrip.
   // Replaces what was previously ~2N individual getUserByIdOrNull calls.
@@ -403,11 +423,13 @@ function LeadsContent() {
     return currentFilters;
   }, [filters]);
 
-  const leadsQuery = useLeadsForExportQuery({
+  const leadsQuery = useLeadsQuery({
     userId: user?.$id ?? "",
     role: user?.role ?? "agent",
     branchIds: user?.branchIds,
     filters: normalizedFilters,
+    page: currentPage,
+    pageSize: ITEMS_PER_PAGE,
   });
 
   // Mirror the query result into local state so the rest of the
@@ -464,90 +486,33 @@ function LeadsContent() {
     setCurrentPage(1);
   };
 
-  // With the full set loaded client-side, slice it into pages for
-  // display. This is the only place we touch the array length.
-  const paginatedLeads = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return leads.slice(start, start + ITEMS_PER_PAGE);
-  }, [leads, currentPage]);
+  // With server pagination, the query already returns the current page slice.
+  // `leads` (local state) holds whatever the latest query returned so the
+  // effect-driven user-name lookup stays decoupled from the query shape.
+  const paginatedLeads = leads;
 
   // Memoize the table rows so that unrelated state updates (e.g. search
   // query changes) don't cause the entire table to re-render from scratch.
+  // Each <tr> is wrapped in a memoized LeadRow so per-row work is local
+  // — typing in the search box or opening a filter dropdown won't rebuild
+  // 100 rows from scratch.
+  const handleViewLead = useCallback(
+    (leadId: string) => router.push(`/leads/${leadId}`),
+    [router],
+  );
   const leadRows = useMemo(() => {
-    const visibleRoles = [
-      "admin",
-      "developer",
-      "monitor",
-      "operations",
-      "team_lead",
-    ];
-    const showAssigned = visibleRoles.includes(user?.role || "");
-    return paginatedLeads.map((lead) => {
-      const leadData = parseLeadData(lead);
-      const firstName =
-        typeof leadData.firstName === "string" ? leadData.firstName : "";
-      const lastName =
-        typeof leadData.lastName === "string" ? leadData.lastName : "";
-      const email =
-        typeof leadData.email === "string" ? leadData.email : "";
-      const sourceName =
-        typeof leadData.sourceName === "string" ? leadData.sourceName : "";
-      const source =
-        typeof leadData.source === "string" ? leadData.source : "";
-
-      return (
-        <tr
-          key={lead.$id}
-          className="border-b hover:bg-accent/50 transition-colors">
-          <td className="p-3 md:p-4">
-            {firstName} {lastName}
-          </td>
-          <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">
-            {email}
-          </td>
-          <td className="p-3 md:p-4">
-            <span className="inline-block px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-primary/10 text-primary">
-              {lead.status}
-            </span>
-          </td>
-          <td className="p-3 md:p-4 text-muted-foreground hidden lg:table-cell">
-            {sourceName || source || "-"}
-          </td>
-          {showAssigned && (
-            <td className="p-3 md:p-4 text-muted-foreground hidden md:table-cell">
-              {lead.assignedToId ? (
-                <AssignedAgentName
-                  agentId={lead.assignedToId}
-                  assignedUsers={assignedUsers}
-                />
-              ) : (
-                "Unassigned"
-              )}
-            </td>
-          )}
-          {showAssigned && (
-            <td className="p-3 md:p-4 text-muted-foreground hidden lg:table-cell">
-              <OwnerName ownerId={lead.ownerId} owners={owners} />
-            </td>
-          )}
-          <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">
-            {lead.$createdAt
-              ? new Date(lead.$createdAt).toLocaleDateString()
-              : "N/A"}
-          </td>
-          <td className="p-3 md:p-4">
-            <Button
-              id="tour-lead-view-btn"
-              size="sm"
-              variant="outline"
-              onClick={() => router.push(`/leads/${lead.$id}`)}>
-              View
-            </Button>
-          </td>
-        </tr>
-      );
-    });
-  }, [paginatedLeads, assignedUsers, owners, user?.role, router]);
+    const showAssigned = SHOW_ASSIGNED_ROLES.has(user?.role || "");
+    return paginatedLeads.map((lead) => (
+      <LeadRow
+        key={lead.$id}
+        lead={lead}
+        showAssigned={showAssigned}
+        assignedUsers={assignedUsers}
+        owners={owners}
+        onView={handleViewLead}
+      />
+    ));
+  }, [paginatedLeads, assignedUsers, owners, user?.role, handleViewLead]);
 
   const totalPages = Math.max(1, Math.ceil(totalLeads / ITEMS_PER_PAGE));
 
@@ -820,6 +785,98 @@ const OwnerName = memo(function OwnerName({
   const owner = owners.get(ownerId);
   return <span>{owner?.name || "Unknown"}</span>;
 });
+
+/**
+ * Memoized table row. Re-renders only when its own lead, the resolved
+ * assigned/owner user, or the visible status string changes. Keeps the
+ * per-keystroke filter cost bounded to the row actually being edited.
+ */
+const LeadRow = memo(
+  function LeadRow({
+    lead,
+    showAssigned,
+    assignedUsers,
+    owners,
+    onView,
+  }: {
+    lead: Lead;
+    showAssigned: boolean;
+    assignedUsers: Map<string, User>;
+    owners: Map<string, User>;
+    onView: (leadId: string) => void;
+  }) {
+    const leadData = parseLeadData(lead);
+    const firstName =
+      typeof leadData.firstName === "string" ? leadData.firstName : "";
+    const lastName =
+      typeof leadData.lastName === "string" ? leadData.lastName : "";
+    const email = typeof leadData.email === "string" ? leadData.email : "";
+    const sourceName =
+      typeof leadData.sourceName === "string" ? leadData.sourceName : "";
+    const source = typeof leadData.source === "string" ? leadData.source : "";
+
+    return (
+      <tr className="border-b hover:bg-accent/50 transition-colors">
+        <td className="p-3 md:p-4">
+          {firstName} {lastName}
+        </td>
+        <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">
+          {email}
+        </td>
+        <td className="p-3 md:p-4">
+          <span className="inline-block px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-primary/10 text-primary">
+            {lead.status}
+          </span>
+        </td>
+        <td className="p-3 md:p-4 text-muted-foreground hidden lg:table-cell">
+          {sourceName || source || "-"}
+        </td>
+        {showAssigned && (
+          <td className="p-3 md:p-4 text-muted-foreground hidden md:table-cell">
+            {lead.assignedToId ? (
+              <AssignedAgentName
+                agentId={lead.assignedToId}
+                assignedUsers={assignedUsers}
+              />
+            ) : (
+              "Unassigned"
+            )}
+          </td>
+        )}
+        {showAssigned && (
+          <td className="p-3 md:p-4 text-muted-foreground hidden lg:table-cell">
+            <OwnerName ownerId={lead.ownerId} owners={owners} />
+          </td>
+        )}
+        <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">
+          {lead.$createdAt
+            ? new Date(lead.$createdAt).toLocaleDateString()
+            : "N/A"}
+        </td>
+        <td className="p-3 md:p-4">
+          <Button
+            id="tour-lead-view-btn"
+            size="sm"
+            variant="outline"
+            onClick={() => onView(lead.$id)}>
+            View
+          </Button>
+        </td>
+      </tr>
+    );
+  },
+  (prev, next) =>
+    prev.lead.$id === next.lead.$id &&
+    prev.lead.status === next.lead.status &&
+    prev.lead.$createdAt === next.lead.$createdAt &&
+    prev.lead.data === next.lead.data &&
+    prev.lead.ownerId === next.lead.ownerId &&
+    prev.lead.assignedToId === next.lead.assignedToId &&
+    prev.showAssigned === next.showAssigned &&
+    prev.assignedUsers === next.assignedUsers &&
+    prev.owners === next.owners &&
+    prev.onView === next.onView,
+);
 
 export default function LeadsPage() {
   return (

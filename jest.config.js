@@ -11,6 +11,15 @@ const customJestConfig = {
   testEnvironment: 'jest-environment-jsdom',
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
+    // `next/cache` transitively loads next/src/server/web/spec-extension
+    // which uses `class extends Request` from the web fetch APIs. jsdom
+    // supports these globals, but the chain pulls in node-fetch ESM
+    // modules the test environment can't resolve cleanly. Stubbing
+    // `next/cache` here is the standard next/jest workaround — production
+    // behavior is untouched because Next.js wires the real
+    // `unstable_cache` / `revalidateTag` for Server Components and Server
+    // Actions at runtime.
+    '^next/cache$': '<rootDir>/tests/__mocks__/next-cache.ts',
   },
   testMatch: [
     '<rootDir>/tests/**/*.test.ts',

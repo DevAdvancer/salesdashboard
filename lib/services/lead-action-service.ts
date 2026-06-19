@@ -75,6 +75,9 @@ export function listLeadsPaginated(
 
 /**
  * List all leads for export (bypasses pagination, capped at 10K).
+ * Wrapped in client-read-cache so repeated calls with the same args within
+ * the TTL (e.g. Client History remount, dashboard refresh) skip the
+ * 10K-row fetch.
  */
 export function listLeadsForExport(
   filters: LeadListFilters,
@@ -82,13 +85,18 @@ export function listLeadsForExport(
   userRole: UserRole,
   branchIds?: string[]
 ): Promise<Lead[]> {
-  return listLeadsAction(
-    filters,
-    userId,
-    userRole,
-    branchIds,
-    { forExport: true }
-  ).then((r) => r.leads);
+  return cacheClientRead(
+    `${LEAD_READ_SCOPE_PREFIX}listLeadsForExport`,
+    [filters, userId, userRole, branchIds ?? []],
+    () => listLeadsAction(
+      filters,
+      userId,
+      userRole,
+      branchIds,
+      { forExport: true }
+    ).then((r) => r.leads),
+    LEAD_LIST_TTL_MS
+  );
 }
 
 export function createLead(

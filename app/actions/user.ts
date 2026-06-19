@@ -3,6 +3,7 @@
 import { ID, Permission, Query, Role } from 'node-appwrite';
 import { createAdminClient, createSessionClient } from '@/lib/server/appwrite';
 import { assertAuthenticatedUserId } from '@/lib/server/current-user';
+import { invalidateDepartmentScopedUserIds } from '@/lib/server/department-user-cache';
 import { CreateTeamLeadInput, CreateAgentInput, Department, UserRole, isValidDepartment } from '@/lib/types';
 import { COLLECTIONS } from '@/lib/constants/appwrite';
 import { normalizeEmail } from '@/lib/utils/user-hierarchy';
@@ -356,6 +357,8 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
             { role: 'team_lead', email, name, branchIds, department: department ?? 'sales' }
         );
 
+        invalidateDepartmentScopedUserIds();
+
         return { success: true };
     } catch (error: any) {
         console.error("DB Creation failed, rolling back Auth User", error);
@@ -443,6 +446,8 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
             role,
             { role, email, name, branchIds, teamLeadId, department: department ?? 'sales' }
         );
+
+        invalidateDepartmentScopedUserIds();
 
         return { success: true };
     } catch (error: any) {
@@ -587,6 +592,11 @@ export async function updateUserAction(input: {
            updates
         );
 
+        // Department/role/active changes affect the cached department-scoped
+        // user-id set used by lead visibility filters. Drop it so the next
+        // listLeadsAction / listLeadCountsAction sees the new set.
+        invalidateDepartmentScopedUserIds();
+
         return { success: true };
 
     } catch (error: any) {
@@ -673,6 +683,10 @@ export async function deleteUserAction(input: {
             { role: targetUserDoc.role, email: targetUserDoc.email, name: targetUserDoc.name }
         );
 
+        // Drop the cached department-scoped user-id set — the deleted user
+        // may have been included.
+        invalidateDepartmentScopedUserIds();
+
         return { success: true };
     } catch (error: unknown) {
         console.error("Delete failed", error);
@@ -745,6 +759,9 @@ export async function setAgentActiveAction(input: {
             targetUserDoc.role,
             { isActive }
         );
+
+        // Inactivating a user affects which leads they're visible for.
+        invalidateDepartmentScopedUserIds();
 
         return { success: true };
     } catch (error: unknown) {

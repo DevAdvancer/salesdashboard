@@ -25,7 +25,7 @@ const FinancialInsightsChart = dynamic(
     import("@/components/dashboard/financial-insights-chart").then(
       (m) => m.FinancialInsightsChart
     ),
-  { loading: () => <Skeleton className="h-[260px] w-full" /> }
+  { loading: () => <Skeleton className="h-[260px] w-full" />, ssr: false }
 );
 
 const fmt = new Intl.NumberFormat("en-US", {

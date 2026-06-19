@@ -3,6 +3,17 @@ import { normalizeLeadStatus } from '@/lib/utils/lead-status-workflow';
 
 export const STALE_LEAD_DAYS = 14;
 
+/**
+ * Max rows shipped to the UI per detail panel. The full set is in the
+ * counters above; details are only used for drill-downs and would push
+ * 10K-row arrays through the network on a wide-dashboard render.
+ */
+const DETAIL_PANEL_CAP = 50;
+
+const DETAIL_PUSH_GUARD = (bucket: DashboardLeadDetailRow[], row: DashboardLeadDetailRow) => {
+  if (bucket.length < DETAIL_PANEL_CAP) bucket.push(row);
+};
+
 export interface LeadershipDashboardSummary {
   activeLeads: number;
   closedLeads: number;
@@ -384,12 +395,22 @@ export function buildLeadershipDashboardInsights({
 
   for (const currentLead of leads) {
     const payment = paymentMap.get(currentLead.$id);
-    // Use the exact amount entered on the lead. Do NOT back-calculate the
-    // total deal value from the payment plan — that was producing inflated
-    // numbers in the leadership dashboard. The exact amount on the payment
-    // plan (upfrontAmount) is tracked separately on the Upfront Collected
-    // card, where it is summed as-is from `payment.paymentPlan.upfrontAmount`.
-    const amount = getLeadAmount(currentLead);
+    // Parse lead.data once per lead. getLeadName/getLeadAmount/etc all
+    // called JSON.parse on the same string before; this is the single
+    // biggest CPU cost in the dashboard builder over 10K leads.
+    const leadData = parseLeadData(currentLead);
+    const amount = parseCurrencyAmount(leadData.amount ?? leadData.dealValue ?? 0);
+    const leadName =
+      (() => {
+        const first = String(leadData.firstName ?? '').trim();
+        const last = String(leadData.lastName ?? '').trim();
+        const company = String(leadData.company ?? '').trim();
+        const email = String(leadData.email ?? '').trim();
+        const fullName = [first, last].filter(Boolean).join(' ');
+        return fullName || company || email || 'Unassigned lead';
+      })();
+    const company = String(leadData.company ?? '').trim();
+    const email = String(leadData.email ?? '').trim();
     const leadIsStale = isStaleLead(currentLead, now);
     const followUpDate = getFollowUpDate(currentLead);
     const hasPendingFollowUp = Boolean(followUpDate && !currentLead.isClosed && currentLead.followUpStatus !== 'completed');
@@ -409,9 +430,9 @@ export function buildLeadershipDashboardInsights({
     // agent→TL fallback chain is needed in the per-lead walk.
     const detailRow: DashboardLeadDetailRow = {
       leadId: currentLead.$id,
-      leadName: getLeadName(currentLead),
-      company: getLeadCompany(currentLead),
-      email: getLeadEmail(currentLead),
+      leadName,
+      company,
+      email,
       status,
       branchName,
       ownerName: owner?.name ?? 'Unknown owner',
@@ -434,37 +455,37 @@ export function buildLeadershipDashboardInsights({
 
     if (payment && (payment.status === 'partially_paid' || payment.status === 'fully_paid')) {
       summary.totalUpfrontValue += payment.paymentPlan.upfrontAmount;
-      details.upfrontCollectedLeads.push(detailRow);
+      DETAIL_PUSH_GUARD(details.upfrontCollectedLeads, detailRow);
       if (payment.status === 'fully_paid') {
         summary.fullyPaidUpfrontValue += payment.paymentPlan.upfrontAmount;
-        details.fullyPaidLeads.push(detailRow);
+        DETAIL_PUSH_GUARD(details.fullyPaidLeads, detailRow);
       } else if (payment.status === 'partially_paid') {
         summary.partiallyPaidUpfrontValue += payment.paymentPlan.upfrontAmount;
-        details.partiallyPaidLeads.push(detailRow);
+        DETAIL_PUSH_GUARD(details.partiallyPaidLeads, detailRow);
       }
     }
 
     if (amount > 0) {
-      details.pipelineValue.push(detailRow);
+      DETAIL_PUSH_GUARD(details.pipelineValue, detailRow);
     }
 
     if (currentLead.isClosed) {
       summary.closedLeads += 1;
       summary.closedRevenue += amount;
-      details.closedLeads.push(detailRow);
+      DETAIL_PUSH_GUARD(details.closedLeads, detailRow);
     } else {
       summary.activeLeads += 1;
-      details.activeLeads.push(detailRow);
+      DETAIL_PUSH_GUARD(details.activeLeads, detailRow);
     }
 
     if (!currentLead.assignedToId && !currentLead.isClosed) {
       summary.unassignedLeads += 1;
-      details.unassignedLeads.push(detailRow);
+      DETAIL_PUSH_GUARD(details.unassignedLeads, detailRow);
     }
 
     if (leadIsStale) {
       summary.staleLeads += 1;
-      details.staleLeads.push(detailRow);
+      DETAIL_PUSH_GUARD(details.staleLeads, detailRow);
     }
 
     if (followUpIsOverdue && followUpCountsTowardQueue) {
@@ -516,7 +537,7 @@ export function buildLeadershipDashboardInsights({
     if (inFollowUpScope && followUpDate) {
       const queueItem: FollowUpQueueItem = {
         leadId: currentLead.$id,
-        leadName: getLeadName(currentLead),
+        leadName,
         assignedToName: assignee?.name ?? 'Unassigned',
         ownerName: owner?.name ?? 'Unknown owner',
         status,

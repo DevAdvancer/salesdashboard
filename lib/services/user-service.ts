@@ -222,7 +222,19 @@ export async function getAllActiveUsers(limit = 5000): Promise<User[]> {
       const response = await databases.listDocuments(
         DATABASE_ID,
         USERS_COLLECTION_ID,
-        [Query.limit(limit)]
+        [
+          Query.select([
+            '$id',
+            'name',
+            'email',
+            'role',
+            'teamLeadId',
+            'branchIds',
+            'isActive',
+            'department',
+          ]),
+          Query.limit(limit),
+        ]
       );
       return response.documents.map(mapDocToUser).filter((user) => user.isActive);
     } catch (error: any) {
@@ -306,7 +318,21 @@ export async function getAssignableUsers(
       const response = await databases.listDocuments(
         DATABASE_ID,
         USERS_COLLECTION_ID,
-        queries
+        [
+          // Project only the fields the UI consumes. Skips prefs, avatar URL,
+          // timestamps, etc. which would otherwise ship with every user.
+          Query.select([
+            '$id',
+            'name',
+            'email',
+            'role',
+            'teamLeadId',
+            'branchIds',
+            'isActive',
+            'department',
+          ]),
+          ...queries,
+        ]
       );
 
       // Filter out inactive users and the creator themselves
@@ -335,6 +361,16 @@ export async function getAgentsByTeamLead(
         DATABASE_ID,
         USERS_COLLECTION_ID,
         [
+          Query.select([
+            '$id',
+            'name',
+            'email',
+            'role',
+            'teamLeadId',
+            'branchIds',
+            'isActive',
+            'department',
+          ]),
           Query.equal('teamLeadId', teamLeadId),
           Query.or([Query.equal('role', 'agent'), Query.equal('role', 'lead_generation')]),
         ]
@@ -449,6 +485,16 @@ export async function getUsersByIds(ids: string[]): Promise<Map<string, User>> {
     chunks.map((chunk) =>
       databases
         .listDocuments(DATABASE_ID, USERS_COLLECTION_ID, [
+          Query.select([
+            '$id',
+            'name',
+            'email',
+            'role',
+            'teamLeadId',
+            'branchIds',
+            'isActive',
+            'department',
+          ]),
           Query.equal('$id', chunk),
           Query.limit(chunk.length),
         ])

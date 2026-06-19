@@ -12,6 +12,7 @@ jest.mock("appwrite", () => ({
     contains: jest.fn((key, values) => ({ type: "contains", key, values })),
     equal: jest.fn((key, value) => ({ type: "equal", key, value })),
     limit: jest.fn((limit) => ({ type: "limit", limit })),
+    select: jest.fn((attributes) => ({ type: "select", attributes })),
   },
 }));
 

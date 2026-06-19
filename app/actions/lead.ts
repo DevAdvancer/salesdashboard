@@ -440,23 +440,18 @@ function normalizeDepartment(value: unknown): Department {
 }
 
 async function getDepartmentScopedUserIds(
-  databases: Awaited<ReturnType<typeof createAdminClient>>['databases'],
+  _databases: Awaited<ReturnType<typeof createAdminClient>>['databases'],
   department: Department,
 ): Promise<Set<string>> {
-  const users = await listAllDocuments<{ $id: string; department?: string }>({
-    databases,
-    databaseId: DATABASE_ID,
-    collectionId: COLLECTIONS.USERS,
-    queries: [Query.orderAsc('$id')],
-    pageLimit: 100,
-    maxPages: 500,
-  });
-
-  return new Set(
-    users
-      .filter((user) => normalizeDepartment(user.department) === department)
-      .map((user) => user.$id),
+  // Delegate to the cached wrapper under lib/server/. The `databases` arg
+  // is preserved for call-site compatibility, but the cached path builds
+  // its own admin client because Next.js' data cache works on serialized
+  // primitives — it can't hold a live database handle.
+  void _databases;
+  const { getDepartmentScopedUserIds: getCached } = await import(
+    '@/lib/server/department-user-cache'
   );
+  return getCached(department);
 }
 
 function leadMatchesDepartmentScope(lead: Lead, visibleUserIds: Set<string>) {
