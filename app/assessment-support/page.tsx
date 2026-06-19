@@ -39,6 +39,7 @@ interface AssessmentFormData {
   to: string;
   cc: string;
   assessmentReceived: string; // ISO string from datetime-local input
+  assessmentDeadline: string; // ISO string from datetime-local input
   candidateName: string;
   technology: string;
   emailId: string;
@@ -62,6 +63,7 @@ const INITIAL_FORM_DATA: AssessmentFormData = {
   // to: "prateek.narvariya@silverspaceinc.com",
   cc: "",
   assessmentReceived: "",
+  assessmentDeadline: "",
   candidateName: "",
   technology: "",
   emailId: "",
@@ -420,6 +422,7 @@ function AssessmentContent() {
       { label: "Job Title", value: formData.jobTitle.trim() },
       { label: "Interview Round", value: formData.interviewRound.trim() },
       { label: "Assessment Received (EST)", value: formData.assessmentReceived },
+      { label: "Assessment Deadline (EST)", value: formData.assessmentDeadline },
       { label: "Assessment Duration", value: formData.assessmentDuration.trim() },
       { label: "Contact Number", value: formData.contactNumber.trim() },
       { label: "Resume", value: formData.resume?.name ?? "" },
@@ -495,6 +498,7 @@ function AssessmentContent() {
 
       // Format Assessment Received
       const formattedReceived = formatScheduleEST(formData.assessmentReceived);
+      const formattedDeadline = formatScheduleEST(formData.assessmentDeadline);
 
       // Subject line
       const subject = `[Sales] Assessment Support - ${formData.candidateName} - ${formData.jobTitle} - ${formattedReceived}`;
@@ -531,6 +535,10 @@ function AssessmentContent() {
               <tr>
                 <td style="font-weight: bold; width: 200px; padding: 8px 12px; background-color: #4a6741; color: #fff; border: 1px solid #555;">Assessment Received (EST)</td>
                 <td style="padding: 8px 12px; background-color: #c5a832; color: #000; font-weight: bold; border: 1px solid #555;">${formattedReceived}</td>
+              </tr>
+              <tr>
+                <td style="font-weight: bold; padding: 8px 12px; background-color: #2a2a2a; color: #ccc; border: 1px solid #555;">Assessment Deadline (EST)</td>
+                <td style="padding: 8px 12px; background-color: #1a1a1a; color: #ddd; border: 1px solid #555;">${formattedDeadline}</td>
               </tr>
               <tr>
                 <td style="font-weight: bold; padding: 8px 12px; background-color: #2a2a2a; color: #ccc; border: 1px solid #555;">Candidate Name</td>
@@ -639,6 +647,7 @@ function AssessmentContent() {
           interviewRound: formData.interviewRound,
           assessmentDuration: formData.assessmentDuration,
           assessmentReceived: formattedReceived,
+          assessmentDeadline: formattedDeadline,
         },
       );
 
@@ -912,6 +921,23 @@ function AssessmentContent() {
                       value={formData.assessmentReceived}
                       onChange={(value) =>
                         setFormData({ ...formData, assessmentReceived: value })
+                      }
+                      className="h-8"
+                      required
+                      aria-required="true"
+                    />
+                  </div>
+
+                  <div className="p-3 bg-muted font-semibold border-b">
+                    <RequiredText>Assessment Deadline (EST)</RequiredText>
+                  </div>
+                  <div className="p-2 border-b">
+                    <DateTimePicker
+                      id="assessmentDeadline"
+                      min={formData.assessmentReceived || minDateTime}
+                      value={formData.assessmentDeadline}
+                      onChange={(value) =>
+                        setFormData({ ...formData, assessmentDeadline: value })
                       }
                       className="h-8"
                       required

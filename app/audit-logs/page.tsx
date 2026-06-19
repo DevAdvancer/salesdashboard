@@ -381,6 +381,7 @@ function AuditLogsContent() {
         ['Job Title', getString(metadata.jobTitle, '-')],
         ['Interview Round', getString(metadata.interviewRound, '-')],
         ['Assessment Received (EST)', getString(metadata.assessmentReceived, '-')],
+        ['Assessment Deadline (EST)', getString(metadata.assessmentDeadline, '-')],
         ['Assessment Duration', getString(metadata.assessmentDuration, '-')],
         ['Email ID', getString(metadata.emailId, '-')],
         ['Contact Number', getString(metadata.contactNumber, '-')],
