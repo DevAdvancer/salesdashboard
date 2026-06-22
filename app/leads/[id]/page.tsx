@@ -235,7 +235,7 @@ function LeadDetailContent() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | null>>({});
   const [showCloseDialog, setShowCloseDialog] = useState(false);
   const [closeStep, setCloseStep] = useState(1);
-  const [closeStatus, setCloseStatus] = useState("Closed");
+  const [closeStatus, setCloseStatus] = useState("Won");
   const [initialPaymentStatus, setInitialPaymentStatus] = useState<string>("");
   const [closureFields, setClosureFields] = useState<FormField[]>([]);
   const [paymentPlanFields, setPaymentPlanFields] = useState<FormField[]>([]);
@@ -1118,7 +1118,7 @@ function LeadDetailContent() {
                         setCloseStatus(
                           isLinkedinRequestLead(leadData)
                             ? "Signed/Closure"
-                            : "Closed",
+                            : "Won",
                         );
                         setShowCloseDialog(true);
                       }}
@@ -1570,7 +1570,6 @@ function LeadDetailContent() {
                           </>
                         ) : (
                           <>
-                            <option value="Closed">Closed</option>
                             <option value="Won">Won</option>
                             <option value="Lost">Lost</option>
                             <option value="Rejected">Rejected</option>

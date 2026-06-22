@@ -26,6 +26,14 @@ export const COLLECTIONS = {
   // derived from this table grouped by `teamLeadId`. See
   // app/actions/lg-handoffs.ts.
   LG_HANDOFFS: process.env.NEXT_PUBLIC_APPWRITE_LG_HANDOFFS_COLLECTION_ID ?? 'lg_handoffs',
+  // One document per "Not Interested" marking event. A new `active`
+  // row is written every time an agent marks a lead not-interested;
+  // the prior `active` row for that lead is flipped to `reopened` in
+  // the same flow. Reports count only `status: "active"` rows in the
+  // selected date range, attributed to the agent who previously owned
+  // the lead. See lib/actions/lead-actions.ts:notInterestedLeadAction
+  // and the Weekly Report action.
+  NOT_INTERESTED_LEADS: process.env.NEXT_PUBLIC_APPWRITE_NOT_INTERESTED_LEADS_COLLECTION_ID ?? 'not_interested_leads',
 };
 
 export const BUCKETS = {

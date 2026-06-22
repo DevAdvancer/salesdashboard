@@ -701,6 +701,30 @@ export async function notInterestedLeadAction(
     nowIso,
   );
 
+  // Persist the marking event in not_interested_leads so weekly reports
+  // can show the exact amount per agent with its date. The prior `active`
+  // row for this lead is flipped to `reopened` first (if any) — that way
+  // a retry-then-re-mark cycle produces two events with their real dates
+  // instead of one row being overwritten.
+  await markPriorNotInterestedRowsReopened(leadId, actorId, databases, nowIso);
+
+  try {
+    await databases.createDocument(DATABASE_ID, COLLECTIONS.NOT_INTERESTED_LEADS, ID.unique(), {
+      leadId,
+      markedById: actorId,
+      markedByName: actorName,
+      markedAt: nowIso,
+      previousOwnerId: currentLead.ownerId,
+      previousAssignedToId: currentLead.assignedToId ?? null,
+      branchId: resolveBranchIdForEvent(currentLead),
+      reason: null,
+      status: "active",
+    });
+  } catch (err) {
+    // Telemetry must never break the user-facing action.
+    console.error("Failed to write not_interested_leads event:", err);
+  }
+
   try {
     await databases.createDocument(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, ID.unique(), {
       action: "LEAD_UPDATE",
@@ -720,6 +744,73 @@ export async function notInterestedLeadAction(
   } catch {}
 
   return { success: true, lead: updated as unknown as Lead };
+}
+
+/**
+ * Flip any prior `active` not_interested_leads row for `leadId` to
+ * `reopened`. Called from both the explicit reopen path and the
+ * implicit "mark not-interested again" path so the row history stays
+ * monotonic: at most one `active` row exists per lead at any time.
+ * Failures are swallowed because telemetry must never block the
+ * user-facing state change.
+ */
+export async function markPriorNotInterestedRowsReopened(
+  leadId: string,
+  actorId: string,
+  databases: AdminDatabases,
+  nowIso: string,
+): Promise<void> {
+  try {
+    const activeRows = (await databases.listDocuments(
+      DATABASE_ID,
+      COLLECTIONS.NOT_INTERESTED_LEADS,
+      [
+        Query.equal("leadId", leadId),
+        Query.equal("status", "active"),
+        Query.limit(25),
+      ],
+    )).documents as Array<{ $id: string }>;
+
+    await Promise.all(
+      activeRows.map((row) =>
+        databases
+          .updateDocument(DATABASE_ID, COLLECTIONS.NOT_INTERESTED_LEADS, row.$id, {
+            status: "reopened",
+            reopenedAt: nowIso,
+            reopenedById: actorId,
+          })
+          .catch((err) => {
+            console.error(`Failed to reopen not_interested row ${row.$id}:`, err);
+          }),
+      ),
+    );
+  } catch (err) {
+    console.error(`Failed to list active not_interested rows for lead ${leadId}:`, err);
+  }
+}
+
+/**
+ * Pick a single branchId for a not_interested_leads row. Lead documents
+ * historically carried `branchId` (singular); newer ones also carry
+ * `branchIds[]`. Prefer the array's first entry when present, otherwise
+ * fall back to `branchId`. `null` when the lead has no branch.
+ */
+function resolveBranchIdForEvent(lead: Lead): string | null {
+  const raw = (lead as unknown as { data?: string }).data;
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw) as { branchIds?: unknown; branchId?: unknown };
+      if (Array.isArray(parsed.branchIds) && typeof parsed.branchIds[0] === "string") {
+        return parsed.branchIds[0] as string;
+      }
+      if (typeof parsed.branchId === "string") {
+        return parsed.branchId;
+      }
+    } catch {
+      // fall through to top-level fields
+    }
+  }
+  return lead.branchId ?? null;
 }
 
 export async function closeLeadAction(

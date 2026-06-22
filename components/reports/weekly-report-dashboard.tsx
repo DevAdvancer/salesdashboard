@@ -114,6 +114,7 @@ export function WeeklyReportDashboard({ user }: { user: User }) {
             ["Leads", singleMember.totals.leads],
             ["Closures", singleMember.totals.closures],
             ["Cold Calls", singleMember.totals.coldCalls],
+            ["Not Interested", singleMember.totals.notInterested],
             ["Upfront", currency.format(singleMember.totals.upfront)],
           ].map(([label, value]) => (
             <Card key={label}>
@@ -148,6 +149,7 @@ export function WeeklyReportDashboard({ user }: { user: User }) {
                     <TableHead>Leads</TableHead>
                     <TableHead>Closures</TableHead>
                     <TableHead>Cold Calls</TableHead>
+                    <TableHead>Not Interested</TableHead>
                     <TableHead className="text-right">Upfront</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -160,6 +162,7 @@ export function WeeklyReportDashboard({ user }: { user: User }) {
                       <TableCell>{member.metrics.leads}</TableCell>
                       <TableCell>{member.metrics.closures}</TableCell>
                       <TableCell>{member.metrics.coldCalls}</TableCell>
+                      <TableCell>{member.metrics.notInterested}</TableCell>
                       <TableCell className="text-right">{currency.format(member.metrics.upfront)}</TableCell>
                     </TableRow>
                   ))}
@@ -170,6 +173,7 @@ export function WeeklyReportDashboard({ user }: { user: User }) {
                     <TableCell className="font-semibold">{team.totals.leads}</TableCell>
                     <TableCell className="font-semibold">{team.totals.closures}</TableCell>
                     <TableCell className="font-semibold">{team.totals.coldCalls}</TableCell>
+                    <TableCell className="font-semibold">{team.totals.notInterested}</TableCell>
                     <TableCell className="text-right font-semibold">{currency.format(team.totals.upfront)}</TableCell>
                   </TableRow>
                 </TableBody>

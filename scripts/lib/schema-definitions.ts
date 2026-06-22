@@ -438,6 +438,46 @@ export const collectionSchemas: Record<string, CollectionSchema> = {
       { key: 'handed_off_idx', type: 'key', attributes: ['handedOffAt'] },
     ],
   },
+
+  // ─── Not Interested Leads ─────────────────────────────────────────────────
+  // Source of truth for the "Not Interested" column in the weekly
+  // report. One document per marking event — a lead can accumulate
+  // multiple rows across its lifetime when an agent retries it and
+  // marks it not-interested again. `status` flips from "active" to
+  // "reopened" when the lead is re-marked or explicitly reopened;
+  // reports count only `status: "active"` rows in the selected range
+  // and attribute them to `previousOwnerId` (the agent whose lead it
+  // was). NOT unique on `leadId` — by design, because each retry
+  // cycle produces a new event row.
+  not_interested_leads: {
+    attributes: [
+      { key: 'leadId', type: 'string', required: true, size: 255 },
+      { key: 'markedById', type: 'string', required: true, size: 255 },
+      { key: 'markedByName', type: 'string', required: true, size: 255 },
+      { key: 'markedAt', type: 'datetime', required: true },
+      { key: 'previousOwnerId', type: 'string', required: true, size: 255 },
+      { key: 'previousAssignedToId', type: 'string', required: false, size: 255 },
+      { key: 'branchId', type: 'string', required: false, size: 255 },
+      { key: 'reason', type: 'string', required: false, size: 500 },
+      {
+        key: 'status',
+        type: 'enum',
+        required: true,
+        default: 'active',
+        values: ['active', 'reopened'],
+      },
+      { key: 'reopenedAt', type: 'datetime', required: false },
+      { key: 'reopenedById', type: 'string', required: false, size: 255 },
+    ],
+    indexes: [
+      { key: 'lead_idx', type: 'key', attributes: ['leadId'] },
+      { key: 'marked_by_idx', type: 'key', attributes: ['markedById'] },
+      { key: 'marked_at_idx', type: 'key', attributes: ['markedAt'] },
+      { key: 'status_idx', type: 'key', attributes: ['status'] },
+      { key: 'previous_owner_idx', type: 'key', attributes: ['previousOwnerId'] },
+      { key: 'branch_idx', type: 'key', attributes: ['branchId'] },
+    ],
+  },
 };
 
 /**

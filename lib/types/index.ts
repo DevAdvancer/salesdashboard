@@ -99,6 +99,32 @@ export interface LgHandoff {
   $updatedAt?: string;
 }
 
+// Lifecycle of a not_interested_leads row.
+export type NotInterestedStatus = 'active' | 'reopened';
+
+// One row per "Not Interested" marking event. A lead can have multiple
+// rows across its lifetime — each time an agent marks it not-interested
+// a fresh `active` row is written; the prior `active` row is flipped to
+// `reopened` in the same transaction. Reports count only `status: 'active'`
+// rows in the selected date range, attributed to the agent who previously
+// owned the lead (`previousOwnerId`).
+export interface NotInterestedLeadEvent {
+  $id: string;
+  leadId: string;
+  markedById: string;
+  markedByName: string;
+  markedAt: string;
+  previousOwnerId: string;
+  previousAssignedToId?: string | null;
+  branchId?: string | null;
+  reason?: string | null;
+  status: NotInterestedStatus;
+  reopenedAt?: string | null;
+  reopenedById?: string | null;
+  $createdAt?: string;
+  $updatedAt?: string;
+}
+
 export type LeadDataValue =
   | string
   | number

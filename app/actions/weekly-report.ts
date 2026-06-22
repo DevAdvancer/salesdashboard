@@ -17,6 +17,7 @@ export type WeeklyReportMetrics = {
   closures: number;
   upfront: number;
   coldCalls: number;
+  notInterested: number;
 };
 
 export type WeeklyReportMember = {
@@ -111,7 +112,7 @@ function mapUser(doc: UserDocument): User {
 }
 
 function emptyMetrics(): WeeklyReportMetrics {
-  return { calls: 0, leads: 0, followups: 0, closures: 0, upfront: 0, coldCalls: 0 };
+  return { calls: 0, leads: 0, followups: 0, closures: 0, upfront: 0, coldCalls: 0, notInterested: 0 };
 }
 
 function addMetrics(target: WeeklyReportMetrics, delta: Partial<WeeklyReportMetrics>) {
@@ -121,6 +122,7 @@ function addMetrics(target: WeeklyReportMetrics, delta: Partial<WeeklyReportMetr
   target.closures += delta.closures ?? 0;
   target.upfront += delta.upfront ?? 0;
   target.coldCalls += delta.coldCalls ?? 0;
+  target.notInterested += delta.notInterested ?? 0;
 }
 
 function getAttributedUserId(lead: Pick<LeadDocument, "assignedToId" | "ownerId">): string {
@@ -249,6 +251,34 @@ async function listClosedLeadsInRange(databases: any, range: WeeklyReportRange):
   });
 }
 
+type NotInterestedEventDocument = {
+  $id: string;
+  leadId: string;
+  previousOwnerId: string;
+  previousAssignedToId?: string | null;
+  markedAt: string;
+  status: "active" | "reopened";
+};
+
+async function listNotInterestedEventsInRange(
+  databases: any,
+  range: WeeklyReportRange,
+): Promise<NotInterestedEventDocument[]> {
+  return listAllDocuments<NotInterestedEventDocument>({
+    databases,
+    databaseId: DATABASE_ID,
+    collectionId: COLLECTIONS.NOT_INTERESTED_LEADS,
+    queries: [
+      Query.equal("status", "active"),
+      Query.greaterThanEqual("markedAt", range.from),
+      Query.lessThanEqual("markedAt", range.to),
+      Query.orderAsc("$id"),
+    ],
+    pageLimit: 100,
+    maxPages: 500,
+  });
+}
+
 async function listAuditLogsInRange(databases: any, range: WeeklyReportRange): Promise<AuditLogDocument[]> {
   return listAllDocuments<AuditLogDocument>({
     databases,
@@ -344,11 +374,12 @@ export async function getWeeklyReportAction(input: {
   const scopedUsers = await listScopedUsers(databases, actor);
   const scopedUserIds = new Set(scopedUsers.map((user) => user.$id));
 
-  const [createdLeads, closedLeads, auditLogs, paymentRecords] = await Promise.all([
+  const [createdLeads, closedLeads, auditLogs, paymentRecords, notInterestedEvents] = await Promise.all([
     listLeadsCreatedInRange(databases, range),
     listClosedLeadsInRange(databases, range),
     listAuditLogsInRange(databases, range),
     listClientPaymentsUpdatedInRange(databases, range),
+    listNotInterestedEventsInRange(databases, range),
   ]);
 
   const metricsByUserId = new Map<string, WeeklyReportMetrics>();
@@ -391,6 +422,18 @@ export async function getWeeklyReportAction(input: {
     } else if (snapshot && snapshot.nextFollowUpAt) {
       addMetrics(ensureMetrics(log.actorId), { followups: 1 });
     }
+  });
+
+  // Attribute not-interested marks to the agent who owned the lead
+  // BEFORE it was handed to the unassigned queue — the operator's rule
+  // is that the mark counts against the original owner's conversion.
+  // `previousAssignedToId` is the fallback when ownership was already
+  // ambiguous (e.g. the lead was in the unassigned queue at mark time
+  // because of an earlier retry).
+  notInterestedEvents.forEach((event) => {
+    const attributed = event.previousAssignedToId || event.previousOwnerId;
+    if (!attributed || !scopedUserIds.has(attributed)) return;
+    addMetrics(ensureMetrics(attributed), { notInterested: 1 });
   });
 
   const paymentLeadIds = Array.from(new Set(paymentRecords.map((record) => record.leadId).filter(Boolean)));

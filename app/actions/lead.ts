@@ -13,6 +13,7 @@ import { notifyDuplicateLeadUpdateAttemptAction } from "@/app/actions/lead-dupli
 import { normalizeLinkedinProfileUrl } from "@/lib/utils/linkedin";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import { recordLgHandoffAction } from "@/app/actions/lg-handoffs";
+import { markPriorNotInterestedRowsReopened } from "@/lib/actions/lead-actions";
 import {
   isAllowedLeadStatusTransition,
   normalizeLeadStatus,
@@ -974,8 +975,19 @@ export async function reopenLeadAction(
             leadId,
             {
                 isClosed: false,
+                status: 'Reopened',
             },
             newPermissions
+        );
+
+        // Flip any prior active not_interested_leads row for this lead
+        // to `reopened`. Best-effort — telemetry must never block the
+        // user-facing state change.
+        await markPriorNotInterestedRowsReopened(
+            leadId,
+            actorId,
+            databases,
+            new Date().toISOString(),
         );
 
         return lead as unknown as Lead;
