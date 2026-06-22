@@ -19,6 +19,7 @@ import {
   normalizeLeadStatus,
 } from "@/lib/utils/lead-status-workflow";
 import { REQUIRED_LEAD_FIELD_KEYS } from "@/lib/utils/required-lead-fields";
+import { expandIsoDateToStart, expandIsoDateToEnd } from "@/lib/utils/iso-date-range";
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const LEADS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_LEADS_COLLECTION_ID!;
@@ -337,6 +338,13 @@ type TeamLeadScopedUserDocument = {
   role?: UserRole;
 };
 
+/**
+ * (Date helpers `expandIsoDateToStart` / `expandIsoDateToEnd` were
+ * promoted to `lib/utils/iso-date-range` so they could be shared with
+ * the client-side lead service. The dashboard's YYYY-MM-DD inputs are
+ * now expanded against the local timezone before being passed to
+ * Appwrite's `$createdAt` filter.)
+ */
 async function getTeamLeadLeadVisibilityScope(databases: any, viewerId: string): Promise<{
   ownerVisibleUserIds: string[];
   assignmentVisibleUserIds: string[];
@@ -1174,12 +1182,17 @@ export async function listLeadsAction(
       queries.push(Query.equal('branchId', filters.branchId));
     }
 
-    // Apply date range filters
+    // Apply date range filters. The dashboard sends `dateFrom` / `dateTo`
+    // as YYYY-MM-DD strings; expand them to the inclusive day boundaries
+    // so leads created later in the same day aren't dropped by a string
+    // comparison (e.g. `'2026-06-22T12:34Z' <= '2026-06-22'` is false).
     if (filters.dateFrom) {
-      queries.push(Query.greaterThanEqual('$createdAt', filters.dateFrom));
+      const from = expandIsoDateToStart(filters.dateFrom);
+      queries.push(Query.greaterThanEqual('$createdAt', from));
     }
     if (filters.dateTo) {
-      queries.push(Query.lessThanEqual('$createdAt', filters.dateTo));
+      const to = expandIsoDateToEnd(filters.dateTo);
+      queries.push(Query.lessThanEqual('$createdAt', to));
     }
 
     // Order by creation date (newest first)
@@ -1415,10 +1428,10 @@ export async function listLeadCountsAction(
       visibilityQueries.push(Query.equal('branchId', filters.branchId));
     }
     if (filters?.dateFrom) {
-      visibilityQueries.push(Query.greaterThanEqual('$createdAt', filters.dateFrom));
+      visibilityQueries.push(Query.greaterThanEqual('$createdAt', expandIsoDateToStart(filters.dateFrom)));
     }
     if (filters?.dateTo) {
-      visibilityQueries.push(Query.lessThanEqual('$createdAt', filters.dateTo));
+      visibilityQueries.push(Query.lessThanEqual('$createdAt', expandIsoDateToEnd(filters.dateTo)));
     }
     if (filters?.status) {
       const statusText =

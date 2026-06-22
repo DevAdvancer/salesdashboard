@@ -139,6 +139,41 @@ export async function listLeadRequestsAction(): Promise<LeadRequest[]> {
   }
 }
 
+/**
+ * Scoped read of `lead_requests` for the dashboard's monthly referral split.
+ * Always filtered to the [monthStartIso, monthEndIso] window. The caller is
+ * responsible for the month bounds; this action just enforces the time range
+ * and the same visibility rules as `listLeadRequestsAction`.
+ */
+export async function listLeadRequestsByMonthAction(input: {
+  monthStartIso: string;
+  monthEndIso: string;
+}): Promise<LeadRequest[]> {
+  await assertLeadRequestReader();
+  const { databases } = await createAdminClient();
+
+  if (!input.monthStartIso || !input.monthEndIso) {
+    throw new Error('Month start and end are required.');
+  }
+
+  try {
+    return await listAllDocuments<LeadRequestDocument>({
+      databases,
+      databaseId: DATABASE_ID,
+      collectionId: COLLECTIONS.LEAD_REQUESTS,
+      queries: [
+        Query.greaterThanEqual('$createdAt', input.monthStartIso),
+        Query.lessThanEqual('$createdAt', input.monthEndIso),
+        Query.orderDesc('$createdAt'),
+      ],
+      pageLimit: 100,
+      maxPages: 50,
+    });
+  } catch (error) {
+    throw new Error(getAppwriteErrorMessage(error));
+  }
+}
+
 export async function getLeadRequestAdminOptionsAction(): Promise<LeadRequestAdminOptions> {
   await assertLeadRequestReader();
   const { databases } = await createAdminClient();

@@ -1,6 +1,7 @@
 import { ID, Query, Permission, Role } from 'appwrite';
 import { databases } from '@/lib/appwrite';
 import { AuditLog, AuditLogAction } from '@/lib/types';
+import { expandIsoDateToStart, expandIsoDateToEnd } from '@/lib/utils/iso-date-range';
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const AUDIT_LOGS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_AUDIT_LOGS_COLLECTION_ID!;
@@ -97,11 +98,11 @@ export async function getAuditLogs(
     }
 
     if (filters?.dateFrom) {
-      queries.push(Query.greaterThanEqual('performedAt', filters.dateFrom));
+      queries.push(Query.greaterThanEqual('performedAt', expandIsoDateToStart(filters.dateFrom)));
     }
 
     if (filters?.dateTo) {
-      queries.push(Query.lessThanEqual('performedAt', filters.dateTo));
+      queries.push(Query.lessThanEqual('performedAt', expandIsoDateToEnd(filters.dateTo)));
     }
 
     const response = await databases.listDocuments(

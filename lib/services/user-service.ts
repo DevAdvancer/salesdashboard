@@ -332,10 +332,14 @@ export async function getAssignableUsers(
             'department',
           ]),
           ...queries,
+          // Cap to 5,000 users — well above any real team size, and the
+          // Appwrite default page size is 25, which silently truncates
+          // large user lists (e.g. >25 agents+TLs) and causes the dashboard
+          // KPI to render an incomplete roster.
+          Query.limit(5000),
         ]
       );
 
-      // Filter out inactive users and the creator themselves
       const users = response.documents
         .map(mapDocToUser)
         .filter((u) => u.isActive)
@@ -373,6 +377,9 @@ export async function getAgentsByTeamLead(
           ]),
           Query.equal('teamLeadId', teamLeadId),
           Query.or([Query.equal('role', 'agent'), Query.equal('role', 'lead_generation')]),
+          // Cap to 5,000 users — Appwrite's default page size is 25, which
+          // silently truncates large teams in the dashboard KPI roster.
+          Query.limit(5000),
         ]
       );
       return response.documents

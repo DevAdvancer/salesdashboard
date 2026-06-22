@@ -4,6 +4,7 @@ import { getAssessmentAttempts } from "@/app/actions/assessment";
 import {
   listAllPaymentInsightsAction,
   listClientPaymentSummariesAction,
+  listLeadPaidAmountsAction,
   type PaymentInsightRecord,
 } from "@/app/actions/client-payments";
 import { getInterviewAttempts } from "@/app/actions/interview";
@@ -21,11 +22,19 @@ import {
   resolveLeadUsersForInsights,
   type LeadershipDashboardInsights,
 } from "@/lib/utils/dashboard-insights";
+import { buildLeadTargetProgress, type DateRange, type KpiRow } from "@/lib/utils/dashboard-kpi";
+import {
+  splitLeadsByReferral,
+  type ReferralSplit,
+} from "@/lib/utils/dashboard-referral";
 import { cacheClientRead, clearClientReadCache } from "@/lib/utils/client-read-cache";
 import type { Branch, Department, Lead, User } from "@/lib/types";
 
 const DASHBOARD_DATA_SCOPE = "dashboard:data";
 const DASHBOARD_DATA_TTL_MS = 60 * 1000;
+const DASHBOARD_TOP_METRICS_SCOPE = "dashboard:topMetrics";
+const DASHBOARD_LEAD_TARGET_SCOPE = "dashboard:leadTarget";
+const DASHBOARD_REFERRAL_SCOPE = "dashboard:referral";
 
 export type AssignedDashboardAgent = User & {
   branchNames: string;
@@ -259,6 +268,248 @@ export async function loadDashboardPaymentInsights(
     `${DASHBOARD_DATA_SCOPE}:paymentInsights`,
     [actorId],
     () => listAllPaymentInsightsAction(actorId),
+    DASHBOARD_DATA_TTL_MS,
+  );
+}
+
+// ----------------------------------------------------------------------------
+// New dashboard sections (top row + KPI + referral split). These replace the
+// monolithic `loadDashboardData` for the new dashboard page, but the legacy
+// function is kept because `app/work-queue/page.tsx` still depends on it.
+// ----------------------------------------------------------------------------
+
+export interface TopMetrics {
+  activeLeads: number;
+  closedLeads: number;
+  createdMocks: number;
+  createdInterviewSupport: number;
+  createdAssessmentSupport: number;
+}
+
+export interface TopMetricsInput {
+  userId: string;
+  role: User["role"];
+  branchIds?: string[];
+  dateRange: DateRange;
+}
+
+const EMPTY_TOP_METRICS: TopMetrics = {
+  activeLeads: 0,
+  closedLeads: 0,
+  createdMocks: 0,
+  createdInterviewSupport: 0,
+  createdAssessmentSupport: 0,
+};
+
+/**
+ * Top-row metrics (Active / Clients / Mocks / Interview / Assessment).
+ * All five respect the date range — leads created inside the window and
+ * attempts against those leads. Falls back to today when no range is set.
+ */
+export async function loadDashboardTopMetrics(
+  input: TopMetricsInput,
+): Promise<TopMetrics> {
+  const dateFrom = input.dateRange.from;
+  const dateTo = input.dateRange.to;
+  if (!dateFrom && !dateTo) {
+    return EMPTY_TOP_METRICS;
+  }
+
+  const branchIds = [...(input.branchIds ?? [])].sort();
+
+  return cacheClientRead(
+    DASHBOARD_TOP_METRICS_SCOPE,
+    [input.userId, input.role, branchIds, dateFrom ?? "", dateTo ?? ""],
+    async () => {
+      // 1. Active + closed counts in the range.
+      const [active, closed] = await Promise.all([
+        listLeads(
+          { isClosed: false, dateFrom, dateTo },
+          input.userId,
+          input.role,
+          input.branchIds,
+        ),
+        listLeads(
+          { isClosed: true, dateFrom, dateTo },
+          input.userId,
+          input.role,
+          input.branchIds,
+        ),
+      ]);
+
+      // 2. Attempt counts against the visible lead IDs.
+      const visibleLeadIds = Array.from(
+        new Set([...active, ...closed].map((lead) => lead.$id)),
+      );
+      const attempts = visibleLeadIds.length
+        ? await loadDashboardAttemptCounts(input.userId, visibleLeadIds)
+        : EMPTY_TOP_METRICS;
+
+      return {
+        activeLeads: active.length,
+        closedLeads: closed.length,
+        createdMocks: attempts.createdMocks,
+        createdInterviewSupport: attempts.createdInterviewSupport,
+        createdAssessmentSupport: attempts.createdAssessmentSupport,
+      };
+    },
+    DASHBOARD_DATA_TTL_MS,
+  );
+}
+
+export interface LeadTargetInput {
+  userId: string;
+  role: User["role"];
+  teamLeadId?: string;
+  branchIds?: string[];
+  dateRange: DateRange;
+}
+
+/**
+ * Returns per-user lead count progress for the KPI section.
+ * - Admin-like (no teamLeadId): every active user.
+ * - Admin-like with teamLeadId: just that TL + their agents.
+ * - Team lead: self + their agents.
+ * - Agent: self only.
+ * - Lead generation: self only.
+ */
+export async function loadLeadTargetProgress(
+  input: LeadTargetInput,
+): Promise<KpiRow[]> {
+  const branchIds = [...(input.branchIds ?? [])].sort();
+
+  return cacheClientRead(
+    DASHBOARD_LEAD_TARGET_SCOPE,
+    [
+      input.userId,
+      input.role,
+      input.teamLeadId ?? null,
+      branchIds,
+      input.dateRange.from ?? "",
+      input.dateRange.to ?? "",
+    ],
+    async () => {
+      // The lead-target KPI counts all leads created in the date range
+      // regardless of closed status — a closed lead still reflects work
+      // done, so query both states and merge.
+      const [activeLeads, closedLeads] = await Promise.all([
+        listLeads(
+          { dateFrom: input.dateRange.from, dateTo: input.dateRange.to, isClosed: false },
+          input.userId,
+          input.role,
+          input.branchIds,
+        ),
+        listLeads(
+          { dateFrom: input.dateRange.from, dateTo: input.dateRange.to, isClosed: true },
+          input.userId,
+          input.role,
+          input.branchIds,
+        ),
+      ]);
+      const leads = [...activeLeads, ...closedLeads];
+
+      const users = await resolveScopeUsers({
+        userId: input.userId,
+        role: input.role,
+        teamLeadId: input.teamLeadId,
+        branchIds: input.branchIds,
+      });
+
+      return buildLeadTargetProgress({ leads, users, range: input.dateRange });
+    },
+    DASHBOARD_DATA_TTL_MS,
+  );
+}
+
+async function resolveScopeUsers(input: {
+  userId: string;
+  role: User["role"];
+  teamLeadId?: string;
+  branchIds?: string[];
+}): Promise<User[]> {
+  const { userId, role, teamLeadId, branchIds } = input;
+
+  // KPI scope: active sales-dept agents AND team leads appear in the
+  // dashboard lead-target. Other roles (admin, developer, monitor,
+  // operations, lead_generation, resume-dept) are excluded — they have
+  // different workflows and shouldn't be measured against the lead
+  // target.
+  const isKpiEligible = (user: User | null | undefined): user is User =>
+    Boolean(
+      user &&
+      user.isActive !== false &&
+      user.department === "sales" &&
+      (user.role === "agent" || user.role === "team_lead"),
+    );
+
+  if (role === "agent" || role === "lead_generation") {
+    const self = await getUserByIdOrNull(userId);
+    return isKpiEligible(self) ? [self] : [];
+  }
+
+  if (role === "team_lead") {
+    // KPI shows this TL plus the agents assigned to them.
+    const self = await getUserByIdOrNull(userId);
+    const agents = await getAgentsByTeamLead(userId);
+    return [self, ...agents].filter(isKpiEligible);
+  }
+
+  // admin / developer / monitor / operations
+  if (teamLeadId) {
+    // KPI shows the selected TL plus their agents.
+    const selected = await getUserByIdOrNull(teamLeadId);
+    const agents = await getAgentsByTeamLead(teamLeadId);
+    return [selected, ...agents].filter(isKpiEligible);
+  }
+
+  const all = await getAssignableUsers(role, branchIds ?? [], userId, "all");
+  return all.filter((candidate) => candidate.$id !== userId && isKpiEligible(candidate));
+}
+
+export interface ReferralStatsInput {
+  userId: string;
+  role: User["role"];
+  branchIds?: string[];
+  monthStartIso: string;
+  monthEndIso: string;
+}
+
+export async function loadDashboardReferralStats(
+  input: ReferralStatsInput,
+): Promise<ReferralSplit> {
+  return cacheClientRead(
+    DASHBOARD_REFERRAL_SCOPE,
+    [
+      input.userId,
+      input.role,
+      input.monthStartIso,
+      input.monthEndIso,
+    ],
+    async () => {
+      // The referral split is computed from closed leads only (it's a
+      // realized-revenue view), so request isClosed=true explicitly.
+      // The default listLeads filter is isClosed=false, which would
+      // leave us with nothing to split.
+      const leads = await listLeads(
+        {
+          dateFrom: input.monthStartIso,
+          dateTo: input.monthEndIso,
+          isClosed: true,
+        },
+        input.userId,
+        input.role,
+        input.branchIds,
+      );
+      // Build a leadId → total-paid lookup from actual payment records so
+      // the referral / non-referral totals reflect money actually
+      // collected, not the planned leadAmount from the lead form.
+      const leadIds = leads.map((l) => l.$id);
+      const paidRecord = leadIds.length > 0
+        ? await listLeadPaidAmountsAction({ actorId: input.userId, leadIds })
+        : {};
+      const paidMap = new Map<string, number>(Object.entries(paidRecord));
+      return splitLeadsByReferral(leads, paidMap);
+    },
     DASHBOARD_DATA_TTL_MS,
   );
 }

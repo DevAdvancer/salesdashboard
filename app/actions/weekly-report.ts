@@ -6,6 +6,7 @@ import { assertAuthenticatedUserId } from "@/lib/server/current-user";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { isRoleEligibleForComponent } from "@/lib/constants/component-access";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
+import { buildWorkingDayKpi, toDateKey } from "@/lib/utils/report-kpi";
 import type { ClientPaymentRecord, Department, Lead, PaymentStatus, User, UserRole } from "@/lib/types";
 
 type WeeklyReportRange = { from: string; to: string };
@@ -18,6 +19,17 @@ export type WeeklyReportMetrics = {
   upfront: number;
   coldCalls: number;
   notInterested: number;
+  /** Per-day KPI breakdown for the selected range. */
+  kpi: {
+    /** ISO dates in the range, one per day. */
+    daily: { date: string; done: boolean }[];
+    /** How many days in the range had at least 1 lead. */
+    daysMet: number;
+    /** How many days in the range had zero leads. */
+    daysMissed: number;
+    /** Total days in the range (equals daily.length). */
+    totalDays: number;
+  };
 };
 
 export type WeeklyReportMember = {
@@ -38,13 +50,13 @@ export type WeeklyReportResult = {
 
 type AuditLogDocument = {
   $id: string;
+  $createdAt: string;
   action: string;
   actorId: string;
   actorName: string;
   targetId?: string | null;
   targetType: string;
   metadata?: string | null;
-  performedAt: string;
 };
 
 type LeadDocument = {
@@ -55,6 +67,7 @@ type LeadDocument = {
   isClosed: boolean;
   closedAt?: string | null;
   $createdAt: string;
+  $updatedAt?: string;
 };
 
 type UserDocument = {
@@ -112,7 +125,33 @@ function mapUser(doc: UserDocument): User {
 }
 
 function emptyMetrics(): WeeklyReportMetrics {
-  return { calls: 0, leads: 0, followups: 0, closures: 0, upfront: 0, coldCalls: 0, notInterested: 0 };
+  return {
+    calls: 0,
+    leads: 0,
+    followups: 0,
+    closures: 0,
+    upfront: 0,
+    coldCalls: 0,
+    notInterested: 0,
+    kpi: emptyKpi(),
+  };
+}
+
+function emptyKpi(): WeeklyReportMetrics["kpi"] {
+  return { daily: [], daysMet: 0, daysMissed: 0, totalDays: 0 };
+}
+
+/**
+ * Per-day KPI summary for a single user: counts the days in the range
+ * on which the user created at least one lead. A day with 0 leads is a
+ * "missed" day. Weekends are excluded from the KPI target so monthly
+ * and custom-range progress only reflects Monday-Friday working days.
+ */
+function buildKpi(
+  range: WeeklyReportRange,
+  userLeadDays: Set<string>,
+): WeeklyReportMetrics["kpi"] {
+  return buildWorkingDayKpi(range, userLeadDays);
 }
 
 function addMetrics(target: WeeklyReportMetrics, delta: Partial<WeeklyReportMetrics>) {
@@ -123,6 +162,31 @@ function addMetrics(target: WeeklyReportMetrics, delta: Partial<WeeklyReportMetr
   target.upfront += delta.upfront ?? 0;
   target.coldCalls += delta.coldCalls ?? 0;
   target.notInterested += delta.notInterested ?? 0;
+}
+
+/**
+ * Aggregates per-member KPI breakdowns into a team-level summary.
+ * A day is "met" for the team if at least one member hit their daily
+ * target that day; otherwise it's "missed" for the team.
+ */
+function combineKpi(members: WeeklyReportMember[]): WeeklyReportMetrics["kpi"] {
+  if (members.length === 0) return emptyKpi();
+  const allDates = new Set<string>();
+  for (const member of members) {
+    for (const day of member.metrics.kpi.daily) {
+      allDates.add(day.date);
+    }
+  }
+  const dates = Array.from(allDates).sort();
+  if (dates.length === 0) return emptyKpi();
+  const daily: { date: string; done: boolean }[] = [];
+  let daysMet = 0;
+  for (const date of dates) {
+    const met = members.some((m) => m.metrics.kpi.daily.some((d) => d.date === date && d.done));
+    if (met) daysMet += 1;
+    daily.push({ date, done: met });
+  }
+  return { daily, daysMet, daysMissed: daily.length - daysMet, totalDays: daily.length };
 }
 
 function getAttributedUserId(lead: Pick<LeadDocument, "assignedToId" | "ownerId">): string {
@@ -236,18 +300,29 @@ async function listLeadsCreatedInRange(databases: any, range: WeeklyReportRange)
 }
 
 async function listClosedLeadsInRange(databases: any, range: WeeklyReportRange): Promise<LeadDocument[]> {
-  return listAllDocuments<LeadDocument>({
+  // Use $updatedAt instead of closedAt so older closed leads (which
+  // predate the closedAt column being set) still show up — closing a
+  // lead bumps $updatedAt even if closedAt is null. We further filter
+  // by the closedAt / $updatedAt range in memory so a lead closed
+  // before the range isn't counted.
+  const docs = await listAllDocuments<LeadDocument>({
     databases,
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.LEADS,
     queries: [
       Query.equal("isClosed", true),
-      Query.greaterThanEqual("closedAt", range.from),
-      Query.lessThanEqual("closedAt", range.to),
+      Query.greaterThanEqual("$updatedAt", range.from),
+      Query.lessThanEqual("$updatedAt", range.to),
       Query.orderAsc("$id"),
     ],
     pageLimit: 100,
     maxPages: 500,
+  });
+  return docs.filter((lead) => {
+    // Prefer closedAt; fall back to $updatedAt for older records.
+    const closedAt = lead.closedAt ?? lead.$updatedAt;
+    if (!closedAt) return false;
+    return closedAt >= range.from && closedAt <= range.to;
   });
 }
 
@@ -257,19 +332,24 @@ type NotInterestedEventDocument = {
   previousOwnerId: string;
   previousAssignedToId?: string | null;
   markedAt: string;
-  status: "active" | "reopened";
+  // Optional because some Appwrite instances of not_interested_leads
+  // predate the column. Treated as "active" when missing.
+  status?: "active" | "reopened";
 };
 
 async function listNotInterestedEventsInRange(
   databases: any,
   range: WeeklyReportRange,
 ): Promise<NotInterestedEventDocument[]> {
-  return listAllDocuments<NotInterestedEventDocument>({
+  // The `status` column on not_interested_leads is optional in some
+  // production instances (older Appwrite setups predate the field), so
+  // we filter the active/reopened split in memory below rather than via
+  // a Query.equal that would 400 against schemas without the attribute.
+  const docs = await listAllDocuments<NotInterestedEventDocument>({
     databases,
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.NOT_INTERESTED_LEADS,
     queries: [
-      Query.equal("status", "active"),
       Query.greaterThanEqual("markedAt", range.from),
       Query.lessThanEqual("markedAt", range.to),
       Query.orderAsc("$id"),
@@ -277,9 +357,20 @@ async function listNotInterestedEventsInRange(
     pageLimit: 100,
     maxPages: 500,
   });
+  return docs.filter((doc) => {
+    // Only count events that haven't been reopened. Missing `status` is
+    // treated as active for compatibility with older collections.
+    return !doc.status || doc.status === "active";
+  });
 }
 
 async function listAuditLogsInRange(databases: any, range: WeeklyReportRange): Promise<AuditLogDocument[]> {
+  // The audit log collection stores the timestamp as `$createdAt` (the
+  // system field Appwrite always maintains). The writes elsewhere in
+  // the codebase use `performedAt` but the schema doesn't include that
+  // attribute, so queries against it return 0 results. Filter by
+  // `$createdAt` instead — it's set when the audit document is created,
+  // which is the same moment the action happened.
   return listAllDocuments<AuditLogDocument>({
     databases,
     databaseId: DATABASE_ID,
@@ -287,8 +378,8 @@ async function listAuditLogsInRange(databases: any, range: WeeklyReportRange): P
     queries: [
       Query.equal("action", "LEAD_UPDATE"),
       Query.equal("targetType", "LEAD"),
-      Query.greaterThanEqual("performedAt", range.from),
-      Query.lessThanEqual("performedAt", range.to),
+      Query.greaterThanEqual("$createdAt", range.from),
+      Query.lessThanEqual("$createdAt", range.to),
       Query.orderAsc("$id"),
     ],
     pageLimit: 100,
@@ -383,11 +474,19 @@ export async function getWeeklyReportAction(input: {
   ]);
 
   const metricsByUserId = new Map<string, WeeklyReportMetrics>();
+  const leadDaysByUserId = new Map<string, Set<string>>();
   const ensureMetrics = (userId: string) => {
     const existing = metricsByUserId.get(userId);
     if (existing) return existing;
     const created = emptyMetrics();
     metricsByUserId.set(userId, created);
+    return created;
+  };
+  const ensureLeadDays = (userId: string) => {
+    const existing = leadDaysByUserId.get(userId);
+    if (existing) return existing;
+    const created = new Set<string>();
+    leadDaysByUserId.set(userId, created);
     return created;
   };
 
@@ -398,6 +497,8 @@ export async function getWeeklyReportAction(input: {
     if (isColdCallLead(lead.data)) {
       addMetrics(ensureMetrics(attributed), { coldCalls: 1 });
     }
+    // Track the date the lead was created on, for per-day KPI counting.
+    ensureLeadDays(attributed).add(toDateKey(new Date(lead.$createdAt)));
   });
 
   closedLeads.forEach((lead) => {
@@ -459,16 +560,25 @@ export async function getWeeklyReportAction(input: {
 
   const userMap = new Map(scopedUsers.map((user) => [user.$id, user] as const));
 
-  const buildMember = (userId: string): WeeklyReportMember => ({
-    user: userMap.get(userId)!,
-    metrics: metricsByUserId.get(userId) ?? emptyMetrics(),
-  });
+  const buildMember = (userId: string): WeeklyReportMember => {
+    const metrics = metricsByUserId.get(userId) ?? emptyMetrics();
+    return {
+      user: userMap.get(userId)!,
+      metrics: {
+        ...metrics,
+        kpi: buildKpi(range, leadDaysByUserId.get(userId) ?? new Set<string>()),
+      },
+    };
+  };
 
   const teams: WeeklyReportTeam[] = [];
 
   if (actor.role === "agent") {
-    const totals = emptyMetrics();
     const member = buildMember(actor.$id);
+    const totals: WeeklyReportMetrics = {
+      ...emptyMetrics(),
+      kpi: member.metrics.kpi,
+    };
     addMetrics(totals, member.metrics);
     teams.push({ teamLead: null, members: [member], totals });
     return { range, teams };
@@ -490,7 +600,16 @@ export async function getWeeklyReportAction(input: {
         return buildMember(user.$id);
       });
 
-    const totals = emptyMetrics();
+    const totals: WeeklyReportMetrics = {
+      calls: 0,
+      leads: 0,
+      followups: 0,
+      closures: 0,
+      upfront: 0,
+      coldCalls: 0,
+      notInterested: 0,
+      kpi: combineKpi(members),
+    };
     members.forEach((member) => addMetrics(totals, member.metrics));
     teams.push({ teamLead, members, totals });
   }

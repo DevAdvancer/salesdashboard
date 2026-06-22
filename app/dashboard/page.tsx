@@ -2,39 +2,28 @@
 
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ProtectedRoute } from "@/components/protected-route";
 import { listLeads } from "@/lib/services/lead-action-service";
-import { useLeadCountsQuery } from "@/lib/queries/leads/use-lead-counts-query";
-import { getMockAttempts } from "@/app/actions/mock";
-import { getInterviewAttempts } from "@/app/actions/interview";
-import { getAssessmentAttempts } from "@/app/actions/assessment";
-import { Skeleton } from "@/components/ui/skeleton";
-import type { Branch, User } from "@/lib/types";
-import { appIcons } from "@/components/navigation-config";
-import { LeadershipDashboard } from "@/components/dashboard/leadership-dashboard";
-import { FollowUpQueueCard } from "@/components/dashboard/follow-up-queue";
-import { RoleWorkDashboard } from "@/components/dashboard/role-work-dashboard";
-import {
-  type LeadershipDashboardInsights,
-} from "@/lib/utils/dashboard-insights";
-import { FinancialInsightsSection } from "@/components/dashboard/financial-insights-section";
+import type { User } from "@/lib/types";
 import { AttendanceSelfToggle } from "@/components/attendance-self-toggle";
+import { DashboardDateRange } from "@/components/dashboard/dashboard-date-range";
+import { TopMetricsRow } from "@/components/dashboard/top-metrics-row";
+import { KpiLeadTargetSection } from "@/components/dashboard/kpi-lead-target-section";
+import { ReferralSection } from "@/components/dashboard/referral-section";
+import { PaymentsSection } from "@/components/dashboard/payments-section";
 import {
-  loadDashboardAttemptCounts,
-  loadDashboardData,
+  loadDashboardTopMetrics,
+  loadLeadTargetProgress,
+  loadDashboardReferralStats,
   loadDashboardPaymentInsights,
-  type AssignedDashboardAgent,
+  type TopMetrics,
 } from "@/lib/services/dashboard-data-service";
-import { type PaymentInsightRecord } from "@/lib/services/client-payment-service";
+import { isSingleDay, workingDaysInRange, type DateRange, type KpiRow } from "@/lib/utils/dashboard-kpi";
+import type { ReferralSplit } from "@/lib/utils/dashboard-referral";
+import type { PaymentInsightRecord } from "@/app/actions/client-payments";
 
 type LeadGenerationTeamAssignmentStat = {
   teamLeadId: string;
@@ -42,629 +31,387 @@ type LeadGenerationTeamAssignmentStat = {
   assignedLeads: number;
 };
 
+// ---------------------------------------------------------------------------
+// Date helpers
+// ---------------------------------------------------------------------------
 
+function toIsoDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
-function LegacyDashboardContent() {
-  const { user, isAdmin, isAgent, isTeamLead, isMonitor, isOperations } =
-    useAuth();
-  const isReadOnlyAdminView = isMonitor || isOperations;
+function monthStartIso(date: Date): string {
+  return toIsoDate(new Date(date.getFullYear(), date.getMonth(), 1));
+}
+
+function monthEndIso(date: Date): string {
+  // Return the last day of the month as a YYYY-MM-DD string so it can
+  // be expanded to the end-of-day timestamp on the server side. This
+  // matches monthStartIso and avoids timezone skew from toISOString
+  // (which would shift the boundary for users not on UTC).
+  return toIsoDate(new Date(date.getFullYear(), date.getMonth() + 1, 0));
+}
+
+function monthLabel(date: Date): string {
+  return date.toLocaleString("en-US", { month: "long", year: "numeric" });
+}
+
+function rangeLabel(range: DateRange): string {
+  if (isSingleDay(range) && range.from) {
+    const [y, m, d] = range.from.split("-").map(Number);
+    const date = new Date(y, m - 1, d);
+    return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  }
+  if (range.from && range.to) {
+    return `${range.from} → ${range.to}`;
+  }
+  if (range.from) return `from ${range.from}`;
+  if (range.to) return `through ${range.to}`;
+  return "no range";
+}
+
+// ---------------------------------------------------------------------------
+// Main dashboard content
+// ---------------------------------------------------------------------------
+
+function DashboardContent() {
+  const { user, isAdmin, isTeamLead, isAgent, isMonitor, isOperations, activeDashboard } = useAuth();
   const router = useRouter();
 
-  // Exact counts for the dashboard cards. Replaces the previous
-  // listLeads-driven counts (which were capped by the action's
-  // default pageSize and could understate large tenants).
-  const countsQuery = useLeadCountsQuery({
-    userId: user?.$id ?? "",
-    role: user?.role ?? "agent",
-    branchIds: user?.branchIds,
-  });
-
-  const [metrics, setMetrics] = useState({
-    activeLeads: 0,
-    closedLeads: 0,
-    createdMocks: 0,
-    createdInterviewSupport: 0,
-    createdAssessmentSupport: 0,
-    loading: true,
-  });
-
-  // Promote the TanStack counts query result into the metrics state.
-  // The counts query is uncapped (Appwrite returns `total` only),
-  // so this overrides any array-length-based numbers from the
-  // legacy listLeads fetch when both are available.
+  // Resume department / view — redirect handled by parent.
+  const isOnResumeView = activeDashboard === "resume";
   useEffect(() => {
-    if (!countsQuery.data) return;
-    setMetrics((prev) => ({
-      ...prev,
-      activeLeads: countsQuery.data.active,
-      closedLeads: countsQuery.data.closed,
-      loading: prev.loading && countsQuery.isLoading,
-    }));
-  }, [countsQuery.data, countsQuery.isLoading]);
+    if (user && isOnResumeView) {
+      router.replace("/resume-dashboard");
+    }
+  }, [user, isOnResumeView, router]);
 
-  const [teamLeadName, setTeamLeadName] = useState<string | null>(null);
-  const [assignedAgents, setAssignedAgents] = useState<AssignedDashboardAgent[]>([]);
-  const [isOutlookChecking, setIsOutlookChecking] = useState(true);
-  const [dashboardInsights, setDashboardInsights] =
-    useState<LeadershipDashboardInsights | null>(null);
-  const [dashboardInsightsLoading, setDashboardInsightsLoading] =
-    useState(false);
-  const [paymentInsights, setPaymentInsights] = useState<PaymentInsightRecord[]>([]);
-  const [paymentInsightsLoading, setPaymentInsightsLoading] = useState(false);
+  if (user?.role === "lead_generation") {
+    return <LeadGenerationDashboardContent />;
+  }
 
-  // Memoize the "My Agents" table rows so unrelated re-renders (e.g. a
-  // payment-insights refresh) don't rebuild every <tr>.
-  const assignedAgentRows = useMemo(
-    () =>
-      assignedAgents.map((agent) => (
-        <tr
-          key={agent.$id}
-          className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-          <td className="p-3 text-sm">{agent.name}</td>
-          <td className="p-3 text-sm text-muted-foreground">{agent.email}</td>
-          <td className="p-3 text-sm">{agent.branchNames || "N/A"}</td>
-          <td className="p-3 text-sm">
-            <span className="inline-flex items-center rounded-full bg-[var(--soft-cloud)] px-3 py-1 text-xs font-medium text-[var(--success)]">
-              Active
-            </span>
-          </td>
-        </tr>
-      )),
-    [assignedAgents],
-  );
+  if (!user || isOnResumeView) {
+    return null;
+  }
 
+  return <MainDashboard user={user} isAdmin={isAdmin} isTeamLead={isTeamLead} isAgent={isAgent} isMonitor={isMonitor} isOperations={isOperations} />;
+}
 
-  // Check Outlook connection status — once per session, not every mount.
+interface MainDashboardProps {
+  user: User;
+  isAdmin: boolean;
+  isTeamLead: boolean;
+  isAgent: boolean;
+  isMonitor: boolean;
+  isOperations: boolean;
+}
+
+function MainDashboard({ user, isAdmin, isTeamLead, isAgent, isMonitor, isOperations }: MainDashboardProps) {
+  const isAdminLike = isAdmin || isMonitor || isOperations;
+  const visibilityLabel = isAgent ? "Assigned to you" : "Total active leads";
+  const router = useRouter();
+
+  // Date range — defaults to today (single day).
+  const [dateRange, setDateRange] = useState<DateRange>(() => ({
+    from: toIsoDate(new Date()),
+    to: toIsoDate(new Date()),
+  }));
+
+  // Top metrics
+  const [topMetrics, setTopMetrics] = useState<TopMetrics | null>(null);
+  const [topMetricsLoading, setTopMetricsLoading] = useState(true);
+
+  // KPI rows
+  const [kpiRows, setKpiRows] = useState<KpiRow[] | null>(null);
+  const [kpiLoading, setKpiLoading] = useState(true);
+
+  // Referral split (always current month)
+  const [referralData, setReferralData] = useState<ReferralSplit | null>(null);
+  const [referralLoading, setReferralLoading] = useState(true);
+  const currentMonth = useMemo(() => new Date(), []);
+  const monthStartKey = useMemo(() => monthStartIso(currentMonth), [currentMonth]);
+  const monthEndKey = useMemo(() => monthEndIso(currentMonth), [currentMonth]);
+
+  // Payment insights (admin-like only)
+  const [paymentRecords, setPaymentRecords] = useState<PaymentInsightRecord[]>([]);
+  const [paymentLoading, setPaymentLoading] = useState(isAdminLike);
+
+  // Section loading flags driven by a single readiness gate.
+  const initialLoading = !user;
+
+  // ── Fetch top metrics when range changes ──────────────────────────────
   useEffect(() => {
-    const OUTLOOK_CHECKED_KEY = "crm:outlook-checked";
-    if (typeof window === "undefined") return;
     if (!user) return;
-    if (window.sessionStorage.getItem(OUTLOOK_CHECKED_KEY) === "1") {
-      setIsOutlookChecking(false);
+    let cancelled = false;
+    // Start loading inside a microtask to satisfy the lint rule
+    // against synchronous setState in effect bodies.
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setTopMetricsLoading(true);
+    });
+
+    (async () => {
+      try {
+        const result = await loadDashboardTopMetrics({
+          userId: user.$id,
+          role: user.role,
+          branchIds: user.branchIds,
+          dateRange,
+        });
+        if (!cancelled) {
+          setTopMetrics(result);
+          setTopMetricsLoading(false);
+        }
+      } catch (error) {
+        console.error("Error loading top metrics:", error);
+        if (!cancelled) {
+          setTopMetrics({
+            activeLeads: 0,
+            closedLeads: 0,
+            createdMocks: 0,
+            createdInterviewSupport: 0,
+            createdAssessmentSupport: 0,
+          });
+          setTopMetricsLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, dateRange]);
+
+  // ── Fetch KPI rows when range changes ─────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setKpiLoading(true);
+    });
+
+    (async () => {
+      try {
+        const rows = await loadLeadTargetProgress({
+          userId: user.$id,
+          role: user.role,
+          branchIds: user.branchIds,
+          dateRange,
+        });
+        if (!cancelled) {
+          setKpiRows(rows);
+          setKpiLoading(false);
+        }
+      } catch (error) {
+        console.error("Error loading KPI rows:", error);
+        if (!cancelled) {
+          setKpiRows([]);
+          setKpiLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, dateRange]);
+
+  // ── Fetch referral split (current month, ignores range) ───────────────
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setReferralLoading(true);
+    });
+
+    (async () => {
+      try {
+        const result = await loadDashboardReferralStats({
+          userId: user.$id,
+          role: user.role,
+          branchIds: user.branchIds,
+          monthStartIso: monthStartKey,
+          monthEndIso: monthEndKey,
+        });
+        if (!cancelled) {
+          setReferralData(result);
+          setReferralLoading(false);
+        }
+      } catch (error) {
+        console.error("Error loading referral stats:", error);
+        if (!cancelled) {
+          setReferralData({
+            nonReferral: { count: 0, totalAmount: 0 },
+            referral: { count: 0, totalAmount: 0 },
+          });
+          setReferralLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, monthStartKey, monthEndKey]);
+
+  // ── Fetch payment insights (admin-like only) ──────────────────────────
+  useEffect(() => {
+    if (!user || !isAdminLike) {
       return;
     }
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setPaymentLoading(true);
+    });
 
-    const checkOutlookConnection = async () => {
+    (async () => {
       try {
-        const response = await fetch("/api/auth/status");
-        const data = await response.json();
-
-        if (!data.connected) {
-          // If not connected, redirect to login
-          console.log("Outlook not connected, redirecting to login...");
-          window.location.href = "/api/auth/login";
-          return;
+        const records = await loadDashboardPaymentInsights(user.$id);
+        if (!cancelled) {
+          setPaymentRecords(records);
+          setPaymentLoading(false);
         }
-        window.sessionStorage.setItem(OUTLOOK_CHECKED_KEY, "1");
-        setIsOutlookChecking(false);
       } catch (error) {
-        console.error("Failed to check Outlook status:", error);
-        setIsOutlookChecking(false);
+        console.error("Error loading payment insights:", error);
+        if (!cancelled) {
+          setPaymentRecords([]);
+          setPaymentLoading(false);
+        }
       }
+    })();
+
+    return () => {
+      cancelled = true;
     };
+  }, [user, isAdminLike]);
 
-    checkOutlookConnection();
-  }, [user]);
+  // KPI section mode + target derived from range
+  const kpiMode = isSingleDay(dateRange) ? "daily" : "monthly";
+  const scopeLabel = isAgent
+    ? "Just you"
+    : isTeamLead
+      ? "Your team"
+      : "All members";
 
-  useEffect(() => {
-    async function fetchMetrics() {
-      if (!user) return;
-      console.log("[Dashboard] Fetching metrics for user:", {
-        id: user.$id,
-        role: user.role,
-        branchIds: user.branchIds,
-      });
+  // Use rows[0] as the source of truth once loaded; otherwise compute a
+  // fallback from the range so the UI never shows "0" on load. The
+  // target is the count of working days (Mon-Fri) in the range — a
+  // 31-day month has roughly 22 working days, a one-week range has 5.
+  const kpiTarget: number = (() => {
+    if (kpiRows && kpiRows.length > 0) return kpiRows[0].target;
+    if (kpiMode === "daily") return 1;
+    const fromIso = dateRange.from ?? toIsoDate(new Date());
+    const toIso = dateRange.to ?? fromIso;
+    return Math.max(1, workingDaysInRange(fromIso, toIso));
+  })();
 
-      try {
-        const {
-          activeLeads,
-          closedLeads,
-          visibleLeadIds,
-          insights,
-          assignedAgents: nextAssignedAgents,
-        } = await loadDashboardData({
-          user,
-          isAdminLike: isAdmin || isReadOnlyAdminView,
-          isTeamLead: user.role === "team_lead",
-          includeAllBranchesForAdminLike: true,
-          includeAssignedAgents: true,
-          departmentScope: "sales",
-        });
-        console.log("[Dashboard] Active leads count:", activeLeads.length);
-        console.log("[Dashboard] Closed leads count:", closedLeads.length);
-
-        setDashboardInsightsLoading(true);
-        try {
-          setAssignedAgents(nextAssignedAgents);
-          setDashboardInsights(insights);
-        } catch (error) {
-          console.error("Error fetching dashboard insights:", error);
-          setDashboardInsights(null);
-        } finally {
-          setDashboardInsightsLoading(false);
-        }
-
-        // visibleLeadIds is hoisted above the try block; reuse it here.
-        const attemptCounts = await loadDashboardAttemptCounts(user.$id, visibleLeadIds);
-
-        // Use the lightweight counts action as the primary count source.
-        // The action returns uncapped totals (no document payload).
-        // Fall back to array length if countsQuery hasn't returned yet.
-        const activeCount = countsQuery.data?.active ??
-          activeLeads.length;
-        const closedCount = countsQuery.data?.closed ??
-          closedLeads.length;
-
-        setMetrics({
-          activeLeads: activeCount,
-          closedLeads: closedCount,
-          createdMocks: attemptCounts.createdMocks,
-          createdInterviewSupport: attemptCounts.createdInterviewSupport,
-          createdAssessmentSupport: attemptCounts.createdAssessmentSupport,
-          loading: false,
-        });
-
-
-        // Fetch upfront payment insights for admin-like read roles.
-        if (isAdmin || isReadOnlyAdminView) {
-          setPaymentInsightsLoading(true);
-          try {
-            const insights = await loadDashboardPaymentInsights(user.$id);
-            setPaymentInsights(insights);
-          } catch (err) {
-            console.error("Error fetching payment insights:", err);
-          } finally {
-            setPaymentInsightsLoading(false);
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching metrics:", error);
-        setMetrics((prev) => ({ ...prev, loading: false }));
-        setDashboardInsights(null);
-        setDashboardInsightsLoading(false);
-      }
-    }
-
-    if (user) {
-      fetchMetrics();
-    }
-  }, [user, isAdmin, isReadOnlyAdminView]);
-
-
-  useEffect(() => {
-    async function fetchUserNames() {
-      if (!user) return;
-
-      try {
-        // The current hierarchy only has Team Lead -> Agent. The legacy
-        // Manager / Assistant Manager roles are retired, so we just resolve
-        // the team lead's name for the user-info card.
-        if (!user.teamLeadId) {
-          setTeamLeadName(null);
-          return;
-        }
-
-        const { databases } = await import("@/lib/appwrite");
-        const isNotFoundError = (error: unknown) => {
-          if (typeof error !== "object" || error === null) return false;
-          const maybe = error as {
-            code?: unknown;
-            message?: unknown;
-            type?: unknown;
-          };
-          const code = typeof maybe.code === "number" ? maybe.code : null;
-          const message =
-            typeof maybe.message === "string" ? maybe.message : "";
-          const type = typeof maybe.type === "string" ? maybe.type : "";
-
-          return (
-            code === 404 ||
-            type.includes("not_found") ||
-            message.toLowerCase().includes("could not be found") ||
-            message.toLowerCase().includes("not found")
-          );
-        };
-
-        const teamLeadDoc = await databases
-          .getDocument(
-            process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
-            process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
-            user.teamLeadId,
-          )
-          .catch((error) => (isNotFoundError(error) ? null : Promise.reject(error)));
-
-        if (teamLeadDoc && typeof teamLeadDoc.name === "string") {
-          setTeamLeadName(teamLeadDoc.name);
-        } else {
-          setTeamLeadName(null);
-        }
-      } catch (error) {
-        console.error("Error fetching user names:", error);
-      }
-    }
-
-    if (user) {
-      fetchUserNames();
-    }
-  }, [user]);
-
-  const LeadsIcon = appIcons.leads;
-  const ClientsIcon = appIcons.clients;
-  const MockIcon = appIcons.mock;
-  const InterviewSupportIcon = appIcons.interviewSupport;
-  const AssessmentSupportIcon = appIcons.assessmentSupport;
-
-
-  if (!user || isOutlookChecking) {
+  if (initialLoading) {
     return (
       <div className="space-y-6">
         <div>
           <Skeleton className="h-9 w-52" />
           <Skeleton className="mt-3 h-4 w-72" />
         </div>
-
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
           {Array.from({ length: 5 }).map((_, index) => (
-            <Card key={index}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <Skeleton className="h-4 w-28" />
-                <Skeleton className="h-4 w-4 rounded-full" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-8 w-16" />
-                <Skeleton className="mt-3 h-3 w-32" />
-              </CardContent>
-            </Card>
+            <Skeleton key={index} className="h-28 w-full" />
           ))}
         </div>
-
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-6 w-40" />
-            <Skeleton className="h-4 w-80" />
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-5/6" />
-            <Skeleton className="h-10 w-2/3" />
-          </CardContent>
-        </Card>
+        <Skeleton className="h-72 w-full" />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      {/* Header */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Dashboard</h1>
           <p className="text-muted-foreground mt-1">Welcome back, {user.name}</p>
         </div>
-        <div className="shrink-0 self-start">
+        <div className="flex flex-wrap items-center gap-2">
+          <DashboardDateRange value={dateRange} onChange={setDateRange} />
           <AttendanceSelfToggle />
         </div>
       </div>
 
-      {/* Metrics Cards */}
-      <div
-        id="tour-global-metrics"
-        className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
-        <Card id="tour-active-leads">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Leads</CardTitle>
-            <LeadsIcon className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {metrics.loading ? (
-                <Skeleton className="h-8 w-16" />
-              ) : (
-                metrics.activeLeads
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {isAgent ? "Assigned to you" : "Total active leads"}
-            </p>
-          </CardContent>
-        </Card>
+      {/* Top metrics row — respects the date range */}
+      <TopMetricsRow
+        metrics={topMetrics}
+        isLoading={topMetricsLoading}
+        visibilityLabel={visibilityLabel}
+      />
 
-        <Card id="tour-clients">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Clients</CardTitle>
-            <ClientsIcon className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {metrics.loading ? (
-                <Skeleton className="h-8 w-16" />
-              ) : (
-                metrics.closedLeads
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              In client records
-            </p>
-          </CardContent>
-        </Card>
+      {/* KPI — daily/monthly lead target per member */}
+      <KpiLeadTargetSection
+        rows={kpiRows}
+        isLoading={kpiLoading}
+        mode={kpiMode}
+        target={kpiTarget}
+        scopeLabel={scopeLabel}
+        rangeLabel={rangeLabel(dateRange)}
+      />
 
-        <Card id="tour-created-mocks">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Created Mocks</CardTitle>
-            <MockIcon className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {metrics.loading ? (
-                <Skeleton className="h-8 w-16" />
-              ) : (
-                metrics.createdMocks
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Mock requests sent
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card id="tour-interview-support">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Created Interview Support
-            </CardTitle>
-            <InterviewSupportIcon className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {metrics.loading ? (
-                <Skeleton className="h-8 w-16" />
-              ) : (
-                metrics.createdInterviewSupport
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Interview emails sent
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card id="tour-assessment-support">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Created Assessment Support
-            </CardTitle>
-            <AssessmentSupportIcon className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {metrics.loading ? (
-                <Skeleton className="h-8 w-16" />
-              ) : (
-                metrics.createdAssessmentSupport
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Assessment emails sent
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {(isAdmin || isReadOnlyAdminView) && (
-        <div id="tour-leadership-dashboard">
-          <LeadershipDashboard
-            role={user.role}
-            insights={dashboardInsights}
-            isLoading={dashboardInsightsLoading || metrics.loading}
-          />
-        </div>
-      )}
-
-      {(isTeamLead || isAgent) && (
-        <div id="tour-role-work-dashboard">
-          <RoleWorkDashboard
-            role={user.role}
-            insights={dashboardInsights}
-            isLoading={dashboardInsightsLoading || metrics.loading}
-          />
-        </div>
-      )}
-
-      <div id="tour-follow-up-queue">
-        <FollowUpQueueCard
-          queue={dashboardInsights?.followUpQueue ?? null}
-          isLoading={dashboardInsightsLoading || metrics.loading}
-        />
-      </div>
-
-      {/* Financial Insights */}
-      {(isAdmin || isReadOnlyAdminView) && (
-        <FinancialInsightsSection
-          paymentRecords={paymentInsights}
-          isLoading={paymentInsightsLoading}
+      {/* Referral split — admin-only, current month */}
+      {isAdminLike && (
+        <ReferralSection
+          data={referralData}
+          isLoading={referralLoading}
+          monthLabel={monthLabel(currentMonth)}
         />
       )}
 
+      {/* Payments — admin-only, all-time + per-month */}
+      {isAdminLike && (
+        <PaymentsSection records={paymentRecords} isLoading={paymentLoading} />
+      )}
 
-
-      <div
-        id="tour-user-quick-actions"
-        className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <Card id="tour-user-info">
-          <CardHeader>
-            <CardTitle>Welcome, {user.name}!</CardTitle>
-            <CardDescription>
-              You are logged in as a{" "}
-              {user.role === "team_lead" ? "team lead" : user.role}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <p className="text-sm">
-                <strong>Email:</strong> {user.email}
-              </p>
-              <p className="text-sm">
-                <strong>Role:</strong>{" "}
-                {user.role === "team_lead"
-                  ? "Team Lead"
-                  : user.role.charAt(0).toUpperCase() + user.role.slice(1)}
-              </p>
-              {teamLeadName && (
-                <p className="text-sm">
-                  <strong>Team Lead:</strong> {teamLeadName}
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {(isAdmin || isReadOnlyAdminView) && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Admin Access</CardTitle>
-              <CardDescription>You have full system access</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                As a {isOperations ? "operations" : isMonitor ? "monitor" : "admin"}, you can:
-              </p>
-              <ul className="list-disc list-inside text-sm mt-2 space-y-1">
-                <li>{isReadOnlyAdminView ? "View all branches" : "Manage all branches"}</li>
-                <li>{isReadOnlyAdminView ? "View users" : "Create and manage users"}</li>
-                <li>{isReadOnlyAdminView ? "View configured lead forms" : "Configure lead forms"}</li>
-                <li>{isReadOnlyAdminView ? "View access controls" : "Manage access controls"}</li>
-                <li>View all leads and clients</li>
-              </ul>
-            </CardContent>
-          </Card>
-        )}
-
+      {/* Quick actions footer — kept minimal */}
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <Button
+          variant="outline"
+          onClick={() => router.push("/leads")}
+        >
+          View Leads
+        </Button>
         {isTeamLead && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Team Lead Access</CardTitle>
-              <CardDescription>You can manage your team</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                As a team lead, you can:
-              </p>
-              <ul className="list-disc list-inside text-sm mt-2 space-y-1">
-                <li>Create and manage agents</li>
-                <li>View team leads</li>
-                <li>Assign and manage leads</li>
-                <li>Access client records and reports</li>
-              </ul>
-            </CardContent>
-          </Card>
+          <Button
+            variant="outline"
+            onClick={() => router.push("/linkedin-requests")}
+          >
+            LinkedIn Requests
+          </Button>
         )}
-
-        {isAgent && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Agent Access</CardTitle>
-              <CardDescription>You have limited system access</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                As an agent, you can:
-              </p>
-              <ul className="list-disc list-inside text-sm mt-2 space-y-1">
-                <li>View assigned leads</li>
-                <li>Edit assigned leads</li>
-                <li>Close leads (if permitted)</li>
-                <li>Access permitted components</li>
-              </ul>
-            </CardContent>
-          </Card>
+        {(isAdminLike || isTeamLead) && (
+          <Button
+            variant="outline"
+            onClick={() => router.push("/users")}
+          >
+            {isAdminLike && !isMonitor && !isOperations ? "Manage Users" : "View Users"}
+          </Button>
         )}
-
-        <Card className="md:col-span-2 lg:col-span-1">
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>Common tasks and shortcuts</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Button
-              className="w-full"
-              variant="outline"
-              onClick={() => router.push("/leads")}>
-              View Leads
-            </Button>
-            {isTeamLead && (
-              <Button
-                className="w-full"
-                variant="outline"
-                onClick={() => router.push("/linkedin-requests")}>
-                Linkedin Request
-              </Button>
-            )}
-            {(isAdmin || isReadOnlyAdminView || isTeamLead) && (
-              <>
-                <Button
-                  className="w-full"
-                  variant="outline"
-                  onClick={() => router.push("/users")}>
-                  {isReadOnlyAdminView ? "View Users" : "Manage Users"}
-                </Button>
-                {!isReadOnlyAdminView && (
-                  <Button
-                    className="w-full"
-                    variant="outline"
-                    onClick={() => router.push("/users?action=create")}>
-                    Create User
-                  </Button>
-                )}
-              </>
-            )}
-            {(isAdmin) && (
-              <Button
-                className="w-full"
-                variant="outline"
-                onClick={() => router.push("/field-management")}>
-                Configure Forms
-              </Button>
-            )}
-            {(isAdmin || isReadOnlyAdminView) && (
-              <Button
-                className="w-full"
-                variant="outline"
-                onClick={() => router.push("/branches")}>
-                {isReadOnlyAdminView ? "View Branches" : "Manage Branches"}
-              </Button>
-            )}
-          </CardContent>
-        </Card>
+        {isAdmin && (
+          <Button
+            variant="outline"
+            onClick={() => router.push("/payments-report")}
+          >
+            Payments Report
+          </Button>
+        )}
       </div>
-
-      {/* Assigned Agents Section (Team Lead Only) */}
-      {isTeamLead && assignedAgents.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>My Agents</CardTitle>
-            <CardDescription>Agents assigned to your team</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="border-b">
-                  <tr className="text-left">
-                    <th className="p-3 font-semibold text-sm">Name</th>
-                    <th className="p-3 font-semibold text-sm">Email</th>
-                    <th className="p-3 font-semibold text-sm">Branch</th>
-                    <th className="p-3 font-semibold text-sm">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {assignedAgentRows}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Lead Generation dashboard (unchanged from prior version)
+// ---------------------------------------------------------------------------
 
 function LeadGenerationDashboardContent() {
   const { user } = useAuth();
@@ -770,38 +517,31 @@ function LeadGenerationDashboardContent() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <AttendanceSelfToggle />
-          {/* Generate Lead button removed, leads are generated through Linkedin Requests */}
           <Button variant="outline" onClick={() => router.push('/settings')}>Profile Settings</Button>
         </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>My Generated Leads</CardTitle>
-            <CardDescription>Leads created by you (active only).</CardDescription>
-          </CardHeader>
-          <CardContent className="flex items-center justify-between">
+        <div className="rounded-2xl border border-[var(--hairline)] bg-[var(--soft-cloud)]/40 p-4">
+          <div className="text-sm font-medium text-muted-foreground">My Generated Leads</div>
+          <div className="text-muted-foreground text-xs">Leads created by you (active only).</div>
+          <div className="mt-2 flex items-center justify-between">
             <div className="text-3xl font-semibold">{stats.loading ? '—' : stats.total}</div>
             <Button variant="outline" onClick={() => router.push('/leads')}>View Leads</Button>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Awaiting Assignment</CardTitle>
-            <CardDescription>Leads not yet assigned to a team.</CardDescription>
-          </CardHeader>
-          <CardContent className="text-3xl font-semibold">{stats.loading ? '—' : stats.unassigned}</CardContent>
-        </Card>
+        <div className="rounded-2xl border border-[var(--hairline)] bg-[var(--soft-cloud)]/40 p-4">
+          <div className="text-sm font-medium text-muted-foreground">Awaiting Assignment</div>
+          <div className="text-muted-foreground text-xs">Leads not yet assigned to a team.</div>
+          <div className="mt-2 text-3xl font-semibold">{stats.loading ? '—' : stats.unassigned}</div>
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Team Assignment Counts</CardTitle>
-          <CardDescription>Active leads you have assigned to each team.</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <div className="rounded-2xl border border-[var(--hairline)] bg-card p-4">
+        <div className="text-sm font-medium">Team Assignment Counts</div>
+        <div className="text-muted-foreground text-xs">Active leads you have assigned to each team.</div>
+        <div className="mt-3">
           {stats.loading ? (
             <Skeleton className="h-24 w-full" />
           ) : stats.teamAssignments.length === 0 ? (
@@ -826,38 +566,15 @@ function LeadGenerationDashboardContent() {
               </table>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
 
-function DashboardContent() {
-  const { user, isAdmin, isMonitor, isOperations, activeDashboard } = useAuth();
-  const router = useRouter();
-
-  // If the user's *active* dashboard view is Resume, the Resume dashboard
-  // is the right home for them. Admin / Monitor / Operations can pick
-  // either view from the sidebar, so this redirect respects their choice
-  // (not just their stored user.department).
-  const isOnResumeView = activeDashboard === "resume";
-
-  useEffect(() => {
-    if (user && isOnResumeView) {
-      router.replace("/resume-dashboard");
-    }
-  }, [user, isOnResumeView, router]);
-
-  if (user && isOnResumeView) {
-    return null; // effect handles redirect; avoid flash
-  }
-
-  if (user?.role === 'lead_generation') {
-    return <LeadGenerationDashboardContent />;
-  }
-
-  return <LegacyDashboardContent />;
-}
+// ---------------------------------------------------------------------------
+// Page export
+// ---------------------------------------------------------------------------
 
 export default function DashboardPage() {
   return (

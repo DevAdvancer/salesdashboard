@@ -386,6 +386,133 @@ export async function listClientPaymentSummariesAction(input: {
   return results;
 }
 
+/**
+ * Returns the total amount actually collected (sum of `updates[].amount`)
+ * for each of the actor's accessible leads. Used by the dashboard referral
+ * split so the non-referral / referral totals reflect real money received,
+ * not the planned `leadAmount` from the lead form.
+ *
+ * Access mirrors `listClientPaymentSummariesAction`: admins and team leads
+ * see records for their team / branches; agents and lead_generation only
+ * see their own leads.
+ */
+export async function listLeadPaidAmountsAction(input: {
+  actorId: string;
+  leadIds?: string[];
+}): Promise<Record<string, number>> {
+  const actor = await getActor(input.actorId);
+  ensureComponentAccess(actor.role, "history");
+
+  const { databases } = await createAdminClient();
+  const CHUNK_SIZE = 100;
+
+  // Resolve which leads the actor is allowed to see.
+  const requestedIds = Array.isArray(input.leadIds)
+    ? Array.from(new Set(input.leadIds.filter((id) => typeof id === "string" && id.trim())))
+    : null;
+
+  let allowedLeadIds: Set<string>;
+
+  if (isAdminLikeReadRole(actor.role)) {
+    if (requestedIds && requestedIds.length > 0) {
+      allowedLeadIds = new Set(requestedIds);
+    } else {
+      // No filter: every lead the actor could conceivably see. The
+      // caller's intent here is to populate a lookup map for the
+      // dashboard, so a global view is appropriate.
+      const allLeads = await listAllDocuments<any>({
+        databases,
+        databaseId: DATABASE_ID,
+        collectionId: COLLECTIONS.LEADS,
+        queries: [Query.select(["$id"]), Query.limit(200)],
+        pageLimit: 200,
+        maxPages: 100,
+      });
+      allowedLeadIds = new Set(allLeads.map((doc) => doc.$id));
+    }
+  } else {
+    // Non-admin roles require an explicit list of leadIds — they can't
+    // pull "all leads" because they wouldn't have access anyway.
+    if (!requestedIds || requestedIds.length === 0) return {};
+    allowedLeadIds = new Set();
+
+    const leadDocuments: any[] = [];
+    for (let i = 0; i < requestedIds.length; i += CHUNK_SIZE) {
+      const chunk = requestedIds.slice(i, i + CHUNK_SIZE);
+      const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS, [
+        Query.equal("$id", chunk),
+        Query.limit(chunk.length),
+      ]);
+      leadDocuments.push(...response.documents);
+    }
+
+    if (actor.role === "agent" || actor.role === "lead_generation") {
+      for (const lead of leadDocuments) {
+        const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : null;
+        const assignedToId = typeof lead.assignedToId === "string" ? lead.assignedToId : null;
+        const permissions = Array.isArray(lead.$permissions) ? (lead.$permissions as string[]) : [];
+        if (
+          ownerId === actor.$id ||
+          assignedToId === actor.$id ||
+          permissions.some((permission) => permission === `read("user:${actor.$id}")`)
+        ) {
+          allowedLeadIds.add(lead.$id);
+        }
+      }
+    } else if (actor.role === "team_lead") {
+      const agents = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
+        Query.equal("teamLeadId", actor.$id),
+        Query.or([Query.equal("role", "agent"), Query.equal("role", "lead_generation")]),
+        Query.limit(5000),
+      ]);
+      const teamIds = new Set<string>([actor.$id, ...agents.documents.map((doc: any) => doc.$id)]);
+
+      for (const lead of leadDocuments) {
+        const branchId = typeof lead.branchId === "string" ? lead.branchId : null;
+        const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : null;
+        const assignedToId = typeof lead.assignedToId === "string" ? lead.assignedToId : null;
+        if (
+          (ownerId ? teamIds.has(ownerId) : false) ||
+          (assignedToId ? teamIds.has(assignedToId) : false) ||
+          (branchId && actor.branchIds?.includes(branchId))
+        ) {
+          allowedLeadIds.add(lead.$id);
+        }
+      }
+    }
+  }
+
+  if (allowedLeadIds.size === 0) return {};
+
+  const paymentDocuments: any[] = [];
+  const allowedIdsArray = Array.from(allowedLeadIds);
+  for (let i = 0; i < allowedIdsArray.length; i += CHUNK_SIZE) {
+    const chunk = allowedIdsArray.slice(i, i + CHUNK_SIZE);
+    const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.CLIENT_PAYMENTS, [
+      Query.equal("leadId", chunk),
+      Query.limit(chunk.length),
+    ]);
+    paymentDocuments.push(...response.documents);
+  }
+
+  const out: Record<string, number> = {};
+  for (const doc of paymentDocuments) {
+    const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
+    if (!leadId || !allowedLeadIds.has(leadId)) continue;
+    const updates = parseJsonOr<ClientPaymentUpdate[]>(doc.updates ?? doc.updatesJson, []);
+    const paid = updates.reduce((sum, u) => {
+      if (u && typeof u.amount === "number" && Number.isFinite(u.amount) && u.amount > 0) {
+        return sum + u.amount;
+      }
+      return sum;
+    }, 0);
+    if (paid > 0) {
+      out[leadId] = (out[leadId] ?? 0) + paid;
+    }
+  }
+  return out;
+}
+
 export interface PaymentInsightRecord {
   leadId: string;
   company: string;
@@ -397,6 +524,10 @@ export interface PaymentInsightRecord {
   createdAt: string;
   /** Whether the client transitioned from partially_paid to fully_paid at some point */
   wasPartiallyPaid: boolean;
+  /** Sum of every update's `amount` field — the real money collected so far. Null when no update carried an amount. */
+  totalPaid: number | null;
+  /** Number of updates that carried an `amount`. */
+  paidUpdateCount: number;
 }
 
 /**
@@ -488,6 +619,11 @@ export async function listAllPaymentInsightsAction(
       status === "fully_paid" &&
       updates.some((u) => u.status === "partially_paid");
 
+    // Sum actual paid amounts from the updates (the real money collected).
+    const paidUpdates = updates.filter((u: any) => typeof u.amount === "number" && u.amount > 0);
+    const totalPaid = paidUpdates.reduce((sum: number, u: any) => sum + u.amount, 0);
+    const paidUpdateCount = paidUpdates.length;
+
     results.push({
       leadId,
       company: leadDataMap.get(leadId) ?? "Unknown",
@@ -497,6 +633,8 @@ export async function listAllPaymentInsightsAction(
       status,
       createdAt: typeof doc.$createdAt === "string" ? doc.$createdAt : new Date().toISOString(),
       wasPartiallyPaid,
+      totalPaid: paidUpdateCount > 0 ? totalPaid : null,
+      paidUpdateCount,
     });
   }
 

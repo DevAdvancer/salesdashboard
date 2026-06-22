@@ -10,6 +10,7 @@ import {
   normalizeLeadStatus,
 } from '@/lib/utils/lead-status-workflow';
 import { getErrorMessage } from '@/lib/utils';
+import { expandIsoDateToStart, expandIsoDateToEnd } from '@/lib/utils/iso-date-range';
 
 // Helper to validate Appwrite ID format
 function isValidId(id: string | null | undefined): boolean {
@@ -654,12 +655,18 @@ export async function listLeads(
       queries.push(Query.equal('branchId', filters.branchId));
     }
 
-    // Apply date range filters
+    // Apply date range filters. The dashboard passes YYYY-MM-DD strings
+    // (e.g. "2026-06-22"). Comparing those lexicographically against
+    // a full ISO timestamp like "2026-06-22T10:00:00.000Z" produces
+    // wrong results: the timestamp sorts after the date-only form,
+    // so a `lessThanEqual` filter on the YYYY-MM-DD form would
+    // silently exclude every lead for that day. Expand the inputs to
+    // a full ISO range before pushing to Appwrite.
     if (filters.dateFrom) {
-      queries.push(Query.greaterThanEqual('$createdAt', filters.dateFrom));
+      queries.push(Query.greaterThanEqual('$createdAt', expandIsoDateToStart(filters.dateFrom)));
     }
     if (filters.dateTo) {
-      queries.push(Query.lessThanEqual('$createdAt', filters.dateTo));
+      queries.push(Query.lessThanEqual('$createdAt', expandIsoDateToEnd(filters.dateTo)));
     }
 
     // Order by creation date (newest first)
