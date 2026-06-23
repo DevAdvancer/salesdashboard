@@ -12,6 +12,7 @@ import type {
   ClientPaymentPlan,
   ClientPaymentRecord,
   ClientPaymentUpdate,
+  Lead,
   PaymentStatus,
   User,
 } from "@/lib/types";
@@ -516,6 +517,10 @@ export async function listLeadPaidAmountsAction(input: {
 export interface PaymentInsightRecord {
   leadId: string;
   company: string;
+  source: string;
+  leadStatus: string;
+  isClosed: boolean;
+  closedAt: string | null;
   upfrontAmount: number;
   months: number;
   percent: number;
@@ -528,6 +533,18 @@ export interface PaymentInsightRecord {
   totalPaid: number | null;
   /** Number of updates that carried an `amount`. */
   paidUpdateCount: number;
+}
+
+export interface AdminClientHistoryRow {
+  rowId: string;
+  leadId: string;
+  lead: Lead;
+  paymentStatus: PaymentStatus;
+  personalDetails: Record<string, unknown>;
+  paymentPlan: ClientPaymentPlan;
+  createdAt: string;
+  totalPaid: number | null;
+  canOpenLead: boolean;
 }
 
 /**
@@ -579,12 +596,26 @@ export async function listAllPaymentInsightsAction(
         })
       : [];
 
-  const leadDataMap = new Map<string, string>(); // leadId -> company name
+  const leadDataMap = new Map<
+    string,
+    {
+      company: string;
+      source: string;
+      leadStatus: string;
+      isClosed: boolean;
+      closedAt: string | null;
+    }
+  >();
   for (const lead of leadDocs as any[]) {
     let company = "";
+    let source = "";
     try {
       const parsed = JSON.parse(lead.data ?? "{}") as Record<string, unknown>;
       company = typeof parsed.company === "string" ? parsed.company.trim() : "";
+      source =
+        typeof parsed.source === "string"
+          ? parsed.source.trim()
+          : "";
       if (!company) {
         const first = typeof parsed.firstName === "string" ? parsed.firstName.trim() : "";
         const last = typeof parsed.lastName === "string" ? parsed.lastName.trim() : "";
@@ -596,7 +627,13 @@ export async function listAllPaymentInsightsAction(
     } catch {
       // ignore parse errors
     }
-    leadDataMap.set(lead.$id, company || "Unknown");
+    leadDataMap.set(lead.$id, {
+      company: company || "Unknown",
+      source,
+      leadStatus: typeof lead.status === "string" ? lead.status : "",
+      isClosed: lead.isClosed === true,
+      closedAt: typeof lead.closedAt === "string" ? lead.closedAt : null,
+    });
   }
 
   const results: PaymentInsightRecord[] = [];
@@ -624,9 +661,15 @@ export async function listAllPaymentInsightsAction(
     const totalPaid = paidUpdates.reduce((sum: number, u: any) => sum + u.amount, 0);
     const paidUpdateCount = paidUpdates.length;
 
+    const leadMeta = leadDataMap.get(leadId);
+
     results.push({
       leadId,
-      company: leadDataMap.get(leadId) ?? "Unknown",
+      company: leadMeta?.company ?? "Unknown",
+      source: leadMeta?.source ?? "",
+      leadStatus: leadMeta?.leadStatus ?? "",
+      isClosed: leadMeta?.isClosed === true,
+      closedAt: leadMeta?.closedAt ?? null,
       upfrontAmount: paymentPlan.upfrontAmount,
       months: paymentPlan.months,
       percent: paymentPlan.percent,
@@ -641,11 +684,163 @@ export async function listAllPaymentInsightsAction(
   return results;
 }
 
+function mapLeadDocumentToLead(doc: any): Lead {
+  return {
+    $id: doc.$id,
+    data: typeof doc.data === "string" ? doc.data : "{}",
+    status: typeof doc.status === "string" ? doc.status : "",
+    ownerId: typeof doc.ownerId === "string" ? doc.ownerId : "",
+    assignedToId:
+      typeof doc.assignedToId === "string" ? doc.assignedToId : null,
+    branchId: typeof doc.branchId === "string" ? doc.branchId : null,
+    isClosed: doc.isClosed === true,
+    closedAt: typeof doc.closedAt === "string" ? doc.closedAt : null,
+    nextFollowUpAt:
+      typeof doc.nextFollowUpAt === "string" ? doc.nextFollowUpAt : null,
+    nextAction: typeof doc.nextAction === "string" ? doc.nextAction : null,
+    lastContactedAt:
+      typeof doc.lastContactedAt === "string" ? doc.lastContactedAt : null,
+    followUpStatus:
+      typeof doc.followUpStatus === "string" ? doc.followUpStatus : null,
+    $createdAt: typeof doc.$createdAt === "string" ? doc.$createdAt : undefined,
+    $updatedAt: typeof doc.$updatedAt === "string" ? doc.$updatedAt : undefined,
+    $permissions: Array.isArray(doc.$permissions) ? doc.$permissions : [],
+  };
+}
+
+function buildSyntheticLead(
+  leadId: string,
+  personalDetails: Record<string, unknown>,
+  createdAt: string,
+): Lead {
+  return {
+    $id: leadId,
+    data: JSON.stringify(personalDetails ?? {}),
+    status: "Unknown",
+    ownerId: "",
+    assignedToId: null,
+    branchId: null,
+    isClosed: true,
+    closedAt: null,
+    $createdAt: createdAt,
+    $updatedAt: createdAt,
+    $permissions: [],
+  };
+}
+
+export async function listAdminClientHistoryRowsAction(
+  actorId: string,
+): Promise<AdminClientHistoryRow[]> {
+  const actor = await getActor(actorId);
+  ensureComponentAccess(actor.role, "history");
+
+  if (!isAdminLikeReadRole(actor.role)) {
+    throw new Error("Not authorized");
+  }
+
+  const { databases } = await createAdminClient();
+  const paymentDocs = await listAllDocuments<any>({
+    databases,
+    databaseId: DATABASE_ID,
+    collectionId: COLLECTIONS.CLIENT_PAYMENTS,
+    queries: [],
+    pageLimit: 100,
+    maxPages: 500,
+  });
+
+  if (paymentDocs.length === 0) return [];
+
+  const leadIds = Array.from(
+    new Set(
+      paymentDocs
+        .map((doc: any) =>
+          typeof doc.leadId === "string" ? doc.leadId.trim() : "",
+        )
+        .filter(Boolean),
+    ),
+  );
+
+  const leadDocs =
+    leadIds.length > 0
+      ? await listAllDocuments<any>({
+          databases,
+          databaseId: DATABASE_ID,
+          collectionId: COLLECTIONS.LEADS,
+          queries: [Query.equal("$id", leadIds)],
+          pageLimit: 100,
+          maxPages: 500,
+        })
+      : [];
+
+  const leadMap = new Map<string, Lead>();
+  for (const leadDoc of leadDocs as any[]) {
+    leadMap.set(leadDoc.$id, mapLeadDocumentToLead(leadDoc));
+  }
+
+  const rows: AdminClientHistoryRow[] = [];
+  for (const doc of paymentDocs as any[]) {
+    const leadId =
+      typeof doc.leadId === "string" ? doc.leadId.trim() : "";
+    const createdAt =
+      typeof doc.$createdAt === "string"
+        ? doc.$createdAt
+        : new Date().toISOString();
+    const personalDetails = parseJsonOr<Record<string, unknown>>(
+      doc.personalDetails ?? doc.personalDetailsJson,
+      {},
+    );
+    const paymentPlan = parseJsonOr<ClientPaymentPlan>(
+      doc.paymentPlan ?? doc.paymentPlanJson,
+      {
+        percent: 0,
+        months: 0,
+        upfrontAmount: 0,
+      },
+    );
+    const status = (doc.status as PaymentStatus) ?? "not_paid";
+    const updates = parseJsonOr<ClientPaymentUpdate[]>(
+      doc.updates ?? doc.updatesJson,
+      [],
+    );
+    let totalPaid = 0;
+    let paidUpdateCount = 0;
+    for (const update of updates) {
+      if (
+        typeof update?.amount === "number" &&
+        Number.isFinite(update.amount)
+      ) {
+        totalPaid += update.amount;
+        paidUpdateCount += 1;
+      }
+    }
+
+    const lead = leadId
+      ? (leadMap.get(leadId) ??
+        buildSyntheticLead(leadId, personalDetails, createdAt))
+      : buildSyntheticLead(String(doc.$id ?? crypto.randomUUID()), personalDetails, createdAt);
+
+    rows.push({
+      rowId: typeof doc.$id === "string" ? doc.$id : crypto.randomUUID(),
+      leadId: lead.$id,
+      lead,
+      paymentStatus: status,
+      personalDetails,
+      paymentPlan,
+      createdAt,
+      totalPaid: paidUpdateCount > 0 ? totalPaid : null,
+      canOpenLead: leadMap.has(lead.$id),
+    });
+  }
+
+  return rows;
+}
+
 export interface PaymentsReportRow {
   $id: string;
   leadId: string;
   company: string;
   legalName: string;
+  closedAt: string | null;
   status: PaymentStatus;
   paymentPlan: ClientPaymentPlan;
   /** Most recent ClientPaymentUpdate entry, or null if the record has no updates. */
@@ -668,15 +863,29 @@ export interface PaymentsReportRow {
   createdAt: string;
 }
 
+function toComparableIsoDate(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+}
+
 /**
  * Operations/admin/developer/monitor report: lists every client payment record
  * with the most recent update's metadata (note, actor, timestamp, amount paid)
  * and the agreed payment plan. Powers the /payments-report page.
  */
 export async function listPaymentsReportAction(
-  actorId: string
+  input: {
+    actorId: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }
 ): Promise<PaymentsReportRow[]> {
-  const actor = await getActor(actorId);
+  const actor = await getActor(input.actorId);
 
   if (!isAdminLikeReadRole(actor.role)) {
     throw new Error("Not authorized");
@@ -718,6 +927,7 @@ export async function listPaymentsReportAction(
   const leadDataMap = new Map<string, string>();
   const leadLegalNameMap = new Map<string, string>();
   const leadAmountMap = new Map<string, number>();
+  const leadClosedAtMap = new Map<string, string | null>();
   for (const lead of leadDocs as any[]) {
     let company = "";
     let legalName = "";
@@ -750,7 +960,14 @@ export async function listPaymentsReportAction(
     leadDataMap.set(lead.$id, company || "Unknown");
     leadLegalNameMap.set(lead.$id, legalName);
     leadAmountMap.set(lead.$id, leadAmount);
+    leadClosedAtMap.set(
+      lead.$id,
+      typeof lead.closedAt === "string" ? lead.closedAt : null,
+    );
   }
+
+  const normalizedFrom = toComparableIsoDate(input.dateFrom);
+  const normalizedTo = toComparableIsoDate(input.dateTo);
 
   const rows: PaymentsReportRow[] = [];
   for (const doc of paymentDocs as any[]) {
@@ -765,6 +982,15 @@ export async function listPaymentsReportAction(
     const status = (doc.status as PaymentStatus) ?? "not_paid";
     const updates = parseJsonOr<ClientPaymentUpdate[]>(doc.updates ?? doc.updatesJson, []);
     const head = updates[0] ?? null;
+    const closedAt = leadClosedAtMap.get(leadId) ?? null;
+    const closedDate = toComparableIsoDate(closedAt);
+
+    if (normalizedFrom && (!closedDate || closedDate < normalizedFrom)) {
+      continue;
+    }
+    if (normalizedTo && (!closedDate || closedDate > normalizedTo)) {
+      continue;
+    }
 
     // Sum the `amount` of every update. This is the running total actually
     // collected so far across every status change on this record.
@@ -782,6 +1008,7 @@ export async function listPaymentsReportAction(
       leadId,
       company: leadDataMap.get(leadId) ?? "Unknown",
       legalName: leadLegalNameMap.get(leadId) ?? "",
+      closedAt,
       status,
       paymentPlan,
       leadAmount: leadAmountMap.get(leadId) ?? 0,

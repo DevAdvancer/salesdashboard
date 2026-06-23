@@ -92,7 +92,7 @@ function daysSinceDateInputValue(dateValue: string) {
 }
 
 function LinkedinRequestsContent() {
-  const { user } = useAuth();
+  const { user, serverSessionReady } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
   const [accounts, setAccounts] = useState<LinkedinAccount[]>([]);
@@ -213,13 +213,19 @@ function LinkedinRequestsContent() {
   }, [user]);
 
   useEffect(() => {
+    // Gate on serverSessionReady so the crm_appwrite_jwt cookie is in place
+    // before listMyLinkedinAccountsAction fires — otherwise createSessionClient
+    // falls through to the legacy a_session_* cookie loop and 500s.
+    if (!user || !serverSessionReady) return;
     void loadAccounts();
-  }, [loadAccounts]);
+  }, [loadAccounts, serverSessionReady, user]);
 
   useEffect(() => {
+    // Same gate as loadAccounts — see comment above.
+    if (!user || !serverSessionReady) return;
     setIsDuplicate(null);
     void loadRequests();
-  }, [loadRequests, selectedAccountId]);
+  }, [loadRequests, selectedAccountId, serverSessionReady, user]);
 
   const onCheck = async () => {
     if (!user) return;

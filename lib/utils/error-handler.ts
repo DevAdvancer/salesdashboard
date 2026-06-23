@@ -1,5 +1,4 @@
 import React from 'react';
-import * as Sentry from '@sentry/nextjs';
 import { toast } from '@/components/ui/use-toast';
 import { ToastAction } from '@/components/ui/toast';
 import { SUPPORT_EMAIL } from '@/lib/constants/support';
@@ -86,7 +85,6 @@ export function handleValidationError(
   }
 
   console.error('Validation error:', message);
-  Sentry.captureException(new Error(message));
 }
 
 /**
@@ -162,7 +160,6 @@ export function handleApiError(
     console.warn('API warning (expected):', message);
   } else {
     console.error('API error:', error);
-    Sentry.captureException(error);
   }
   
   return message;
@@ -185,7 +182,6 @@ export function handlePermissionError(
   }
 
   console.error('Permission error:', message);
-  Sentry.captureException(new Error(message));
 }
 
 /**
@@ -209,7 +205,6 @@ export function handleNetworkError(
   }
 
   console.error('Network error:', error);
-  Sentry.captureException(error);
 
   return message;
 }

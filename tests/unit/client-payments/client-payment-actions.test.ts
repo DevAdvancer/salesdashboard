@@ -431,10 +431,12 @@ describe("client payment amount persistence and report", () => {
           {
             $id: "lead-1",
             data: JSON.stringify({ company: "Acme" }),
+            closedAt: "2026-06-05T00:00:00.000Z",
           },
           {
             $id: "lead-2",
             data: JSON.stringify({ firstName: "Bob", lastName: "Jones" }),
+            closedAt: "2026-05-29T00:00:00.000Z",
           },
         ],
       });
@@ -443,7 +445,7 @@ describe("client payment amount persistence and report", () => {
       "@/app/actions/client-payments"
     );
 
-    const rows = await listPaymentsReportAction("admin-1");
+    const rows = await listPaymentsReportAction({ actorId: "admin-1" });
     expect(rows).toHaveLength(2);
 
     const withUpdate = rows.find((r) => r.$id === "payment-1");
@@ -459,6 +461,7 @@ describe("client payment amount persistence and report", () => {
     // record there's one update carrying 500, so the total is 500.
     expect(withUpdate!.totalPaid).toBe(500);
     expect(withUpdate!.paidUpdateCount).toBe(1);
+    expect(withUpdate!.closedAt).toBe("2026-06-05T00:00:00.000Z");
 
     const withoutUpdate = rows.find((r) => r.$id === "payment-2");
     expect(withoutUpdate).toBeDefined();
@@ -467,6 +470,75 @@ describe("client payment amount persistence and report", () => {
     // No updates with amounts → totalPaid is null and count is 0.
     expect(withoutUpdate!.totalPaid).toBeNull();
     expect(withoutUpdate!.paidUpdateCount).toBe(0);
+  });
+
+  it("filters payment report rows by lead closedAt date range", async () => {
+    mockGetDocument.mockResolvedValueOnce({
+      $id: "admin-1",
+      name: "Admin",
+      email: "admin@example.com",
+      role: "admin",
+      branchIds: [],
+    });
+
+    mockListDocuments
+      .mockResolvedValueOnce({
+        documents: [
+          {
+            $id: "payment-1",
+            leadId: "lead-1",
+            personalDetails: "{}",
+            paymentPlan: JSON.stringify({
+              percent: 10,
+              months: 2,
+              upfrontAmount: 500,
+            }),
+            updates: "[]",
+            status: "not_paid",
+            $createdAt: "2026-06-10T00:00:00.000Z",
+          },
+          {
+            $id: "payment-2",
+            leadId: "lead-2",
+            personalDetails: "{}",
+            paymentPlan: JSON.stringify({
+              percent: 10,
+              months: 2,
+              upfrontAmount: 300,
+            }),
+            updates: "[]",
+            status: "not_paid",
+            $createdAt: "2026-06-11T00:00:00.000Z",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        documents: [
+          {
+            $id: "lead-1",
+            data: JSON.stringify({ company: "Acme" }),
+            closedAt: "2026-06-05T00:00:00.000Z",
+          },
+          {
+            $id: "lead-2",
+            data: JSON.stringify({ company: "Bravo" }),
+            closedAt: "2026-05-31T00:00:00.000Z",
+          },
+        ],
+      });
+
+    const { listPaymentsReportAction } = await import(
+      "@/app/actions/client-payments"
+    );
+
+    const rows = await listPaymentsReportAction({
+      actorId: "admin-1",
+      dateFrom: "2026-06-01",
+      dateTo: "2026-06-30",
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.leadId).toBe("lead-1");
   });
 
   it("rejects non-admin read roles from listPaymentsReportAction", async () => {
@@ -482,7 +554,7 @@ describe("client payment amount persistence and report", () => {
       "@/app/actions/client-payments"
     );
 
-    await expect(listPaymentsReportAction("agent-1")).rejects.toThrow(
+    await expect(listPaymentsReportAction({ actorId: "agent-1" })).rejects.toThrow(
       "Not authorized"
     );
     expect(mockListDocuments).not.toHaveBeenCalled();

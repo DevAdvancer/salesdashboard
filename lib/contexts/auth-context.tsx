@@ -24,6 +24,12 @@ function canSwitchDashboard(role: UserRole | undefined): boolean {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  // Flips to true the first time syncServerSession settles (success or
+  // failure) for the current session. Reset by logout/clearServerSession
+  // and at the start of every checkSession so a re-login re-gates.
+  // Pages that fire server actions from useEffect should wait on this
+  // flag to avoid a 500 race on the crm_appwrite_jwt cookie.
+  const [serverSessionReady, setServerSessionReady] = useState(false);
   // Sales-team members and resume-team members are pinned; only leadership
   // roles may flip this. We store it in state for re-render, but read the
   // initial value from localStorage so the choice survives a refresh.
@@ -87,6 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearServerSession = useCallback(async () => {
     lastServerSessionSyncAt.current = 0;
     writeStoredServerSessionSyncAt(0);
+    setServerSessionReady(false);
     await fetch('/api/auth/appwrite-session', { method: 'DELETE' }).catch(() => {});
   }, [writeStoredServerSessionSyncAt]);
 
@@ -125,15 +132,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     const checkSession = async () => {
+      // Re-gate: a re-login or session restore must wait for the next sync
+      // attempt before downstream pages fire server actions.
+      setServerSessionReady(false);
       try {
         const session = await account.get();
         if (session) {
           // Parallelize: server session sync + user doc fetch both depend on
           // the local cookie already set by account.get(); no sequential order required.
-          const [, userDoc] = await Promise.all([
-            syncServerSession({ force: true }),
+          // We still need the sync promise to settle before un-gating the
+          // context, so we await it here and only resolve the user-doc
+          // branch via Promise.all with a no-op shim.
+          const userDoc = await Promise.all([
+            syncServerSession({ force: true }).catch(() => {}),
             fetchUserDocument(session.$id),
-          ]);
+          ]).then(([, doc]) => doc);
           if (cancelled) return;
 
           if (userDoc?.isActive === false) {
@@ -168,11 +181,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
             return nextUser;
           });
+          // Un-gate: the syncServerSession promise has settled (success or
+          // catch), and the user is in place. Pages may now fire server
+          // actions without racing the crm_appwrite_jwt cookie write.
+          if (!cancelled) setServerSessionReady(true);
+        } else {
+          // account.get() returned nothing — no session to sync, no gate needed.
+          if (!cancelled) setServerSessionReady(true);
         }
       } catch {
         // No active session
         await clearServerSession();
         if (!cancelled) setUser(null);
+        // No session, no actions should run anyway; flip the flag so consumers
+        // can distinguish "still checking" from "checked, no session".
+        if (!cancelled) setServerSessionReady(true);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -209,6 +232,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Login function
   const login = useCallback(async (email: string, password: string) => {
     try {
+      // Re-gate for the new session.
+      setServerSessionReady(false);
+
       // Create email session
       await account.createEmailPasswordSession(email, password);
 
@@ -230,8 +256,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setUser(userDoc);
+      // Un-gate: the JWT cookie is now set; downstream pages may fire.
+      setServerSessionReady(true);
     } catch (error) {
       console.error('Login error:', error);
+      // On login failure we still un-gate (with a false user) so protected
+      // pages can render the unauthenticated state without hanging.
+      setServerSessionReady(true);
       throw error;
     }
   }, [clearServerSession, fetchUserDocument, syncServerSession]);
@@ -307,6 +338,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       canSwitchDashboard: canSwitchDashboardFlag,
       setActiveDashboard,
       loading,
+      serverSessionReady,
       login,
       logout,
       signup,
@@ -327,6 +359,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       canSwitchDashboardFlag,
       setActiveDashboard,
       loading,
+      serverSessionReady,
       login,
       logout,
       signup,

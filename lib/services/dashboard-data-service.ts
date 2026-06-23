@@ -24,9 +24,11 @@ import {
 } from "@/lib/utils/dashboard-insights";
 import { buildLeadTargetProgress, type DateRange, type KpiRow } from "@/lib/utils/dashboard-kpi";
 import {
+  filterClosedLeadsInDateRange,
   splitLeadsByReferral,
   type ReferralSplit,
 } from "@/lib/utils/dashboard-referral";
+import { isVisibleClientLead } from "@/lib/utils/client-history";
 import { cacheClientRead, clearClientReadCache } from "@/lib/utils/client-read-cache";
 import type { Branch, Department, Lead, User } from "@/lib/types";
 
@@ -330,16 +332,21 @@ export async function loadDashboardTopMetrics(
           input.branchIds,
         ),
         listLeads(
-          { isClosed: true, dateFrom, dateTo },
+          { isClosed: true },
           input.userId,
           input.role,
           input.branchIds,
         ),
       ]);
+      const closedInRange = filterClosedLeadsInDateRange(
+        closed,
+        dateFrom ?? "",
+        dateTo ?? "",
+      ).filter(isVisibleClientLead);
 
       // 2. Attempt counts against the visible lead IDs.
       const visibleLeadIds = Array.from(
-        new Set([...active, ...closed].map((lead) => lead.$id)),
+        new Set([...active, ...closedInRange].map((lead) => lead.$id)),
       );
       const attempts = visibleLeadIds.length
         ? await loadDashboardAttemptCounts(input.userId, visibleLeadIds)
@@ -347,7 +354,7 @@ export async function loadDashboardTopMetrics(
 
       return {
         activeLeads: active.length,
-        closedLeads: closed.length,
+        closedLeads: closedInRange.length,
         createdMocks: attempts.createdMocks,
         createdInterviewSupport: attempts.createdInterviewSupport,
         createdAssessmentSupport: attempts.createdAssessmentSupport,
@@ -486,19 +493,21 @@ export async function loadDashboardReferralStats(
       input.monthEndIso,
     ],
     async () => {
-      // The referral split is computed from closed leads only (it's a
-      // realized-revenue view), so request isClosed=true explicitly.
-      // The default listLeads filter is isClosed=false, which would
-      // leave us with nothing to split.
-      const leads = await listLeads(
+      // The referral split is a "closed this month" view. Pull closed leads
+      // in scope, then filter by `closedAt` instead of `$createdAt` so leads
+      // created earlier but closed this month are counted correctly.
+      const closedLeads = await listLeads(
         {
-          dateFrom: input.monthStartIso,
-          dateTo: input.monthEndIso,
           isClosed: true,
         },
         input.userId,
         input.role,
         input.branchIds,
+      );
+      const leads = filterClosedLeadsInDateRange(
+        closedLeads,
+        input.monthStartIso,
+        input.monthEndIso,
       );
       // Build a leadId → total-paid lookup from actual payment records so
       // the referral / non-referral totals reflect money actually
@@ -508,7 +517,24 @@ export async function loadDashboardReferralStats(
         ? await listLeadPaidAmountsAction({ actorId: input.userId, leadIds })
         : {};
       const paidMap = new Map<string, number>(Object.entries(paidRecord));
-      return splitLeadsByReferral(leads, paidMap);
+      const paymentSummaries = leadIds.length > 0
+        ? await listClientPaymentSummariesAction({
+            actorId: input.userId,
+            leadIds,
+          })
+        : [];
+      const upfrontMap = new Map<string, number>(
+        paymentSummaries.map((summary) => [
+          summary.leadId,
+          Number.isFinite(summary.paymentPlan?.upfrontAmount)
+            ? summary.paymentPlan.upfrontAmount
+            : 0,
+        ]),
+      );
+      const statusMap = new Map<string, string>(
+        paymentSummaries.map((summary) => [summary.leadId, summary.status]),
+      );
+      return splitLeadsByReferral(leads, paidMap, upfrontMap, statusMap);
     },
     DASHBOARD_DATA_TTL_MS,
   );

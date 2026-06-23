@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { DateRangePicker } from "@/components/ui/date-picker";
 import { PaymentsReportSidebar } from "./payments-report-sidebar";
 
 type StatusFilter = "all" | "partially_paid" | "fully_paid";
@@ -57,6 +58,7 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
   const router = useRouter();
   const [rows, setRows] = useState<PaymentsReportRow[]>([]);
   const [filter, setFilter] = useState<StatusFilter>("all");
+  const [range, setRange] = useState<{ from?: string; to?: string }>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,14 +66,16 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
     try {
       setLoading(true);
       setError(null);
-      const data = await listPaymentsReport(user.$id);
+      const data = await listPaymentsReport({
+        actorId: user.$id,
+        dateFrom: range.from,
+        dateTo: range.to,
+      });
       setRows(data);
     } catch (err) {
       console.error("Failed to load payments report:", err);
       setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to load payments report."
+        err instanceof Error ? err.message : "Failed to load payments report.",
       );
       setRows([]);
     } finally {
@@ -80,9 +84,11 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
   };
 
   useEffect(() => {
-    void load();
+    queueMicrotask(() => {
+      void load();
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user.$id]);
+  }, [user.$id, range.from, range.to]);
 
   const sorted = useMemo(() => {
     return [...rows].sort((a, b) => {
@@ -143,189 +149,205 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
     <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
       <PaymentsReportSidebar rows={rows} />
       <div className="space-y-6">
-      <Card>
-        <CardHeader className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-2">
-              {FILTERS.map((f) => (
-                <Button
-                  key={f.key}
-                  type="button"
-                  size="sm"
-                  variant={filter === f.key ? "default" : "outline"}
-                  aria-pressed={filter === f.key}
-                  onClick={() => setFilter(f.key)}
-                  disabled={loading}
-                >
-                  {f.label}
-                </Button>
-              ))}
+        <Card>
+          <CardHeader className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <div className="w-full sm:w-72">
+                  <DateRangePicker value={range} onChange={setRange} />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {FILTERS.map((f) => (
+                    <Button
+                      key={f.key}
+                      type="button"
+                      size="sm"
+                      variant={filter === f.key ? "default" : "outline"}
+                      aria-pressed={filter === f.key}
+                      onClick={() => setFilter(f.key)}
+                      disabled={loading}>
+                      {f.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void load()}
+                disabled={loading}>
+                <RefreshCw
+                  className={
+                    loading ? "mr-2 h-4 w-4 animate-spin" : "mr-2 h-4 w-4"
+                  }
+                />
+                Refresh
+              </Button>
             </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => void load()}
-              disabled={loading}
-            >
-              <RefreshCw className={loading ? "mr-2 h-4 w-4 animate-spin" : "mr-2 h-4 w-4"} />
-              Refresh
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {error ? (
-            <div
-              role="alert"
-              className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
-            >
-              {error}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {error ? (
+              <div
+                role="alert"
+                className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {error}
+              </div>
+            ) : null}
+
+            <p className="text-xs text-muted-foreground">
+              Date range filters the report by client closing date.
+            </p>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Records
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-semibold">{summary.count}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Total Amount
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-semibold">
+                    {currency.format(summary.totalAmount)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Sum of all lead totals
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Upfront (collected)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-semibold">
+                    {currency.format(summary.amountPaid)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Across {summary.amountPaidCount} update
+                    {summary.amountPaidCount === 1 ? "" : "s"}
+                  </p>
+                </CardContent>
+              </Card>
             </div>
-          ) : null}
 
-          <div className="grid gap-3 md:grid-cols-3">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Records
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-semibold">{summary.count}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Total Amount
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-semibold">
-                  {currency.format(summary.totalAmount)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Sum of all lead totals
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Upfront (collected)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-semibold">
-                  {currency.format(summary.amountPaid)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Across {summary.amountPaidCount} update
-                  {summary.amountPaidCount === 1 ? "" : "s"}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Company</TableHead>
-                  <TableHead>Legal Name</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead className="text-right">Upfront</TableHead>
-                  <TableHead className="text-right">Paid</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Last Update</TableHead>
-                  <TableHead>Updated By</TableHead>
-                  <TableHead>Last Update Note</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell
-                      colSpan={8}
-                      className="text-center text-sm text-muted-foreground"
-                    >
-                      Loading payments report…
-                    </TableCell>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Legal Name</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead className="text-right">Upfront</TableHead>
+                    <TableHead className="text-right">Paid</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Closed Date</TableHead>
+                    <TableHead>Last Update</TableHead>
+                    <TableHead>Updated By</TableHead>
+                    <TableHead>Last Update Note</TableHead>
                   </TableRow>
-                ) : rows.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={8}
-                      className="text-center text-sm text-muted-foreground"
-                    >
-                      No payment records found.
-                    </TableCell>
-                  </TableRow>
-                ) : filtered.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={8}
-                      className="text-center text-sm text-muted-foreground"
-                    >
-                      No records for the selected filter.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filtered.map((row) => (
-                    <TableRow
-                      key={row.$id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => router.push(`/client/${row.leadId}`)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          router.push(`/client/${row.leadId}`);
-                        }
-                      }}
-                      className="cursor-pointer hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <TableCell className="font-medium">
-                        {row.company || "Unknown"}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {row.legalName || "—"}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {currency.format(row.leadAmount)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {currency.format(row.paymentPlan.upfrontAmount)}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {typeof row.totalPaid === "number"
-                          ? currency.format(row.totalPaid)
-                          : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={statusBadgeVariant(row.status)}>
-                          {statusLabel(row.status)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {row.lastUpdate?.createdAt
-                          ? dateFormatter.format(new Date(row.lastUpdate.createdAt))
-                          : "—"}
-                      </TableCell>
-                      <TableCell>{row.lastUpdate?.actorName ?? "—"}</TableCell>
-                      <TableCell className="max-w-[320px]">
-                        <p className="line-clamp-2 whitespace-pre-wrap break-words text-sm text-muted-foreground">
-                          {row.lastUpdate?.note ?? "—"}
-                        </p>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={10}
+                        className="text-center text-sm text-muted-foreground">
+                        Loading payments report…
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                  ) : rows.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={10}
+                        className="text-center text-sm text-muted-foreground">
+                        No payment records found.
+                      </TableCell>
+                    </TableRow>
+                  ) : filtered.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={10}
+                        className="text-center text-sm text-muted-foreground">
+                        No records for the selected filter.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filtered.map((row) => (
+                      <TableRow
+                        key={row.$id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => router.push(`/client/${row.leadId}`)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            router.push(`/client/${row.leadId}`);
+                          }
+                        }}
+                        className="cursor-pointer hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        <TableCell className="font-medium">
+                          {row.company || "Unknown"}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {row.legalName || "—"}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {currency.format(row.leadAmount)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {currency.format(row.paymentPlan.upfrontAmount)}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {typeof row.totalPaid === "number"
+                            ? currency.format(row.totalPaid)
+                            : "—"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={statusBadgeVariant(row.status)}>
+                            {statusLabel(row.status)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {row.closedAt
+                            ? dateFormatter.format(new Date(row.closedAt))
+                            : "—"}
+                        </TableCell>
+                        <TableCell>
+                          {row.lastUpdate?.createdAt
+                            ? dateFormatter.format(
+                                new Date(row.lastUpdate.createdAt),
+                              )
+                            : "—"}
+                        </TableCell>
+                        <TableCell>
+                          {row.lastUpdate?.actorName ?? "—"}
+                        </TableCell>
+                        <TableCell className="max-w-[320px]">
+                          <p className="line-clamp-2 whitespace-pre-wrap break-words text-sm text-muted-foreground">
+                            {row.lastUpdate?.note ?? "—"}
+                          </p>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

@@ -268,6 +268,7 @@ export type ComponentKey =
   | 'linkedin-account-management'
   | 'linkedin-reports'
   | 'payments-report'
+  | 'target-report'
   | 'resume-dashboard'
   | 'resume-chat'
   | 'resume-hierarchy';
@@ -426,6 +427,14 @@ export interface AuthContext {
    */
   setActiveDashboard: (next: Department) => void;
   loading: boolean;
+  /**
+   * True once `syncServerSession` has finished its first attempt for the
+   * current session. Pages that call server actions on mount should wait
+   * for this flag so the crm_appwrite_jwt cookie is in place before the
+   * first request — otherwise createSessionClient falls through to the
+   * legacy a_session_* cookie loop and may 500 with "No session".
+   */
+  serverSessionReady: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
@@ -544,4 +553,41 @@ export interface TlLeadCount {
   userId: string;
   leadCount: number;
   updatedAt: string;
+}
+
+// ─── Monthly Targets ────────────────────────────────────────────────────
+// One document per (team_lead_id, month_key). Admins set the total
+// amount for a TL's team for the month; TLs then split that total
+// across their agents via MonthlyTargetAssignment rows.
+export interface MonthlyTarget {
+  $id: string;
+  teamLeadId: string;
+  teamLeadName?: string | null;
+  /** YYYY-MM (e.g. "2026-06") */
+  monthKey: string;
+  /** The total target amount the admin set for the TL's team. */
+  totalAmount: number;
+  note?: string | null;
+  createdById: string;
+  createdByName?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+  updatedById?: string | null;
+  updatedByName?: string | null;
+}
+
+// One document per (monthly_target_id, agent_id). Carries the
+// per-agent target amount a TL assigns within their team's monthly
+// target. `amount` is summed to derive the TL's split total.
+export interface MonthlyTargetAssignment {
+  $id: string;
+  monthlyTargetId: string;
+  teamLeadId: string;
+  agentId: string;
+  agentName?: string | null;
+  amount: number;
+  createdAt: string;
+  updatedAt?: string | null;
+  updatedById?: string | null;
+  updatedByName?: string | null;
 }

@@ -1084,6 +1084,8 @@ export async function listLeadsAction(
     pageSize?: number;
     /** If true, ignore pagination and fetch as many as possible (for export). */
     forExport?: boolean;
+    /** If true, skip admin-only department post-filtering on historical exports. */
+    skipDepartmentScope?: boolean;
   }
 ): Promise<{ leads: Lead[]; total: number; page: number; pageSize: number }> {
   try {
@@ -1095,8 +1097,9 @@ export async function listLeadsAction(
     const userDoc = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, userId) as unknown as UserDocument;
     assertSalesCrmAccess(userDoc);
     const userRole = userDoc.role;
+    const skipDepartmentScope = options?.skipDepartmentScope === true;
     const salesUserIds =
-      isAdminLikeReadAllRole(userRole)
+      isAdminLikeReadAllRole(userRole) && !skipDepartmentScope
         ? await getDepartmentScopedUserIds(databases, 'sales')
         : null;
 

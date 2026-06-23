@@ -17,11 +17,16 @@ import { PaymentsSection } from "@/components/dashboard/payments-section";
 import {
   loadDashboardTopMetrics,
   loadLeadTargetProgress,
-  loadDashboardReferralStats,
   loadDashboardPaymentInsights,
+  loadDashboardReferralStats,
   type TopMetrics,
 } from "@/lib/services/dashboard-data-service";
-import { isSingleDay, workingDaysInRange, type DateRange, type KpiRow } from "@/lib/utils/dashboard-kpi";
+import {
+  isSingleDay,
+  workingDaysInRange,
+  type DateRange,
+  type KpiRow,
+} from "@/lib/utils/dashboard-kpi";
 import type { ReferralSplit } from "@/lib/utils/dashboard-referral";
 import type { PaymentInsightRecord } from "@/app/actions/client-payments";
 
@@ -62,7 +67,11 @@ function rangeLabel(range: DateRange): string {
   if (isSingleDay(range) && range.from) {
     const [y, m, d] = range.from.split("-").map(Number);
     const date = new Date(y, m - 1, d);
-    return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+    return date.toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
   }
   if (range.from && range.to) {
     return `${range.from} → ${range.to}`;
@@ -77,7 +86,15 @@ function rangeLabel(range: DateRange): string {
 // ---------------------------------------------------------------------------
 
 function DashboardContent() {
-  const { user, isAdmin, isTeamLead, isAgent, isMonitor, isOperations, activeDashboard } = useAuth();
+  const {
+    user,
+    isAdmin,
+    isTeamLead,
+    isAgent,
+    isMonitor,
+    isOperations,
+    activeDashboard,
+  } = useAuth();
   const router = useRouter();
 
   // Resume department / view — redirect handled by parent.
@@ -96,7 +113,16 @@ function DashboardContent() {
     return null;
   }
 
-  return <MainDashboard user={user} isAdmin={isAdmin} isTeamLead={isTeamLead} isAgent={isAgent} isMonitor={isMonitor} isOperations={isOperations} />;
+  return (
+    <MainDashboard
+      user={user}
+      isAdmin={isAdmin}
+      isTeamLead={isTeamLead}
+      isAgent={isAgent}
+      isMonitor={isMonitor}
+      isOperations={isOperations}
+    />
+  );
 }
 
 interface MainDashboardProps {
@@ -108,7 +134,14 @@ interface MainDashboardProps {
   isOperations: boolean;
 }
 
-function MainDashboard({ user, isAdmin, isTeamLead, isAgent, isMonitor, isOperations }: MainDashboardProps) {
+function MainDashboard({
+  user,
+  isAdmin,
+  isTeamLead,
+  isAgent,
+  isMonitor,
+  isOperations,
+}: MainDashboardProps) {
   const isAdminLike = isAdmin || isMonitor || isOperations;
   const visibilityLabel = isAgent ? "Assigned to you" : "Total active leads";
   const router = useRouter();
@@ -128,15 +161,20 @@ function MainDashboard({ user, isAdmin, isTeamLead, isAgent, isMonitor, isOperat
   const [kpiLoading, setKpiLoading] = useState(true);
 
   // Referral split (always current month)
-  const [referralData, setReferralData] = useState<ReferralSplit | null>(null);
-  const [referralLoading, setReferralLoading] = useState(true);
   const currentMonth = useMemo(() => new Date(), []);
-  const monthStartKey = useMemo(() => monthStartIso(currentMonth), [currentMonth]);
+  const monthStartKey = useMemo(
+    () => monthStartIso(currentMonth),
+    [currentMonth],
+  );
   const monthEndKey = useMemo(() => monthEndIso(currentMonth), [currentMonth]);
 
   // Payment insights (admin-like only)
-  const [paymentRecords, setPaymentRecords] = useState<PaymentInsightRecord[]>([]);
+  const [paymentRecords, setPaymentRecords] = useState<PaymentInsightRecord[]>(
+    [],
+  );
   const [paymentLoading, setPaymentLoading] = useState(isAdminLike);
+  const [referralData, setReferralData] = useState<ReferralSplit | null>(null);
+  const [referralLoading, setReferralLoading] = useState(isAdminLike);
 
   // Section loading flags driven by a single readiness gate.
   const initialLoading = !user;
@@ -219,45 +257,6 @@ function MainDashboard({ user, isAdmin, isTeamLead, isAgent, isMonitor, isOperat
     };
   }, [user, dateRange]);
 
-  // ── Fetch referral split (current month, ignores range) ───────────────
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-      setReferralLoading(true);
-    });
-
-    (async () => {
-      try {
-        const result = await loadDashboardReferralStats({
-          userId: user.$id,
-          role: user.role,
-          branchIds: user.branchIds,
-          monthStartIso: monthStartKey,
-          monthEndIso: monthEndKey,
-        });
-        if (!cancelled) {
-          setReferralData(result);
-          setReferralLoading(false);
-        }
-      } catch (error) {
-        console.error("Error loading referral stats:", error);
-        if (!cancelled) {
-          setReferralData({
-            nonReferral: { count: 0, totalAmount: 0 },
-            referral: { count: 0, totalAmount: 0 },
-          });
-          setReferralLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user, monthStartKey, monthEndKey]);
-
   // ── Fetch payment insights (admin-like only) ──────────────────────────
   useEffect(() => {
     if (!user || !isAdminLike) {
@@ -289,6 +288,44 @@ function MainDashboard({ user, isAdmin, isTeamLead, isAgent, isMonitor, isOperat
       cancelled = true;
     };
   }, [user, isAdminLike]);
+
+  // ── Fetch referral split (admin-like only, current month by closedAt) ───
+  useEffect(() => {
+    if (!user || !isAdminLike) {
+      return;
+    }
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setReferralLoading(true);
+    });
+
+    (async () => {
+      try {
+        const result = await loadDashboardReferralStats({
+          userId: user.$id,
+          role: user.role,
+          branchIds: user.branchIds,
+          monthStartIso: monthStartKey,
+          monthEndIso: monthEndKey,
+        });
+        if (!cancelled) {
+          setReferralData(result);
+          setReferralLoading(false);
+        }
+      } catch (error) {
+        console.error("Error loading referral stats:", error);
+        if (!cancelled) {
+          setReferralData(null);
+          setReferralLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, isAdminLike, monthStartKey, monthEndKey]);
 
   // KPI section mode + target derived from range
   const kpiMode = isSingleDay(dateRange) ? "daily" : "monthly";
@@ -333,7 +370,9 @@ function MainDashboard({ user, isAdmin, isTeamLead, isAgent, isMonitor, isOperat
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground mt-1">Welcome back, {user.name}</p>
+          <p className="text-muted-foreground mt-1">
+            Welcome back, {user.name}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <DashboardDateRange value={dateRange} onChange={setDateRange} />
@@ -374,33 +413,27 @@ function MainDashboard({ user, isAdmin, isTeamLead, isAgent, isMonitor, isOperat
 
       {/* Quick actions footer — kept minimal */}
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-        <Button
-          variant="outline"
-          onClick={() => router.push("/leads")}
-        >
+        <Button variant="outline" onClick={() => router.push("/leads")}>
           View Leads
         </Button>
         {isTeamLead && (
           <Button
             variant="outline"
-            onClick={() => router.push("/linkedin-requests")}
-          >
+            onClick={() => router.push("/linkedin-requests")}>
             LinkedIn Requests
           </Button>
         )}
         {(isAdminLike || isTeamLead) && (
-          <Button
-            variant="outline"
-            onClick={() => router.push("/users")}
-          >
-            {isAdminLike && !isMonitor && !isOperations ? "Manage Users" : "View Users"}
+          <Button variant="outline" onClick={() => router.push("/users")}>
+            {isAdminLike && !isMonitor && !isOperations
+              ? "Manage Users"
+              : "View Users"}
           </Button>
         )}
         {isAdmin && (
           <Button
             variant="outline"
-            onClick={() => router.push("/payments-report")}
-          >
+            onClick={() => router.push("/payments-report")}>
             Payments Report
           </Button>
         )}
@@ -435,14 +468,22 @@ function LeadGenerationDashboardContent() {
 
     (async () => {
       try {
-        const leads = await listLeads({ isClosed: false }, user.$id, user.role, user.branchIds);
+        const leads = await listLeads(
+          { isClosed: false },
+          user.$id,
+          user.role,
+          user.branchIds,
+        );
         const unassigned = leads.filter((lead) => !lead.assignedToId).length;
-        const { getUserByIdOrNull } = await import("@/lib/services/user-service");
+        const { getUserByIdOrNull } =
+          await import("@/lib/services/user-service");
         const usersById = new Map<string, User>([[user.$id, user]]);
         const userIdsToResolve = new Set(
           leads
             .map((lead) => lead.assignedToId)
-            .filter((assignedToId): assignedToId is string => Boolean(assignedToId)),
+            .filter((assignedToId): assignedToId is string =>
+              Boolean(assignedToId),
+            ),
         );
 
         for (const userId of Array.from(userIdsToResolve)) {
@@ -450,7 +491,11 @@ function LeadGenerationDashboardContent() {
           if (!resolvedUser) continue;
 
           usersById.set(resolvedUser.$id, resolvedUser);
-          if (resolvedUser.role === "agent" && resolvedUser.teamLeadId && !usersById.has(resolvedUser.teamLeadId)) {
+          if (
+            resolvedUser.role === "agent" &&
+            resolvedUser.teamLeadId &&
+            !usersById.has(resolvedUser.teamLeadId)
+          ) {
             const teamLead = await getUserByIdOrNull(resolvedUser.teamLeadId);
             if (teamLead) {
               usersById.set(teamLead.$id, teamLead);
@@ -481,11 +526,18 @@ function LeadGenerationDashboardContent() {
         }
 
         const teamAssignments = Array.from(teamMap.values()).sort(
-          (a, b) => b.assignedLeads - a.assignedLeads || a.teamLeadName.localeCompare(b.teamLeadName),
+          (a, b) =>
+            b.assignedLeads - a.assignedLeads ||
+            a.teamLeadName.localeCompare(b.teamLeadName),
         );
 
         if (!cancelled) {
-          setStats({ total: leads.length, unassigned, teamAssignments, loading: false });
+          setStats({
+            total: leads.length,
+            unassigned,
+            teamAssignments,
+            loading: false,
+          });
         }
       } catch {
         if (!cancelled) {
@@ -513,52 +565,81 @@ function LeadGenerationDashboardContent() {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold md:text-3xl">Lead Generation</h1>
-          <p className="text-muted-foreground">Create new leads with the basic details and hand them off for assignment.</p>
+          <p className="text-muted-foreground">
+            Create new leads with the basic details and hand them off for
+            assignment.
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <AttendanceSelfToggle />
-          <Button variant="outline" onClick={() => router.push('/settings')}>Profile Settings</Button>
+          <Button variant="outline" onClick={() => router.push("/settings")}>
+            Profile Settings
+          </Button>
         </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
         <div className="rounded-2xl border border-[var(--hairline)] bg-[var(--soft-cloud)]/40 p-4">
-          <div className="text-sm font-medium text-muted-foreground">My Generated Leads</div>
-          <div className="text-muted-foreground text-xs">Leads created by you (active only).</div>
+          <div className="text-sm font-medium text-muted-foreground">
+            My Generated Leads
+          </div>
+          <div className="text-muted-foreground text-xs">
+            Leads created by you (active only).
+          </div>
           <div className="mt-2 flex items-center justify-between">
-            <div className="text-3xl font-semibold">{stats.loading ? '—' : stats.total}</div>
-            <Button variant="outline" onClick={() => router.push('/leads')}>View Leads</Button>
+            <div className="text-3xl font-semibold">
+              {stats.loading ? "—" : stats.total}
+            </div>
+            <Button variant="outline" onClick={() => router.push("/leads")}>
+              View Leads
+            </Button>
           </div>
         </div>
 
         <div className="rounded-2xl border border-[var(--hairline)] bg-[var(--soft-cloud)]/40 p-4">
-          <div className="text-sm font-medium text-muted-foreground">Awaiting Assignment</div>
-          <div className="text-muted-foreground text-xs">Leads not yet assigned to a team.</div>
-          <div className="mt-2 text-3xl font-semibold">{stats.loading ? '—' : stats.unassigned}</div>
+          <div className="text-sm font-medium text-muted-foreground">
+            Awaiting Assignment
+          </div>
+          <div className="text-muted-foreground text-xs">
+            Leads not yet assigned to a team.
+          </div>
+          <div className="mt-2 text-3xl font-semibold">
+            {stats.loading ? "—" : stats.unassigned}
+          </div>
         </div>
       </div>
 
       <div className="rounded-2xl border border-[var(--hairline)] bg-card p-4">
         <div className="text-sm font-medium">Team Assignment Counts</div>
-        <div className="text-muted-foreground text-xs">Active leads you have assigned to each team.</div>
+        <div className="text-muted-foreground text-xs">
+          Active leads you have assigned to each team.
+        </div>
         <div className="mt-3">
           {stats.loading ? (
             <Skeleton className="h-24 w-full" />
           ) : stats.teamAssignments.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No leads assigned to a team yet.</p>
+            <p className="text-sm text-muted-foreground">
+              No leads assigned to a team yet.
+            </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="border-b">
                   <tr className="text-left">
                     <th className="p-3 text-sm font-semibold">Team Lead</th>
-                    <th className="p-3 text-sm font-semibold">Assigned Leads</th>
+                    <th className="p-3 text-sm font-semibold">
+                      Assigned Leads
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {stats.teamAssignments.map((team) => (
-                    <tr key={team.teamLeadId} className="border-b last:border-0">
-                      <td className="p-3 text-sm font-medium">{team.teamLeadName}</td>
+                    <tr
+                      key={team.teamLeadId}
+                      className="border-b last:border-0">
+                      <td className="p-3 text-sm font-medium">
+                        {team.teamLeadName}
+                      </td>
                       <td className="p-3 text-sm">{team.assignedLeads}</td>
                     </tr>
                   ))}

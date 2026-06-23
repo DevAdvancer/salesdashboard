@@ -34,6 +34,12 @@ export const COLLECTIONS = {
   // the lead. See lib/actions/lead-actions.ts:notInterestedLeadAction
   // and the Weekly Report action.
   NOT_INTERESTED_LEADS: process.env.NEXT_PUBLIC_APPWRITE_NOT_INTERESTED_LEADS_COLLECTION_ID ?? 'not_interested_leads',
+  // One document per (team_lead_id, month_key) carrying the team's
+  // monthly target set by an admin. Powers the new Target-Report page.
+  MONTHLY_TARGETS: process.env.NEXT_PUBLIC_APPWRITE_MONTHLY_TARGETS_COLLECTION_ID ?? 'monthly_targets',
+  // One document per (monthly_target_id, agent_id) carrying the per-agent
+  // split amount chosen by the TL within their team's monthly target.
+  MONTHLY_TARGET_ASSIGNMENTS: process.env.NEXT_PUBLIC_APPWRITE_MONTHLY_TARGET_ASSIGNMENTS_COLLECTION_ID ?? 'monthly_target_assignments',
 };
 
 export const BUCKETS = {

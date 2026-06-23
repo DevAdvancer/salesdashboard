@@ -478,6 +478,63 @@ export const collectionSchemas: Record<string, CollectionSchema> = {
       { key: 'branch_idx', type: 'key', attributes: ['branchId'] },
     ],
   },
+
+  // ─── Monthly Targets ─────────────────────────────────────────────────────
+  // One document per (team_lead_id, month_key) where month_key is
+  // "YYYY-MM". Carries the total team target set by an admin for the
+  // month. The amount entered here is the denominator in the
+  // "achievement" calculation — money collected (from client_payments)
+  // is divided by this number to compute a percentage. TLs then split
+  // this total across their agents via `monthly_target_assignments`.
+  monthly_targets: {
+    attributes: [
+      { key: 'teamLeadId', type: 'string', required: true, size: 255 },
+      { key: 'teamLeadName', type: 'string', required: false, size: 255 },
+      // YYYY-MM string so range queries and uniqueness are simple.
+      { key: 'monthKey', type: 'string', required: true, size: 7 },
+      // The total amount the admin set as this team's target for the
+      // month — the upfront side of the achievement calculation.
+      { key: 'totalAmount', type: 'integer', required: true },
+      { key: 'note', type: 'string', required: false, size: 500 },
+      { key: 'createdById', type: 'string', required: true, size: 255 },
+      { key: 'createdByName', type: 'string', required: false, size: 255 },
+      { key: 'createdAt', type: 'datetime', required: true },
+      { key: 'updatedAt', type: 'datetime', required: false },
+      { key: 'updatedById', type: 'string', required: false, size: 255 },
+      { key: 'updatedByName', type: 'string', required: false, size: 255 },
+    ],
+    indexes: [
+      // One row per TL per month — enforced unique.
+      { key: 'tl_month_unique', type: 'unique', attributes: ['teamLeadId', 'monthKey'] },
+      { key: 'month_idx', type: 'key', attributes: ['monthKey'] },
+    ],
+  },
+
+  // ─── Monthly Target Assignments ──────────────────────────────────────────
+  // One document per (monthly_target_id, agent_id). Carries the per-agent
+  // target amount a TL assigns within their monthly team target. Each
+  // assignment row's `amount` is summed to compute the TL's split total;
+  // the TL can save without it matching the team total exactly.
+  monthly_target_assignments: {
+    attributes: [
+      { key: 'monthlyTargetId', type: 'string', required: true, size: 255 },
+      { key: 'teamLeadId', type: 'string', required: true, size: 255 },
+      { key: 'agentId', type: 'string', required: true, size: 255 },
+      { key: 'agentName', type: 'string', required: false, size: 255 },
+      { key: 'amount', type: 'integer', required: true },
+      { key: 'createdAt', type: 'datetime', required: true },
+      { key: 'updatedAt', type: 'datetime', required: false },
+      { key: 'updatedById', type: 'string', required: false, size: 255 },
+      { key: 'updatedByName', type: 'string', required: false, size: 255 },
+    ],
+    indexes: [
+      { key: 'target_idx', type: 'key', attributes: ['monthlyTargetId'] },
+      { key: 'tl_idx', type: 'key', attributes: ['teamLeadId'] },
+      { key: 'agent_idx', type: 'key', attributes: ['agentId'] },
+      // One assignment per (target, agent) — unique.
+      { key: 'target_agent_unique', type: 'unique', attributes: ['monthlyTargetId', 'agentId'] },
+    ],
+  },
 };
 
 /**

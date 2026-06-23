@@ -28,6 +28,11 @@ export const COMPONENT_ACCESS: RoleAccessMap = {
   'linkedin-account-management': ['admin', 'monitor', 'operations', 'team_lead'],
   'linkedin-reports': ['admin', 'developer', 'monitor', 'operations', 'team_lead'],
   'payments-report': ['admin', 'developer', 'monitor', 'operations'],
+  // Target Report — admin reads every TL/agent, TLs split their own
+  // team's target, agents see their own achievement. Monitoring roles
+  // (monitor / operations) can view but not edit; the server action
+  // gates writes accordingly.
+  'target-report': ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent', 'lead_generation'],
   // Empty by design — `resume-dashboard` opens only via the department
   // short-circuit in AccessControlProvider.canAccess (resume team members
   // and the leadership roles). Sales-team members are blocked at that gate.

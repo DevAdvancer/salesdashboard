@@ -91,7 +91,7 @@ export function Navigation({
   const adminItemKeys = new Set(["branch-management", "hierarchy", "lead-requests", "audit-logs", "settings"]);
   const technicalItemKeys = new Set(["mock", "interview-support", "assessment-support"]);
   const linkedinItemKeys = new Set(["linkedin-requests", "linkedin-account-management", "linkedin-reports"]);
-  const paymentsItemKeys = new Set(["payments-report"]);
+  const paymentsItemKeys = new Set(["payments-report", "target-report"]);
   const resumeItemKeys = new Set(["resume-dashboard", "resume-hierarchy"]);
 
   // Resume-team members get a slim sidebar: the Resume Dashboard, the

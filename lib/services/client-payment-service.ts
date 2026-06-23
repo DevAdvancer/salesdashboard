@@ -1,11 +1,13 @@
 import {
   addClientPaymentUpdateAction,
+  listAdminClientHistoryRowsAction,
   getClientPaymentRecordAction,
   listClientPaymentSummariesAction,
   listAllPaymentInsightsAction,
   listPaymentsReportAction,
   updateClientPersonalDetailsAction,
   upsertClientPaymentRecordAction,
+  type AdminClientHistoryRow,
   type PaymentInsightRecord,
   type PaymentsReportRow,
 } from "@/app/actions/client-payments";
@@ -16,6 +18,7 @@ import type { ClientPaymentPlan, ClientPaymentRecord, PaymentStatus } from "@/li
 // Re-export the action-layer type so consumers don't need a separate import
 // path just to read the shape.
 export type { PaymentInsightRecord };
+export type { AdminClientHistoryRow };
 
 export function getClientPaymentRecord(
   actorId: string,
@@ -74,8 +77,12 @@ export function listClientPaymentSummaries(input: {
   );
 }
 
-export function listPaymentsReport(actorId: string): Promise<PaymentsReportRow[]> {
-  return listPaymentsReportAction(actorId);
+export function listPaymentsReport(input: {
+  actorId: string;
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<PaymentsReportRow[]> {
+  return listPaymentsReportAction(input);
 }
 
 export function listAllPaymentInsights(actorId: string): Promise<PaymentInsightRecord[]> {
@@ -83,5 +90,15 @@ export function listAllPaymentInsights(actorId: string): Promise<PaymentInsightR
     "clientPayments:listAllInsights",
     [actorId],
     () => listAllPaymentInsightsAction(actorId),
+  );
+}
+
+export function listAdminClientHistoryRows(
+  actorId: string,
+): Promise<AdminClientHistoryRow[]> {
+  return cacheClientRead(
+    "clientPayments:listAdminHistoryRows",
+    [actorId],
+    () => listAdminClientHistoryRowsAction(actorId),
   );
 }

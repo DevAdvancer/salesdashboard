@@ -1,6 +1,5 @@
 "use client";
 
-import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 import { SUPPORT_EMAIL } from "@/lib/constants/support";
 
@@ -10,7 +9,7 @@ export default function GlobalError({
   error: Error & { digest?: string };
 }) {
   useEffect(() => {
-    Sentry.captureException(error);
+    console.error("Global error:", error);
   }, [error]);
 
   return (

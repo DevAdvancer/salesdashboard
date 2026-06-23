@@ -19,7 +19,13 @@ import {
   upsertClientPaymentRecord,
   updateClientPersonalDetails,
 } from "@/lib/services/client-payment-service";
-import { Lead, FormField, LeadData, ClientPaymentRecord, PaymentStatus } from "@/lib/types";
+import {
+  Lead,
+  FormField,
+  LeadData,
+  ClientPaymentRecord,
+  PaymentStatus,
+} from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,29 +35,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { ProtectedRoute } from "@/components/protected-route";
 import { LeadActivityTimeline } from "@/components/leads/lead-activity-timeline";
 import { LeadNotesCard } from "@/components/leads/lead-notes-card";
-
-function isBackoutStatus(value: unknown) {
-  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (!text) return false;
-  return (
-    text === "backout" ||
-    text === "backedout" ||
-    text === "backed out" ||
-    text === "back out" ||
-    text.replace(/\s+/g, "") === "backedout" ||
-    text.replace(/\s+/g, "") === "backout"
-  );
-}
-
-function isNotInterestedStatus(value: unknown) {
-  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (!text) return false;
-  return text.replace(/\s+/g, "") === "notinterested";
-}
-
-function isClientExcludedStatus(value: unknown) {
-  return isBackoutStatus(value) || isNotInterestedStatus(value);
-}
+import { isClientExcludedStatus } from "@/lib/utils/client-history";
 
 // Ensures a "lastName" text field is always present and rendered just below
 // "firstName" on the Client Detail page. Mirrors the fallback used in
@@ -103,7 +87,13 @@ export default function HistoryDetailPage() {
 }
 
 function HistoryDetailContent() {
-  const { user, loading: authLoading, isAdmin, isTeamLead, isMonitor } = useAuth();
+  const {
+    user,
+    loading: authLoading,
+    isAdmin,
+    isTeamLead,
+    isMonitor,
+  } = useAuth();
   const router = useRouter();
   const params = useParams();
   const { toast } = useToast();
@@ -121,17 +111,27 @@ function HistoryDetailContent() {
   const [closureFields, setClosureFields] = useState<FormField[]>([]);
   const [paymentPlanFields, setPaymentPlanFields] = useState<FormField[]>([]);
   const [clientIntakeFields, setClientIntakeFields] = useState<FormField[]>([]);
-  const [paymentRecord, setPaymentRecord] = useState<ClientPaymentRecord | null>(null);
+  const [paymentRecord, setPaymentRecord] =
+    useState<ClientPaymentRecord | null>(null);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("not_paid");
   const [paymentNote, setPaymentNote] = useState("");
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [paymentInitSaving, setPaymentInitSaving] = useState(false);
-  const [paymentInitPlanValues, setPaymentInitPlanValues] = useState<Record<string, unknown>>({});
-  const [paymentInitPersonalValues, setPaymentInitPersonalValues] = useState<Record<string, unknown>>({});
-  const [clientIntakeValues, setClientIntakeValues] = useState<Record<string, unknown>>({});
+  const [paymentInitPlanValues, setPaymentInitPlanValues] = useState<
+    Record<string, unknown>
+  >({});
+  const [paymentInitPersonalValues, setPaymentInitPersonalValues] = useState<
+    Record<string, unknown>
+  >({});
+  const [clientIntakeValues, setClientIntakeValues] = useState<
+    Record<string, unknown>
+  >({});
   const [clientIntakeSaving, setClientIntakeSaving] = useState(false);
-  const [clientIntakeInitializedForRecord, setClientIntakeInitializedForRecord] = useState<string | null>(null);
+  const [
+    clientIntakeInitializedForRecord,
+    setClientIntakeInitializedForRecord,
+  ] = useState<string | null>(null);
   const [editUpfrontAmount, setEditUpfrontAmount] = useState<string>("");
 
   useEffect(() => {
@@ -205,7 +205,9 @@ function HistoryDetailContent() {
         getPaymentPlanFormConfig(),
       ]);
       setClosureFields(closureConfig.fields.sort((a, b) => a.order - b.order));
-      setPaymentPlanFields(paymentConfig.fields.sort((a, b) => a.order - b.order));
+      setPaymentPlanFields(
+        paymentConfig.fields.sort((a, b) => a.order - b.order),
+      );
     } catch (err: unknown) {
       console.error("Error loading close configs:", err);
     }
@@ -265,8 +267,7 @@ function HistoryDetailContent() {
           className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           value={value}
           onChange={(e) => onChange(field.key, e.target.value)}
-          disabled={disabled}
-        >
+          disabled={disabled}>
           <option value="" disabled>
             Select...
           </option>
@@ -282,7 +283,13 @@ function HistoryDetailContent() {
     return (
       <Input
         id={field.key}
-        type={field.type === "email" ? "email" : field.type === "phone" ? "tel" : "text"}
+        type={
+          field.type === "email"
+            ? "email"
+            : field.type === "phone"
+              ? "tel"
+              : "text"
+        }
         value={value}
         onChange={(e) => onChange(field.key, e.target.value)}
         disabled={disabled}
@@ -299,10 +306,15 @@ function HistoryDetailContent() {
     const months = Number(paymentInitPlanValues.paymentMonths);
     const upfrontAmount = Number(paymentInitPlanValues.upfrontAmount);
 
-    if (!Number.isFinite(percent) || !Number.isFinite(months) || !Number.isFinite(upfrontAmount)) {
+    if (
+      !Number.isFinite(percent) ||
+      !Number.isFinite(months) ||
+      !Number.isFinite(upfrontAmount)
+    ) {
       toast({
         title: "Invalid payment details",
-        description: "Payment percent, months, and upfront amount must be valid numbers.",
+        description:
+          "Payment percent, months, and upfront amount must be valid numbers.",
         variant: "destructive",
       });
       return;
@@ -324,7 +336,10 @@ function HistoryDetailContent() {
       console.error("Error creating payment record:", err);
       toast({
         title: "Error",
-        description: err instanceof Error ? err.message : "Failed to create payment record",
+        description:
+          err instanceof Error
+            ? err.message
+            : "Failed to create payment record",
         variant: "destructive",
       });
     } finally {
@@ -359,10 +374,14 @@ function HistoryDetailContent() {
     if (!paymentRecord) return;
     if (clientIntakeInitializedForRecord === paymentRecord.$id) return;
 
-    const firstName = typeof leadData.firstName === "string" ? leadData.firstName.trim() : "";
-    const lastName = typeof leadData.lastName === "string" ? leadData.lastName.trim() : "";
-    const fallbackName = typeof leadData.legalName === "string" ? leadData.legalName.trim() : "";
-    const fullName = [firstName, lastName].filter(Boolean).join(" ").trim() || fallbackName;
+    const firstName =
+      typeof leadData.firstName === "string" ? leadData.firstName.trim() : "";
+    const lastName =
+      typeof leadData.lastName === "string" ? leadData.lastName.trim() : "";
+    const fallbackName =
+      typeof leadData.legalName === "string" ? leadData.legalName.trim() : "";
+    const fullName =
+      [firstName, lastName].filter(Boolean).join(" ").trim() || fallbackName;
 
     const salesperson = assignedTo?.name || owner?.name || "";
 
@@ -371,12 +390,18 @@ function HistoryDetailContent() {
 
     if (!next.salesperson) next.salesperson = salesperson;
     if (!next.fullName) next.fullName = fullName;
-    if (!next.visaStatus) next.visaStatus = typeof leadData.visaStatus === "string" ? leadData.visaStatus : "";
-    if (!next.email) next.email = typeof leadData.email === "string" ? leadData.email : "";
-    if (!next.phone) next.phone = typeof leadData.phone === "string" ? leadData.phone : "";
+    if (!next.visaStatus)
+      next.visaStatus =
+        typeof leadData.visaStatus === "string" ? leadData.visaStatus : "";
+    if (!next.email)
+      next.email = typeof leadData.email === "string" ? leadData.email : "";
+    if (!next.phone)
+      next.phone = typeof leadData.phone === "string" ? leadData.phone : "";
     if (!next.linkedinProfileUrl) {
       next.linkedinProfileUrl =
-        typeof (leadData as any).linkedinProfileUrl === "string" ? (leadData as any).linkedinProfileUrl : "";
+        typeof (leadData as any).linkedinProfileUrl === "string"
+          ? (leadData as any).linkedinProfileUrl
+          : "";
     }
     // Pre-fill the Upfront field from the lead's quoted amount when the
     // personal-details record doesn't already have a value saved. The
@@ -391,7 +416,13 @@ function HistoryDetailContent() {
 
     setClientIntakeValues(next);
     setClientIntakeInitializedForRecord(paymentRecord.$id);
-  }, [paymentRecord, leadData, assignedTo, owner, clientIntakeInitializedForRecord]);
+  }, [
+    paymentRecord,
+    leadData,
+    assignedTo,
+    owner,
+    clientIntakeInitializedForRecord,
+  ]);
 
   // Keep `agreement` in sync with the latest payment plan (it's a
   // description of the plan, not a free-text field). `upfront` is
@@ -521,7 +552,11 @@ function HistoryDetailContent() {
 
   const renderReadOnlyValue = (value: unknown) => {
     if (value === null || value === undefined) return "";
-    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    ) {
       return String(value);
     }
     if (Array.isArray(value)) return value.map((v) => String(v)).join(", ");
@@ -543,7 +578,9 @@ function HistoryDetailContent() {
     const value =
       valueRaw === null || valueRaw === undefined
         ? ""
-        : typeof valueRaw === "string" || typeof valueRaw === "number" || typeof valueRaw === "boolean"
+        : typeof valueRaw === "string" ||
+            typeof valueRaw === "number" ||
+            typeof valueRaw === "boolean"
           ? String(valueRaw)
           : JSON.stringify(valueRaw);
 
@@ -551,13 +588,16 @@ function HistoryDetailContent() {
     // Other fields (salesperson) remain always locked.
     const isLockedField =
       field.key === "salesperson" ||
-      (field.key !== "agreement" && field.key !== "upfront" ? false : !isAdmin && !isTeamLead);
+      (field.key !== "agreement" && field.key !== "upfront"
+        ? false
+        : !isAdmin && !isTeamLead);
     const canEditAgreementUpfront = isAdmin || isTeamLead;
     const isDisabled =
       !canEditClientPayments ||
       clientIntakeSaving ||
       !paymentRecord ||
-      (paymentRecord.status !== "fully_paid" && paymentRecord.status !== "partially_paid") ||
+      (paymentRecord.status !== "fully_paid" &&
+        paymentRecord.status !== "partially_paid") ||
       (isLockedField && !canEditAgreementUpfront);
 
     if (field.type === "textarea") {
@@ -579,8 +619,7 @@ function HistoryDetailContent() {
           className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           value={value}
           onChange={(e) => handleClientIntakeChange(field.key, e.target.value)}
-          disabled={isDisabled}
-        >
+          disabled={isDisabled}>
           <option value="" disabled>
             Select...
           </option>
@@ -596,7 +635,13 @@ function HistoryDetailContent() {
     return (
       <Input
         id={field.key}
-        type={field.type === "email" ? "email" : field.type === "phone" ? "tel" : "text"}
+        type={
+          field.type === "email"
+            ? "email"
+            : field.type === "phone"
+              ? "tel"
+              : "text"
+        }
         value={value}
         disabled={isDisabled}
         onChange={(e) => handleClientIntakeChange(field.key, e.target.value)}
@@ -610,10 +655,14 @@ function HistoryDetailContent() {
     if (!canEditClientPayments) return;
     if (!paymentRecord) return;
 
-    if (paymentRecord.status !== "fully_paid" && paymentRecord.status !== "partially_paid") {
+    if (
+      paymentRecord.status !== "fully_paid" &&
+      paymentRecord.status !== "partially_paid"
+    ) {
       toast({
         title: "Payment not completed",
-        description: "Client details can be completed only after payment status is Partially or Fully Paid.",
+        description:
+          "Client details can be completed only after payment status is Partially or Fully Paid.",
         variant: "destructive",
       });
       return;
@@ -629,15 +678,18 @@ function HistoryDetailContent() {
     // before saving) and is no longer auto-derived from the payment
     // plan — we just take whatever the user typed in the form.
     const canOverrideAgreement = isAdmin || isTeamLead;
-    const editedAgreement = typeof clientIntakeValues.agreement === "string"
-      ? clientIntakeValues.agreement.trim()
-      : "";
-    const editedUpfront = typeof clientIntakeValues.upfront === "string"
-      ? clientIntakeValues.upfront.trim()
-      : "";
-    const finalAgreement = canOverrideAgreement && editedAgreement
-      ? editedAgreement
-      : derivedAgreement;
+    const editedAgreement =
+      typeof clientIntakeValues.agreement === "string"
+        ? clientIntakeValues.agreement.trim()
+        : "";
+    const editedUpfront =
+      typeof clientIntakeValues.upfront === "string"
+        ? clientIntakeValues.upfront.trim()
+        : "";
+    const finalAgreement =
+      canOverrideAgreement && editedAgreement
+        ? editedAgreement
+        : derivedAgreement;
 
     const merged: Record<string, unknown> = {
       ...(paymentRecord.personalDetails ?? {}),
@@ -658,7 +710,8 @@ function HistoryDetailContent() {
         if (!Array.isArray(raw) || raw.length === 0) missing.push(field.label);
         continue;
       }
-      const text = typeof raw === "string" ? raw.trim() : String(raw ?? "").trim();
+      const text =
+        typeof raw === "string" ? raw.trim() : String(raw ?? "").trim();
       if (!text) missing.push(field.label);
     }
 
@@ -685,7 +738,8 @@ function HistoryDetailContent() {
       console.error("Error saving client intake:", err);
       toast({
         title: "Error",
-        description: err instanceof Error ? err.message : "Failed to save client details",
+        description:
+          err instanceof Error ? err.message : "Failed to save client details",
         variant: "destructive",
       });
     } finally {
@@ -721,12 +775,18 @@ function HistoryDetailContent() {
       const enteredAmount =
         !isNaN(newUpfront) && newUpfront > 0 ? newUpfront : null;
 
-      if (!isNaN(newUpfront) && newUpfront !== currentRecord.paymentPlan.upfrontAmount) {
+      if (
+        !isNaN(newUpfront) &&
+        newUpfront !== currentRecord.paymentPlan.upfrontAmount
+      ) {
         currentRecord = await upsertClientPaymentRecord({
           actorId: user.$id,
           leadId,
           personalDetails: currentRecord.personalDetails,
-          paymentPlan: { ...currentRecord.paymentPlan, upfrontAmount: newUpfront },
+          paymentPlan: {
+            ...currentRecord.paymentPlan,
+            upfrontAmount: newUpfront,
+          },
         });
       }
 
@@ -739,7 +799,7 @@ function HistoryDetailContent() {
       });
       setPaymentRecord(updated);
       if (updated) {
-         setEditUpfrontAmount(String(updated.paymentPlan.upfrontAmount));
+        setEditUpfrontAmount(String(updated.paymentPlan.upfrontAmount));
       }
       setPaymentNote("");
       toast({ title: "Success", description: "Payment update saved." });
@@ -747,7 +807,8 @@ function HistoryDetailContent() {
       console.error("Error saving payment update:", err);
       toast({
         title: "Error",
-        description: err instanceof Error ? err.message : "Failed to save payment update",
+        description:
+          err instanceof Error ? err.message : "Failed to save payment update",
         variant: "destructive",
       });
     } finally {
@@ -914,7 +975,9 @@ function HistoryDetailContent() {
           </CardHeader>
           <CardContent className="space-y-4">
             {paymentLoading ? (
-              <p className="text-sm text-muted-foreground">Loading payments...</p>
+              <p className="text-sm text-muted-foreground">
+                Loading payments...
+              </p>
             ) : !paymentRecord ? (
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">
@@ -948,7 +1011,13 @@ function HistoryDetailContent() {
                         {closureFields
                           .filter((field) => field.visible)
                           .map((field) => (
-                            <div key={field.id} className={field.type === "textarea" ? "md:col-span-2" : undefined}>
+                            <div
+                              key={field.id}
+                              className={
+                                field.type === "textarea"
+                                  ? "md:col-span-2"
+                                  : undefined
+                              }>
                               <Label>{field.label}</Label>
                               {renderPaymentInitField(
                                 field,
@@ -962,8 +1031,12 @@ function HistoryDetailContent() {
                     )}
 
                     <div className="flex justify-end">
-                      <Button onClick={handleCreatePaymentRecord} disabled={paymentInitSaving}>
-                        {paymentInitSaving ? "Creating..." : "Create Payment Record"}
+                      <Button
+                        onClick={handleCreatePaymentRecord}
+                        disabled={paymentInitSaving}>
+                        {paymentInitSaving
+                          ? "Creating..."
+                          : "Create Payment Record"}
                       </Button>
                     </div>
                   </>
@@ -1008,7 +1081,9 @@ function HistoryDetailContent() {
                         <div key={field.id}>
                           <Label>{field.label}</Label>
                           <Input
-                            value={renderReadOnlyValue(paymentRecord.personalDetails[field.key])}
+                            value={renderReadOnlyValue(
+                              paymentRecord.personalDetails[field.key],
+                            )}
                             disabled
                             readOnly
                           />
@@ -1028,7 +1103,9 @@ function HistoryDetailContent() {
                             <Input
                               type="number"
                               value={editUpfrontAmount}
-                              onChange={(e) => setEditUpfrontAmount(e.target.value)}
+                              onChange={(e) =>
+                                setEditUpfrontAmount(e.target.value)
+                              }
                               disabled={!canEditClientPayments || paymentSaving}
                             />
                           ) : (
@@ -1038,7 +1115,9 @@ function HistoryDetailContent() {
                                   ? paymentRecord.paymentPlan.percent
                                   : field.key === "paymentMonths"
                                     ? paymentRecord.paymentPlan.months
-                                    : (paymentRecord.paymentPlan as any)[field.key],
+                                    : (paymentRecord.paymentPlan as any)[
+                                        field.key
+                                      ],
                               )}
                               disabled
                               readOnly
@@ -1057,9 +1136,10 @@ function HistoryDetailContent() {
                         id="paymentStatus"
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         value={paymentStatus}
-                        onChange={(e) => setPaymentStatus(e.target.value as PaymentStatus)}
-                        disabled={!canEditClientPayments || paymentSaving}
-                      >
+                        onChange={(e) =>
+                          setPaymentStatus(e.target.value as PaymentStatus)
+                        }
+                        disabled={!canEditClientPayments || paymentSaving}>
                         <option value="not_paid">Not Paid</option>
                         <option value="partially_paid">Partially Paid</option>
                         <option value="fully_paid">Fully Paid</option>
@@ -1081,8 +1161,7 @@ function HistoryDetailContent() {
                     <div className="flex justify-end">
                       <Button
                         onClick={handleAddPaymentUpdate}
-                        disabled={!canEditClientPayments || paymentSaving}
-                      >
+                        disabled={!canEditClientPayments || paymentSaving}>
                         {paymentSaving ? "Saving..." : "Add Update"}
                       </Button>
                     </div>
@@ -1092,13 +1171,19 @@ function HistoryDetailContent() {
                 <div className="space-y-3">
                   <Label>Updates</Label>
                   {paymentRecord.updates.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No updates yet.</p>
+                    <p className="text-sm text-muted-foreground">
+                      No updates yet.
+                    </p>
                   ) : (
                     paymentRecord.updates.map((update) => (
-                      <div key={update.id} className="rounded-md border border-border p-3">
+                      <div
+                        key={update.id}
+                        className="rounded-md border border-border p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <p className="text-sm font-medium">{update.actorName}</p>
+                            <p className="text-sm font-medium">
+                              {update.actorName}
+                            </p>
                             <p className="text-xs text-muted-foreground">
                               {formatPaymentStatusLabel(update.status)}
                             </p>
@@ -1125,26 +1210,39 @@ function HistoryDetailContent() {
           <CardHeader>
             <CardTitle>Client Details (After Payment)</CardTitle>
             <p className="text-sm text-muted-foreground">
-              {paymentRecord?.status === "fully_paid" || paymentRecord?.status === "partially_paid"
+              {paymentRecord?.status === "fully_paid" ||
+              paymentRecord?.status === "partially_paid"
                 ? "All fields are required."
                 : "Complete payment first (set status to Partially or Fully Paid) to fill client details."}
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
             {!paymentRecord ? (
-              <p className="text-sm text-muted-foreground">No payment record found.</p>
+              <p className="text-sm text-muted-foreground">
+                No payment record found.
+              </p>
             ) : clientIntakeFields.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No client intake configuration found.</p>
+              <p className="text-sm text-muted-foreground">
+                No client intake configuration found.
+              </p>
             ) : (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {clientIntakeFields
                     .filter((field) => field.visible)
                     .map((field) => (
-                      <div key={field.id} className={field.type === "textarea" ? "md:col-span-2" : undefined}>
+                      <div
+                        key={field.id}
+                        className={
+                          field.type === "textarea"
+                            ? "md:col-span-2"
+                            : undefined
+                        }>
                         <Label htmlFor={field.key}>
                           {field.label}
-                          {field.required && <span className="text-red-500 ml-1">*</span>}
+                          {field.required && (
+                            <span className="text-red-500 ml-1">*</span>
+                          )}
                         </Label>
                         {renderClientIntakeField(field)}
                       </div>
@@ -1157,9 +1255,9 @@ function HistoryDetailContent() {
                       clientIntakeSaving ||
                       !canEditClientPayments ||
                       paymentLoading ||
-                      (paymentRecord.status !== "fully_paid" && paymentRecord.status !== "partially_paid")
-                    }
-                  >
+                      (paymentRecord.status !== "fully_paid" &&
+                        paymentRecord.status !== "partially_paid")
+                    }>
                     {clientIntakeSaving ? "Saving..." : "Save Client Details"}
                   </Button>
                 </div>

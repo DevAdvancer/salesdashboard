@@ -34,6 +34,7 @@ export type ComponentKey =
   | 'linkedin-account-management'
   | 'linkedin-reports'
   | 'payments-report'
+  | 'target-report'
   | 'resume-dashboard'
   | 'resume-chat'
   | 'resume-hierarchy';
@@ -66,6 +67,7 @@ const SALES_ONLY_COMPONENTS = new Set<ComponentKey>([
   'linkedin-account-management',
   'linkedin-reports',
   'payments-report',
+  'target-report',
 ]);
 
 function canCrossDashboards(role: NonNullable<ReturnType<typeof useAuth>['user']>['role']) {

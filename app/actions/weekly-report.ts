@@ -208,6 +208,21 @@ function isColdCallLead(dataJson: string): boolean {
   }
 }
 
+/**
+ * True when the lead's `data.source` / `data.sourceName` resolves to
+ * "referral" (case- and separator-insensitive). The KPI helper excludes
+ * these so referrals don't inflate the agent's working-day hit rate.
+ */
+function isReferralLead(dataJson: string): boolean {
+  try {
+    const data = JSON.parse(dataJson) as { source?: unknown; sourceName?: unknown };
+    const normalized = normalizeSource(data.sourceName ?? data.source);
+    return normalized === "referral";
+  } catch {
+    return false;
+  }
+}
+
 function parseAuditMetadata(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "string") return null;
   try {
@@ -498,7 +513,12 @@ export async function getWeeklyReportAction(input: {
       addMetrics(ensureMetrics(attributed), { coldCalls: 1 });
     }
     // Track the date the lead was created on, for per-day KPI counting.
-    ensureLeadDays(attributed).add(toDateKey(new Date(lead.$createdAt)));
+    // Referral leads are excluded so an inbound referral can't pad a
+    // agent's working-day hit rate — the same rule the Target Report
+    // uses for revenue attribution.
+    if (!isReferralLead(lead.data)) {
+      ensureLeadDays(attributed).add(toDateKey(new Date(lead.$createdAt)));
+    }
   });
 
   closedLeads.forEach((lead) => {

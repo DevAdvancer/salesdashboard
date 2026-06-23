@@ -1,8 +1,28 @@
 import type { Lead, LeadRequest } from "@/lib/types";
+import { isClientExcludedStatus } from "@/lib/utils/client-history";
+
+export interface ReferralSplitBucket {
+  count: number;
+  totalAmount: number;
+  fullyPaidAmount: number;
+  partiallyPaidAmount: number;
+}
 
 export interface ReferralSplit {
-  nonReferral: { count: number; totalAmount: number };
-  referral: { count: number; totalAmount: number };
+  nonReferral: ReferralSplitBucket;
+  referral: ReferralSplitBucket;
+}
+
+export interface ReferralPaymentRecord {
+  leadId: string;
+  source: string;
+  leadStatus: string;
+  isClosed: boolean;
+  closedAt: string | null;
+  upfrontAmount: number;
+  createdAt: string;
+  totalPaid: number | null;
+  status?: string | null;
 }
 
 /**
@@ -24,12 +44,120 @@ function isReferralSource(source: unknown): boolean {
   return normalizeSource(source) === REFERRAL_SOURCE_NORMALIZED;
 }
 
+function isDateOnlyString(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function toComparableIsoDate(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (isDateOnlyString(trimmed)) return trimmed;
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+}
+
+function resolvePaidAmount(record: ReferralPaymentRecord): number {
+  if (typeof record.totalPaid === "number" && Number.isFinite(record.totalPaid)) {
+    return Math.max(0, record.totalPaid);
+  }
+
+  if (record.status === "fully_paid") {
+    return Number.isFinite(record.upfrontAmount)
+      ? Math.max(0, record.upfrontAmount)
+      : 0;
+  }
+
+  return 0;
+}
+
+export function splitPaymentInsightsByReferral(
+  records: ReferralPaymentRecord[],
+  startDate: string,
+  endDate: string,
+): ReferralSplit {
+  const normalizedStart = toComparableIsoDate(startDate);
+  const normalizedEnd = toComparableIsoDate(endDate);
+  if (!normalizedStart || !normalizedEnd) {
+    return {
+      nonReferral: {
+        count: 0,
+        totalAmount: 0,
+        fullyPaidAmount: 0,
+        partiallyPaidAmount: 0,
+      },
+      referral: {
+        count: 0,
+        totalAmount: 0,
+        fullyPaidAmount: 0,
+        partiallyPaidAmount: 0,
+      },
+    };
+  }
+
+  let nonReferralCount = 0;
+  let nonReferralAmount = 0;
+  let nonReferralFullyPaidAmount = 0;
+  let nonReferralPartiallyPaidAmount = 0;
+  let referralCount = 0;
+  let referralAmount = 0;
+  let referralFullyPaidAmount = 0;
+  let referralPartiallyPaidAmount = 0;
+
+  for (const record of records) {
+    // Payment records are the source of truth for this widget. Prefer the
+    // lead's closedAt when present; otherwise fall back to the payment record
+    // creation date so client counts do not drop when lead metadata is stale
+    // or missing.
+    const eventDate = toComparableIsoDate(record.closedAt ?? record.createdAt);
+    if (!eventDate || eventDate < normalizedStart || eventDate > normalizedEnd) {
+      continue;
+    }
+
+    const paidAmount = resolvePaidAmount(record);
+
+    if (isReferralSource(record.source)) {
+      referralCount += 1;
+      referralAmount += paidAmount;
+      if (record.status === "fully_paid") {
+        referralFullyPaidAmount += paidAmount;
+      } else {
+        referralPartiallyPaidAmount += paidAmount;
+      }
+    } else {
+      nonReferralCount += 1;
+      nonReferralAmount += paidAmount;
+      if (record.status === "fully_paid") {
+        nonReferralFullyPaidAmount += paidAmount;
+      } else {
+        nonReferralPartiallyPaidAmount += paidAmount;
+      }
+    }
+  }
+
+  return {
+    nonReferral: {
+      count: nonReferralCount,
+      totalAmount: nonReferralAmount,
+      fullyPaidAmount: nonReferralFullyPaidAmount,
+      partiallyPaidAmount: nonReferralPartiallyPaidAmount,
+    },
+    referral: {
+      count: referralCount,
+      totalAmount: referralAmount,
+      fullyPaidAmount: referralFullyPaidAmount,
+      partiallyPaidAmount: referralPartiallyPaidAmount,
+    },
+  };
+}
+
 interface ParsedLeadData {
   source?: unknown;
   leadAmount?: unknown;
   totalAmount?: unknown;
   amount?: unknown;
-  bonusAmount?: unknown;
 }
 
 function parseLeadData(raw: string | undefined): ParsedLeadData {
@@ -52,10 +180,24 @@ function parseLeadAmount(data: ParsedLeadData): number {
   return Number.isFinite(num) ? num : 0;
 }
 
-function parseBonusAmount(data: ParsedLeadData): number {
-  const raw = data.bonusAmount;
-  const num = typeof raw === "number" ? raw : Number(raw ?? 0);
-  return Number.isFinite(num) ? num : 0;
+export function filterClosedLeadsInDateRange(
+  leads: Lead[],
+  startDate: string,
+  endDate: string,
+): Lead[] {
+  const normalizedStart = toComparableIsoDate(startDate);
+  const normalizedEnd = toComparableIsoDate(endDate);
+  if (!normalizedStart || !normalizedEnd) return [];
+
+  return leads.filter((lead) => {
+    if (!lead.isClosed) return false;
+    const closedDate = toComparableIsoDate(lead.closedAt);
+    return Boolean(
+      closedDate &&
+      closedDate >= normalizedStart &&
+      closedDate <= normalizedEnd,
+    );
+  });
 }
 
 /**
@@ -65,43 +207,72 @@ function parseBonusAmount(data: ParsedLeadData): number {
  *   excluded so the totals reflect realized revenue, not pipeline.
  * - Source is read from the `data` JSON column (not the legacy `source` field,
  *   which is unreliable across form versions).
- * - Amount is sourced from the `paidByLeadId` map (real money collected via
- *   `client_payments.updates[].amount`) when present; otherwise it falls back
- *   to the `data.leadAmount` / `totalAmount` / `amount` fields on the lead.
- *   Referral leads prefer `data.bonusAmount` over the lead amount.
+ * - Amount is sourced from the payment plan's upfront amount when present.
+ *   If that is unavailable, it falls back to the actual paid total from
+ *   `client_payments.updates[].amount`, then finally to the lead form amount.
+ *   Referral and non-referral leads intentionally use the same money source so
+ *   the split stays consistent with the payment setup.
  */
 export function splitLeadsByReferral(
   leads: Lead[],
   paidByLeadId: ReadonlyMap<string, number> = new Map(),
+  upfrontByLeadId: ReadonlyMap<string, number> = new Map(),
+  statusByLeadId: ReadonlyMap<string, string> = new Map(),
 ): ReferralSplit {
   let nonReferralCount = 0;
   let nonReferralAmount = 0;
+  let nonReferralFullyPaidAmount = 0;
+  let nonReferralPartiallyPaidAmount = 0;
   let referralCount = 0;
   let referralAmount = 0;
+  let referralFullyPaidAmount = 0;
+  let referralPartiallyPaidAmount = 0;
 
   for (const lead of leads) {
     if (!lead.isClosed) continue;
+    if (isClientExcludedStatus(lead.status)) continue;
     const data = parseLeadData(lead.data);
     const leadAmount = parseLeadAmount(data);
-    // Prefer the real amount collected via payments; fall back to the
-    // lead's own amount field when no payment record exists yet.
-    const amount = paidByLeadId.get(lead.$id) ?? leadAmount;
+    // Prefer the payment plan's upfront amount for the referral split. If that
+    // is missing, fall back to the paid total, then finally to lead data.
+    const amount =
+      upfrontByLeadId.get(lead.$id) ??
+      paidByLeadId.get(lead.$id) ??
+      leadAmount;
+    const status = statusByLeadId.get(lead.$id) ?? null;
 
     if (isReferralSource(data.source)) {
       referralCount += 1;
-      // Referral leads: prefer explicit bonus, else fall back to the
-      // resolved amount (paid if available, else planned).
-      const bonus = parseBonusAmount(data);
-      referralAmount += bonus > 0 ? bonus : amount;
+      referralAmount += amount;
+      if (status === "fully_paid") {
+        referralFullyPaidAmount += amount;
+      } else {
+        referralPartiallyPaidAmount += amount;
+      }
     } else {
       nonReferralCount += 1;
       nonReferralAmount += amount;
+      if (status === "fully_paid") {
+        nonReferralFullyPaidAmount += amount;
+      } else {
+        nonReferralPartiallyPaidAmount += amount;
+      }
     }
   }
 
   return {
-    nonReferral: { count: nonReferralCount, totalAmount: nonReferralAmount },
-    referral: { count: referralCount, totalAmount: referralAmount },
+    nonReferral: {
+      count: nonReferralCount,
+      totalAmount: nonReferralAmount,
+      fullyPaidAmount: nonReferralFullyPaidAmount,
+      partiallyPaidAmount: nonReferralPartiallyPaidAmount,
+    },
+    referral: {
+      count: referralCount,
+      totalAmount: referralAmount,
+      fullyPaidAmount: referralFullyPaidAmount,
+      partiallyPaidAmount: referralPartiallyPaidAmount,
+    },
   };
 }
 

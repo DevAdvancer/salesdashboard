@@ -16,18 +16,30 @@ export function useLeadsForExportQuery({
   role,
   branchIds,
   filters,
+  actionOptions,
 }: {
   userId: string;
   role: UserRole;
   branchIds?: string[];
   filters: LeadListFilters;
+  actionOptions?: {
+    skipDepartmentScope?: boolean;
+  };
 }) {
   const scope = buildScope(userId, role);
 
   return useQuery({
-    queryKey: queryKeys.leads.list(scope, { ...filters, branchIds }, 1, 10000),
+    queryKey: queryKeys.leads.list(
+      scope,
+      { ...filters, branchIds, actionOptions },
+      1,
+      10000,
+    ),
     queryFn: () =>
-      listLeadsAction(filters, userId, role, branchIds, { forExport: true }),
+      listLeadsAction(filters, userId, role, branchIds, {
+        forExport: true,
+        skipDepartmentScope: actionOptions?.skipDepartmentScope,
+      }),
     enabled: Boolean(userId),
     // 10 min stale — the export path pulls a lot of data, give the
     // server a chance to settle.

@@ -4,7 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useLeadsForExportQuery } from "@/lib/queries/leads/use-leads-for-export-query";
-import { Branch, Lead, LeadData, HistoryFilters, AuditLog, PaymentStatus } from "@/lib/types";
+import {
+  Branch,
+  Lead,
+  LeadData,
+  HistoryFilters,
+  AuditLog,
+  PaymentStatus,
+} from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -15,29 +22,8 @@ import { getAuditLogs } from "@/lib/services/audit-service";
 import { DateRangePicker } from "@/components/ui/date-picker";
 import { listBranches } from "@/lib/services/branch-service";
 import { listClientPaymentSummaries } from "@/lib/services/client-payment-service";
-
-function isBackoutStatus(value: unknown) {
-  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (!text) return false;
-  return (
-    text === "backout" ||
-    text === "backedout" ||
-    text === "backed out" ||
-    text === "back out" ||
-    text.replace(/\s+/g, "") === "backedout" ||
-    text.replace(/\s+/g, "") === "backout"
-  );
-}
-
-function isNotInterestedStatus(value: unknown) {
-  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (!text) return false;
-  return text.replace(/\s+/g, "") === "notinterested";
-}
-
-function isClientExcludedStatus(value: unknown) {
-  return isBackoutStatus(value) || isNotInterestedStatus(value);
-}
+import { isVisibleClientLead } from "@/lib/utils/client-history";
+import { filterClosedLeadsInDateRange } from "@/lib/utils/dashboard-referral";
 
 function HistoryContent() {
   const router = useRouter();
@@ -57,9 +43,14 @@ function HistoryContent() {
   const [search, setSearch] = useState("");
   const [closedByMap, setClosedByMap] = useState<Record<string, string>>({});
   const [paymentByLeadId, setPaymentByLeadId] = useState<
-    Record<string, { status: PaymentStatus; personalDetails: Record<string, unknown> }>
+    Record<
+      string,
+      { status: PaymentStatus; personalDetails: Record<string, unknown> }
+    >
   >({});
-  const [paymentFilter, setPaymentFilter] = useState<PaymentStatus | "no_record" | "all">("all");
+  const [paymentFilter, setPaymentFilter] = useState<
+    PaymentStatus | "no_record" | "all"
+  >("all");
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
   const getLeadData = (lead: Lead): LeadData => {
@@ -85,10 +76,11 @@ function HistoryContent() {
     closedByName: string,
   ) => {
     const get = (key: string) => {
-      const value = personalDetails[key] ?? (leadData as any)[key];
+      const value = personalDetails[key] ?? leadData[key];
       if (value === null || value === undefined) return "";
       if (typeof value === "string") return value.trim();
-      if (typeof value === "number" || typeof value === "boolean") return String(value);
+      if (typeof value === "number" || typeof value === "boolean")
+        return String(value);
       return JSON.stringify(value);
     };
 
@@ -125,6 +117,49 @@ function HistoryContent() {
       "",
     ].join("\n");
   };
+
+  async function loadClosedBy(currentLeads: Lead[]) {
+    try {
+      const entries: Record<string, string> = {};
+
+      await Promise.all(
+        currentLeads.map(async (lead) => {
+          try {
+            const { logs } = await getAuditLogs({
+              targetId: lead.$id,
+              targetType: "LEAD",
+              limit: 10,
+            });
+
+            const closeLog = logs.find((log: AuditLog) => {
+              if (log.action !== "LEAD_UPDATE" || !log.metadata) return false;
+              try {
+                const metadata = JSON.parse(log.metadata);
+                return metadata.isClosed === true;
+              } catch {
+                return false;
+              }
+            });
+
+            if (closeLog) {
+              entries[lead.$id] = closeLog.actorName;
+            }
+          } catch (error) {
+            console.error("Error loading closedBy for lead", lead.$id, error);
+          }
+        }),
+      );
+
+      if (Object.keys(entries).length > 0) {
+        setClosedByMap((prev) => ({
+          ...prev,
+          ...entries,
+        }));
+      }
+    } catch (error) {
+      console.error("Error loading closedBy names:", error);
+    }
+  }
 
   const fetchClosedByName = async (leadId: string) => {
     try {
@@ -166,7 +201,13 @@ function HistoryContent() {
           setClosedByMap((prev) => ({ ...prev, [lead.$id]: closedByName }));
         }
       }
-      const text = buildCopyText(lead, data, personalDetails, status, closedByName);
+      const text = buildCopyText(
+        lead,
+        data,
+        personalDetails,
+        status,
+        closedByName,
+      );
       await navigator.clipboard.writeText(text);
     } finally {
       setCopyingLeadId(null);
@@ -175,22 +216,33 @@ function HistoryContent() {
 
   const filteredLeads = useMemo(() => {
     const query = search.trim().toLowerCase();
-    const base = query
-      ? leads.filter((lead) => {
-          const data = getLeadData(lead);
-          const name = `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim();
-          const email = `${data.email ?? ""}`.trim();
-          const source = `${data.sourceName ?? data.source ?? ""}`.trim();
-          const status = `${lead.status ?? ""}`.trim();
+    const leadsInRange =
+      dateRange.from && dateRange.to
+        ? filterClosedLeadsInDateRange(leads, dateRange.from, dateRange.to)
+        : leads;
 
-          return (
-            name.toLowerCase().includes(query) ||
-            email.toLowerCase().includes(query) ||
-            source.toLowerCase().includes(query) ||
-            status.toLowerCase().includes(query)
-          );
-        })
-      : leads;
+    const base = leadsInRange.filter((lead) => {
+      const data = getLeadData(lead);
+      if (filters.branchId && lead.branchId !== filters.branchId) {
+        return false;
+      }
+      if (filters.agentId && lead.assignedToId !== filters.agentId) {
+        return false;
+      }
+      if (!query) return true;
+
+      const name = `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim();
+      const email = `${data.email ?? ""}`.trim();
+      const source = `${data.sourceName ?? data.source ?? ""}`.trim();
+      const status = `${lead.status ?? ""}`.trim();
+
+      return (
+        name.toLowerCase().includes(query) ||
+        email.toLowerCase().includes(query) ||
+        source.toLowerCase().includes(query) ||
+        status.toLowerCase().includes(query)
+      );
+    });
 
     if (paymentFilter === "all") return base;
 
@@ -198,9 +250,21 @@ function HistoryContent() {
       const status = paymentByLeadId[lead.$id]?.status ?? "no_record";
       return status === paymentFilter;
     });
-  }, [leads, search, paymentFilter, paymentByLeadId]);
+  }, [
+    leads,
+    search,
+    paymentFilter,
+    paymentByLeadId,
+    filters.branchId,
+    filters.agentId,
+    dateRange.from,
+    dateRange.to,
+  ]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredLeads.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredLeads.length / ITEMS_PER_PAGE),
+  );
   const paginatedLeads = useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     return filteredLeads.slice(startIndex, startIndex + ITEMS_PER_PAGE);
@@ -218,25 +282,39 @@ function HistoryContent() {
 
   useEffect(() => {
     if (user?.role === "admin") {
-      loadBranches();
+      queueMicrotask(() => {
+        void (async () => {
+          try {
+            const branchList = await listBranches();
+            const visibleBranches = branchList.filter((branch) => {
+              if (!branch.isActive) return false;
+              return (
+                user.role === "admin" ||
+                (user.branchIds ?? []).includes(branch.$id)
+              );
+            });
+            setBranches(visibleBranches);
+          } catch (error) {
+            console.error("Error loading branches:", error);
+          }
+        })();
+      });
     }
   }, [user]);
 
   useEffect(() => {
-    const visibleLeads = filteredLeads.slice(
-      (currentPage - 1) * ITEMS_PER_PAGE,
-      currentPage * ITEMS_PER_PAGE,
-    );
-    const leadsMissingClosedBy = visibleLeads.filter(
-      (lead) => !closedByMap[lead.$id],
+    const leadsMissingClosedBy = paginatedLeads.filter(
+      (lead) => lead.$id && !closedByMap[lead.$id],
     );
 
     if (leadsMissingClosedBy.length === 0) {
       return;
     }
 
-    void loadClosedBy(leadsMissingClosedBy);
-  }, [filteredLeads, currentPage, closedByMap]);
+    queueMicrotask(() => {
+      void loadClosedBy(leadsMissingClosedBy);
+    });
+  }, [paginatedLeads, closedByMap]);
 
   // TanStack Query: fetch ALL closed leads matching the current filters.
   // The action uses cursor pagination (listAllDocuments) so the result
@@ -250,8 +328,12 @@ function HistoryContent() {
       isClosed: true,
       assignedToId: filters.agentId,
       branchId: filters.branchId,
-      dateFrom: filters.dateFrom,
-      dateTo: filters.dateTo,
+    },
+    actionOptions: {
+      // Client history should show every closed client the actor can access,
+      // even when the original owner / assignee is no longer in the current
+      // department-scoped user cache.
+      skipDepartmentScope: true,
     },
   });
 
@@ -260,15 +342,17 @@ function HistoryContent() {
   // historically applied.
   useEffect(() => {
     if (!closedLeadsQuery.data) return;
-    const visible = closedLeadsQuery.data.leads.filter(
-      (lead) => !isClientExcludedStatus(lead.status)
-    );
-    setLeads(visible);
-    setPaymentByLeadId({});
+    const visible = closedLeadsQuery.data.leads.filter(isVisibleClientLead);
+    queueMicrotask(() => {
+      setLeads(visible);
+      setPaymentByLeadId({});
+    });
   }, [closedLeadsQuery.data]);
 
   useEffect(() => {
-    setLoading(closedLeadsQuery.isLoading);
+    queueMicrotask(() => {
+      setLoading(closedLeadsQuery.isLoading);
+    });
   }, [closedLeadsQuery.isLoading]);
 
   // Side-effect: fetch payment summaries whenever the visible
@@ -304,70 +388,12 @@ function HistoryContent() {
     };
   }, [leads, user]);
 
-  const loadClosedBy = async (currentLeads: Lead[]) => {
-    try {
-      const entries: Record<string, string> = {};
-
-      await Promise.all(
-        currentLeads.map(async (lead) => {
-          try {
-            const { logs } = await getAuditLogs({
-              targetId: lead.$id,
-              targetType: "LEAD",
-              limit: 10,
-            });
-
-            const closeLog = logs.find((log: AuditLog) => {
-              if (log.action !== "LEAD_UPDATE" || !log.metadata) return false;
-              try {
-                const metadata = JSON.parse(log.metadata);
-                return metadata.isClosed === true;
-              } catch {
-                return false;
-              }
-            });
-
-            if (closeLog) {
-              entries[lead.$id] = closeLog.actorName;
-            }
-          } catch (error) {
-            console.error("Error loading closedBy for lead", lead.$id, error);
-          }
-        }),
-      );
-
-      if (Object.keys(entries).length > 0) {
-        setClosedByMap((prev) => ({
-          ...prev,
-          ...entries,
-        }));
-      }
-    } catch (error) {
-      console.error("Error loading closedBy names:", error);
-    }
-  };
-
   const clearFilters = () => {
     setDateRange({});
     setFilters({});
     setSearch("");
     setPaymentFilter("all");
     setCurrentPage(1);
-  };
-
-  const loadBranches = async () => {
-    if (!user || user.role !== "admin") return;
-
-    try {
-      const branchList = await listBranches();
-      const visibleBranches = branchList.filter((branch) => {
-        if (!branch.isActive) return false;
-        return user.role === "admin" || (user.branchIds ?? []).includes(branch.$id);
-      });
-      setBranches(visibleBranches);
-    } catch (error) {
-      console.error("Error loading branches:", error);
-    }
   };
 
   const formatDate = (dateString: string | null | undefined) => {
@@ -421,11 +447,11 @@ function HistoryContent() {
               value={paymentFilter}
               onChange={(event) => {
                 setPaymentFilter(
-                  (event.target.value as PaymentStatus | "no_record" | "all") || "all",
+                  (event.target.value as PaymentStatus | "no_record" | "all") ||
+                    "all",
                 );
                 setCurrentPage(1);
-              }}
-            >
+              }}>
               <option value="all">All</option>
               <option value="no_record">No Record</option>
               <option value="not_paid">Not Paid</option>
@@ -475,8 +501,7 @@ function HistoryContent() {
                     branchId: event.target.value || undefined,
                   }));
                   setCurrentPage(1);
-                }}
-              >
+                }}>
                 <option value="">All Branches</option>
                 {branches.map((branch) => (
                   <option key={branch.$id} value={branch.$id}>
@@ -524,7 +549,7 @@ function HistoryContent() {
               {paginatedLeads.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={8}
                     className="text-center py-8 text-muted-foreground">
                     No client records found
                   </td>
@@ -536,11 +561,14 @@ function HistoryContent() {
                     typeof data.firstName === "string" ? data.firstName : "";
                   const lastName =
                     typeof data.lastName === "string" ? data.lastName : "";
-                  const email = typeof data.email === "string" ? data.email : "";
+                  const email =
+                    typeof data.email === "string" ? data.email : "";
                   const sourceName =
                     typeof data.sourceName === "string" ? data.sourceName : "";
-                  const source = typeof data.source === "string" ? data.source : "";
-                  const paymentStatus = paymentByLeadId[lead.$id]?.status ?? "no_record";
+                  const source =
+                    typeof data.source === "string" ? data.source : "";
+                  const paymentStatus =
+                    paymentByLeadId[lead.$id]?.status ?? "no_record";
                   return (
                     <tr
                       key={lead.$id}

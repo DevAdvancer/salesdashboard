@@ -7,6 +7,7 @@ const mockGetDocument = jest.fn();
 const mockCreateDocument = jest.fn();
 const mockUpdateDocument = jest.fn();
 const mockUpdateFile = jest.fn();
+const mockGetDepartmentScopedUserIds = jest.fn();
 
 jest.mock('@/lib/server/current-user', () => ({
   assertAuthenticatedUserId: (...args: unknown[]) => mockAssertAuthenticatedUserId(...args),
@@ -14,6 +15,11 @@ jest.mock('@/lib/server/current-user', () => ({
 
 jest.mock('@/lib/server/appwrite', () => ({
   createAdminClient: () => mockCreateAdminClient(),
+}));
+
+jest.mock('@/lib/server/department-user-cache', () => ({
+  getDepartmentScopedUserIds: (...args: unknown[]) =>
+    mockGetDepartmentScopedUserIds(...args),
 }));
 
 jest.mock('@/lib/server/notifications', () => ({
@@ -36,6 +42,7 @@ jest.mock('node-appwrite', () => ({
     lessThanEqual: jest.fn((key, value) => `lte:${key}:${value}`),
     limit: jest.fn((limit) => `limit:${limit}`),
     offset: jest.fn((offset) => `offset:${offset}`),
+    cursorAfter: jest.fn((value) => `cursorAfter:${value}`),
     or: jest.fn((conditions) => `or:${conditions.join('|')}`),
     orderAsc: jest.fn((key) => `orderAsc:${key}`),
     orderDesc: jest.fn((key) => `orderDesc:${key}`),
@@ -78,6 +85,23 @@ describe('lead server action authorization', () => {
       },
     });
     mockListDocuments.mockResolvedValue({ documents: [] });
+    mockGetDepartmentScopedUserIds.mockResolvedValue(
+      new Set([
+        'owner-1',
+        'agent-1',
+        'agent-2',
+        'leadgen-1',
+        'manager-1',
+        'monitor-1',
+        'operations-1',
+        'sales-owner',
+        'tl-1',
+        'tl-2',
+        'tl-3',
+        'unassigned-owner',
+        'viewer-1',
+      ])
+    );
     mockUpdateDocument.mockResolvedValue({
       $id: 'lead-1',
       data: '{}',
@@ -145,6 +169,105 @@ describe('lead server action authorization', () => {
     expect(Query.equal).not.toHaveBeenCalledWith('ownerId', expect.anything());
     expect(Query.equal).not.toHaveBeenCalledWith('assignedToId', expect.anything());
     expect(Query.equal).toHaveBeenCalledWith('isClosed', false);
+  });
+
+  it('keeps admin export department-scoped by default', async () => {
+    mockGetDocument.mockResolvedValueOnce({
+      $id: 'admin-1',
+      email: 'admin@example.com',
+      role: 'admin',
+      branchIds: [],
+      department: 'sales',
+    });
+    mockGetDepartmentScopedUserIds.mockResolvedValueOnce(new Set(['sales-owner']));
+    mockListDocuments.mockResolvedValueOnce({
+      documents: [
+        {
+          $id: 'lead-sales',
+          data: '{}',
+          ownerId: 'sales-owner',
+          assignedToId: null,
+          branchId: 'branch-1',
+          isClosed: true,
+          closedAt: '2026-06-01T10:00:00.000Z',
+          status: 'Signed/Closure',
+        },
+        {
+          $id: 'lead-archived',
+          data: '{}',
+          ownerId: 'archived-owner',
+          assignedToId: null,
+          branchId: 'branch-1',
+          isClosed: true,
+          closedAt: '2026-06-02T10:00:00.000Z',
+          status: 'Signed/Closure',
+        },
+      ],
+      total: 2,
+    });
+
+    const { listLeadsAction } = await import('@/app/actions/lead');
+
+    const result = await listLeadsAction(
+      { isClosed: true },
+      'admin-1',
+      'admin',
+      [],
+      { forExport: true },
+    );
+
+    expect(result.leads.map((lead) => lead.$id)).toEqual(['lead-sales']);
+  });
+
+  it('lets client history skip admin department post-filtering', async () => {
+    mockGetDocument.mockResolvedValueOnce({
+      $id: 'admin-1',
+      email: 'admin@example.com',
+      role: 'admin',
+      branchIds: [],
+      department: 'sales',
+    });
+    mockListDocuments.mockResolvedValueOnce({
+      documents: [
+        {
+          $id: 'lead-sales',
+          data: '{}',
+          ownerId: 'sales-owner',
+          assignedToId: null,
+          branchId: 'branch-1',
+          isClosed: true,
+          closedAt: '2026-06-01T10:00:00.000Z',
+          status: 'Signed/Closure',
+        },
+        {
+          $id: 'lead-archived',
+          data: '{}',
+          ownerId: 'archived-owner',
+          assignedToId: null,
+          branchId: 'branch-1',
+          isClosed: true,
+          closedAt: '2026-06-02T10:00:00.000Z',
+          status: 'Signed/Closure',
+        },
+      ],
+      total: 2,
+    });
+
+    const { listLeadsAction } = await import('@/app/actions/lead');
+
+    const result = await listLeadsAction(
+      { isClosed: true },
+      'admin-1',
+      'admin',
+      [],
+      { forExport: true, skipDepartmentScope: true },
+    );
+
+    expect(result.leads.map((lead) => lead.$id)).toEqual([
+      'lead-sales',
+      'lead-archived',
+    ]);
+    expect(mockGetDepartmentScopedUserIds).not.toHaveBeenCalled();
   });
 
   it('lets operations read any lead detail', async () => {
