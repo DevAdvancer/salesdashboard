@@ -6,6 +6,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { listLeadsForExport } from "@/lib/services/lead-action-service";
 import { useLeadsQuery } from "@/lib/queries/leads/use-leads-query";
 import { getUsersByIds } from "@/lib/services/user-service";
+import { MONITOR_ONLY_STATUSES } from "@/lib/utils/lead-status-workflow";
 import {
   useAssignableUsersQuery,
   useBranchesQuery,
@@ -467,11 +468,15 @@ function LeadsContent() {
       "Generated",
       ...formOptions,
       "Backed Out",
+      // LinkedIn and Leads are monitor-only statuses — they only appear
+      // in the filter for users with the `monitor` role. Operations and
+      // other roles will not see these as filter options.
+      ...(isMonitor ? [...MONITOR_ONLY_STATUSES] : []),
     ]
       .map((v) => v.trim())
       .filter(Boolean);
     return Array.from(new Set(merged));
-  }, [formConfigQuery.data]);
+  }, [formConfigQuery.data, isMonitor]);
 
   // Derive the current page of leads from the query result. Reading the
   // data directly (instead of mirroring it into local state) keeps
@@ -694,7 +699,7 @@ function LeadsContent() {
               {isExporting ? "Exporting..." : "Export CSV"}
             </Button>
           )}
-          {!isLeadGeneration && !isReadOnlyAdminView && (
+          {!isLeadGeneration && !isOperations && (
             <Button onClick={() => router.push("/leads/new")}>Create Lead</Button>
           )}
         </div>

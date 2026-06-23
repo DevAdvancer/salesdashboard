@@ -279,7 +279,11 @@ export async function createLead(
     const permissions: string[] = [
       Permission.read(Role.user(finalOwnerId)),
     ];
-    if (!ownerIsMonitor) {
+    // Grant the owner update/delete on their own lead. Monitor owners
+    // are included so they can edit the leads they create; operations
+    // owners stay read-only at the document level (they cannot create
+    // leads at all, but this is a defense-in-depth block).
+    if (ownerDoc.role !== 'operations') {
       permissions.push(
         Permission.update(Role.user(finalOwnerId)),
         Permission.delete(Role.user(finalOwnerId)),
@@ -367,6 +371,20 @@ export async function updateLead(
   try {
     await assertActorCanMutateLead(actorId);
 
+    // Resolve the actor's role once so monitor-only statuses (LinkedIn,
+    // Leads) are properly gated. If we can't resolve the actor, fall back
+    // to the strictest interpretation (no role passed) — non-monitor
+    // transitions to LinkedIn/Leads will be denied.
+    let actorRole: string | undefined;
+    if (actorId) {
+      try {
+        const actor = await getUserById(actorId);
+        actorRole = actor.role;
+      } catch {
+        actorRole = undefined;
+      }
+    }
+
     // Get the current lead to merge data
     const currentLead = await getLead(leadId);
     const currentData = JSON.parse(currentLead.data) as LeadData;
@@ -377,17 +395,22 @@ export async function updateLead(
     const nextStatus = (updatedData as any).status;
     if (nextStatus) {
       const previousStatus = currentLead.status;
+      const KNOWN_WORKFLOW_STATUSES = [
+        'interested',
+        'notinterested',
+        'pipelinefollowup',
+        'signedclosure',
+        'backedout',
+        'linkedin',
+        'leads',
+      ];
       const shouldEnforceWorkflow =
         isLinkedinRequestLeadData(updatedData) ||
-        ['interested', 'notinterested', 'pipelinefollowup', 'signedclosure', 'backedout'].includes(
-          normalizeLeadStatus(previousStatus),
-        ) ||
-        ['pipelinefollowup', 'signedclosure', 'backedout'].includes(
-          normalizeLeadStatus(nextStatus),
-        );
+        KNOWN_WORKFLOW_STATUSES.includes(normalizeLeadStatus(previousStatus)) ||
+        KNOWN_WORKFLOW_STATUSES.includes(normalizeLeadStatus(nextStatus));
       if (
         shouldEnforceWorkflow &&
-        !isAllowedLeadStatusTransition(previousStatus, nextStatus)
+        !isAllowedLeadStatusTransition(previousStatus, nextStatus, actorRole)
       ) {
         throw new Error('Invalid status transition for this lead.');
       }

@@ -50,7 +50,8 @@ import { storage } from "@/lib/appwrite";
 import { BUCKETS } from "@/lib/constants/appwrite";
 import {
   LEAD_WORKFLOW_STATUSES,
-  getLeadEditAllowedStatuses,
+  MONITOR_ONLY_STATUSES,
+  getLeadEditAllowedStatusesForRole,
   isAllowedLeadStatusTransition,
   normalizeLeadStatus,
   canonicalizeLeadStatus,
@@ -422,7 +423,7 @@ function LeadDetailContent() {
 
       if (
         statusChanged &&
-        !isAllowedLeadStatusTransition(previousStatus, nextStatus)
+        !isAllowedLeadStatusTransition(previousStatus, nextStatus, user?.role)
       ) {
         toast({
           title: "Error",
@@ -784,15 +785,24 @@ function LeadDetailContent() {
       case "dropdown":
         if (field.key === "status") {
           const savedStatus = lead?.status ?? value;
+          const isMonitor = user?.role === "monitor";
           const allowed = new Set(
-            getLeadEditAllowedStatuses(savedStatus).map(normalizeStatusText),
+            getLeadEditAllowedStatusesForRole(
+              savedStatus,
+              user?.role,
+            ).map(normalizeStatusText),
           );
+          // Monitor users get the LinkedIn and Leads statuses in addition
+          // to the standard workflow. Other roles must never see them.
+          const roleScopedOptions = isMonitor
+            ? [...LEAD_WORKFLOW_STATUSES, ...MONITOR_ONLY_STATUSES]
+            : LEAD_WORKFLOW_STATUSES;
           const mergedOptions = Array.from(
             new Set([
               ...(field.options ?? []).map((opt) =>
                 canonicalizeLeadStatus(opt),
               ),
-              ...LEAD_WORKFLOW_STATUSES,
+              ...roleScopedOptions,
             ]),
           );
           const options =
