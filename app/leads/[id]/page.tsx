@@ -755,11 +755,11 @@ function LeadDetailContent() {
     const value = isLinkedinProfileField(field)
       ? getLinkedinProfileValue(leadData, [field])
       : String(leadData[field.key] ?? "");
+    // Monitors are leadership-level observers and may edit any lead they
+    // can view (mirrors the server-side `assertLeadUpdateAllowed` policy
+    // in app/actions/lead.ts). Operations is read-only.
     const isReadOnly =
-      !isEditing ||
-      lead?.isClosed ||
-      user?.role === "operations" ||
-      (user?.role === "monitor" && lead?.ownerId !== user.$id);
+      !isEditing || lead?.isClosed || user?.role === "operations";
     const fieldError = fieldErrors[field.key];
 
     switch (field.type) {
@@ -1044,7 +1044,16 @@ function LeadDetailContent() {
   const isMonitor = user.role === "monitor";
   const isOperations = user.role === "operations";
   const isLeadOwner = lead.ownerId === user.$id;
-  const canModifyLead = !isOperations && (!isMonitor || isLeadOwner);
+  // Per-lead gating for the Edit / Close Lead / Reopen buttons. Operations
+  // is read-only and never gets these affordances. Monitors are
+  // leadership-level observers: the server-side close / update / reopen
+  // actions all let them mutate any lead they can view, so the UI mirrors
+  // that — previously `(!isMonitor || isLeadOwner)` hid the Close Lead
+  // button for monitor on non-owned leads even though the action would
+  // have succeeded. The server enforces the per-role permission rules
+  // (see `assertLeadUpdateAllowed` / `assertLeadReopenAllowed` /
+  // `closeLeadAction` in app/actions/lead.ts and lib/actions/lead-actions.ts).
+  const canModifyLead = !isOperations;
   // Read the current lead-amount value from the lead's parsed `data` JSON.
   // The Amount key was previously `leadAmount` (still recognized as a
   // legacy alias by the payments report) and is now the uniform `amount`
@@ -1314,8 +1323,7 @@ function LeadDetailContent() {
                   disabled={
                     !isEditing ||
                     lead?.isClosed ||
-                    user?.role === "operations" ||
-                    (user?.role === "monitor" && lead?.ownerId !== user?.$id)
+                    user?.role === "operations"
                   }
                   aria-required="true"
                   aria-invalid={isLeadAmountMissing}
