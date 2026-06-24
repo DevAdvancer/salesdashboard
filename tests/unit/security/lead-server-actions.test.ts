@@ -338,7 +338,7 @@ describe('lead server action authorization', () => {
     );
   });
 
-  it('rejects monitor lead edits when the monitor does not own the lead', async () => {
+  it('allows monitor lead edits even when the monitor does not own the lead', async () => {
     mockGetDocument
       .mockResolvedValueOnce({
         $id: 'monitor-1',
@@ -365,11 +365,22 @@ describe('lead server action authorization', () => {
 
     const { updateLeadAction } = await import('@/app/actions/lead');
 
+    // Monitors are leadership-level observers: they can edit any lead they
+    // can see, not only leads they personally own. This matches the
+    // admin/developer behavior so the /leads list and /leads/[id] detail
+    // page surface the same set of leads for the role.
     await expect(
       updateLeadAction('lead-1', { firstName: 'Changed' }, 'monitor-1', 'Monitor')
-    ).rejects.toThrow('Permission denied');
+    ).resolves.toBeTruthy();
 
-    expect(mockUpdateDocument).not.toHaveBeenCalled();
+    expect(mockUpdateDocument).toHaveBeenCalledWith(
+      'database',
+      'leads',
+      'lead-1',
+      expect.objectContaining({
+        data: expect.stringContaining('Changed'),
+      }),
+    );
   });
 
   it('allows monitor lead creation with the monitor as owner', async () => {

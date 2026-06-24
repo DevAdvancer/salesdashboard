@@ -367,7 +367,12 @@ function LeadDetailContent() {
       loadLead();
       loadFormConfig();
     }
-  }, [user, authLoading, leadId, router, loadLead, loadFormConfig, loadAgents]);
+    // Note: `loadAgents` intentionally omitted from deps — it depends on
+    // `lead`, and including it here would re-fire `loadLead()` every
+    // time `loadAgents` is recreated (i.e. after `setLead`), creating
+    // an infinite fetch loop. Agents are loaded in a separate effect
+    // below once the lead has actually been resolved.
+  }, [user, authLoading, leadId, router, loadLead, loadFormConfig]);
 
   useEffect(() => {
     if (!user || !lead) return;
@@ -390,7 +395,6 @@ function LeadDetailContent() {
   const handleSave = async () => {
     if (!lead || !user) return;
     if (user.role === "operations") return;
-    if (user.role === "monitor" && lead.ownerId !== user.$id) return;
 
     try {
       setIsSaving(true);
@@ -522,7 +526,6 @@ function LeadDetailContent() {
   const handleCloseLead = async () => {
     if (!lead || !user) return;
     if (user.role === "operations") return;
-    if (user.role === "monitor" && lead.ownerId !== user.$id) return;
 
     // Safety net: don't allow closing (except for Backout) when any of
     // the required close-time fields (Amount, LastName, Legal Name) is
@@ -670,7 +673,6 @@ function LeadDetailContent() {
   const handleReopenLead = async () => {
     if (!lead || !user) return;
     if (user.role === "operations") return;
-    if (user.role === "monitor" && lead.ownerId !== user.$id) return;
 
     try {
       setIsSaving(true);
@@ -700,7 +702,6 @@ function LeadDetailContent() {
     if (user.role === "operations") return;
     if (user.role === "agent") return;
     if (user.role === "lead_generation" && lead.ownerId !== user.$id) return;
-    if (user.role === "monitor" && lead.ownerId !== user.$id) return;
     // Single-click guard: the assignment <select> fires onChange synchronously
     // and re-fires on every keystroke when the user reopens it; coalesce
     // concurrent calls so only one assignLead() request goes out at a time.

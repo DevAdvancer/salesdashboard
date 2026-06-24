@@ -497,12 +497,13 @@ async function assertLeadReopenAllowed(
     throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
   }
 
-  if (isMonitorRole(actorDoc.role)) {
-    if (lead.ownerId === actorDoc.$id) return;
-    throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
+  if (
+    actorDoc.role === 'admin' ||
+    actorDoc.role === 'developer' ||
+    actorDoc.role === 'monitor'
+  ) {
+    return;
   }
-
-  if (actorDoc.role === 'admin' || actorDoc.role === 'developer') return;
 
   if (actorDoc.role !== 'team_lead') {
     throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
@@ -531,12 +532,13 @@ async function assertLeadUpdateAllowed(
     throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
   }
 
-  if (isMonitorRole(actorDoc.role)) {
-    if (lead.ownerId === actorDoc.$id) return;
-    throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
+  if (
+    actorDoc.role === 'admin' ||
+    actorDoc.role === 'developer' ||
+    actorDoc.role === 'monitor'
+  ) {
+    return;
   }
-
-  if (actorDoc.role === 'admin' || actorDoc.role === 'developer') return;
 
   const specialBranchId = getSpecialBranchLeadAccess(actorDoc.email);
   if (specialBranchId && lead.branchId === specialBranchId) return;
@@ -1032,10 +1034,11 @@ export async function getLeadAction(
     ) as unknown as Lead;
 
     if (isAdminLikeReadAllRole(viewerDoc.role)) {
-      const salesUserIds = await getDepartmentScopedUserIds(databases, 'sales');
-      if (!leadMatchesDepartmentScope(lead, salesUserIds)) {
-        throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
-      }
+      // Admin-like roles (admin/developer/monitor/operations) see all leads
+      // across all branches via the paginated listLeadsAction path. Mirror
+      // that here so a lead visible on /leads is also viewable in /leads/[id];
+      // previously the dept-scope post-filter rejected some rows that the
+      // list had returned, breaking the detail page.
       return lead;
     }
 

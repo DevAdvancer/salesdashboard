@@ -842,10 +842,6 @@ export async function closeLeadAction(
             throw new Error('Permission denied');
         }
 
-        if (actorDoc?.role === 'monitor' && currentLead.ownerId !== actorDoc.$id) {
-            throw new Error('Permission denied');
-        }
-
         const shouldAssignClosingAgent =
             actorRole === 'agent' && Boolean(actorId) && !currentLead.assignedToId;
         const nextAssignedToId = shouldAssignClosingAgent ? actorId : currentLead.assignedToId;
