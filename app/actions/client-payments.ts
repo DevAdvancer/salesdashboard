@@ -52,7 +52,9 @@ function isAdminLikeReadRole(role: User["role"]) {
 }
 
 function assertCanMutateClientPayments(actor: User) {
-  if (actor.role === "monitor" || actor.role === "operations") {
+  // `monitor` is allowed to close leads (and therefore upsert the matching
+  // client payment record). `operations` remains read-only here.
+  if (actor.role === "operations") {
     throw new Error("Not authorized");
   }
 }

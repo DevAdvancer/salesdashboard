@@ -459,7 +459,10 @@ function HistoryDetailContent() {
   }, [paymentRecord, leadData]);
 
   const canReopen = Boolean(isTeamLead);
-  const canEditClientPayments = !isMonitor;
+  // Server actions in `app/actions/client-payments.ts` allow monitor and
+  // admin-like roles to mutate client payments. Keeping the UI in sync so
+  // monitor can edit status, notes, amounts, and the upfront / plan fields.
+  const canEditClientPayments = true;
 
   const handleReopenLead = async () => {
     if (!lead || !canReopen || !user) return;
