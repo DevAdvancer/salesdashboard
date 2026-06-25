@@ -14,11 +14,13 @@ import { TopMetricsRow } from "@/components/dashboard/top-metrics-row";
 import { KpiLeadTargetSection } from "@/components/dashboard/kpi-lead-target-section";
 import { ReferralSection } from "@/components/dashboard/referral-section";
 import { PaymentsSection } from "@/components/dashboard/payments-section";
+import { LgHandoffSection } from "@/components/dashboard/lg-handoff-section";
 import {
   loadDashboardTopMetrics,
   loadLeadTargetProgress,
   loadDashboardPaymentInsights,
   loadDashboardReferralStats,
+  loadLgHandoffSummaries,
   type TopMetrics,
 } from "@/lib/services/dashboard-data-service";
 import {
@@ -29,6 +31,7 @@ import {
 } from "@/lib/utils/dashboard-kpi";
 import type { ReferralSplit } from "@/lib/utils/dashboard-referral";
 import type { PaymentInsightRecord } from "@/app/actions/client-payments";
+import type { TeamLeadAssignmentSummary } from "@/lib/utils/dashboard-insights";
 
 type LeadGenerationTeamAssignmentStat = {
   teamLeadId: string;
@@ -175,6 +178,10 @@ function MainDashboard({
   const [paymentLoading, setPaymentLoading] = useState(isAdminLike);
   const [referralData, setReferralData] = useState<ReferralSplit | null>(null);
   const [referralLoading, setReferralLoading] = useState(isAdminLike);
+
+  // LG Handoff summaries (admin-like only)
+  const [handoffSummaries, setHandoffSummaries] = useState<TeamLeadAssignmentSummary[] | null>(null);
+  const [handoffLoading, setHandoffLoading] = useState(isAdminLike);
 
   // Section loading flags driven by a single readiness gate.
   const initialLoading = !user;
@@ -327,6 +334,36 @@ function MainDashboard({
     };
   }, [user, isAdminLike, monthStartKey, monthEndKey]);
 
+  // ── Fetch LG handoff summaries (admin-like only) ──────────────────────
+  useEffect(() => {
+    if (!user || !isAdminLike) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setHandoffLoading(true);
+    });
+
+    (async () => {
+      try {
+        const result = await loadLgHandoffSummaries(user.$id);
+        if (!cancelled) {
+          setHandoffSummaries(result);
+          setHandoffLoading(false);
+        }
+      } catch (error) {
+        console.error("Error loading LG handoff summaries:", error);
+        if (!cancelled) {
+          setHandoffSummaries([]);
+          setHandoffLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, isAdminLike]);
+
   // KPI section mode + target derived from range
   const kpiMode = isSingleDay(dateRange) ? "daily" : "monthly";
   const scopeLabel = isAgent
@@ -403,6 +440,14 @@ function MainDashboard({
           data={referralData}
           isLoading={referralLoading}
           monthLabel={monthLabel(currentMonth)}
+        />
+      )}
+
+      {/* LG → TL Handoff counts — admin-only */}
+      {isAdminLike && (
+        <LgHandoffSection
+          summaries={handoffSummaries}
+          isLoading={handoffLoading}
         />
       )}
 

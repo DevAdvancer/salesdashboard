@@ -20,6 +20,7 @@ import {
 } from "@/lib/utils/lead-status-workflow";
 import { REQUIRED_LEAD_FIELD_KEYS } from "@/lib/utils/required-lead-fields";
 import { expandIsoDateToStart, expandIsoDateToEnd } from "@/lib/utils/iso-date-range";
+import { workingDaysInRange, type KpiRow } from "@/lib/utils/dashboard-kpi";
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const LEADS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_LEADS_COLLECTION_ID!;
@@ -667,7 +668,11 @@ export async function createLeadAction(
             );
         }
 
-        const dataJson = JSON.stringify(input.data);
+        const dataWithCreator = {
+            ...input.data,
+            creatorId: finalOwnerId,
+        };
+        const dataJson = JSON.stringify(dataWithCreator);
 
         // Permissions
         const permissions: string[] = [
@@ -1568,4 +1573,171 @@ export async function listLeadCountsAction(
       getAppwriteErrorMessage(error) || 'Failed to list lead counts'
     );
   }
+}
+
+function parseIsoDateLocal(iso: string): Date {
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function daysInMonthLocal(isoDate: string): number {
+  const date = parseIsoDateLocal(isoDate);
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+}
+
+async function getUserByIdOrNull(databases: any, userId: string): Promise<any | null> {
+  try {
+    return await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, userId);
+  } catch {
+    return null;
+  }
+}
+
+async function getAgentsByTeamLead(databases: any, teamLeadId: string): Promise<any[]> {
+  try {
+    return await listAllDocuments<any>({
+      databases,
+      databaseId: DATABASE_ID,
+      collectionId: COLLECTIONS.USERS,
+      queries: [
+        Query.equal('teamLeadId', teamLeadId),
+        Query.orderAsc('$id'),
+      ],
+      pageLimit: 100,
+      maxPages: 100,
+    });
+  } catch {
+    return [];
+  }
+}
+
+export async function loadLeadTargetProgressAction(input: {
+  userId: string;
+  role: string;
+  teamLeadId?: string;
+  branchIds?: string[];
+  dateRange: { from?: string; to?: string };
+}): Promise<KpiRow[]> {
+  await assertAuthenticatedUserId(input.userId);
+  const { databases } = await createAdminClient();
+
+  const isKpiEligible = (user: any): boolean =>
+    Boolean(
+      user &&
+      user.isActive !== false &&
+      user.department === "sales" &&
+      (user.role === "agent" || user.role === "team_lead")
+    );
+
+  let scopeUsers: any[] = [];
+  if (input.role === "agent" || input.role === "lead_generation") {
+    const self = await getUserByIdOrNull(databases, input.userId);
+    scopeUsers = isKpiEligible(self) ? [self] : [];
+  } else if (input.role === "team_lead") {
+    const self = await getUserByIdOrNull(databases, input.userId);
+    const agents = await getAgentsByTeamLead(databases, input.userId);
+    scopeUsers = [self, ...agents].filter(isKpiEligible);
+  } else {
+    // admin / developer / monitor / operations
+    if (input.teamLeadId) {
+      const selected = await getUserByIdOrNull(databases, input.teamLeadId);
+      const agents = await getAgentsByTeamLead(databases, input.teamLeadId);
+      scopeUsers = [selected, ...agents].filter(isKpiEligible);
+    } else {
+      const allUsers = await listAllDocuments<any>({
+        databases,
+        databaseId: DATABASE_ID,
+        collectionId: COLLECTIONS.USERS,
+        queries: [Query.orderAsc('$id')],
+        pageLimit: 100,
+        maxPages: 500,
+      });
+      scopeUsers = allUsers.filter((user) => {
+        if (!isKpiEligible(user)) return false;
+        if (input.branchIds && input.branchIds.length > 0) {
+          const userBranchIds = Array.isArray(user.branchIds) ? user.branchIds : [];
+          const hasOverlap = userBranchIds.some((b: string) => input.branchIds!.includes(b));
+          if (!hasOverlap) return false;
+        }
+        return user.$id !== input.userId;
+      });
+    }
+  }
+
+  // Fetch all leads created in the date range (active + closed) globally
+  const queries: string[] = [];
+  if (input.dateRange.from) {
+    queries.push(Query.greaterThanEqual('$createdAt', expandIsoDateToStart(input.dateRange.from)));
+  }
+  if (input.dateRange.to) {
+    queries.push(Query.lessThanEqual('$createdAt', expandIsoDateToEnd(input.dateRange.to)));
+  }
+  queries.push(Query.orderDesc('$createdAt'));
+
+  const allLeads = await listAllDocuments<any>({
+    databases,
+    databaseId: DATABASE_ID,
+    collectionId: LEADS_COLLECTION_ID,
+    queries,
+    pageLimit: 100,
+    maxPages: 500,
+  });
+
+  const fromIso = input.dateRange.from;
+  const toIso = input.dateRange.to ?? input.dateRange.from;
+  const singleDay = Boolean(fromIso && toIso && fromIso === toIso);
+  let target: number;
+  let mode: "daily" | "monthly";
+
+  if (singleDay) {
+    target = 1;
+    mode = "daily";
+  } else if (fromIso && toIso) {
+    target = Math.max(1, workingDaysInRange(fromIso, toIso));
+    mode = "monthly";
+  } else {
+    const effectiveDate = toIso ?? new Date().toISOString().slice(0, 10);
+    target = daysInMonthLocal(effectiveDate);
+    mode = "monthly";
+  }
+
+  const kpiRows = scopeUsers.map((user) => {
+    // Count leads created by this user:
+    const createdCount = allLeads.filter((lead) => {
+      let creatorId = lead.ownerId;
+      try {
+        const leadData = JSON.parse(lead.data);
+        if (leadData && leadData.creatorId) {
+          creatorId = leadData.creatorId;
+        }
+      } catch {}
+      return creatorId === user.$id;
+    }).length;
+
+    // Count leads assigned to this user:
+    const assignedCount = allLeads.filter((lead) => lead.assignedToId === user.$id).length;
+
+    return {
+      userId: user.$id,
+      userName: user.name,
+      userRole: user.role,
+      leadCount: createdCount,
+      assignedLeadCount: assignedCount,
+      target,
+      mode,
+    };
+  });
+
+  // Sort rows: underperformers first, then by name
+  kpiRows.sort((a, b) => {
+    const aMet = a.leadCount >= a.target;
+    const bMet = b.leadCount >= b.target;
+    if (aMet !== bMet) return aMet ? 1 : -1;
+    const aGap = a.target - a.leadCount;
+    const bGap = b.target - b.leadCount;
+    if (aGap !== bGap) return bGap - aGap;
+    return a.userName.localeCompare(b.userName);
+  });
+
+  return kpiRows as KpiRow[];
 }

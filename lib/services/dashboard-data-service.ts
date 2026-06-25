@@ -11,6 +11,7 @@ import { getInterviewAttempts } from "@/app/actions/interview";
 import { listLgHandoffsAction } from "@/app/actions/lg-handoffs";
 import { getMockAttempts } from "@/app/actions/mock";
 import { listLeads } from "@/lib/services/lead-action-service";
+import { loadLeadTargetProgressAction } from "@/app/actions/lead";
 import { listBranches } from "@/lib/services/branch-service";
 import {
   getAgentsByTeamLead,
@@ -30,13 +31,15 @@ import {
 } from "@/lib/utils/dashboard-referral";
 import { isVisibleClientLead } from "@/lib/utils/client-history";
 import { cacheClientRead, clearClientReadCache } from "@/lib/utils/client-read-cache";
-import type { Branch, Department, Lead, User } from "@/lib/types";
+import type { Branch, Department, Lead, LgHandoff, User } from "@/lib/types";
+import type { TeamLeadAssignmentSummary } from "@/lib/utils/dashboard-insights";
 
 const DASHBOARD_DATA_SCOPE = "dashboard:data";
 const DASHBOARD_DATA_TTL_MS = 60 * 1000;
 const DASHBOARD_TOP_METRICS_SCOPE = "dashboard:topMetrics";
 const DASHBOARD_LEAD_TARGET_SCOPE = "dashboard:leadTarget";
 const DASHBOARD_REFERRAL_SCOPE = "dashboard:referral";
+const DASHBOARD_LG_HANDOFFS_SCOPE = "dashboard:lgHandoffs";
 
 export type AssignedDashboardAgent = User & {
   branchNames: string;
@@ -396,33 +399,13 @@ export async function loadLeadTargetProgress(
       input.dateRange.to ?? "",
     ],
     async () => {
-      // The lead-target KPI counts all leads created in the date range
-      // regardless of closed status — a closed lead still reflects work
-      // done, so query both states and merge.
-      const [activeLeads, closedLeads] = await Promise.all([
-        listLeads(
-          { dateFrom: input.dateRange.from, dateTo: input.dateRange.to, isClosed: false },
-          input.userId,
-          input.role,
-          input.branchIds,
-        ),
-        listLeads(
-          { dateFrom: input.dateRange.from, dateTo: input.dateRange.to, isClosed: true },
-          input.userId,
-          input.role,
-          input.branchIds,
-        ),
-      ]);
-      const leads = [...activeLeads, ...closedLeads];
-
-      const users = await resolveScopeUsers({
+      return loadLeadTargetProgressAction({
         userId: input.userId,
         role: input.role,
         teamLeadId: input.teamLeadId,
         branchIds: input.branchIds,
+        dateRange: input.dateRange,
       });
-
-      return buildLeadTargetProgress({ leads, users, range: input.dateRange });
     },
     DASHBOARD_DATA_TTL_MS,
   );
@@ -535,6 +518,104 @@ export async function loadDashboardReferralStats(
         paymentSummaries.map((summary) => [summary.leadId, summary.status]),
       );
       return splitLeadsByReferral(leads, paidMap, upfrontMap, statusMap);
+    },
+    DASHBOARD_DATA_TTL_MS,
+  );
+}
+
+/**
+ * Fetches all lg_handoffs rows and builds per-TL summaries (handoff count
+ * + per-LG-actor breakdown) for the admin dashboard "Lead Gen Handoffs" card.
+ *
+ * Uses the same TTL cache as the other dashboard sections. If the collection
+ * is missing, returns an empty array so the card renders an empty state.
+ */
+export async function loadLgHandoffSummaries(
+  actorId: string,
+): Promise<TeamLeadAssignmentSummary[]> {
+  return cacheClientRead(
+    DASHBOARD_LG_HANDOFFS_SCOPE,
+    [actorId],
+    async () => {
+      // 1. Fetch all handoff rows.
+      const handoffs: LgHandoff[] = await listLgHandoffsAction().catch(() => []);
+      if (handoffs.length === 0) return [];
+
+      // 2. Collect unique user IDs referenced in the handoff rows.
+      const tlIds = new Set<string>();
+      const lgIds = new Set<string>();
+      for (const h of handoffs) {
+        if (h.teamLeadId) tlIds.add(h.teamLeadId);
+        if (h.leadGenerationId) lgIds.add(h.leadGenerationId);
+      }
+
+      // 3. Resolve user names in parallel.
+      const resolveAll = async (ids: Set<string>): Promise<Map<string, string>> => {
+        const entries = await Promise.all(
+          Array.from(ids).map(async (id) => {
+            const u = await getUserByIdOrNull(id).catch(() => null);
+            return [id, u?.name ?? "Unknown"] as [string, string];
+          }),
+        );
+        return new Map(entries);
+      };
+
+      const [tlNames, lgNames] = await Promise.all([
+        resolveAll(tlIds),
+        resolveAll(lgIds),
+      ]);
+
+      // 4. Aggregate per-TL.
+      const summaryMap = new Map<string, TeamLeadAssignmentSummary>();
+      for (const h of handoffs) {
+        const tlId = h.teamLeadId;
+        const lgId = h.leadGenerationId;
+        if (!tlId || !lgId) continue;
+
+        const existing = summaryMap.get(tlId) ?? {
+          teamLeadId: tlId,
+          teamLeadName: tlNames.get(tlId) ?? "Unknown",
+          assignedLeads: 0,
+          assignmentShare: 0,
+          leadGenerationBreakdown: [],
+        };
+        existing.assignedLeads += 1;
+
+        const lgEntry = existing.leadGenerationBreakdown.find(
+          (e) => e.leadGenerationId === lgId,
+        );
+        if (lgEntry) {
+          lgEntry.assignedLeads += 1;
+        } else {
+          existing.leadGenerationBreakdown.push({
+            leadGenerationId: lgId,
+            leadGenerationName: lgNames.get(lgId) ?? "Unknown",
+            assignedLeads: 1,
+          });
+        }
+        summaryMap.set(tlId, existing);
+      }
+
+      // 5. Compute shares and sort.
+      const total = Array.from(summaryMap.values()).reduce(
+        (s, t) => s + t.assignedLeads,
+        0,
+      );
+      return Array.from(summaryMap.values())
+        .map((t) => ({
+          ...t,
+          assignmentShare: total > 0 ? Math.round((t.assignedLeads / total) * 100) : 0,
+          leadGenerationBreakdown: [...t.leadGenerationBreakdown].sort(
+            (a, b) =>
+              b.assignedLeads - a.assignedLeads ||
+              a.leadGenerationName.localeCompare(b.leadGenerationName),
+          ),
+        }))
+        .sort(
+          (a, b) =>
+            b.assignedLeads - a.assignedLeads ||
+            a.teamLeadName.localeCompare(b.teamLeadName),
+        );
     },
     DASHBOARD_DATA_TTL_MS,
   );

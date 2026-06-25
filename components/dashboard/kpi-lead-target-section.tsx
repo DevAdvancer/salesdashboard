@@ -268,6 +268,11 @@ function KpiMembersDialog({
                       {roleLabel(row.userRole)}
                     </span>
                   </div>
+                  {row.assignedLeadCount !== undefined && (
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      Assigned: {row.assignedLeadCount} lead{row.assignedLeadCount === 1 ? "" : "s"}
+                    </div>
+                  )}
                 </div>
                 <div className="shrink-0 text-right text-sm tabular-nums">
                   <span className={cn("font-semibold", tone === "success" ? "text-emerald-700" : "text-amber-700")}>

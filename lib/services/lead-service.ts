@@ -270,7 +270,11 @@ export async function createLead(
     }
 
     // Serialize lead data to JSON
-    const dataJson = JSON.stringify(input.data);
+    const dataWithCreator = {
+      ...input.data,
+      creatorId: finalOwnerId,
+    };
+    const dataJson = JSON.stringify(dataWithCreator);
 
     const ownerDoc = await getUserById(finalOwnerId);
     const ownerIsMonitor = ownerDoc.role === 'monitor';

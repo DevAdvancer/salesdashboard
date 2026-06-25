@@ -588,6 +588,15 @@ export async function backoutLeadAction(
   permissions.push(...hierarchyPerms);
 
   const nowIso = new Date().toISOString();
+  let updatedDataJson = currentLead.data;
+  try {
+    const leadData = JSON.parse(currentLead.data);
+    if (!leadData.creatorId) {
+      leadData.creatorId = currentLead.ownerId;
+      updatedDataJson = JSON.stringify(leadData);
+    }
+  } catch {}
+
   const updated = await databases.updateDocument(
     DATABASE_ID,
     COLLECTIONS.LEADS,
@@ -598,6 +607,7 @@ export async function backoutLeadAction(
       isClosed: true,
       closedAt: nowIso,
       status: "Backed Out",
+      data: updatedDataJson,
     },
     [...new Set(permissions)],
   );
@@ -678,6 +688,15 @@ export async function notInterestedLeadAction(
   // for the lead to land in the unassigned queue so other agents can
   // pick it up and try a fresh outreach. Closing it would hide it from
   // everyone's active dashboard and defeat that re-engagement flow.
+  let updatedDataJson = currentLead.data;
+  try {
+    const leadData = JSON.parse(currentLead.data);
+    if (!leadData.creatorId) {
+      leadData.creatorId = currentLead.ownerId;
+      updatedDataJson = JSON.stringify(leadData);
+    }
+  } catch {}
+
   const updated = await databases.updateDocument(
     DATABASE_ID,
     COLLECTIONS.LEADS,
@@ -688,6 +707,7 @@ export async function notInterestedLeadAction(
       isClosed: false,
       closedAt: null,
       status: "Not Interested",
+      data: updatedDataJson,
     },
     [...new Set(permissions)],
   );

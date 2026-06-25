@@ -227,4 +227,38 @@ describe("buildLeadTargetProgress", () => {
     });
     expect(rows[0].leadCount).toBe(3);
   });
+
+  it("counts leads based on creatorId inside JSON data if ownerId differs", () => {
+    const users = [makeUser("u1", "Alice")];
+    const leads = [
+      {
+        ...makeLead("l1", "unassigned-user"),
+        data: JSON.stringify({ creatorId: "u1" }),
+      },
+    ];
+    const rows = buildLeadTargetProgress({
+      leads,
+      users,
+      range: { from: "2026-06-22", to: "2026-06-22" },
+    });
+    expect(rows[0].leadCount).toBe(1);
+  });
+
+  it("calculates assignedLeadCount correctly", () => {
+    const users = [makeUser("u1", "Alice"), makeUser("u2", "Bob")];
+    const leads = [
+      { ...makeLead("l1", "u1"), assignedToId: "u1" },
+      { ...makeLead("l2", "u1"), assignedToId: "u2" },
+      { ...makeLead("l3", "u2"), assignedToId: "u2" },
+    ];
+    const rows = buildLeadTargetProgress({
+      leads,
+      users,
+      range: { from: "2026-06-22", to: "2026-06-22" },
+    });
+    const alice = rows.find((r) => r.userId === "u1");
+    const bob = rows.find((r) => r.userId === "u2");
+    expect(alice?.assignedLeadCount).toBe(1);
+    expect(bob?.assignedLeadCount).toBe(2);
+  });
 });

@@ -10,16 +10,24 @@ export interface KpiRow {
   userName: string;
   userRole: string;
   leadCount: number;
+  assignedLeadCount?: number;
   target: number;
   mode: "daily" | "monthly";
 }
 
 /**
  * Counts how many leads a user created within a date range.
- * A lead "belongs" to its `ownerId`.
+ * A lead "belongs" to its `ownerId` or its original `creatorId` inside JSON data.
  */
 function countLeadsForUser(leads: Lead[], userId: string): number {
-  return leads.filter((lead) => lead.ownerId === userId).length;
+  return leads.filter((lead) => {
+    if (lead.ownerId === userId) return true;
+    try {
+      const data = JSON.parse(lead.data);
+      if (data && data.creatorId === userId) return true;
+    } catch {}
+    return false;
+  }).length;
 }
 
 /**
@@ -120,6 +128,7 @@ export function buildLeadTargetProgress(params: {
       userName: user.name,
       userRole: user.role,
       leadCount: countLeadsForUser(leads, user.$id),
+      assignedLeadCount: leads.filter((lead) => lead.assignedToId === user.$id).length,
       target,
       mode,
     }))
