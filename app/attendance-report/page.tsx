@@ -46,22 +46,29 @@ function StatusBadge({ present, flagged }: { present: boolean; flagged?: boolean
   );
 }
 
+function getTodayKey() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 function AttendanceReportContent() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<ReportResult | null>(null);
-  const [selectedDateRange, setSelectedDateRange] = useState<{ from?: string; to?: string }>({});
+  const [selectedDateRange, setSelectedDateRange] = useState<{ from?: string; to?: string }>(() => {
+    const today = getTodayKey();
+    return { from: today, to: today };
+  });
   const [teamLeadOptions, setTeamLeadOptions] = useState<Array<{ userId: string; userName: string }>>([]);
   const [selectedTeamLeadId, setSelectedTeamLeadId] = useState<string>(""); // empty = all
 
   const todayKey = useMemo(() => {
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/New_York",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date());
+    return getTodayKey();
   }, []);
 
   const isAdminLike =

@@ -13,6 +13,7 @@ import { getMockAttempts } from "@/app/actions/mock";
 import { listLeads } from "@/lib/services/lead-action-service";
 import { loadLeadTargetProgressAction } from "@/app/actions/lead";
 import { listBranches } from "@/lib/services/branch-service";
+import { loadLinkedinConnectionKpiAction, type LinkedinConnectionKpiRow } from "@/app/actions/linkedin";
 import {
   getAgentsByTeamLead,
   getAssignableUsers,
@@ -95,6 +96,11 @@ function mapAgentsWithBranches(
 
 export function clearDashboardDataCache(): void {
   clearClientReadCache(DASHBOARD_DATA_SCOPE);
+  clearClientReadCache(DASHBOARD_TOP_METRICS_SCOPE);
+  clearClientReadCache(DASHBOARD_LEAD_TARGET_SCOPE);
+  clearClientReadCache(DASHBOARD_REFERRAL_SCOPE);
+  clearClientReadCache(DASHBOARD_LG_HANDOFFS_SCOPE);
+  clearClientReadCache("dashboard:linkedinConnectionKpi");
 }
 
 export async function loadDashboardData(
@@ -400,6 +406,42 @@ export async function loadLeadTargetProgress(
     ],
     async () => {
       return loadLeadTargetProgressAction({
+        userId: input.userId,
+        role: input.role,
+        teamLeadId: input.teamLeadId,
+        branchIds: input.branchIds,
+        dateRange: input.dateRange,
+      });
+    },
+    DASHBOARD_DATA_TTL_MS,
+  );
+}
+
+export interface LinkedinConnectionKpiInput {
+  userId: string;
+  role: User["role"];
+  teamLeadId?: string;
+  branchIds?: string[];
+  dateRange: DateRange;
+}
+
+export async function loadLinkedinConnectionKpiProgress(
+  input: LinkedinConnectionKpiInput,
+): Promise<LinkedinConnectionKpiRow[]> {
+  const branchIds = [...(input.branchIds ?? [])].sort();
+
+  return cacheClientRead(
+    "dashboard:linkedinConnectionKpi",
+    [
+      input.userId,
+      input.role,
+      input.teamLeadId ?? null,
+      branchIds,
+      input.dateRange.from ?? "",
+      input.dateRange.to ?? "",
+    ],
+    async () => {
+      return loadLinkedinConnectionKpiAction({
         userId: input.userId,
         role: input.role,
         teamLeadId: input.teamLeadId,

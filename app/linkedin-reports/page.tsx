@@ -73,10 +73,9 @@ function LinkedinReportsContent() {
     user?.role === "operations";
   const [teamLeads, setTeamLeads] = useState<User[]>([]);
   const [teamLeadId, setTeamLeadId] = useState<string>("all");
-  const initial = useMemo(() => sevenDayRange(), []);
-  const [range, setRange] = useState<{ from?: string; to?: string }>({
-    from: dateInputValueFromDate(initial.start),
-    to: dateInputValueFromDate(initial.end),
+  const [range, setRange] = useState<{ from?: string; to?: string }>(() => {
+    const today = dateInputValueFromDate(new Date());
+    return { from: today, to: today };
   });
   const [agents, setAgents] = useState<User[]>([]);
   const [accounts, setAccounts] = useState<LinkedinAccount[]>([]);

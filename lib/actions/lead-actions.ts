@@ -6,6 +6,7 @@ import { BUCKETS, COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { Permission, Role, ID, Query } from 'node-appwrite';
 import { Lead, LinkedinRequest, User } from '@/lib/types';
 import { assertAuthenticatedUserId } from '@/lib/server/current-user';
+import { recordLgHandoffAction } from '@/app/actions/lg-handoffs';
 
 type AdminDatabases = Awaited<ReturnType<typeof createAdminClient>>['databases'];
 
@@ -448,6 +449,19 @@ export async function assignLeadAction(
             },
             permissions
         );
+
+        if (actorDoc.role === 'lead_generation' && agentDoc.role === 'team_lead') {
+            try {
+                await recordLgHandoffAction({
+                    leadId: leadId,
+                    teamLeadId: agentId,
+                    leadGenerationId: actorId,
+                    branchId: currentLead.branchId ?? null,
+                });
+            } catch (handoffError) {
+                console.error('Failed to record LG handoff on assignment:', handoffError);
+            }
+        }
 
         await syncResumePermissionsForAssignment(currentLead, agentId, databases, storage);
 

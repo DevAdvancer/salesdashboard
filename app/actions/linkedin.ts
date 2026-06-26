@@ -19,6 +19,14 @@ import {
   LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS,
   LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS,
 } from "@/lib/utils/linkedin-withdrawal-reminders";
+import { workingDaysInRange } from "@/lib/utils/dashboard-kpi";
+import { listAllDocuments } from "@/lib/server/appwrite-pagination";
+import { expandIsoDateToEnd, expandIsoDateToStart } from "@/lib/utils/iso-date-range";
+import {
+  getAgentsByTeamLead,
+  getAssignableUsers,
+  getUserByIdOrNull,
+} from "@/lib/services/user-service";
 
 function normalizeCompany(value: string) {
   return value.trim();
@@ -1145,7 +1153,9 @@ export async function listTeamLeadsForLinkedinAction(input: {
     Query.orderAsc("name"),
   ]);
 
-  return response.documents as unknown as User[];
+  return (response.documents as unknown as User[]).filter(
+    (u) => (u.department ?? "sales") === "sales",
+  );
 }
 
 export async function listAllUsersForLinkedinAction(input: {
@@ -1163,7 +1173,9 @@ export async function listAllUsersForLinkedinAction(input: {
     Query.orderAsc("name"),
   ]);
 
-  return response.documents as unknown as User[];
+  return (response.documents as unknown as User[]).filter(
+    (u) => (u.department ?? "sales") === "sales",
+  );
 }
 
 export async function listAgentsForTeamLeadLinkedinAction(input: {
@@ -1196,7 +1208,9 @@ export async function listAgentsForTeamLeadLinkedinAction(input: {
     Query.orderAsc("name"),
   ]);
 
-  return response.documents as unknown as User[];
+  return (response.documents as unknown as User[]).filter(
+    (u) => (u.department ?? "sales") === "sales",
+  );
 }
 
 export async function upsertLinkedinAccountAction(input: {
@@ -1402,6 +1416,27 @@ export async function toggleLinkedinAccountStatusAction(input: {
   return updated as unknown as LinkedinAccount;
 }
 
+async function getSalesUserIds(
+  databases: Awaited<ReturnType<typeof createAdminClient>>["databases"],
+  userIds: string[],
+) {
+  const salesUserIds = new Set<string>();
+  const chunkSize = 100;
+  for (let i = 0; i < userIds.length; i += chunkSize) {
+    const chunk = userIds.slice(i, i + chunkSize);
+    const usersResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
+      Query.equal("$id", chunk),
+      Query.limit(2000),
+    ]);
+    for (const userDoc of usersResponse.documents as unknown as User[]) {
+      if ((userDoc.department ?? "sales") === "sales") {
+        salesUserIds.add(userDoc.$id);
+      }
+    }
+  }
+  return salesUserIds;
+}
+
 export async function listLinkedinAccountsForManagementAction(input: {
   currentUserId: string;
   teamLeadId?: string | null;
@@ -1438,15 +1473,21 @@ export async function listLinkedinAccountsForManagementAction(input: {
     new Set(accounts.map((account) => account.assignedUserId).filter(Boolean)),
   );
 
-  if (assignedUserIds.length === 0 || user.role !== "team_lead") {
-    return accounts;
+  if (assignedUserIds.length === 0) {
+    return [];
   }
 
-  const teamLeadAssignedUserIds = await getTeamLeadAssignedUserIds(databases, assignedUserIds);
+  const salesUserIds = await getSalesUserIds(databases, assignedUserIds);
+  let filtered = accounts.filter((account) => salesUserIds.has(account.assignedUserId));
 
-  return accounts.filter(
-    (account) => !teamLeadAssignedUserIds.has(account.assignedUserId),
-  );
+  if (user.role === "team_lead") {
+    const teamLeadAssignedUserIds = await getTeamLeadAssignedUserIds(databases, assignedUserIds);
+    filtered = filtered.filter(
+      (account) => !teamLeadAssignedUserIds.has(account.assignedUserId),
+    );
+  }
+
+  return filtered;
 }
 
 export async function getLinkedinWeeklyReportAction(input: {
@@ -1463,8 +1504,8 @@ export async function getLinkedinWeeklyReportAction(input: {
   const effectiveTeamLeadId = resolveLinkedinReportTeamLeadId(user, input.teamLeadId);
   assertLinkedinReportTeamScope(user, effectiveTeamLeadId);
 
-  const startDate = assertDateIso(input.startDate);
-  const endDate = assertDateIso(input.endDate);
+  const startDate = expandIsoDateToStart(input.startDate);
+  const endDate = expandIsoDateToEnd(input.endDate);
 
   const { databases } = await createAdminClient();
   const pageSize = 100;
@@ -1499,10 +1540,16 @@ export async function getLinkedinWeeklyReportAction(input: {
   const uniqueRequests = Array.from(
     new Map(all.map((r) => [r.$id, r] as const)).values(),
   );
+  const agentIds = Array.from(
+    new Set(uniqueRequests.map((r) => r.agentId).filter(Boolean)),
+  );
+  const salesAgentIds = await getSalesUserIds(databases, agentIds);
+  const salesRequests = uniqueRequests.filter((r) => salesAgentIds.has(r.agentId));
+
   const visibleRequests =
     user.role === "team_lead"
-      ? uniqueRequests.filter((request) => request.agentId !== user.$id)
-      : uniqueRequests;
+      ? salesRequests.filter((request) => request.agentId !== user.$id)
+      : salesRequests;
 
   const accountIds = Array.from(
     new Set(visibleRequests.map((r) => r.accountId).filter(Boolean)),
@@ -1674,7 +1721,214 @@ export async function listLinkedinRequestsForAdminAction(input: {
 
   const docs = response.documents as unknown as LinkedinRequest[];
   const uniqueDocs = Array.from(new Map(docs.map((r) => [r.$id, r] as const)).values());
+  const agentIds = Array.from(
+    new Set(uniqueDocs.map((r) => r.agentId).filter(Boolean)),
+  );
+  const salesAgentIds = await getSalesUserIds(databases, agentIds);
+  const salesDocs = uniqueDocs.filter((r) => salesAgentIds.has(r.agentId));
+
   return user.role === "team_lead"
-    ? uniqueDocs.filter((request) => request.agentId !== user.$id)
-    : uniqueDocs;
+    ? salesDocs.filter((request) => request.agentId !== user.$id)
+    : salesDocs;
+}
+
+function parseIsoDateLocal(iso: string): Date {
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function daysInMonthLocal(isoDate: string): number {
+  const date = parseIsoDateLocal(isoDate);
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+}
+
+async function resolveScopeUsersForLinkedin(input: {
+  userId: string;
+  role: string;
+  teamLeadId?: string;
+  branchIds?: string[];
+}): Promise<User[]> {
+  const { userId, role, teamLeadId, branchIds } = input;
+
+  const isKpiEligible = (user: User | null | undefined): user is User =>
+    Boolean(
+      user &&
+      user.isActive !== false &&
+      (user.department ?? "sales") === "sales" &&
+      (user.role === "agent" || user.role === "team_lead" || user.role === "lead_generation"),
+    );
+
+  if (role === "agent" || role === "lead_generation") {
+    const self = await getUserByIdOrNull(userId);
+    return isKpiEligible(self) ? [self] : [];
+  }
+
+  if (role === "team_lead") {
+    const self = await getUserByIdOrNull(userId);
+    const agents = await getAgentsByTeamLead(userId);
+    return [self, ...agents].filter(isKpiEligible);
+  }
+
+  // admin / developer / monitor / operations
+  if (teamLeadId && teamLeadId !== "all") {
+    const selected = await getUserByIdOrNull(teamLeadId);
+    const agents = await getAgentsByTeamLead(teamLeadId);
+    return [selected, ...agents].filter(isKpiEligible);
+  }
+
+  const all = await getAssignableUsers(role as any, branchIds ?? [], userId, "all");
+  return all.filter((candidate) => candidate.$id !== userId && isKpiEligible(candidate));
+}
+
+export interface LinkedinConnectionKpiRow {
+  accountId: string;
+  idName: string;
+  company: string;
+  userName: string;
+  userId: string;
+  sentCount: number;
+  target: number;
+  mode: "daily" | "monthly";
+}
+
+export async function loadLinkedinConnectionKpiAction(input: {
+  userId: string;
+  role: string;
+  teamLeadId?: string;
+  branchIds?: string[];
+  dateRange: { from?: string; to?: string };
+}): Promise<LinkedinConnectionKpiRow[]> {
+  await assertAuthenticatedUserId(input.userId);
+  const { databases } = await createAdminClient();
+
+  const scopeUsers = await resolveScopeUsersForLinkedin({
+    userId: input.userId,
+    role: input.role,
+    teamLeadId: input.teamLeadId,
+    branchIds: input.branchIds,
+  });
+
+  if (scopeUsers.length === 0) {
+    return [];
+  }
+
+  // Fetch active LinkedIn accounts
+  const accountsRes = await databases.listDocuments(
+    DATABASE_ID,
+    COLLECTIONS.LINKEDIN_ACCOUNTS,
+    [
+      Query.equal("isActive", true),
+      Query.limit(2000),
+    ]
+  );
+  const allAccounts = (accountsRes.documents as unknown as LinkedinAccount[]).filter(
+    (acc) => scopeUsers.some((u) => u.$id === acc.assignedUserId)
+  );
+
+  if (allAccounts.length === 0) {
+    return [];
+  }
+
+  // Fetch connection requests within the date range
+  const queries: string[] = [];
+  if (input.dateRange.from) {
+    queries.push(Query.greaterThanEqual("dateSent", expandIsoDateToStart(input.dateRange.from)));
+  }
+  if (input.dateRange.to) {
+    queries.push(Query.lessThanEqual("dateSent", expandIsoDateToEnd(input.dateRange.to)));
+  }
+  queries.push(Query.orderDesc("dateSent"));
+
+  const allRequests = await listAllDocuments<LinkedinRequest>({
+    databases,
+    databaseId: DATABASE_ID,
+    collectionId: COLLECTIONS.LINKEDIN_REQUESTS,
+    queries,
+    pageLimit: 100,
+    maxPages: 500,
+  });
+
+  const activeRequests = allRequests.filter((doc) => {
+    const isActive = doc.isActive ?? true;
+    return isActive && doc.status !== "withdrawn";
+  });
+
+  const fromIso = input.dateRange.from;
+  const toIso = input.dateRange.to ?? input.dateRange.from;
+  const singleDay = Boolean(fromIso && toIso && fromIso === toIso);
+  let daysCount: number;
+  let mode: "daily" | "monthly";
+
+  if (singleDay) {
+    daysCount = 1;
+    mode = "daily";
+  } else if (fromIso && toIso) {
+    daysCount = Math.max(1, workingDaysInRange(fromIso, toIso));
+    mode = "monthly";
+  } else {
+    const effectiveDate = toIso ?? new Date().toISOString().slice(0, 10);
+    daysCount = daysInMonthLocal(effectiveDate);
+    mode = "monthly";
+  }
+
+  // Group by userId (User)
+  const userRowsMap = new Map<string, {
+    userId: string;
+    userName: string;
+    sentCount: number;
+    target: number;
+    companies: string[];
+    idNames: string[];
+  }>();
+
+  for (const account of allAccounts) {
+    const user = scopeUsers.find((u) => u.$id === account.assignedUserId);
+    const userId = account.assignedUserId;
+    const userName = user?.name ?? "Unknown";
+    const sentCount = activeRequests.filter((req) => req.accountId === account.$id).length;
+    const target = (account.connectionLimit ?? 0) * daysCount;
+
+    const existing = userRowsMap.get(userId) ?? {
+      userId,
+      userName,
+      sentCount: 0,
+      target: 0,
+      companies: [],
+      idNames: [],
+    };
+
+    existing.sentCount += sentCount;
+    existing.target += target;
+    if (account.company) existing.companies.push(account.company);
+    if (account.idName) existing.idNames.push(account.idName);
+
+    userRowsMap.set(userId, existing);
+  }
+
+  const kpiRows = Array.from(userRowsMap.values()).map((u) => {
+    const uniqCompanies = Array.from(new Set(u.companies));
+    return {
+      accountId: u.userId, // use userId as the unique key
+      idName: u.userName,
+      company: uniqCompanies.length > 0 ? uniqCompanies.join(", ") : "LinkedIn",
+      userName: u.userName,
+      userId: u.userId,
+      sentCount: u.sentCount,
+      target: u.target,
+      mode,
+    };
+  });
+
+  // Sort: underperformers first, then by name
+  kpiRows.sort((a, b) => {
+    const aMet = a.target > 0 && a.sentCount >= a.target;
+    const bMet = b.target > 0 && b.sentCount >= b.target;
+    if (aMet !== bMet) return aMet ? 1 : -1;
+    const aGap = a.target - a.sentCount;
+    const bGap = b.target - b.sentCount;
+    if (aGap !== bGap) return bGap - aGap;
+    return a.idName.localeCompare(b.idName);
+  });
+
+  return kpiRows;
 }

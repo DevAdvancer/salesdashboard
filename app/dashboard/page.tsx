@@ -12,17 +12,20 @@ import { AttendanceSelfToggle } from "@/components/attendance-self-toggle";
 import { DashboardDateRange } from "@/components/dashboard/dashboard-date-range";
 import { TopMetricsRow } from "@/components/dashboard/top-metrics-row";
 import { KpiLeadTargetSection } from "@/components/dashboard/kpi-lead-target-section";
+import { KpiLinkedinConnectionSection } from "@/components/dashboard/kpi-linkedin-connection-section";
 import { ReferralSection } from "@/components/dashboard/referral-section";
 import { PaymentsSection } from "@/components/dashboard/payments-section";
 import { LgHandoffSection } from "@/components/dashboard/lg-handoff-section";
 import {
   loadDashboardTopMetrics,
   loadLeadTargetProgress,
+  loadLinkedinConnectionKpiProgress,
   loadDashboardPaymentInsights,
   loadDashboardReferralStats,
   loadLgHandoffSummaries,
   type TopMetrics,
 } from "@/lib/services/dashboard-data-service";
+import type { LinkedinConnectionKpiRow } from "@/app/actions/linkedin";
 import {
   isSingleDay,
   workingDaysInRange,
@@ -163,6 +166,10 @@ function MainDashboard({
   const [kpiRows, setKpiRows] = useState<KpiRow[] | null>(null);
   const [kpiLoading, setKpiLoading] = useState(true);
 
+  // LinkedIn Connection KPI rows
+  const [linkedinKpiRows, setLinkedinKpiRows] = useState<LinkedinConnectionKpiRow[] | null>(null);
+  const [linkedinKpiLoading, setLinkedinKpiLoading] = useState(true);
+
   // Referral split (always current month)
   const currentMonth = useMemo(() => new Date(), []);
   const monthStartKey = useMemo(
@@ -255,6 +262,41 @@ function MainDashboard({
         if (!cancelled) {
           setKpiRows([]);
           setKpiLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, dateRange]);
+
+  // ── Fetch LinkedIn KPI rows when range changes ─────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLinkedinKpiLoading(true);
+    });
+
+    (async () => {
+      try {
+        const rows = await loadLinkedinConnectionKpiProgress({
+          userId: user.$id,
+          role: user.role,
+          branchIds: user.branchIds,
+          dateRange,
+        });
+        if (!cancelled) {
+          setLinkedinKpiRows(rows);
+          setLinkedinKpiLoading(false);
+        }
+      } catch (error) {
+        console.error("Error loading LinkedIn Connection KPI rows:", error);
+        if (!cancelled) {
+          setLinkedinKpiRows([]);
+          setLinkedinKpiLoading(false);
         }
       }
     })();
@@ -433,6 +475,16 @@ function MainDashboard({
         scopeLabel={scopeLabel}
         rangeLabel={rangeLabel(dateRange)}
       />
+
+      {/* LinkedIn daily/monthly Connection limit KPI */}
+      {(isAdminLike || isTeamLead) && (
+        <KpiLinkedinConnectionSection
+          rows={linkedinKpiRows}
+          isLoading={linkedinKpiLoading}
+          mode={kpiMode}
+          rangeLabel={rangeLabel(dateRange)}
+        />
+      )}
 
       {/* Referral split — admin-only, current month */}
       {isAdminLike && (

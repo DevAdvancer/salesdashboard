@@ -11,6 +11,7 @@ export interface KpiRow {
   userRole: string;
   leadCount: number;
   assignedLeadCount?: number;
+  notInterestedCount?: number;
   target: number;
   mode: "daily" | "monthly";
 }

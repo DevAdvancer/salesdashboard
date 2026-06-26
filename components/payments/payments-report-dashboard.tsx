@@ -58,7 +58,14 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
   const router = useRouter();
   const [rows, setRows] = useState<PaymentsReportRow[]>([]);
   const [filter, setFilter] = useState<StatusFilter>("all");
-  const [range, setRange] = useState<{ from?: string; to?: string }>({});
+  const [range, setRange] = useState<{ from?: string; to?: string }>(() => {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, "0");
+    const dd = String(today.getDate()).padStart(2, "0");
+    const todayStr = `${yyyy}-${mm}-${dd}`;
+    return { from: todayStr, to: todayStr };
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

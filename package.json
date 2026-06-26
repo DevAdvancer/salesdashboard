@@ -22,7 +22,9 @@
     "migrate:not-interested": "tsx scripts/migrate-not-interested-leads.ts",
     "migrate:not-interested:apply": "tsx scripts/migrate-not-interested-leads.ts -- --apply",
     "backfill:not-interested-events:dry": "tsx scripts/backfill-not-interested-events.ts",
-    "backfill:not-interested-events:apply": "tsx scripts/backfill-not-interested-events.ts -- --apply"
+    "backfill:not-interested-events:apply": "tsx scripts/backfill-not-interested-events.ts -- --apply",
+    "backfill:lg-handoffs:dry": "tsx scripts/backfill-lg-handoffs.ts",
+    "backfill:lg-handoffs:apply": "tsx scripts/backfill-lg-handoffs.ts -- --apply"
   },
   "dependencies": {
     "@azure/msal-browser": "^4.29.0",

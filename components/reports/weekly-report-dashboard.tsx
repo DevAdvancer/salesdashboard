@@ -18,14 +18,8 @@ function toDateValue(date: Date) {
 }
 
 function getDefaultRange(): { from: string; to: string } {
-  // Default to the last 30 days instead of "this week" so the report
-  // always shows recent activity. The current-week default frequently
-  // missed leads for users who created/closed them in the prior week
-  // (e.g. Friday after the Monday-start week boundary).
   const today = new Date();
-  const start = new Date(today);
-  start.setDate(today.getDate() - 29);
-  return { from: toDateValue(start), to: toDateValue(today) };
+  return { from: toDateValue(today), to: toDateValue(today) };
 }
 
 const currency = new Intl.NumberFormat("en-US", {

@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Check, Minus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { KpiRow } from "@/lib/utils/dashboard-kpi";
+import type { LinkedinConnectionKpiRow } from "@/app/actions/linkedin";
 
 const KpiPieChart = dynamic(
   () =>
@@ -29,35 +29,25 @@ const KpiPieChart = dynamic(
   { loading: () => <Skeleton className="h-[260px] w-full" />, ssr: false }
 );
 
-interface KpiLeadTargetSectionProps {
-  rows: KpiRow[] | null;
+interface KpiLinkedinConnectionSectionProps {
+  rows: LinkedinConnectionKpiRow[] | null;
   isLoading: boolean;
   mode: "daily" | "monthly";
-  target: number;
-  scopeLabel: string;
   rangeLabel: string;
 }
 
-function roleLabel(role: string): string {
-  if (role === "team_lead") return "Team lead";
-  if (role === "lead_generation") return "Lead gen";
-  return role.charAt(0).toUpperCase() + role.slice(1);
-}
-
-export function KpiLeadTargetSection({
+export function KpiLinkedinConnectionSection({
   rows,
   isLoading,
   mode,
-  target,
-  scopeLabel,
   rangeLabel,
-}: KpiLeadTargetSectionProps) {
+}: KpiLinkedinConnectionSectionProps) {
   const [open, setOpen] = useState<"complete" | "incomplete" | null>(null);
 
   const { completed, pending, completedRows, pendingRows, totalActive } = useMemo(() => {
     const all = rows ?? [];
-    const completedRows = all.filter((r) => r.leadCount >= r.target);
-    const pendingRows = all.filter((r) => r.leadCount < r.target);
+    const completedRows = all.filter((r) => r.target > 0 && r.sentCount >= r.target);
+    const pendingRows = all.filter((r) => r.target > 0 && r.sentCount < r.target);
     return {
       completed: completedRows.length,
       pending: pendingRows.length,
@@ -70,21 +60,20 @@ export function KpiLeadTargetSection({
   const completedPct = totalActive > 0 ? Math.round((completed / totalActive) * 100) : 0;
 
   return (
-    <Card id="tour-kpi-target">
+    <Card id="tour-linkedin-kpi-target">
       <CardHeader>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
               {mode === "daily"
-                ? "Lead target — every member should add at least 1 lead today"
-                : "Lead target — every member should add at least 1 lead per working day"}
+                ? "LinkedIn Daily Connection target — members that hit their daily limit"
+                : "LinkedIn Connection target — members that hit their connection limit"}
               <Badge variant="default" className="capitalize">
                 {mode}
               </Badge>
             </CardTitle>
             <CardDescription>
-              {scopeLabel} · {rangeLabel} · target = {target} lead{target === 1 ? "" : "s"}
-              {mode === "monthly" ? " (Mon–Fri)" : ""}
+              {rangeLabel} · target = connection limit * working days
             </CardDescription>
           </div>
           <div className="text-sm text-muted-foreground">
@@ -104,7 +93,7 @@ export function KpiLeadTargetSection({
           </div>
         ) : totalActive === 0 ? (
           <div className="flex h-24 items-center justify-center rounded-md border border-dashed border-[var(--hairline)] text-sm text-[var(--mute)]">
-            No active members in scope for this period.
+            No active members with LinkedIn accounts in scope for this period.
           </div>
         ) : (
           <div className="grid gap-6 md:grid-cols-2">
@@ -115,13 +104,13 @@ export function KpiLeadTargetSection({
                 onSliceClick={(slice) => setOpen(slice)}
               />
               <p className="mt-2 text-center text-xs text-muted-foreground">
-                Click a slice to see who fell short.
+                Click a slice to see details.
               </p>
             </div>
             <div className="space-y-2">
               <SummaryRow
                 tone="success"
-                label="Completed KPI"
+                label="Completed Target"
                 value={completed}
                 total={totalActive}
                 pct={completedPct}
@@ -129,36 +118,36 @@ export function KpiLeadTargetSection({
               />
               <SummaryRow
                 tone="warning"
-                label="Missed KPI"
+                label="Missed Target"
                 value={pending}
                 total={totalActive}
                 pct={100 - completedPct}
                 onClick={() => setOpen("incomplete")}
               />
               <p className="pt-2 text-xs text-muted-foreground">
-                Showing active agents and team leads in the user&apos;s scope (department / branch / reports).
+                Showing active members assigned to LinkedIn accounts in the user&apos;s scope.
               </p>
             </div>
           </div>
         )}
       </CardContent>
 
-      <KpiMembersDialog
+      <KpiAccountsDialog
         open={open === "complete"}
         onOpenChange={(o) => setOpen(o ? "complete" : null)}
-        title="Members who completed their KPI"
-        description={`${completedRows.length} of ${totalActive} active member${totalActive === 1 ? "" : "s"} met the target of ${target} lead${target === 1 ? "" : "s"}.`}
+        title="LinkedIn Members that completed connection limits"
+        description={`${completedRows.length} of ${totalActive} active member${totalActive === 1 ? "" : "s"} met the target connection limit.`}
         rows={completedRows}
-        emptyMessage="No one has met the target yet."
+        emptyMessage="No members have completed connection limits yet."
         tone="success"
       />
-      <KpiMembersDialog
+      <KpiAccountsDialog
         open={open === "incomplete"}
         onOpenChange={(o) => setOpen(o ? "incomplete" : null)}
-        title="Members who missed their KPI"
-        description={`${pendingRows.length} of ${totalActive} active member${totalActive === 1 ? "" : "s"} are below the target of ${target} lead${target === 1 ? "" : "s"}.`}
+        title="LinkedIn Members that missed connection limits"
+        description={`${pendingRows.length} of ${totalActive} active member${totalActive === 1 ? "" : "s"} missed the target connection limit.`}
         rows={pendingRows}
-        emptyMessage="Everyone in scope has met their target."
+        emptyMessage="All members in scope met their targets."
         tone="warning"
       />
     </Card>
@@ -212,7 +201,7 @@ function SummaryRow({
   );
 }
 
-function KpiMembersDialog({
+function KpiAccountsDialog({
   open,
   onOpenChange,
   title,
@@ -225,7 +214,7 @@ function KpiMembersDialog({
   onOpenChange: (open: boolean) => void;
   title: string;
   description: string;
-  rows: KpiRow[];
+  rows: LinkedinConnectionKpiRow[];
   emptyMessage: string;
   tone: "success" | "warning";
 }) {
@@ -244,7 +233,7 @@ function KpiMembersDialog({
           <ul className="max-h-[60vh] space-y-1 overflow-y-auto">
             {rows.map((row) => (
               <li
-                key={row.userId}
+                key={row.accountId}
                 className="flex items-center gap-3 rounded-md border border-[var(--hairline-soft)] px-3 py-2"
               >
                 <span
@@ -264,24 +253,14 @@ function KpiMembersDialog({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="truncate text-sm font-medium">{row.userName}</span>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {roleLabel(row.userRole)}
-                    </span>
                   </div>
-                  {row.assignedLeadCount !== undefined && (
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      Assigned: {row.assignedLeadCount} lead{row.assignedLeadCount === 1 ? "" : "s"}
-                    </div>
-                  )}
-                  {row.notInterestedCount !== undefined && row.notInterestedCount > 0 && (
-                    <div className="text-xs text-muted-foreground mt-0.5 text-amber-600 dark:text-amber-500">
-                      Not Interested: {row.notInterestedCount} lead{row.notInterestedCount === 1 ? "" : "s"}
-                    </div>
-                  )}
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    Accounts: {row.company}
+                  </div>
                 </div>
                 <div className="shrink-0 text-right text-sm tabular-nums">
                   <span className={cn("font-semibold", tone === "success" ? "text-emerald-700" : "text-amber-700")}>
-                    {row.leadCount}
+                    {row.sentCount}
                   </span>
                   <span className="text-muted-foreground"> / {row.target}</span>
                 </div>

@@ -13,7 +13,7 @@ import { notifyDuplicateLeadUpdateAttemptAction } from "@/app/actions/lead-dupli
 import { normalizeLinkedinProfileUrl } from "@/lib/utils/linkedin";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import { recordLgHandoffAction } from "@/app/actions/lg-handoffs";
-import { markPriorNotInterestedRowsReopened } from "@/lib/actions/lead-actions";
+import { markPriorNotInterestedRowsReopened, notInterestedLeadAction } from "@/lib/actions/lead-actions";
 import {
   isAllowedLeadStatusTransition,
   normalizeLeadStatus,
@@ -435,6 +435,7 @@ function appendTeamLeadLeadVisibilityQuery(
 
 type UserDocument = {
   $id: string;
+  name?: string;
   email?: string;
   role: UserRole;
   branchIds?: string[];
@@ -899,6 +900,15 @@ export async function updateLeadAction(
             );
         }
 
+        const targetStatus = (updatedData as any).status || currentLead.status;
+        if (targetStatus === "Not Interested" && currentLead.status !== "Not Interested") {
+            const result = await notInterestedLeadAction(leadId, actorId, actorName || actorDoc.name || actorDoc.$id);
+            return result.lead as unknown as Lead;
+        }
+
+        const oldBranchId = currentLead.branchId;
+        const newBranchId = (updatedData as any).branchId ?? oldBranchId ?? null;
+
         const lead = await databases.updateDocument(
             DATABASE_ID,
             LEADS_COLLECTION_ID,
@@ -906,8 +916,32 @@ export async function updateLeadAction(
             {
                 data: JSON.stringify(updatedData),
                 status: (updatedData.status as string) || currentLead.status,
+                branchId: newBranchId,
             }
         );
+
+        if (newBranchId !== oldBranchId) {
+            try {
+                // If a handoff row exists for this lead, update its branchId too
+                const handoffDoc = await databases.getDocument(
+                    DATABASE_ID,
+                    COLLECTIONS.LG_HANDOFFS,
+                    leadId
+                );
+                if (handoffDoc) {
+                    await databases.updateDocument(
+                        DATABASE_ID,
+                        COLLECTIONS.LG_HANDOFFS,
+                        leadId,
+                        {
+                            branchId: newBranchId,
+                        }
+                    );
+                }
+            } catch (err) {
+                // Ignore if no handoff row exists
+            }
+        }
 
         if (actorName) {
             try {
@@ -1683,6 +1717,23 @@ export async function loadLeadTargetProgressAction(input: {
     maxPages: 500,
   });
 
+  // Fetch not_interested_leads events in range
+  const niQueries: string[] = [];
+  if (input.dateRange.from) {
+    niQueries.push(Query.greaterThanEqual("markedAt", expandIsoDateToStart(input.dateRange.from)));
+  }
+  if (input.dateRange.to) {
+    niQueries.push(Query.lessThanEqual("markedAt", expandIsoDateToEnd(input.dateRange.to)));
+  }
+  const niEvents = await listAllDocuments<any>({
+    databases,
+    databaseId: DATABASE_ID,
+    collectionId: COLLECTIONS.NOT_INTERESTED_LEADS,
+    queries: niQueries,
+    pageLimit: 100,
+    maxPages: 500,
+  }).catch(() => []);
+
   const fromIso = input.dateRange.from;
   const toIso = input.dateRange.to ?? input.dateRange.from;
   const singleDay = Boolean(fromIso && toIso && fromIso === toIso);
@@ -1717,12 +1768,19 @@ export async function loadLeadTargetProgressAction(input: {
     // Count leads assigned to this user:
     const assignedCount = allLeads.filter((lead) => lead.assignedToId === user.$id).length;
 
+    // Count active Not Interested events attributed to this user:
+    const niCount = niEvents.filter((event) => {
+      const attributed = event.previousAssignedToId || event.previousOwnerId;
+      return attributed === user.$id && (!event.status || event.status === "active");
+    }).length;
+
     return {
       userId: user.$id,
       userName: user.name,
       userRole: user.role,
       leadCount: createdCount,
       assignedLeadCount: assignedCount,
+      notInterestedCount: niCount,
       target,
       mode,
     };
