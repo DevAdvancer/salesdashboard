@@ -72,7 +72,7 @@ describe("Linkedin account management authorization", () => {
     await upsertLinkedinAccountAction({
       currentUserId: "tl-1",
       assignedUserId: "agent-1",
-      company: "SilverSpace Inc.",
+      company: "Silverspace INC",
       idName: "Main",
       accountType: "main",
       licenseType: "Normal",
@@ -106,7 +106,7 @@ describe("Linkedin account management authorization", () => {
       upsertLinkedinAccountAction({
         currentUserId: "operations-1",
         assignedUserId: "agent-1",
-        company: "SilverSpace Inc.",
+        company: "Silverspace INC",
         idName: "Main",
         accountType: "main",
         licenseType: "Normal",
@@ -136,7 +136,7 @@ describe("Linkedin account management authorization", () => {
     await upsertLinkedinAccountAction({
       currentUserId: "admin-1",
       assignedUserId: "tl-1",
-      company: "SilverSpace Inc.",
+      company: "Silverspace INC",
       idName: "TL Main",
       accountType: "main",
       licenseType: "Normal",

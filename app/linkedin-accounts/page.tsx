@@ -58,7 +58,7 @@ function LinkedinAccountsContent() {
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const companyOptions = useMemo(
-    () => ["SilverSpace Inc.", "Vizva Inc.", "Flawless-ED"],
+    () => ["Silverspace INC", "Vizva INC", "Flawless-ED"],
     [],
   );
   const licenseTypeOptions = useMemo(
