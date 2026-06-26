@@ -819,7 +819,7 @@ export async function markPriorNotInterestedRowsReopened(
       ),
     );
   } catch (err) {
-    console.error(`Failed to list active not_interested rows for lead ${leadId}:`, err);
+    console.error("Failed to list active not_interested rows for lead", leadId, err);
   }
 }
 

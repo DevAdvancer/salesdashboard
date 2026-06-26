@@ -10,11 +10,23 @@ bun run build            # Production build
 bun run lint             # ESLint check
 bun run test             # Jest tests
 bun run test:watch       # Watch mode
-bun run test:coverage   # With coverage report
-bun run setup:appwrite  # Initialize Appwrite collections + backfill user.department (run once)
-bun run setup:appwrite:dry  # Dry-run — report changes without writing
-bun run sync:appwrite      # Alias for setup:appwrite
-# docker-compose up --build  # Docker build, runs on port 5000
+bun run test:coverage    # With coverage report
+
+# Appwrite schema
+bun run setup:appwrite         # Initialize collections + backfill user.department (run once)
+bun run setup:appwrite:dry     # Dry-run — report changes without writing
+bun run setup:appwrite:targets # Initialize monthly targets
+bun run promote-admin          # Promote a user to admin role
+
+# Data migrations (always dry-run first)
+bun run migrate:uk:dry                       # UK database migration dry-run
+bun run migrate:uk                           # Apply UK database migration
+bun run migrate:not-interested               # Migrate not-interested leads (dry-run)
+bun run migrate:not-interested:apply         # Apply migration
+bun run backfill:not-interested-events:dry   # Dry-run not-interested event backfill
+bun run backfill:not-interested-events:apply # Apply backfill
+bun run backfill:lg-handoffs:dry             # Dry-run LG handoffs backfill
+bun run backfill:lg-handoffs:apply           # Apply backfill
 ```
 
 ## Architecture Overview
@@ -30,8 +42,6 @@ The two auth systems are independent. A user can be logged into the CRM without 
 
 ### Provider Chain
 
-The root layout wraps every page through this provider sequence:
-
 ```
 AzureMsalProvider → ErrorBoundary → AuthProvider → AccessControlProvider → AppLayout → Toaster
 ```
@@ -41,7 +51,7 @@ See [app/layout.tsx](app/layout.tsx) for the exact implementation.
 ### Data Storage Strategy
 
 - **Leads**: Business fields stored in JSON `data` string field, not individual columns. Metadata fields (`ownerId`, `assignedToId`, `branchId`, `status`) are stable columns.
-- **Users**: Stored in Appwrite auth + mirrored in `users` collection. Document ID aligns with Appwrite account ID.
+- **Users**: Stored in Appwrite auth + mirrored in `users` collection. Document ID aligns with Appwrite account ID. Users have a `department` field (`'sales'` | `'resume'`); defaults to `'sales'` for legacy records. `branchIds` (array) is current — `branchId` is deprecated.
 - **Dynamic config**: `form_config` and `access_config` collections drive runtime behavior.
 
 ### Access Control Enforcement
@@ -71,6 +81,8 @@ Three patterns coexist for backend operations:
 
 **API vs Client**: Server actions use `node-appwrite` (admin client). Client services use browser Appwrite SDK.
 
+**Data fetching**: `@tanstack/react-query` is the standard for server-state. `@tanstack/react-table` handles tabular data. Charts use `recharts`. Forms use `react-hook-form` + `zod`.
+
 ## Key Directories
 
 | Directory | Purpose |
@@ -81,10 +93,10 @@ Three patterns coexist for backend operations:
 | `lib/services/` | Client-side business logic (browser SDK) |
 | `lib/server/` | Server-only helpers (node-appwrite, email) |
 | `lib/contexts/` | React contexts (Auth, AccessControl) |
-| `lib/constants/` | Collection IDs, access rules |
-| `lib/types/` | TypeScript interfaces |
+| `lib/constants/` | Collection IDs, access rules, component-access map |
+| `lib/types/` | TypeScript interfaces (`index.ts`) |
 | `components/` | Shared React components |
-| `scripts/` | One-off setup scripts |
+| `scripts/` | One-off setup/migration scripts |
 
 ## Collection IDs
 
@@ -102,6 +114,7 @@ Automated jobs run via API routes under `app/api/cron/`:
 
 - `linkedin-withdrawal-reminders/` — Reminds agents to withdraw stale LinkedIn requests
 - `payment-reminders/` — Follows up on pending client payments
+- `partial-paid-reminders/` — Follows up on partially paid client payments
 
 ## User Roles
 
@@ -112,6 +125,8 @@ Automated jobs run via API routes under `app/api/cron/`:
 | `team_lead` | Manage agents, see team leads, attendance |
 | `agent` | Own leads only, LinkedIn outreach |
 | `lead_generation` | Create leads only, no history/reports |
+| `monitor` | Admin-level read visibility, no mutation privileges |
+| `operations` | Broad read + operational access, no admin mutations |
 
 ## Known Patterns to Maintain
 
@@ -120,3 +135,4 @@ Automated jobs run via API routes under `app/api/cron/`:
 - Two auth systems are independent — CRM auth != Outlook auth
 - Tests use Jest (configured in `jest.config.js`)
 - Dev server runs on **port 5000** (not 3000)
+- Component-level access rules live in `lib/constants/component-access.ts` and `lib/constants/default-access.ts` — update both when adding new roles or routes
