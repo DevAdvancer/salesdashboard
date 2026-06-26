@@ -1297,35 +1297,24 @@ export async function listLeadsAction(
       return { leads, total: leads.length, page: 1, pageSize: leads.length };
     }
 
-    if (!wantExport) {
-      queries.push(Query.limit(pageSize));
-      queries.push(Query.offset((page - 1) * pageSize));
-    }
-
-    // Apply Query.select projection to trim the per-page payload. Skip
-    // when search is active so all fields are available for in-memory
-    // filtering (the in-memory filter does a substring scan over data).
-    queries.push(...(!filters.searchQuery ? [Query.select(LEADS_LIST_SELECT)] : []));
-
-    // Paginated list path
-    const response = await databases.listDocuments(
-      DATABASE_ID,
-      LEADS_COLLECTION_ID,
-      queries
-    );
-    let leads = response.documents as unknown as Lead[];
-    // response.total is the full filtered count from Appwrite (NOT the
-    // current page size). We need it for the pagination controls on the
-    // client. Using leads.length here would always equal pageSize and
-    // hide every page beyond the first.
-    const totalBeforeSearch = response.total ?? leads.length;
-
+    // When search is active, fetch ALL visible leads using listAllDocuments
+    // (which handles pagination automatically) then filter in memory and paginate.
+    // This ensures leads on pages beyond the first can be found by search.
     if (filters.searchQuery) {
-      // Search-via-substring is performed on the current page only (we can
-      // no longer scan the full 50K collection when paginated). This is a
-      // deliberate trade: with date/status/branch filters in place the
-      // realistic search universe is already narrow, and combined with
-      // pagination the user can flip pages if they don't see a match.
+      const allLeads = await listAllDocuments<Lead>({
+        databases,
+        databaseId: DATABASE_ID,
+        collectionId: LEADS_COLLECTION_ID,
+        queries: queries.filter(
+          (q) => !String(q).startsWith('limit(') && !String(q).startsWith('offset(')
+        ),
+        pageLimit: 100,
+        maxPages: 500,
+      });
+
+      let leads = allLeads;
+
+      // Apply search filter in memory
       const searchLower = filters.searchQuery.toLowerCase();
       leads = leads.filter((lead) => {
         try {
@@ -1337,11 +1326,35 @@ export async function listLeadsAction(
           return false;
         }
       });
+
+      // Paginate the filtered results
+      const start = (page - 1) * pageSize;
+      return {
+        leads: leads.slice(start, start + pageSize),
+        total: leads.length,
+        page,
+        pageSize,
+      };
     }
 
+    // Non-search path: use pagination directly from Appwrite
+    if (!wantExport) {
+      queries.push(Query.limit(pageSize));
+      queries.push(Query.offset((page - 1) * pageSize));
+    }
+
+    // Apply Query.select projection to trim the per-page payload
+    queries.push(Query.select(LEADS_LIST_SELECT));
+
+    const response = await databases.listDocuments(
+      DATABASE_ID,
+      LEADS_COLLECTION_ID,
+      queries
+    );
+
     return {
-      leads,
-      total: totalBeforeSearch,
+      leads: response.documents as unknown as Lead[],
+      total: response.total ?? response.documents.length,
       page,
       pageSize,
     };

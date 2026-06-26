@@ -179,7 +179,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'interview-support', role: 'agent', allowed: true },
   { componentKey: 'hierarchy', role: 'agent', allowed: false },
   { componentKey: 'work-queue', role: 'agent', allowed: true },
-  { componentKey: 'reports', role: 'agent', allowed: false },
+  { componentKey: 'reports', role: 'agent', allowed: true },
   { componentKey: 'coaching-notes', role: 'agent', allowed: false },
   { componentKey: 'review-queue', role: 'agent', allowed: false },
   { componentKey: 'notifications', role: 'agent', allowed: true },
