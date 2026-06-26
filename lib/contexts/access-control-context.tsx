@@ -35,6 +35,7 @@ export type ComponentKey =
   | 'linkedin-reports'
   | 'payments-report'
   | 'target-report'
+  | 'technical-payments'
   | 'resume-dashboard'
   | 'resume-chat'
   | 'resume-hierarchy';

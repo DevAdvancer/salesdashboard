@@ -510,6 +510,32 @@ export const collectionSchemas: Record<string, CollectionSchema> = {
     ],
   },
 
+  // ─── Technical Payments ──────────────────────────────────────────────────
+  // One document per upfront payment collected when creating an Assessment
+  // or Interview support request. Written only after the email is sent
+  // successfully (never on failure / rollback). Attributed to the agent
+  // who sent the email via `userId`, linked to the candidate via `leadId`.
+  technical_payments: {
+    attributes: [
+      { key: 'leadId', type: 'string', required: true, size: 255 },
+      { key: 'userId', type: 'string', required: true, size: 255 },
+      { key: 'amount', type: 'integer', required: true, min: 0 },
+      {
+        key: 'type',
+        type: 'enum',
+        required: true,
+        values: ['assessment', 'interview'],
+      },
+      { key: 'createdAt', type: 'datetime', required: true },
+    ],
+    indexes: [
+      { key: 'lead_idx', type: 'key', attributes: ['leadId'] },
+      { key: 'user_idx', type: 'key', attributes: ['userId'] },
+      { key: 'type_idx', type: 'key', attributes: ['type'] },
+      { key: 'created_idx', type: 'key', attributes: ['createdAt'] },
+    ],
+  },
+
   // ─── Monthly Target Assignments ──────────────────────────────────────────
   // One document per (monthly_target_id, agent_id). Carries the per-agent
   // target amount a TL assigns within their monthly team target. Each

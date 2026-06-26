@@ -28,6 +28,7 @@ export const COMPONENT_ACCESS: RoleAccessMap = {
   'linkedin-account-management': ['admin', 'monitor', 'operations', 'team_lead'],
   'linkedin-reports': ['admin', 'developer', 'monitor', 'operations', 'team_lead'],
   'payments-report': ['admin', 'developer', 'monitor', 'operations'],
+  'technical-payments': ['admin', 'developer', 'monitor', 'operations', 'team_lead'],
   // Target Report — admin reads every TL/agent, TLs split their own
   // team's target, agents see their own achievement. Monitoring roles
   // (monitor / operations) can view but not edit; the server action

@@ -271,7 +271,8 @@ export type ComponentKey =
   | 'target-report'
   | 'resume-dashboard'
   | 'resume-chat'
-  | 'resume-hierarchy';
+  | 'resume-hierarchy'
+  | 'technical-payments';
 
 export interface AccessRule {
   $id?: string;
@@ -590,4 +591,15 @@ export interface MonthlyTargetAssignment {
   updatedAt?: string | null;
   updatedById?: string | null;
   updatedByName?: string | null;
+}
+
+// One document per upfront payment collected when an Assessment or Interview
+// support email is sent successfully. Written only after the email succeeds.
+export interface TechnicalPayment {
+  $id: string;
+  leadId: string;
+  userId: string;
+  amount: number;
+  type: 'assessment' | 'interview';
+  createdAt: string;
 }

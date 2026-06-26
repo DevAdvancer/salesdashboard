@@ -32,6 +32,7 @@ import {
   rollbackInterviewAttempt,
   completeInterviewAttempt,
 } from "@/app/actions/interview";
+import { saveTechnicalPayment } from "@/app/actions/technical-payments";
 import { listLeads } from "@/lib/services/lead-action-service";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 
@@ -263,50 +264,49 @@ function InterviewContent() {
   const [resumeInputKey, setResumeInputKey] = useState(Date.now());
   const [additionalInputKey, setAdditionalInputKey] = useState(Date.now() + 1);
   const [isPreparingInterview, setIsPreparingInterview] = useState(false);
+  const [isUpfrontDialogOpen, setIsUpfrontDialogOpen] = useState(false);
+  const [upfrontAmount, setUpfrontAmount] = useState("");
+  const [selectedLeadForUpfront, setSelectedLeadForUpfront] = useState<Lead | null>(null);
+  const [currentUpfrontAmount, setCurrentUpfrontAmount] = useState(0);
 
   const handleCreateInterview = async (lead: Lead) => {
+    setSelectedLeadForUpfront(lead);
+    setUpfrontAmount("");
+    setIsUpfrontDialogOpen(true);
+  };
+
+  const setUpformDataForInterview = async (lead: Lead) => {
+    setIsPreparingInterview(true);
+    setSelectedLead(lead);
+
+    const leadData = JSON.parse(lead.data);
+
+    setFormData((prev) => ({
+      ...INITIAL_FORM_DATA,
+      yourName: prev.yourName,
+      yourRole: prev.yourRole,
+      yourPhone: prev.yourPhone,
+      company: prev.company,
+      candidateName: `${leadData.firstName || ""} ${leadData.lastName || ""}`.trim(),
+      emailId: leadData.email || "",
+      contactNumber: leadData.phone || "",
+      endClient: leadData.company || "",
+    }));
+    setResumeInputKey(Date.now());
+    setAdditionalInputKey(Date.now() + 1);
+
+    const currentUser = user;
+    if (!currentUser) return;
+
     try {
-      setIsPreparingInterview(true);
-      setSelectedLead(lead);
+      const ccEmails = await getSupportRequestCcEmails(currentUser);
+      const uniqueCC = Array.from(new Set([...INTERVIEW_SUPPORT_CC_EMAILS, ...ccEmails]));
 
-      const leadData = JSON.parse(lead.data);
-
-      setFormData((prev) => ({
-        ...INITIAL_FORM_DATA,
-        yourName: prev.yourName,
-        yourRole: prev.yourRole,
-        yourPhone: prev.yourPhone,
-        company: prev.company,
-        candidateName: `${leadData.firstName || ""} ${leadData.lastName || ""}`.trim(),
-        emailId: leadData.email || "",
-        contactNumber: leadData.phone || "",
-        endClient: leadData.company || "",
-      }));
-      setResumeInputKey(Date.now());
-      setAdditionalInputKey(Date.now() + 1);
-
-      const currentUser = user;
-      if (!currentUser) return;
-
-      try {
-        const ccEmails = await getSupportRequestCcEmails(currentUser);
-        const uniqueCC = Array.from(new Set([...INTERVIEW_SUPPORT_CC_EMAILS, ...ccEmails]));
-
-        setFormData((prev) => ({ ...prev, cc: uniqueCC.join(", ") }));
-      } catch (err) {
-        console.error("Failed to fetch CC users:", err);
-      }
-      setIsModalOpen(true);
-    } catch (error) {
-      console.error("Error preparing interview:", error);
-      toast({
-        title: "Error",
-        description: "Failed to prepare interview support form.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsPreparingInterview(false);
+      setFormData((prev) => ({ ...prev, cc: uniqueCC.join(", ") }));
+    } catch (err) {
+      console.error("Failed to fetch CC users:", err);
     }
+    setIsModalOpen(true);
   };
 
   const handleFileChange = async (
@@ -579,6 +579,20 @@ function InterviewContent() {
         contactNumber: formData.contactNumber,
       });
 
+      // Save the technical payment if amount > 0
+      if (currentUpfrontAmount > 0) {
+        try {
+          await saveTechnicalPayment({
+            actorId: user.$id,
+            leadId: selectedLead.$id,
+            amount: currentUpfrontAmount,
+            type: 'interview',
+          });
+        } catch (error) {
+          console.error('Failed to save technical payment:', error);
+        }
+      }
+
       setInterviewAttempts((prev) =>
         new Map(prev).set(selectedLead.$id, {
           $id: reservedAttempt.$id,
@@ -763,8 +777,63 @@ function InterviewContent() {
         </CardContent>
       </Card>
 
+      {/* Upfront Payment Dialog */}
+      <Dialog open={isUpfrontDialogOpen} onOpenChange={(open) => {
+        if (!open) setSelectedLeadForUpfront(null);
+        setIsUpfrontDialogOpen(open);
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Upfront Payment</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="mb-4">
+              Before creating Interview Support, please enter the upfront payment amount for this candidate:
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="upfrontAmount">Amount ($)</Label>
+              <Input
+                id="upfrontAmount"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                value={upfrontAmount}
+                onChange={(e) => setUpfrontAmount(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setIsUpfrontDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!selectedLeadForUpfront) return;
+                const amount = Number(upfrontAmount);
+                if (isNaN(amount) || amount < 0) {
+                  toast({ title: "Invalid Amount", description: "Please enter a valid amount", variant: "destructive" });
+                  return;
+                }
+                setIsUpfrontDialogOpen(false);
+                setCurrentUpfrontAmount(amount);
+                setUpformDataForInterview(selectedLeadForUpfront);
+              }}
+            >
+              Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Create Interview Dialog */}
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+      <Dialog open={isModalOpen} onOpenChange={(open) => {
+        setIsModalOpen(open);
+        if (!open) {
+          setCurrentUpfrontAmount(0);
+        }
+      }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Interview Support</DialogTitle>

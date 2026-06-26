@@ -40,6 +40,7 @@ export const COLLECTIONS = {
   // One document per (monthly_target_id, agent_id) carrying the per-agent
   // split amount chosen by the TL within their team's monthly target.
   MONTHLY_TARGET_ASSIGNMENTS: process.env.NEXT_PUBLIC_APPWRITE_MONTHLY_TARGET_ASSIGNMENTS_COLLECTION_ID ?? 'monthly_target_assignments',
+  TECHNICAL_PAYMENTS: process.env.NEXT_PUBLIC_APPWRITE_TECHNICAL_PAYMENTS_COLLECTION_ID ?? 'technical_payments',
 };
 
 export const BUCKETS = {

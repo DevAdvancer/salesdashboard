@@ -32,6 +32,7 @@ import {
   rollbackAssessmentAttempt,
   completeAssessmentAttempt,
 } from "@/app/actions/assessment";
+import { saveTechnicalPayment } from "@/app/actions/technical-payments";
 import { listLeads } from "@/lib/services/lead-action-service";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 
@@ -284,7 +285,10 @@ function AssessmentContent() {
   const [additionalInputKey, setAdditionalInputKey] = useState(Date.now() + 1);
 
   const [isPreparingAssessment, setIsPreparingAssessment] = useState(false);
-
+  const [isUpfrontDialogOpen, setIsUpfrontDialogOpen] = useState(false);
+  const [upfrontAmount, setUpfrontAmount] = useState("");
+  const [selectedLeadForUpfront, setSelectedLeadForUpfront] = useState<Lead | null>(null);
+  const [currentUpfrontAmount, setCurrentUpfrontAmount] = useState(0);
 
   // Multiple assessments are always allowed; duplicates are checked by subject
   const canCreateAssessment = () => {
@@ -301,54 +305,50 @@ function AssessmentContent() {
       return;
     }
 
+    setSelectedLeadForUpfront(lead);
+    setUpfrontAmount("");
+    setIsUpfrontDialogOpen(true);
+  };
+
+  const setUpformDataForAssessment = async (lead: Lead) => {
+    setSelectedLead(lead);
+    setIsPreparingAssessment(true);
+
+    const leadData = JSON.parse(lead.data);
+
+    // Reset form data but keep signature preferences
+    setFormData((prev) => ({
+      ...INITIAL_FORM_DATA,
+      yourName: prev.yourName,
+      yourRole: prev.yourRole,
+      yourPhone: prev.yourPhone,
+      company: prev.company,
+      // Pre-fill from lead data
+      candidateName: `${leadData.firstName || ""} ${leadData.lastName || ""}`.trim(),
+      emailId: leadData.email || "",
+      contactNumber: leadData.phone || "",
+      endClient: leadData.company || "",
+    }));
+    setResumeInputKey(Date.now());
+    setAdditionalInputKey(Date.now() + 1);
+
+    const currentUser = user;
+    if (!currentUser) return;
+
     try {
-      setIsPreparingAssessment(true);
-      setSelectedLead(lead);
+      const ccEmails = await getSupportRequestCcEmails(currentUser);
+      const uniqueCC = Array.from(new Set([...ASSESSMENT_SUPPORT_CC_EMAILS, ...ccEmails]));
 
-      const leadData = JSON.parse(lead.data);
-
-      // Reset form data but keep signature preferences
       setFormData((prev) => ({
-        ...INITIAL_FORM_DATA,
-        yourName: prev.yourName,
-        yourRole: prev.yourRole,
-        yourPhone: prev.yourPhone,
-        company: prev.company,
-        // Pre-fill from lead data
-        candidateName: `${leadData.firstName || ""} ${leadData.lastName || ""}`.trim(),
-        emailId: leadData.email || "",
-        contactNumber: leadData.phone || "",
-        endClient: leadData.company || "",
+        ...prev,
+        cc: uniqueCC.join(", "),
       }));
-      setResumeInputKey(Date.now());
-      setAdditionalInputKey(Date.now() + 1);
-
-      const currentUser = user;
-      if (!currentUser) return;
-
-      try {
-        const ccEmails = await getSupportRequestCcEmails(currentUser);
-        const uniqueCC = Array.from(new Set([...ASSESSMENT_SUPPORT_CC_EMAILS, ...ccEmails]));
-
-        setFormData((prev) => ({
-          ...prev,
-          cc: uniqueCC.join(", "),
-        }));
-      } catch (err) {
-        console.error("Failed to fetch CC users:", err);
-      }
-
-      setIsModalOpen(true);
-    } catch (error) {
-      console.error("Error preparing assessment:", error);
-      toast({
-        title: "Error",
-        description: "Failed to prepare assessment support form.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsPreparingAssessment(false);
+    } catch (err) {
+      console.error("Failed to fetch CC users:", err);
     }
+
+    setIsModalOpen(true);
+    setIsPreparingAssessment(false);
   };
 
   const handleFileChange = async (
@@ -651,6 +651,21 @@ function AssessmentContent() {
         },
       );
 
+      // Save the technical payment if amount > 0
+      if (currentUpfrontAmount > 0) {
+        try {
+          await saveTechnicalPayment({
+            actorId: user.$id,
+            leadId: selectedLead.$id,
+            amount: currentUpfrontAmount,
+            type: 'assessment',
+          });
+        } catch (error) {
+          console.error('Failed to save technical payment:', error);
+          // Don't throw - let the email be successful even if payment fails
+        }
+      }
+
       setAssessmentAttempts((prev) =>
         new Map(prev).set(selectedLead.$id, {
           $id: reservedAttempt.$id,
@@ -868,7 +883,71 @@ function AssessmentContent() {
         </CardContent>
       </Card>
 
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+      {/* Upfront Payment Dialog */}
+      <Dialog open={isUpfrontDialogOpen} onOpenChange={(open) => {
+        if (!open && !selectedLead) {
+          setSelectedLeadForUpfront(null);
+        }
+        setIsUpfrontDialogOpen(open);
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Upfront Payment</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="mb-4">
+              Before creating Assessment Support, please enter the upfront payment amount for this candidate:
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="upfrontAmount">Amount ($)</Label>
+              <Input
+                id="upfrontAmount"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                value={upfrontAmount}
+                onChange={(e) => setUpfrontAmount(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setIsUpfrontDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!selectedLeadForUpfront) return;
+
+                const amount = Number(upfrontAmount);
+                if (isNaN(amount) || amount < 0) {
+                  toast({
+                    title: "Invalid Amount",
+                    description: "Please enter a valid amount",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+
+                setIsUpfrontDialogOpen(false);
+                setCurrentUpfrontAmount(amount);
+                // Pass amount to the next dialog
+                setUpformDataForAssessment(selectedLeadForUpfront);
+              }}
+            >
+              Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isModalOpen} onOpenChange={(open) => {
+        setIsModalOpen(open);
+        if (!open) {
+          setCurrentUpfrontAmount(0);
+        }
+      }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Assessment Support</DialogTitle>

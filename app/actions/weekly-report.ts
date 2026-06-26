@@ -8,6 +8,7 @@ import { isRoleEligibleForComponent } from "@/lib/constants/component-access";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import { buildWorkingDayKpi, toDateKey } from "@/lib/utils/report-kpi";
 import type { ClientPaymentRecord, Department, Lead, PaymentStatus, User, UserRole } from "@/lib/types";
+import { getTechnicalPaymentsByLeadIdsAction } from "./technical-payments";
 
 type WeeklyReportRange = { from: string; to: string };
 
@@ -19,6 +20,7 @@ export type WeeklyReportMetrics = {
   upfront: number;
   coldCalls: number;
   notInterested: number;
+  technicalUpfront: number;
   /** Per-day KPI breakdown for the selected range. */
   kpi: {
     /** ISO dates in the range, one per day. */
@@ -133,6 +135,7 @@ function emptyMetrics(): WeeklyReportMetrics {
     upfront: 0,
     coldCalls: 0,
     notInterested: 0,
+    technicalUpfront: 0,
     kpi: emptyKpi(),
   };
 }
@@ -162,6 +165,7 @@ function addMetrics(target: WeeklyReportMetrics, delta: Partial<WeeklyReportMetr
   target.upfront += delta.upfront ?? 0;
   target.coldCalls += delta.coldCalls ?? 0;
   target.notInterested += delta.notInterested ?? 0;
+  target.technicalUpfront += delta.technicalUpfront ?? 0;
 }
 
 /**
@@ -260,7 +264,7 @@ async function listTeamLeadAgents(databases: any, teamLeadId: string): Promise<U
     collectionId: COLLECTIONS.USERS,
     queries: [
       Query.equal("teamLeadId", teamLeadId),
-      Query.equal("role", "agent"),
+      Query.or([Query.equal("role", "agent"), Query.equal("role", "lead_generation")]),
       Query.orderAsc("$id"),
     ],
     pageLimit: 100,
@@ -278,6 +282,8 @@ async function listScopedUsers(databases: any, actor: User): Promise<User[]> {
 
   if (actor.role === "team_lead") {
     const agents = await listTeamLeadAgents(databases, actor.$id);
+    // Also fetch any lead_generation users directly assigned to this TL
+    // (listTeamLeadAgents now fetches both agent + lead_generation)
     return [actor, ...agents];
   }
 
@@ -286,7 +292,7 @@ async function listScopedUsers(databases: any, actor: User): Promise<User[]> {
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.USERS,
     queries: [
-      Query.or([Query.equal("role", "team_lead"), Query.equal("role", "agent")]),
+      Query.or([Query.equal("role", "team_lead"), Query.equal("role", "agent"), Query.equal("role", "lead_generation")]),
       Query.orderAsc("$id"),
     ],
     pageLimit: 100,
@@ -576,6 +582,19 @@ export async function getWeeklyReportAction(input: {
     addMetrics(ensureMetrics(attributed), { upfront: upfrontAmount });
   });
 
+  // Technical payments: sum amounts attributed by userId within the date range.
+  const techPayments = await getTechnicalPaymentsByLeadIdsAction(actor.$id, paymentLeadIds);
+  for (const payment of techPayments) {
+    const userId = payment.userId;
+    if (!scopedUserIds.has(userId)) continue;
+    const createdAt = payment.createdAt;
+    if (createdAt < range.from || createdAt > range.to) continue;
+    const amount = Number(payment.amount) || 0;
+    if (amount > 0) {
+      addMetrics(ensureMetrics(userId), { technicalUpfront: amount });
+    }
+  }
+
   scopedUsers.forEach((user) => ensureMetrics(user.$id));
 
   const userMap = new Map(scopedUsers.map((user) => [user.$id, user] as const));
@@ -613,7 +632,7 @@ export async function getWeeklyReportAction(input: {
   for (const teamLead of teamLeads) {
     const members = scopedUsers
       .filter((user) => user.$id === teamLead.$id || user.teamLeadId === teamLead.$id)
-      .filter((user) => user.role === "team_lead" || user.role === "agent")
+      .filter((user) => user.role === "team_lead" || user.role === "agent" || user.role === "lead_generation")
       .sort((a, b) => String(a.name).localeCompare(String(b.name)))
       .map((user) => {
         seenMembers.add(user.$id);
@@ -628,10 +647,33 @@ export async function getWeeklyReportAction(input: {
       upfront: 0,
       coldCalls: 0,
       notInterested: 0,
+      technicalUpfront: 0,
       kpi: combineKpi(members),
     };
     members.forEach((member) => addMetrics(totals, member.metrics));
     teams.push({ teamLead, members, totals });
+  }
+
+  // Handle unassigned users (e.g., lead_generation without a teamLeadId)
+  const unassigned = scopedUsers
+    .filter((user) => !seenMembers.has(user.$id))
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+    .map((user) => buildMember(user.$id));
+
+  if (unassigned.length > 0) {
+    const totals: WeeklyReportMetrics = {
+      calls: 0,
+      leads: 0,
+      followups: 0,
+      closures: 0,
+      upfront: 0,
+      coldCalls: 0,
+      notInterested: 0,
+      technicalUpfront: 0,
+      kpi: combineKpi(unassigned),
+    };
+    unassigned.forEach((member) => addMetrics(totals, member.metrics));
+    teams.push({ teamLead: null, members: unassigned, totals });
   }
 
   if (actor.role === "team_lead") {
