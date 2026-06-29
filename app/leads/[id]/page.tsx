@@ -572,6 +572,9 @@ function LeadDetailContent() {
         const missing: string[] = [];
         for (const field of fields) {
           if (!field.visible || !field.required) continue;
+          if (field.key === "paymentMonths" && values.paymentPercent === "H1B Agreement") {
+            continue;
+          }
           const raw = values[field.key];
           if (field.type === "checklist") {
             if (!Array.isArray(raw) || raw.length === 0)
@@ -600,8 +603,9 @@ function LeadDetailContent() {
         return;
       }
 
-      const percent = Number(paymentPlanValues.paymentPercent);
-      const months = Number(paymentPlanValues.paymentMonths);
+      const isH1B = paymentPlanValues.paymentPercent === "H1B Agreement";
+      const percent = isH1B ? 0 : Number(paymentPlanValues.paymentPercent);
+      const months = isH1B ? 0 : Number(paymentPlanValues.paymentMonths);
       const upfrontAmount = Number(paymentPlanValues.upfrontAmount);
 
       if (
@@ -944,23 +948,35 @@ function LeadDetailContent() {
           />
         );
 
-      case "dropdown":
+      case "dropdown": {
+        const options = field.key === "paymentPercent"
+          ? Array.from(new Set([...(field.options ?? []), "H1B Agreement"]))
+          : (field.options ?? []);
         return (
           <select
             id={field.key}
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             value={value}
-            onChange={(e) =>
-              setValues((prev) => ({ ...prev, [field.key]: e.target.value }))
-            }>
+            onChange={(e) => {
+              const val = e.target.value;
+              setValues((prev) => {
+                const next = { ...prev, [field.key]: val };
+                if (field.key === "paymentPercent" && val === "H1B Agreement") {
+                  next.paymentMonths = "0";
+                }
+                return next;
+              });
+            }}
+          >
             <option value="">Select {field.label}</option>
-            {field.options?.map((option) => (
+            {options.map((option) => (
               <option key={option} value={option}>
                 {option}
               </option>
             ))}
           </select>
         );
+      }
 
       case "checklist":
         return (
@@ -1550,7 +1566,13 @@ function LeadDetailContent() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {paymentPlanFields
-                      .filter((field) => field.visible)
+                      .filter((field) => {
+                        if (!field.visible) return false;
+                        if (field.key === "paymentMonths" && paymentPlanValues.paymentPercent === "H1B Agreement") {
+                          return false;
+                        }
+                        return true;
+                      })
                       .map((field) => (
                         <div key={field.id} className="space-y-2">
                           <Label htmlFor={field.key}>

@@ -109,7 +109,7 @@ export const DEFAULT_PAYMENT_PLAN_FIELDS: FormField[] = [
     required: true,
     visible: true,
     order: 1,
-    options: ['10', '11', '12', '14'],
+    options: ['10', '11', '12', '14', 'H1B Agreement'],
   },
   {
     id: '2',

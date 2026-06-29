@@ -551,9 +551,12 @@ function UserManagementContent() {
   }, [user, isAdmin, isDeveloper, confirm, fetchUsers]);
 
   const handleSetAgentActive = useCallback(async (agent: User, isActive: boolean) => {
+    const isCallerTL = user?.role === "team_lead";
+    const canMutate = isAdmin || isDeveloper || (isCallerTL && agent.teamLeadId === user?.$id);
+
     if (
       !user ||
-      !isAdmin && !isDeveloper ||
+      !canMutate ||
       (agent.role !== "agent" && agent.role !== "lead_generation" && agent.role !== "monitor" && agent.role !== "operations")
     )
       return;
@@ -981,7 +984,7 @@ function UserManagementContent() {
                         <th className="text-left py-3 px-4 font-semibold">
                           Created
                         </th>
-                        {isAdmin && (
+                        {(isAdmin || isDeveloper || isTeamLead) && (
                           <th className="text-left py-3 px-4 font-semibold">
                             Actions
                           </th>
@@ -1018,7 +1021,7 @@ function UserManagementContent() {
                               ? new Date(u.$createdAt).toLocaleDateString()
                               : "N/A"}
                           </td>
-                          {isAdmin && (
+                          {(isAdmin || isDeveloper || isTeamLead) && (
                             <td className="py-3 px-4">
                               <div className="flex flex-wrap gap-2">
                                 {(isAdmin ||
@@ -1033,37 +1036,40 @@ function UserManagementContent() {
                                     Edit
                                   </Button>
                                 )}
-                                {isAdmin && u.$id !== user?.$id && (
+                                {u.$id !== user?.$id && (
                                   <>
-                                    {(u.role === "agent" ||
-                                      u.role === "lead_generation" ||
-                                      u.role === "monitor" ||
-                                      u.role === "operations") && (
+                                    {(isAdmin || isDeveloper || (isTeamLead && u.teamLeadId === user?.$id)) &&
+                                      (u.role === "agent" ||
+                                        u.role === "lead_generation" ||
+                                        u.role === "monitor" ||
+                                        u.role === "operations") && (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() =>
+                                            handleSetAgentActive(
+                                              u,
+                                              u.isActive === false,
+                                            )
+                                          }
+                                          loading={activeStatusUserId === u.$id}
+                                          disabled={activeStatusUserId === u.$id}>
+                                          {u.isActive === false
+                                            ? "Reactivate"
+                                            : "Inactivate"}
+                                        </Button>
+                                      )}
+                                    {(isAdmin || isDeveloper) && (
                                       <Button
                                         variant="outline"
                                         size="sm"
-                                        onClick={() =>
-                                          handleSetAgentActive(
-                                            u,
-                                            u.isActive === false,
-                                          )
-                                        }
-                                        loading={activeStatusUserId === u.$id}
-                                        disabled={activeStatusUserId === u.$id}>
-                                        {u.isActive === false
-                                          ? "Reactivate"
-                                          : "Inactivate"}
+                                        onClick={() => handleDeleteUser(u)}
+                                        loading={deletingUserId === u.$id}
+                                        disabled={deletingUserId === u.$id}
+                                        className="text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-900 dark:hover:bg-red-950/20">
+                                        Delete
                                       </Button>
                                     )}
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleDeleteUser(u)}
-                                      loading={deletingUserId === u.$id}
-                                      disabled={deletingUserId === u.$id}
-                                      className="text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-900 dark:hover:bg-red-950/20">
-                                      Delete
-                                    </Button>
                                   </>
                                 )}
                               </div>

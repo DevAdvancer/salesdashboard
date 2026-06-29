@@ -223,7 +223,13 @@ function HistoryDetailContent() {
   };
 
   const handlePaymentInitPlanChange = (key: string, value: unknown) => {
-    setPaymentInitPlanValues((prev) => ({ ...prev, [key]: value }));
+    setPaymentInitPlanValues((prev) => {
+      const next = { ...prev, [key]: value };
+      if (key === "paymentPercent" && value === "H1B Agreement") {
+        next.paymentMonths = "0";
+      }
+      return next;
+    });
   };
 
   const handlePaymentInitPersonalChange = (key: string, value: unknown) => {
@@ -261,6 +267,9 @@ function HistoryDetailContent() {
     }
 
     if (field.type === "dropdown") {
+      const options = field.key === "paymentPercent"
+        ? Array.from(new Set([...(field.options ?? []), "H1B Agreement"]))
+        : (field.options ?? []);
       return (
         <select
           id={field.key}
@@ -271,7 +280,7 @@ function HistoryDetailContent() {
           <option value="" disabled>
             Select...
           </option>
-          {(field.options ?? []).map((option) => (
+          {options.map((option) => (
             <option key={option} value={option}>
               {option}
             </option>
@@ -302,8 +311,9 @@ function HistoryDetailContent() {
     if (!user) return;
     if (!canEditClientPayments) return;
 
-    const percent = Number(paymentInitPlanValues.paymentPercent);
-    const months = Number(paymentInitPlanValues.paymentMonths);
+    const isH1B = paymentInitPlanValues.paymentPercent === "H1B Agreement";
+    const percent = isH1B ? 0 : Number(paymentInitPlanValues.paymentPercent);
+    const months = isH1B ? 0 : Number(paymentInitPlanValues.paymentMonths);
     const upfrontAmount = Number(paymentInitPlanValues.upfrontAmount);
 
     if (
@@ -433,7 +443,9 @@ function HistoryDetailContent() {
   // field on the previous save stays as the starting value.
   useEffect(() => {
     if (!paymentRecord) return;
-    const derivedAgreement = `${paymentRecord.paymentPlan.percent}% in ${paymentRecord.paymentPlan.months} Months`;
+    const derivedAgreement = paymentRecord.paymentPlan.percent === 0
+      ? "H1B Agreement"
+      : `${paymentRecord.paymentPlan.percent}% in ${paymentRecord.paymentPlan.months} Months`;
     setClientIntakeValues((prev) => {
       if (prev.agreement === derivedAgreement) {
         return prev;
@@ -672,7 +684,9 @@ function HistoryDetailContent() {
     }
 
     const derivedSalesperson = assignedTo?.name || owner?.name || "";
-    const derivedAgreement = `${paymentRecord.paymentPlan.percent}% in ${paymentRecord.paymentPlan.months} Months`;
+    const derivedAgreement = paymentRecord.paymentPlan.percent === 0
+      ? "H1B Agreement"
+      : `${paymentRecord.paymentPlan.percent}% in ${paymentRecord.paymentPlan.months} Months`;
 
     // Admin and TL can override the derived agreement with their edit.
     // For other roles, always re-derive the agreement from the live
@@ -994,7 +1008,13 @@ function HistoryDetailContent() {
                     {paymentPlanFields.length > 0 && (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {paymentPlanFields
-                          .filter((field) => field.visible)
+                          .filter((field) => {
+                            if (!field.visible) return false;
+                            if (field.key === "paymentMonths" && paymentInitPlanValues.paymentPercent === "H1B Agreement") {
+                              return false;
+                            }
+                            return true;
+                          })
                           .map((field) => (
                             <div key={field.id}>
                               <Label>{field.label}</Label>
@@ -1098,7 +1118,13 @@ function HistoryDetailContent() {
                 {paymentPlanFields.length > 0 && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {paymentPlanFields
-                      .filter((field) => field.visible)
+                      .filter((field) => {
+                        if (!field.visible) return false;
+                        if (field.key === "paymentMonths" && paymentRecord.paymentPlan.percent === 0) {
+                          return false;
+                        }
+                        return true;
+                      })
                       .map((field) => (
                         <div key={field.id}>
                           <Label>{field.label}</Label>
@@ -1115,7 +1141,7 @@ function HistoryDetailContent() {
                             <Input
                               value={renderReadOnlyValue(
                                 field.key === "paymentPercent"
-                                  ? paymentRecord.paymentPlan.percent
+                                  ? (paymentRecord.paymentPlan.percent === 0 ? "H1B Agreement" : paymentRecord.paymentPlan.percent)
                                   : field.key === "paymentMonths"
                                     ? paymentRecord.paymentPlan.months
                                     : (paymentRecord.paymentPlan as any)[

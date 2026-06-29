@@ -1177,7 +1177,7 @@ export async function listAllUsersForLinkedinAction(input: {
   ]);
 
   return (response.documents as unknown as User[]).filter(
-    (u) => (u.department ?? "sales") === "sales",
+    (u) => (u.department ?? "sales") === "sales" && u.isActive !== false,
   );
 }
 
@@ -1212,7 +1212,7 @@ export async function listAgentsForTeamLeadLinkedinAction(input: {
   ]);
 
   return (response.documents as unknown as User[]).filter(
-    (u) => (u.department ?? "sales") === "sales",
+    (u) => (u.department ?? "sales") === "sales" && u.isActive !== false,
   );
 }
 
@@ -1432,7 +1432,7 @@ async function getSalesUserIds(
       Query.limit(2000),
     ]);
     for (const userDoc of usersResponse.documents as unknown as User[]) {
-      if ((userDoc.department ?? "sales") === "sales") {
+      if ((userDoc.department ?? "sales") === "sales" && userDoc.isActive !== false) {
         salesUserIds.add(userDoc.$id);
       }
     }

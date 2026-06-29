@@ -484,6 +484,10 @@ export async function updateUserAction(input: {
         throw new Error("Permission denied");
     }
 
+    if (isCallerTeamLead && targetUserDoc.teamLeadId !== currentUserId) {
+        throw new Error("Permission denied: You can only update agents on your team");
+    }
+
     const { users, databases } = await createAdminClient();
 
     try {
@@ -705,12 +709,22 @@ export async function setAgentActiveAction(input: {
     await assertAuthenticatedUserId(currentUserId);
 
     const callerDoc = await getUserDoc(currentUserId);
-    if (!callerDoc || (callerDoc.role !== 'admin' && callerDoc.role !== 'developer')) {
-        throw new Error("Permission denied: Only admins and developers can update agent active status");
+    if (!callerDoc) throw new Error("Caller not found");
+
+    const isTL = callerDoc.role === 'team_lead';
+    const isAdminOrDev = callerDoc.role === 'admin' || callerDoc.role === 'developer';
+
+    if (!isAdminOrDev && !isTL) {
+        throw new Error("Permission denied: Only admins, developers, and team leads can update agent active status");
     }
 
     const targetUserDoc = await getUserDoc(userId);
     if (!targetUserDoc) throw new Error("Target user not found");
+
+    if (isTL && targetUserDoc.teamLeadId !== currentUserId) {
+        throw new Error("Permission denied: You can only update the active status of agents on your team");
+    }
+
     if (targetUserDoc.role !== 'agent' && targetUserDoc.role !== 'lead_generation' && targetUserDoc.role !== 'monitor' && targetUserDoc.role !== 'operations') {
         throw new Error("Only agents, lead generation users, monitors, and operations can be inactivated from this action");
     }
@@ -748,6 +762,29 @@ export async function setAgentActiveAction(input: {
                 userId,
                 schemaSafeUpdates
             );
+        }
+
+        if (!isActive) {
+            try {
+                const accountsResponse = await databases.listDocuments(
+                    DATABASE_ID,
+                    COLLECTIONS.LINKEDIN_ACCOUNTS,
+                    [
+                        Query.equal('assignedUserId', userId),
+                        Query.limit(100),
+                    ]
+                );
+                for (const accountDoc of accountsResponse.documents) {
+                    await databases.updateDocument(
+                        DATABASE_ID,
+                        COLLECTIONS.LINKEDIN_ACCOUNTS,
+                        accountDoc.$id,
+                        { isActive: false }
+                    );
+                }
+            } catch (err) {
+                console.error("Failed to deactivate LinkedIn accounts for inactive user:", err);
+            }
         }
 
         await logAuditAction(
