@@ -13,6 +13,7 @@ import {
   type TechnicalPaymentSummary,
 } from "@/app/actions/technical-payments";
 import { Calendar, Download, Filter, Search } from "lucide-react";
+import { getTodayEst, getMonthStartEst } from "@/lib/utils/est-date";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -23,21 +24,33 @@ function formatDate(iso: string) {
 }
 
 function toIsoDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
 }
 
 function dateRangePresets() {
-  const today = new Date();
-  const startOfWeek = new Date(today);
-  startOfWeek.setDate(today.getDate() - today.getDay());
-  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const today = getTodayEst();
+  // Start of week (Sunday) in EST
+  const nowEst = new Date();
+  const estParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+  }).formatToParts(nowEst);
+  // Use getDay() equivalent for EST: subtract weekday index
+  const dayOfWeekStr = estParts.find((p) => p.type === "weekday")?.value ?? "Sun";
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const dayIndex = days.indexOf(dayOfWeekStr);
+  const startOfWeekMs = nowEst.getTime() - dayIndex * 24 * 60 * 60 * 1000;
+  const startOfWeek = toIsoDate(new Date(startOfWeekMs));
+  const startOfMonth = getMonthStartEst();
   return [
-    { label: "Today", from: toIsoDate(today), to: toIsoDate(today) },
-    { label: "This Week", from: toIsoDate(startOfWeek), to: toIsoDate(today) },
-    { label: "This Month", from: toIsoDate(startOfMonth), to: toIsoDate(today) },
+    { label: "Today", from: today, to: today },
+    { label: "This Week", from: startOfWeek, to: today },
+    { label: "This Month", from: startOfMonth, to: today },
     { label: "All Time", from: "", to: "" },
   ];
 }

@@ -7,6 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { DateRangePicker } from "@/components/ui/date-picker";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Table,
   TableBody,
   TableCell,
@@ -23,16 +31,24 @@ import {
   listLinkedinAccountsForManagementAction,
   listTeamLeadsForLinkedinAction,
   listAllUsersForLinkedinAction,
+  runLinkedinAutoWithdrawAction,
 } from "@/app/actions/linkedin";
 import type { LinkedinAccount, LinkedinRequest, User } from "@/lib/types";
 import { getErrorMessage } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { getTodayEst } from "@/lib/utils/est-date";
 
+/**
+ * Format a Date object as YYYY-MM-DD in America/New_York.
+ * Used when adjusting date ranges by N days relative to today.
+ */
 function dateInputValueFromDate(date: Date) {
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
 }
 
 function sevenDayRange() {
@@ -74,13 +90,41 @@ function LinkedinReportsContent() {
   const [teamLeads, setTeamLeads] = useState<User[]>([]);
   const [teamLeadId, setTeamLeadId] = useState<string>("all");
   const [range, setRange] = useState<{ from?: string; to?: string }>(() => {
-    const today = dateInputValueFromDate(new Date());
+    const today = getTodayEst();
     return { from: today, to: today };
   });
   const [agents, setAgents] = useState<User[]>([]);
   const [accounts, setAccounts] = useState<LinkedinAccount[]>([]);
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [autoWithdrawing, setAutoWithdrawing] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const executeAutoWithdraw = async () => {
+    if (!user) return;
+    try {
+      setAutoWithdrawing(true);
+      setShowConfirm(false);
+      const result = await runLinkedinAutoWithdrawAction({
+        currentUserId: user.$id,
+      });
+      toast({
+        title: "Auto-Withdraw Completed",
+        description: `Evaluated: ${result.evaluated} requests, Auto-withdrawn: ${result.autoWithdrawn}, Errors: ${result.errors}`,
+      });
+      void loadReport();
+      void loadRequests();
+    } catch (error: unknown) {
+      toast({
+        title: "Auto-Withdraw Failed",
+        description: getErrorMessage(error),
+        variant: "destructive",
+      });
+    } finally {
+      setAutoWithdrawing(false);
+    }
+  };
+
   const [requestsLoading, setRequestsLoading] = useState(false);
   const [requests, setRequests] = useState<LinkedinRequest[]>([]);
   const [requestStatus, setRequestStatus] = useState<
@@ -382,6 +426,45 @@ function LinkedinReportsContent() {
             <Button onClick={loadReport} disabled={loading || !teamLeadId}>
               {loading ? "Loading..." : "Refresh"}
             </Button>
+            {canReadLikeAdmin && (
+              <>
+                <Button
+                  variant="destructive"
+                  onClick={() => setShowConfirm(true)}
+                  disabled={autoWithdrawing}
+                >
+                  {autoWithdrawing ? "Running..." : "Run Auto-Withdraw"}
+                </Button>
+
+                <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Confirm Auto-Withdrawal</DialogTitle>
+                      <DialogDescription asChild>
+                        <div className="mt-2 text-sm text-[var(--muted-foreground)] leading-relaxed">
+                          Are you sure you want to run the LinkedIn auto-withdrawal logic right now?
+                          <br />
+                          <br />
+                          This will scan and mark as <strong>withdrawn</strong>:
+                          <ul className="list-disc pl-5 mt-2 space-y-1">
+                            <li>All active <strong>sent</strong> requests older than 20 days.</li>
+                            <li>All <strong>accepted</strong> requests without a linked lead older than 11 days.</li>
+                          </ul>
+                        </div>
+                      </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="mt-4 gap-2">
+                      <Button variant="secondary" onClick={() => setShowConfirm(false)}>
+                        Cancel
+                      </Button>
+                      <Button variant="destructive" onClick={executeAutoWithdraw}>
+                        Confirm Run
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </>
+            )}
             <div className="text-sm text-muted-foreground">
               Cold Calls: {totals.coldCalls} ·
               Connections Sent: {totals.sent} · Connections Accepted: {totals.accepted} ·

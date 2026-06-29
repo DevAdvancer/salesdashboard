@@ -9,6 +9,8 @@ import {
   getLinkedinReminderPolicy,
   shouldAutoWithdrawLinkedinRequest,
   shouldSendLinkedinWithdrawalReminder,
+  LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS,
+  LINKEDIN_SENT_AUTO_WITHDRAW_DAYS,
 } from '@/lib/utils/linkedin-withdrawal-reminders';
 
 function getAuthorizationToken(request: NextRequest) {
@@ -88,8 +90,8 @@ async function autoWithdrawLinkedinRequest(
   const isAcceptedWithoutLead =
     request.status === 'accepted' && !request.leadId;
   const reason = isAcceptedWithoutLead
-    ? 'No lead was created within 12 days after connection acceptance.'
-    : 'Connection was not withdrawn within 20 days after sending.';
+    ? `No lead was created within ${LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS} days after connection acceptance.`
+    : `Connection was not withdrawn within ${LINKEDIN_SENT_AUTO_WITHDRAW_DAYS} days after sending.`;
 
   await databases.updateDocument(DATABASE_ID, COLLECTIONS.LINKEDIN_REQUESTS, request.$id, {
     status: 'withdrawn',

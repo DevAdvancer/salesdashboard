@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/linkedin-withdrawal-reminders",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/payment-reminders",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/partial-paid-reminders",
+      "schedule": "0 5 * * *"
+    }
+  ]
+}

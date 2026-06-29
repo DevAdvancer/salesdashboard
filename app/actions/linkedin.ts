@@ -18,6 +18,9 @@ import type {
 import {
   LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS,
   LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS,
+  shouldAutoWithdrawLinkedinRequest,
+  LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS,
+  LINKEDIN_SENT_AUTO_WITHDRAW_DAYS,
 } from "@/lib/utils/linkedin-withdrawal-reminders";
 import { workingDaysInRange } from "@/lib/utils/dashboard-kpi";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
@@ -1932,3 +1935,138 @@ export async function loadLinkedinConnectionKpiAction(input: {
 
   return kpiRows;
 }
+
+// ---------------------------------------------------------------------------
+// Auto-withdraw server action (admin / operations only)
+// ---------------------------------------------------------------------------
+
+export type AutoWithdrawResult = {
+  evaluated: number;
+  autoWithdrawn: number;
+  errors: number;
+  processedAt: string;
+};
+
+/**
+ * Runs the LinkedIn auto-withdrawal logic on-demand.
+ *
+ * Evaluates all active `sent` requests older than
+ * LINKEDIN_SENT_AUTO_WITHDRAW_DAYS (20 days) and marks them withdrawn,
+ * and all `accepted` requests without a lead older than
+ * LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS (11 days).
+ *
+ * Can be triggered:
+ *  - from the LinkedIn Reports admin UI (manual run)
+ *  - from an external cron/Appwrite Function via the API route
+ *    `/api/cron/linkedin-withdrawal-reminders`
+ */
+export async function runLinkedinAutoWithdrawAction(input: {
+  currentUserId: string;
+}): Promise<AutoWithdrawResult> {
+  await assertAuthenticatedUserId(input.currentUserId);
+  const actor = await getAuthenticatedUserDoc();
+
+  const isAllowed =
+    actor.role === "admin" ||
+    actor.role === "developer" ||
+    actor.role === "operations" ||
+    actor.role === "monitor";
+
+  if (!isAllowed) {
+    throw new Error("Only admins can run auto-withdraw.");
+  }
+
+  const { databases } = await createAdminClient();
+  const now = new Date();
+  const nowIso = now.toISOString();
+
+  // Fetch all active sent/accepted requests
+  const response = await databases.listDocuments(
+    DATABASE_ID,
+    COLLECTIONS.LINKEDIN_REQUESTS,
+    [
+      Query.equal("isActive", true),
+      Query.equal("status", ["sent", "accepted"]),
+      Query.limit(5000),
+    ],
+  );
+
+  let evaluated = 0;
+  let autoWithdrawn = 0;
+  let errors = 0;
+
+  for (const doc of response.documents as unknown as LinkedinRequest[]) {
+    // Skip accepted requests that already have a linked lead
+    if (doc.status === "accepted" && doc.leadId) continue;
+
+    evaluated += 1;
+
+    if (!shouldAutoWithdrawLinkedinRequest({ request: doc, now })) continue;
+
+    try {
+      const isAcceptedWithoutLead = doc.status === "accepted" && !doc.leadId;
+      const reason = isAcceptedWithoutLead
+        ? `No lead was created within ${LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS} days after connection acceptance.`
+        : `Connection was not accepted/withdrawn within ${LINKEDIN_SENT_AUTO_WITHDRAW_DAYS} days after sending.`;
+
+      // Mark withdrawn
+      await databases.updateDocument(
+        DATABASE_ID,
+        COLLECTIONS.LINKEDIN_REQUESTS,
+        doc.$id,
+        {
+          status: "withdrawn",
+          isActive: false,
+          withdrawnAt: nowIso,
+        },
+      );
+
+      // Audit log
+      await databases.createDocument(
+        DATABASE_ID,
+        COLLECTIONS.AUDIT_LOGS,
+        ID.unique(),
+        {
+          action: "LINKEDIN_REQUEST_AUTO_WITHDRAW",
+          actorId: actor.$id,
+          actorName: actor.name,
+          targetId: doc.$id,
+          targetType: "linkedin_request",
+          metadata: JSON.stringify({
+            company: doc.company,
+            targetUrl: doc.targetUrl,
+            reason,
+            withdrawnAt: nowIso,
+            triggeredBy: "admin_action",
+          }),
+          performedAt: nowIso,
+        },
+      );
+
+      // General chat notification
+      try {
+        await databases.createDocument(
+          DATABASE_ID,
+          COLLECTIONS.CHAT_MESSAGES,
+          ID.unique(),
+          {
+            channel: "general",
+            body: `Linkedin URL available again: ${doc.targetUrl} (${doc.company}) was auto-withdrawn. Reason: ${reason}`,
+            createdById: "system",
+            createdByName: "System",
+            createdAt: nowIso,
+          },
+        );
+      } catch {
+        // Chat message failure is non-fatal
+      }
+
+      autoWithdrawn += 1;
+    } catch {
+      errors += 1;
+    }
+  }
+
+  return { evaluated, autoWithdrawn, errors, processedAt: nowIso };
+}
+

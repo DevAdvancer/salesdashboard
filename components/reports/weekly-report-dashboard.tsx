@@ -9,6 +9,7 @@ import { getWeeklyReport } from "@/lib/services/weekly-report-service";
 import { expandIsoDateToEnd, expandIsoDateToStart } from "@/lib/utils/iso-date-range";
 import type { WeeklyReportResult } from "@/app/actions/weekly-report";
 import type { User } from "@/lib/types";
+import { getTodayEst } from "@/lib/utils/est-date";
 
 function toDateValue(date: Date) {
   const year = date.getFullYear();
@@ -18,8 +19,8 @@ function toDateValue(date: Date) {
 }
 
 function getDefaultRange(): { from: string; to: string } {
-  const today = new Date();
-  return { from: toDateValue(today), to: toDateValue(today) };
+  const today = getTodayEst();
+  return { from: today, to: today };
 }
 
 const currency = new Intl.NumberFormat("en-US", {

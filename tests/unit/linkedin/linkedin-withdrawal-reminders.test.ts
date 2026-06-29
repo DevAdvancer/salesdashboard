@@ -79,7 +79,7 @@ describe('linkedin withdrawal reminders', () => {
     });
   });
 
-  it('auto withdraws sent requests after 20 days and accepted requests without leads after 12 days', () => {
+  it('auto withdraws sent requests after 20 days and accepted requests without leads after 11 days', () => {
     expect(
       shouldAutoWithdrawLinkedinRequest({
         request: request({ dateSent: '2026-04-26T00:00:00.000Z' }),
@@ -87,16 +87,29 @@ describe('linkedin withdrawal reminders', () => {
       }),
     ).toBe(true);
 
+    // 11 days age should auto withdraw
     expect(
       shouldAutoWithdrawLinkedinRequest({
         request: request({
           status: 'accepted',
-          acceptedAt: '2026-05-04T00:00:00.000Z',
+          acceptedAt: '2026-05-05T00:00:00.000Z',
           leadId: null,
         }),
         now,
       }),
     ).toBe(true);
+
+    // 10 days age should NOT auto withdraw
+    expect(
+      shouldAutoWithdrawLinkedinRequest({
+        request: request({
+          status: 'accepted',
+          acceptedAt: '2026-05-06T00:00:00.000Z',
+          leadId: null,
+        }),
+        now,
+      }),
+    ).toBe(false);
 
     expect(
       shouldAutoWithdrawLinkedinRequest({

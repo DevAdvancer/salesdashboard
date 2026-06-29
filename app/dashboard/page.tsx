@@ -37,6 +37,7 @@ import type { ReferralSplit } from "@/lib/utils/dashboard-referral";
 import type { PaymentInsightRecord } from "@/app/actions/client-payments";
 import type { TeamLeadAssignmentSummary } from "@/lib/utils/dashboard-insights";
 import { loadTechnicalPaymentsDashboardAction } from "@/app/actions/technical-payments-dashboard";
+import { getTodayEst, getMonthStartEst, getMonthEndEst } from "@/lib/utils/est-date";
 
 type LeadGenerationTeamAssignmentStat = {
   teamLeadId: string;
@@ -48,45 +49,32 @@ type LeadGenerationTeamAssignmentStat = {
 // Date helpers
 // ---------------------------------------------------------------------------
 
-function toIsoDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function monthStartIso(date: Date): string {
-  return toIsoDate(new Date(date.getFullYear(), date.getMonth(), 1));
-}
-
-function monthEndIso(date: Date): string {
-  // Return the last day of the month as a YYYY-MM-DD string so it can
-  // be expanded to the end-of-day timestamp on the server side. This
-  // matches monthStartIso and avoids timezone skew from toISOString
-  // (which would shift the boundary for users not on UTC).
-  return toIsoDate(new Date(date.getFullYear(), date.getMonth() + 1, 0));
-}
-
-function monthLabel(date: Date): string {
-  return date.toLocaleString("en-US", { month: "long", year: "numeric" });
-}
-
+/**
+ * Format a YYYY-MM-DD string as a human-readable label.
+ * The date is parsed in UTC (not local time) so the label matches
+ * the raw string — no timezone drift.
+ */
 function rangeLabel(range: DateRange): string {
   if (isSingleDay(range) && range.from) {
     const [y, m, d] = range.from.split("-").map(Number);
-    const date = new Date(y, m - 1, d);
+    const date = new Date(Date.UTC(y, m - 1, d));
     return date.toLocaleDateString("en-US", {
       month: "long",
       day: "numeric",
       year: "numeric",
+      timeZone: "UTC",
     });
   }
   if (range.from && range.to) {
-    return `${range.from} → ${range.to}`;
+    return `${range.from} \u2192 ${range.to}`;
   }
   if (range.from) return `from ${range.from}`;
   if (range.to) return `through ${range.to}`;
   return "no range";
+}
+
+function monthLabel(date: Date): string {
+  return date.toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "America/New_York" });
 }
 
 // ---------------------------------------------------------------------------
@@ -154,10 +142,10 @@ function MainDashboard({
   const visibilityLabel = isAgent ? "Assigned to you" : "Total active leads";
   const router = useRouter();
 
-  // Date range — defaults to today (single day).
+  // Date range — defaults to today in EST (single day).
   const [dateRange, setDateRange] = useState<DateRange>(() => ({
-    from: toIsoDate(new Date()),
-    to: toIsoDate(new Date()),
+    from: getTodayEst(),
+    to: getTodayEst(),
   }));
 
   // Top metrics
@@ -172,13 +160,17 @@ function MainDashboard({
   const [linkedinKpiRows, setLinkedinKpiRows] = useState<LinkedinConnectionKpiRow[] | null>(null);
   const [linkedinKpiLoading, setLinkedinKpiLoading] = useState(true);
 
-  // Referral split (always current month)
+  // Referral split (always current month in EST)
   const currentMonth = useMemo(() => new Date(), []);
   const monthStartKey = useMemo(
-    () => monthStartIso(currentMonth),
+    () => getMonthStartEst(currentMonth),
     [currentMonth],
   );
-  const monthEndKey = useMemo(() => monthEndIso(currentMonth), [currentMonth]);
+  const monthEndKey = useMemo(
+    () => getMonthEndEst(currentMonth),
+    [currentMonth],
+  );
+
 
   // Payment insights (admin-like only)
   const [paymentRecords, setPaymentRecords] = useState<PaymentInsightRecord[]>(
@@ -459,7 +451,7 @@ function MainDashboard({
   const kpiTarget: number = (() => {
     if (kpiRows && kpiRows.length > 0) return kpiRows[0].target;
     if (kpiMode === "daily") return 1;
-    const fromIso = dateRange.from ?? toIsoDate(new Date());
+    const fromIso = dateRange.from ?? getTodayEst();
     const toIso = dateRange.to ?? fromIso;
     return Math.max(1, workingDaysInRange(fromIso, toIso));
   })();

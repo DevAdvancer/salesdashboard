@@ -5,17 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { isSingleDay } from "@/lib/utils/dashboard-kpi";
 import type { DateRange } from "@/lib/utils/dashboard-kpi";
-
-function toIso(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function monthStart(date: Date): string {
-  return toIso(new Date(date.getFullYear(), date.getMonth(), 1));
-}
+import { getTodayEst, getMonthStartEst } from "@/lib/utils/est-date";
 
 interface DashboardDateRangeProps {
   value: DateRange;
@@ -28,8 +18,8 @@ export function DashboardDateRange({
   onChange,
   className,
 }: DashboardDateRangeProps) {
-  const today = toIso(new Date());
-  const monthFirst = monthStart(new Date());
+  const today = getTodayEst();
+  const monthFirst = getMonthStartEst();
 
   return (
     <div className={cn("flex flex-wrap items-center gap-2", className)}>
