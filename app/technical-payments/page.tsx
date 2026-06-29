@@ -5,13 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { ProtectedRoute } from "@/components/protected-route";
 import {
   listTechnicalPaymentsAction,
   type TechnicalPaymentSummary,
 } from "@/app/actions/technical-payments";
-import { Calendar, Download, Filter } from "lucide-react";
+import { Calendar, Download, Filter, Search } from "lucide-react";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -55,6 +56,7 @@ function TechnicalPaymentsPage() {
   const [dateTo, setDateTo] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [searchAgent, setSearchAgent] = useState("");
+  const [companySearch, setCompanySearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("all");
 
   useEffect(() => {
@@ -82,9 +84,10 @@ function TechnicalPaymentsPage() {
       if (dateFrom && p.createdAt < dateFrom) return false;
       if (dateTo && p.createdAt > dateTo + "T23:59:59") return false;
       if (searchAgent && !p.userName.toLowerCase().includes(searchAgent.toLowerCase())) return false;
+      if (companySearch && !p.leadName.toLowerCase().includes(companySearch.toLowerCase())) return false;
       return true;
     });
-  }, [payments, dateFrom, dateTo, typeFilter, searchAgent]);
+  }, [payments, dateFrom, dateTo, typeFilter, searchAgent, companySearch]);
 
   // Group by team lead or agent
   const grouped = useMemo(() => {
@@ -265,13 +268,40 @@ function TechnicalPaymentsPage() {
 
           {/* Agent search (admin only) */}
           {isAdminScope && (
-            <div className="flex items-center gap-2">
-              <input
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative min-w-[160px]">
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search agent..."
+                  value={searchAgent}
+                  onChange={(e) => setSearchAgent(e.target.value)}
+                  className="pl-8 h-8 text-xs w-40"
+                />
+              </div>
+              <div className="relative min-w-[160px]">
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Filter by company..."
+                  value={companySearch}
+                  onChange={(e) => setCompanySearch(e.target.value)}
+                  className="pl-8 h-8 text-xs w-40"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Company search for non-admin */}
+          {!isAdminScope && (
+            <div className="relative min-w-[160px]">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
                 type="text"
-                placeholder="Search by agent name..."
-                value={searchAgent}
-                onChange={(e) => setSearchAgent(e.target.value)}
-                className="rounded-md border border-[var(--hairline)] bg-background px-3 py-1 text-xs w-48"
+                placeholder="Filter by company..."
+                value={companySearch}
+                onChange={(e) => setCompanySearch(e.target.value)}
+                className="pl-8 h-8 text-xs w-40"
               />
             </div>
           )}

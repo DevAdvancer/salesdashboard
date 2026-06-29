@@ -617,7 +617,7 @@ export async function backoutLeadAction(
     leadId,
     {
       ownerId: unassignedOwnerId,
-      assignedToId: null,
+      // Keep assignedToId as-is so the original assignee is preserved for reports
       isClosed: true,
       closedAt: nowIso,
       status: "Backed Out",
@@ -645,7 +645,7 @@ export async function backoutLeadAction(
       metadata: JSON.stringify({
         status: "Backed Out",
         ownerId: unassignedOwnerId,
-        assignedToId: null,
+        assignedToId: currentLead.assignedToId ?? null,
         isClosed: true,
         closedAt: nowIso,
       }),
@@ -717,7 +717,7 @@ export async function notInterestedLeadAction(
     leadId,
     {
       ownerId: unassignedOwnerId,
-      assignedToId: null,
+      // Keep assignedToId as-is so the original assignee is preserved for reports
       isClosed: false,
       closedAt: null,
       status: "Not Interested",
@@ -769,7 +769,7 @@ export async function notInterestedLeadAction(
       metadata: JSON.stringify({
         status: "Not Interested",
         ownerId: unassignedOwnerId,
-        assignedToId: null,
+        assignedToId: currentLead.assignedToId ?? null,
         isClosed: false,
         closedAt: null,
       }),

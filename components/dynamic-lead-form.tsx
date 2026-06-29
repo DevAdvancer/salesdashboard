@@ -15,6 +15,17 @@ import { useAuth } from "@/lib/contexts/auth-context";
 import { LeadAssignmentDropdown } from "@/components/lead-assignment-dropdown";
 import { shouldShowRequiredAsterisk } from "@/lib/utils/required-lead-fields";
 
+const REFERRAL_SOURCE_NORMALIZED = "referral";
+
+function normalizeSource(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function isReferralSource(value: unknown): boolean {
+  return normalizeSource(value) === REFERRAL_SOURCE_NORMALIZED;
+}
+
 interface DynamicLeadFormProps {
   formConfig: FormField[];
   onSubmit: (data: Record<string, unknown>) => void | Promise<void>;
@@ -88,7 +99,14 @@ export function DynamicLeadForm({
     isAgentLike && user ? user.$id : user ? user.$id : null,
   );
 
-  // Filter out ownerId, assignedToId, and lastName from configurable form fields (Requirement 4.5)
+  // Track source value to conditionally show referralName field
+  const [selectedSource, setSelectedSource] = useState<string>(
+    typeof defaultValues?.source === "string" ? defaultValues.source : "",
+  );
+
+  // Show referralName field when source is "Referral"
+  const showReferralName = isReferralSource(selectedSource);
+
   // Filter out ownerId and assignedToId from configurable form fields (Requirement 4.5)
   // These are handled automatically: ownerId by createLead, assignedToId by the dropdown
   const filteredConfig = formConfig.filter(
@@ -262,6 +280,7 @@ export function DynamicLeadForm({
           field.key,
           isMonitor,
         );
+        const isSourceField = field.key === "source" || field.key === "sourceName";
         return (
           <div key={field.id} className="space-y-2">
             <Label htmlFor={field.key}>
@@ -273,8 +292,13 @@ export function DynamicLeadForm({
             <select
               id={field.key}
               {...register(field.key, {
-              onChange: () => onClearExternalError?.(field.key),
-            })}
+                onChange: (e) => {
+                  onClearExternalError?.(field.key);
+                  if (isSourceField) {
+                    setSelectedSource(e.target.value);
+                  }
+                },
+              })}
               className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
                 error ? "border-red-500" : ""
               }`}>
@@ -351,6 +375,30 @@ export function DynamicLeadForm({
 
       {/* Render fields in order (Requirement 3.8) */}
       {visibleFields.map((field) => renderField(field))}
+
+      {/* Conditionally show Referral Name field when source is "Referral" */}
+      {showReferralName && (
+        <div className="space-y-2">
+          <Label htmlFor="referralName">
+            Referral Name
+            <span className="text-red-500 ml-1">*</span>
+          </Label>
+          <Input
+            id="referralName"
+            type="text"
+            placeholder="Enter referral name"
+            {...register("referralName", {
+              onChange: () => onClearExternalError?.("referralName"),
+            })}
+            className={errors.referralName ? "border-red-500" : ""}
+          />
+          {errors.referralName && (
+            <p className="text-sm text-red-500">
+              {errors.referralName.message as string}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Submit button - disabled when invalid (Requirement 11.5) */}
       <div className="flex justify-end space-x-4">

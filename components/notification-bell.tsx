@@ -13,6 +13,7 @@ import type { NotificationRecord } from '@/lib/types';
 import { getLatestNotifications } from '@/lib/utils/notifications';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
+import { showBrowserNotification, playNotificationSound } from '@/lib/utils/notification-sound';
 
 const NOTIFICATION_FALLBACK_POLL_MS = 5 * 60 * 1000;
 const NOTIFICATION_FORCE_REFRESH_COOLDOWN_MS = 5000;
@@ -81,6 +82,13 @@ export function NotificationBell({ className }: { className?: string }) {
 
         visibleToasts.forEach((notification) => {
           toastedIdsRef.current.add(notification.$id);
+          // Play sound and show browser notification
+          playNotificationSound();
+          showBrowserNotification(notification.title || 'Notification', {
+            body: notification.body,
+            icon: '/favicon.ico',
+          });
+          // Also show in-app toast
           toast({
             title: notification.title || 'Notification',
             description: notification.body,

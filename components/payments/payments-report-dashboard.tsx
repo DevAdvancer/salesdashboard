@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Search } from "lucide-react";
 import type { User } from "@/lib/types";
 import type { PaymentsReportRow } from "@/app/actions/client-payments";
 import { listPaymentsReport } from "@/lib/services/client-payment-service";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -66,6 +67,7 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
     const todayStr = `${yyyy}-${mm}-${dd}`;
     return { from: todayStr, to: todayStr };
   });
+  const [companySearch, setCompanySearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -108,9 +110,18 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
   }, [rows]);
 
   const filtered = useMemo(() => {
-    if (filter === "all") return sorted;
-    return sorted.filter((r) => r.status === filter);
-  }, [sorted, filter]);
+    let result = sorted;
+    if (filter !== "all") {
+      result = result.filter((r) => r.status === filter);
+    }
+    if (companySearch.trim()) {
+      const search = companySearch.toLowerCase().trim();
+      result = result.filter((r) =>
+        (r.company || "").toLowerCase().includes(search)
+      );
+    }
+    return result;
+  }, [sorted, filter, companySearch]);
 
   const summary = useMemo(() => {
     let amountPaid = 0;
@@ -176,6 +187,15 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
                       {f.label}
                     </Button>
                   ))}
+                </div>
+                <div className="relative min-w-[180px]">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Filter by company..."
+                    value={companySearch}
+                    onChange={(e) => setCompanySearch(e.target.value)}
+                    className="pl-9"
+                  />
                 </div>
               </div>
               <Button

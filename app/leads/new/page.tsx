@@ -31,7 +31,6 @@ import {
   getLinkedinProfileValue,
   isLinkedinProfileField,
 } from "@/lib/utils/lead-linkedin-field";
-import { getLeadCreateStatusOptions } from "@/lib/utils/lead-status-workflow";
 import { parseLeadActionError } from "@/lib/utils/lead-action-error";
 
 export default function NewLeadPage() {
@@ -670,7 +669,6 @@ function LegacyNewLeadContent() {
   const LINKEDIN_INITIAL_STATUS = "Connection Accepted";
   const LINKEDIN_SOURCE = "LinkedIN/Lead";
   const COLD_CALL_SOURCE = "Cold Calls";
-  const CREATE_STATUS_OPTIONS = getLeadCreateStatusOptions();
 
   const [formFields, setFormFields] = useState<FormField[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -794,14 +792,10 @@ function LegacyNewLeadContent() {
           )
         : isDirectLinkedinLead
           ? sorted.map((field) =>
-              field.key === "status"
-                ? { ...field, options: CREATE_STATUS_OPTIONS }
-                : field,
+              field,
             )
           : sorted.map((field) =>
-              field.key === "status"
-                ? { ...field, options: CREATE_STATUS_OPTIONS }
-                : field,
+              field,
             );
       const withRequiredOverrides = adjusted.map((field) => {
         const normalizedLabel = field.label.trim().toLowerCase();
