@@ -11,6 +11,8 @@ import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter, useParams } from "next/navigation";
 import { getLead } from "@/lib/services/lead-service";
 import { getLeadAction } from "@/app/actions/lead";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queries/keys";
 import { sendChatMessageAction } from "@/app/actions/chat";
 import {
   assignLead,
@@ -221,6 +223,7 @@ function LeadDetailContent() {
   const params = useParams();
   const { toast } = useToast();
   const leadId = params.id as string;
+  const queryClient = useQueryClient();
 
   const [lead, setLead] = useState<Lead | null>(null);
   const [leadData, setLeadData] = useState<LeadData>({});
@@ -253,6 +256,8 @@ function LeadDetailContent() {
     try {
       setIsLoading(true);
       setError(null);
+      // Invalidate React Query cache so we get fresh data
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads.detail(leadId) });
       const fetchedLead =
         user.role === "monitor" || user.role === "operations"
           ? await getLeadAction(leadId, user.$id)
@@ -265,7 +270,7 @@ function LeadDetailContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [leadId, user]);
+  }, [leadId, user, queryClient]);
 
   const loadFormConfig = useCallback(async () => {
     try {
