@@ -273,3 +273,48 @@ export function buildTargetReport(input: {
     unresolvedAgentIds: Array.from(usersByAgentId.keys()).filter((id) => !resolvedAgentIds.has(id)),
   };
 }
+
+/**
+ * Filter the target report result to show only a specific agent's row.
+ * Used when an agent views the report — they should see only their own
+ * target (from assignments) and achievement, not the full team view.
+ */
+export function filterTargetReportForAgent(
+  result: TargetReportResult,
+  agentId: string,
+): TargetReportResult {
+  // Find the agent's row across all team rows
+  for (const row of result.rows) {
+    const agentRow = row.agents.find((a) => a.userId === agentId);
+    if (agentRow) {
+      // Return a result with just this agent's row
+      return {
+        rows: [
+          {
+            ...row,
+            agents: [agentRow],
+          },
+        ],
+        totals: {
+          target: agentRow.target,
+          achieved: agentRow.achieved,
+          percent: agentRow.percent,
+          agentCount: 1,
+        },
+        unresolvedAgentIds: [],
+      };
+    }
+  }
+
+  // Agent has no row (no target assigned) — return empty result
+  return {
+    rows: [],
+    totals: {
+      target: 0,
+      achieved: 0,
+      percent: null,
+      agentCount: 0,
+    },
+    unresolvedAgentIds: [],
+  };
+}

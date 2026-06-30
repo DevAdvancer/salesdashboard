@@ -1,25 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { getAuthenticatedAccount } from "@/lib/server/current-user";
-import { readErrorResponseMessage } from "@/lib/utils/http-error-response";
+import { Resend } from "resend";
 import {
   SUPPORT_EMAIL_MAX_JSON_PAYLOAD_BYTES,
   SUPPORT_EMAIL_MAX_JSON_PAYLOAD_LABEL,
 } from "@/lib/utils/support-email-attachments";
 
+const resend = new Resend(process.env.RESEND_API_KEY || "re_xxxxxxxxx");
+
 function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'Internal Server Error';
+  return error instanceof Error ? error.message : "Internal Server Error";
 }
 
 export async function POST(request: NextRequest) {
   try {
+    // Enforce authentication via Appwrite session
     await getAuthenticatedAccount();
-    const cookieStore = await cookies();
-    const token = cookieStore.get("outlook_access_token");
-
-    if (!token || !token.value) {
-      return NextResponse.json({ error: "Not connected to Outlook" }, { status: 401 });
-    }
 
     const contentLength = Number(request.headers.get("content-length") ?? "0");
     if (contentLength > SUPPORT_EMAIL_MAX_JSON_PAYLOAD_BYTES) {
@@ -32,23 +28,54 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = await request.json();
+    const { message } = payload;
 
-    const response = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token.value}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      throw new Error(await readErrorResponseMessage(response, 'Failed to send email via Graph API'));
+    if (!message) {
+      return NextResponse.json({ error: "Invalid payload: missing message" }, { status: 400 });
     }
 
-    return NextResponse.json({ success: true });
+    const to = message.toRecipients?.map((r: any) => r.emailAddress.address) || [];
+    const cc = message.ccRecipients?.map((r: any) => r.emailAddress.address) || [];
+    const subject = message.subject || "";
+    const html = message.body?.contentType?.toUpperCase() === "HTML" ? message.body.content : undefined;
+    const text = message.body?.contentType?.toUpperCase() !== "HTML" ? message.body.content : undefined;
+
+    const attachments = message.attachments?.map((att: any) => ({
+      filename: att.name,
+      content: Buffer.from(att.contentBytes, "base64"),
+    })) || [];
+
+    const fromEmail = process.env.RESEND_FROM_EMAIL || "Acme <onboarding@resend.dev>";
+
+    const sendOptions: any = {
+      from: fromEmail,
+      to,
+      subject,
+    };
+
+    if (cc.length > 0) {
+      sendOptions.cc = cc;
+    }
+
+    if (html !== undefined) {
+      sendOptions.html = html;
+    } else if (text !== undefined) {
+      sendOptions.text = text;
+    }
+
+    if (attachments.length > 0) {
+      sendOptions.attachments = attachments;
+    }
+
+    const { data, error } = await resend.emails.send(sendOptions);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return NextResponse.json({ success: true, data });
   } catch (error: unknown) {
-    console.error('Error sending interview email:', error);
+    console.error("Error sending interview email:", error);
     return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }

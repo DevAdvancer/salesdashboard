@@ -11,6 +11,7 @@ import { MonthPicker } from "./month-picker";
 import { TargetReportTable } from "./target-report-table";
 import { AdminTargetForm } from "./admin-target-form";
 import { TlSplitForm } from "./tl-split-form";
+import { filterTargetReportForAgent } from "@/lib/utils/monthly-target-report";
 
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -43,6 +44,7 @@ export function TargetReportDashboard({ user }: TargetReportDashboardProps) {
     user.role === "monitor" ||
     user.role === "operations";
   const isTl = user.role === "team_lead";
+  const isAgent = user.role === "agent" || user.role === "lead_generation";
 
   const load = useCallback(async () => {
     try {
@@ -112,13 +114,17 @@ export function TargetReportDashboard({ user }: TargetReportDashboardProps) {
           Loading target report…
         </div>
       ) : payload ? (
-        <TargetReportTable result={payload.result} />
+        <TargetReportTable
+          result={isAgent ? filterTargetReportForAgent(payload.result, user.$id) : payload.result}
+        />
       ) : null}
 
       {payload ? (
         <p className="text-xs text-muted-foreground">
-          Showing {payload.monthLabel}. Team total: {currency.format(payload.result.totals.target)}.
-          Achieved: {currency.format(payload.result.totals.achieved)}.
+          {isAgent
+            ? `Showing your personal target for ${payload.monthLabel}. Your target: ${currency.format(payload.result.totals.target)}. Achieved: ${currency.format(payload.result.totals.achieved)}.`
+            : `Showing ${payload.monthLabel}. Team total: ${currency.format(payload.result.totals.target)}. Achieved: ${currency.format(payload.result.totals.achieved)}.`
+          }
         </p>
       ) : null}
     </div>
