@@ -68,6 +68,8 @@ import {
   isCloseRequiredFieldsMissing,
   isAmountMissing,
   getMissingCloseRequiredFields,
+  isPaymentDetailsMissing,
+  getMissingPaymentFields,
 } from "@/lib/utils/lead-close-gate";
 import { getErrorMessage } from "@/lib/utils";
 import { parseLeadActionError } from "@/lib/utils/lead-action-error";
@@ -588,6 +590,22 @@ function LeadDetailContent() {
         return missing;
       };
 
+      // Payment details are always required to close a lead, regardless of
+      // the field's `required` flag in the form config — even admin/developer/
+      // monitor cannot bypass this. Backout is exempt.
+      const paymentPlanMissing = getMissingPaymentFields(
+        paymentPlanValues,
+        closeStatus,
+      );
+      if (isPaymentDetailsMissing(paymentPlanValues, closeStatus)) {
+        toast({
+          title: "Payment details required",
+          description: "Fill in Payment Percentage and Payment Months before closing the lead.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const missingClosure = missingRequired(closureFields, closureValues);
       const missingPayment = missingRequired(
         paymentPlanFields,
@@ -1066,12 +1084,9 @@ function LeadDetailContent() {
   const isOperations = user.role === "operations";
   const isLeadOwner = lead.ownerId === user.$id;
   // Per-lead gating for the Edit / Close Lead / Reopen buttons. Operations
-  // is read-only and never gets these affordances. Monitors are
-  // leadership-level observers: the server-side close / update / reopen
-  // actions all let them mutate any lead they can view, so the UI mirrors
-  // that — previously `(!isMonitor || isLeadOwner)` hid the Close Lead
-  // button for monitor on non-owned leads even though the action would
-  // have succeeded. The server enforces the per-role permission rules
+  // is read-only and never gets these affordances. Admin, developer, and
+  // team_lead can close leads; monitor cannot close but can reopen. The
+  // server enforces the per-role permission rules
   // (see `assertLeadUpdateAllowed` / `assertLeadReopenAllowed` /
   // `closeLeadAction` in app/actions/lead.ts and lib/actions/lead-actions.ts).
   const canModifyLead = !isOperations;
@@ -1197,6 +1212,7 @@ function LeadDetailContent() {
             canModifyLead &&
             (isLeadOwner ||
               user?.role === "admin" ||
+              user?.role === "developer" ||
               user?.role === "team_lead") && (
               <>
                 {isBackoutStatus(lead.status) && (
@@ -1612,14 +1628,12 @@ function LeadDetailContent() {
                             <option value="Signed/Closure">
                               Signed/Closure
                             </option>
-                            <option value="Backed Out">Backed Out</option>
                           </>
                         ) : (
                           <>
                             <option value="Won">Won</option>
                             <option value="Lost">Lost</option>
                             <option value="Rejected">Rejected</option>
-                            <option value="Backed Out">Backed Out</option>
                           </>
                         )}
                       </select>

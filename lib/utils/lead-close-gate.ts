@@ -111,3 +111,59 @@ export function getMissingCloseRequiredFields(
 
   return missing;
 }
+
+/**
+ * Returns true when Payment Percentage or Payment Months are missing/
+ * blank/N/A in the payment plan values. Used to gate lead closure —
+ * no role (including admin/developer/monitor) can close a lead without
+ * entering payment details. Backout is exempt.
+ */
+export function isPaymentDetailsMissing(
+  paymentPlanValues: Record<string, unknown>,
+  closeStatus: string,
+): boolean {
+  if (isBackoutStatusInternal(closeStatus)) return false;
+
+  const rawPercent = paymentPlanValues.paymentPercent;
+  const rawMonths = paymentPlanValues.paymentMonths;
+
+  return (
+    isTextMissing(rawPercent) || isTextMissing(rawMonths)
+  );
+}
+
+/**
+ * Lists the missing payment fields for use in toasts.
+ */
+export function getMissingPaymentFields(
+  paymentPlanValues: Record<string, unknown>,
+  closeStatus: string,
+): string[] {
+  if (isBackoutStatusInternal(closeStatus)) return [];
+
+  const missing: string[] = [];
+  const rawPercent = paymentPlanValues.paymentPercent;
+  const rawMonths = paymentPlanValues.paymentMonths;
+
+  if (isTextMissing(rawPercent)) missing.push("Payment Percentage");
+  if (isTextMissing(rawMonths)) missing.push("Payment Months");
+
+  return missing;
+}
+
+/**
+ * Internal backout check matching the pattern used in the leads page.
+ * Exposed so the page component can share the same logic.
+ */
+export function isBackoutStatusInternal(value: unknown): boolean {
+  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (!text) return false;
+  return (
+    text === "backout" ||
+    text === "backedout" ||
+    text === "backed out" ||
+    text === "back out" ||
+    text.replace(/\s+/g, "") === "backedout" ||
+    text.replace(/\s+/g, "") === "backout"
+  );
+}

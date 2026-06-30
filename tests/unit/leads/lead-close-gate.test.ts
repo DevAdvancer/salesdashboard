@@ -4,6 +4,8 @@ import {
   isCloseRequiredFieldsMissing,
   isTextMissing,
   getMissingCloseRequiredFields,
+  isPaymentDetailsMissing,
+  getMissingPaymentFields,
 } from "@/lib/utils/lead-close-gate";
 
 const isBackoutStatus = (status: string) => {
@@ -276,6 +278,75 @@ describe("lead-close-gate", () => {
         legalName: "Narendra",
       };
       expect(getMissingCloseRequiredFields(leadData)).toEqual([]);
+    });
+  });
+
+  describe("isPaymentDetailsMissing", () => {
+    it("returns false when both paymentPercent and paymentMonths are filled", () => {
+      const values = { paymentPercent: "50", paymentMonths: "12" };
+      expect(isPaymentDetailsMissing(values, "Closed")).toBe(false);
+    });
+
+    it("returns true when paymentPercent is missing", () => {
+      const values = { paymentPercent: "", paymentMonths: "12" };
+      expect(isPaymentDetailsMissing(values, "Closed")).toBe(true);
+    });
+
+    it("returns true when paymentMonths is missing", () => {
+      const values = { paymentPercent: "50", paymentMonths: "" };
+      expect(isPaymentDetailsMissing(values, "Closed")).toBe(true);
+    });
+
+    it("returns true for N/A-like values in paymentPercent", () => {
+      const values = { paymentPercent: "N/A", paymentMonths: "12" };
+      expect(isPaymentDetailsMissing(values, "Closed")).toBe(true);
+    });
+
+    it("returns true for N/A-like values in paymentMonths", () => {
+      const values = { paymentPercent: "50", paymentMonths: "n/a" };
+      expect(isPaymentDetailsMissing(values, "Closed")).toBe(true);
+    });
+
+    it("returns true for whitespace-only values", () => {
+      const values = { paymentPercent: "   ", paymentMonths: "   " };
+      expect(isPaymentDetailsMissing(values, "Closed")).toBe(true);
+    });
+
+    it("returns false for undefined/null paymentPercent and paymentMonths when status is Backout", () => {
+      const values = { paymentPercent: undefined, paymentMonths: null };
+      expect(isPaymentDetailsMissing(values, "Backout")).toBe(false);
+    });
+
+    it("returns false for undefined/null paymentPercent and paymentMonths when status is Backed Out", () => {
+      const values = { paymentPercent: undefined, paymentMonths: null };
+      expect(isPaymentDetailsMissing(values, "Backed Out")).toBe(false);
+    });
+  });
+
+  describe("getMissingPaymentFields", () => {
+    it("returns empty array when both fields are filled", () => {
+      const values = { paymentPercent: "50", paymentMonths: "12" };
+      expect(getMissingPaymentFields(values, "Closed")).toEqual([]);
+    });
+
+    it("lists both fields when both are missing", () => {
+      const values = { paymentPercent: "", paymentMonths: "" };
+      expect(getMissingPaymentFields(values, "Closed")).toEqual([
+        "Payment Percentage",
+        "Payment Months",
+      ]);
+    });
+
+    it("lists only Payment Percentage when it is missing", () => {
+      const values = { paymentPercent: "", paymentMonths: "12" };
+      expect(getMissingPaymentFields(values, "Closed")).toEqual([
+        "Payment Percentage",
+      ]);
+    });
+
+    it("returns empty array for Backout status even when fields are missing", () => {
+      const values = { paymentPercent: "", paymentMonths: "" };
+      expect(getMissingPaymentFields(values, "Backout")).toEqual([]);
     });
   });
 });
