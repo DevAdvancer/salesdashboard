@@ -32,6 +32,7 @@ export const queryKeys = {
     assignable: (scope: string) => ["users", "assignable", scope] as const,
     teamAgents: (teamLeadId: string) =>
       ["users", "teamAgents", teamLeadId] as const,
+    teamLeads: (scope: string) => ["users", "teamLeads", scope] as const,
     list: (scope: string, page: number, pageSize: number) =>
       ["users", "list", scope, page, pageSize] as const,
   },

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   getAgentsByTeamLead,
   getAssignableUsers,
+  getTeamLeads,
 } from "@/lib/services/user-service";
 import { listBranches } from "@/lib/services/branch-service";
 import { getFormConfig } from "@/lib/services/form-config-service";
@@ -44,6 +45,26 @@ export function useAssignableUsersQuery({
     queryKey: queryKeys.users.assignable(scope),
     queryFn: () =>
       getAssignableUsers(role, branchIds ?? [], userId, departmentScope),
+    enabled: Boolean(userId),
+    staleTime: FIVE_MINUTES,
+  });
+}
+
+export function useTeamLeadsQuery({
+  userId,
+  role,
+  branchIds,
+  departmentScope,
+}: {
+  userId: string;
+  role: UserRole;
+  branchIds?: string[];
+  departmentScope?: Department | "all";
+}) {
+  const scope = buildScope(userId, role);
+  return useQuery<User[]>({
+    queryKey: queryKeys.users.teamLeads(scope),
+    queryFn: () => getTeamLeads(branchIds, departmentScope),
     enabled: Boolean(userId),
     staleTime: FIVE_MINUTES,
   });

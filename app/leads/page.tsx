@@ -12,6 +12,7 @@ import {
   useBranchesQuery,
   useLeadFormConfigQuery,
   useTeamAgentsQuery,
+  useTeamLeadsQuery,
 } from "@/lib/queries/users/use-users-query";
 import { Branch, Lead, User, LeadListFilters, LeadData } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,6 +40,7 @@ const FILTER_PARAM_KEYS = {
   branch: "branch",
   from: "from",
   to: "to",
+  team: "team",
 } as const;
 
 function parseLeadData(lead: Lead): LeadData {
@@ -88,6 +90,9 @@ const LEADERSHIP_NO_BRANCH_FILTER = new Set([
   "operations",
 ]);
 
+// Roles that see all agents but have no default team selected
+const ADMIN_OPS_NO_DEFAULT = new Set(["admin", "operations"]);
+
 function LeadsContent() {
   const { user, loading } = useAuth();
   const isMonitor = user?.role === 'monitor';
@@ -116,6 +121,7 @@ function LeadsContent() {
   const urlBranch = searchParams.get(FILTER_PARAM_KEYS.branch) ?? "";
   const urlFrom = searchParams.get(FILTER_PARAM_KEYS.from) ?? "";
   const urlTo = searchParams.get(FILTER_PARAM_KEYS.to) ?? "";
+  const urlTeam = searchParams.get(FILTER_PARAM_KEYS.team) ?? "";
 
   type FilterDrafts = {
     q: string;
@@ -124,6 +130,7 @@ function LeadsContent() {
     branch: string;
     from: string;
     to: string;
+    team: string;
   };
 
   const [drafts, setDrafts] = useState<FilterDrafts>(() => ({
@@ -133,6 +140,7 @@ function LeadsContent() {
     branch: urlBranch,
     from: urlFrom,
     to: urlTo,
+    team: urlTeam,
   }));
 
   // Re-seed the drafts when the URL changes from outside this component
@@ -152,6 +160,7 @@ function LeadsContent() {
       branch: urlBranch,
       from: urlFrom,
       to: urlTo,
+      team: urlTeam,
     };
     const current = draftsRef.current;
     if (
@@ -160,7 +169,8 @@ function LeadsContent() {
       current.assignedTo === next.assignedTo &&
       current.branch === next.branch &&
       current.from === next.from &&
-      current.to === next.to
+      current.to === next.to &&
+      current.team === next.team
     ) {
       return;
     }
@@ -169,7 +179,7 @@ function LeadsContent() {
     // meant to react to URL changes only, and reading drafts in the
     // dependency list would cause infinite loops because the effect
     // also updates drafts.
-  }, [urlSearch, urlStatus, urlAssignedTo, urlBranch, urlFrom, urlTo]);
+  }, [urlSearch, urlStatus, urlAssignedTo, urlBranch, urlFrom, urlTo, urlTeam]);
 
   const searchDraft = drafts.q;
   const statusDraft = drafts.status;
@@ -177,6 +187,28 @@ function LeadsContent() {
   const branchDraft = drafts.branch;
   const dateFromDraft = drafts.from;
   const dateToDraft = drafts.to;
+  const teamDraft = drafts.team;
+
+  // Set default team selection: team_lead defaults to self, admin/operations
+  // have no default, other leadership roles also have no default.
+  useEffect(() => {
+    if (!user) return;
+    // If team is already in the URL, don't override it
+    if (urlTeam) return;
+    // Admin and operations get no default team selection
+    if (ADMIN_OPS_NO_DEFAULT.has(user.role)) return;
+    // Team leads default to their own team
+    if (user.role === "team_lead") {
+      setDrafts((prev) => ({ ...prev, team: user.$id }));
+    }
+  }, [user, urlTeam]);
+
+  // Reset assignedTo when team changes to avoid selecting an agent
+  // that isn't in the newly selected team.
+  useEffect(() => {
+    setDrafts((prev) => ({ ...prev, assignedTo: "" }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamDraft]);
 
   // The committed (URL-sourced) values drive the actual query.
   const searchQuery = urlSearch;
@@ -226,6 +258,7 @@ function LeadsContent() {
       branch: string;
       from: string;
       to: string;
+      team: string;
     }) => {
       const params = new URLSearchParams();
       if (next.q) params.set(FILTER_PARAM_KEYS.q, next.q);
@@ -234,6 +267,7 @@ function LeadsContent() {
       if (next.branch) params.set(FILTER_PARAM_KEYS.branch, next.branch);
       if (next.from) params.set(FILTER_PARAM_KEYS.from, next.from);
       if (next.to) params.set(FILTER_PARAM_KEYS.to, next.to);
+      if (next.team) params.set(FILTER_PARAM_KEYS.team, next.team);
       const qs = params.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
@@ -411,6 +445,12 @@ function LeadsContent() {
     teamLeadId: user?.$id ?? "",
     departmentScope: "sales",
   });
+  const teamLeadsQuery = useTeamLeadsQuery({
+    userId: user?.$id ?? "",
+    role: user?.role ?? "agent",
+    branchIds: user?.branchIds,
+    departmentScope: "sales",
+  });
   const branchesQuery = useBranchesQuery();
   const formConfigQuery = useLeadFormConfigQuery();
 
@@ -422,20 +462,46 @@ function LeadsContent() {
     () => teamAgentsQuery.data ?? [],
     [teamAgentsQuery.data],
   );
+  const teamLeads = useMemo(
+    () => teamLeadsQuery.data ?? [],
+    [teamLeadsQuery.data],
+  );
   const rawBranches = useMemo(
     () => branchesQuery.data ?? [],
     [branchesQuery.data],
   );
 
-  // Pick the agent list based on role: TLs see only their own team,
-  // admins/leadership see all assignable users, agent role sees nothing
-  // (the dropdown is hidden for them anyway).
-  const agents: User[] = useMemo(() => {
+  // Build a lookup: teamLeadId -> agents belonging to that team
+  // For leadership roles we need agents grouped by their teamLeadId
+  const agentsByTeamLead = useMemo(() => {
+    const map = new Map<string, User[]>();
+    allAssignableUsers.forEach((u) => {
+      if (u.role === "agent" || u.role === "lead_generation") {
+        const tlId = u.teamLeadId || "";
+        if (!map.has(tlId)) map.set(tlId, []);
+        map.get(tlId)!.push(u);
+      }
+    });
+    return map;
+  }, [allAssignableUsers]);
+
+  // For team_lead: agents of their own team only
+  const agentsForCurrentRole: User[] = useMemo(() => {
     if (!user) return [];
     if (TEAM_LEAD_ONLY.has(user.role)) return teamAgents;
     if (LEADERSHIP_ROLES.has(user.role)) return allAssignableUsers;
     return [];
   }, [user, allAssignableUsers, teamAgents]);
+
+  // When a team is selected (for leadership roles), filter agents to
+  // only those belonging to the selected team. If no team is selected,
+  // return all agents for the role.
+  const agents: User[] = useMemo(() => {
+    if (!LEADERSHIP_ROLES.has(user?.role || "")) return [];
+    if (!teamDraft) return agentsForCurrentRole;
+    // Filter to agents whose teamLeadId matches the selected team
+    return agentsByTeamLead.get(teamDraft) ?? [];
+  }, [user, agentsForCurrentRole, agentsByTeamLead, teamDraft]);
 
   // Branch filter is shown to every role. Filter to active + role-visible
   // branches: leadership sees all active; everyone else sees only the
@@ -604,6 +670,7 @@ function LeadsContent() {
       branch: branchDraft,
       from: dateFromDraft,
       to: dateToDraft,
+      team: teamDraft,
     });
     // Reset to page 1 when filters change so users see results starting
     // at the top.
@@ -618,6 +685,7 @@ function LeadsContent() {
       branch: "",
       from: "",
       to: "",
+      team: "",
     });
     setCurrentPage(1);
   };
@@ -746,6 +814,28 @@ function LeadsContent() {
                 ))}
               </select>
             </div>
+
+            {LEADERSHIP_ROLES.has(user?.role || "") && (
+              <div>
+                <Label htmlFor="teamFilter">Team</Label>
+                <select
+                  id="teamFilter"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  value={teamDraft}
+                  onChange={(e) =>
+                    setDrafts((prev) => ({ ...prev, team: e.target.value }))
+                  }>
+                  <option value="">
+                    {ADMIN_OPS_NO_DEFAULT.has(user?.role || "") ? "All Teams" : "My Team"}
+                  </option>
+                  {teamLeads.map((tl) => (
+                    <option key={tl.$id} value={tl.$id}>
+                      {tl.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {LEADERSHIP_ROLES.has(user?.role || "") && (
               <div>
