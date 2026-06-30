@@ -11,6 +11,7 @@ import {
   HistoryFilters,
   AuditLog,
   PaymentStatus,
+  User,
 } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ import { listBranches } from "@/lib/services/branch-service";
 import { listClientPaymentSummaries } from "@/lib/services/client-payment-service";
 import { isVisibleClientLead } from "@/lib/utils/client-history";
 import { filterClosedLeadsInDateRange } from "@/lib/utils/dashboard-referral";
+import { useAssignableUsersQuery, useTeamAgentsQuery } from "@/lib/queries/users/use-users-query";
 
 function HistoryContent() {
   const router = useRouter();
@@ -52,6 +54,7 @@ function HistoryContent() {
     PaymentStatus | "no_record" | "all"
   >("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [teamLeadId, setTeamLeadId] = useState<string>("");
   const ITEMS_PER_PAGE = 10;
   const getLeadData = (lead: Lead): LeadData => {
     try {
@@ -65,6 +68,7 @@ function HistoryContent() {
     if (status === "no_record") return "No Record";
     if (status === "fully_paid") return "Fully Paid";
     if (status === "partially_paid") return "Partially Paid";
+    if (status === "non_upfront") return "Non-Upfront";
     return "Not Paid";
   };
 
@@ -302,6 +306,39 @@ function HistoryContent() {
     }
   }, [user]);
 
+  // Load agents for filtering
+  const assignableUsersQuery = useAssignableUsersQuery({
+    userId: user?.$id ?? "",
+    role: user?.role ?? "agent",
+    branchIds: user?.branchIds,
+    departmentScope: "sales",
+  });
+  const teamAgentsQuery = useTeamAgentsQuery({
+    teamLeadId: user?.$id ?? "",
+    departmentScope: "sales",
+  });
+
+  const canFilterByAgent = user?.role === "admin" || user?.role === "team_lead" || user?.role === "monitor" || user?.role === "operations";
+  const LEADERSHIP_ROLES = new Set([
+    "admin", "developer", "monitor", "operations", "team_lead"
+  ]);
+
+  const agents: User[] = useMemo(() => {
+    if (!user) return [];
+
+    // Team leads see only their own team
+    if (user.role === "team_lead") {
+      return teamAgentsQuery.data ?? [];
+    }
+
+    // Admin/monitor/operations see all assignable users
+    if (LEADERSHIP_ROLES.has(user?.role)) {
+      return assignableUsersQuery.data ?? [];
+    }
+
+    return [];
+  }, [user, assignableUsersQuery.data, teamAgentsQuery.data]);
+
   useEffect(() => {
     const leadsMissingClosedBy = paginatedLeads.filter(
       (lead) => lead.$id && !closedByMap[lead.$id],
@@ -328,6 +365,7 @@ function HistoryContent() {
       isClosed: true,
       assignedToId: filters.agentId,
       branchId: filters.branchId,
+      teamLeadId: teamLeadId || undefined,
     },
     actionOptions: {
       // Client history should show every closed client the actor can access,
@@ -393,6 +431,7 @@ function HistoryContent() {
     setFilters({});
     setSearch("");
     setPaymentFilter("all");
+    setTeamLeadId("");
     setCurrentPage(1);
   };
 
@@ -456,6 +495,7 @@ function HistoryContent() {
               <option value="no_record">No Record</option>
               <option value="not_paid">Not Paid</option>
               <option value="partially_paid">Partially Paid</option>
+              <option value="non_upfront">Non-Upfront</option>
               <option value="fully_paid">Fully Paid</option>
             </select>
           </div>
@@ -488,6 +528,49 @@ function HistoryContent() {
               }}
             />
           </div>
+          {canFilterByAgent && agents.length > 0 && (
+            <div>
+              <Label htmlFor="clientAgentFilter">Agent</Label>
+              <select
+                id="clientAgentFilter"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                value={filters.agentId ?? ""}
+                onChange={(event) => {
+                  setFilters((prev) => ({
+                    ...prev,
+                    agentId: event.target.value || undefined,
+                  }));
+                  setCurrentPage(1);
+                }}>
+                <option value="">All Agents</option>
+                {agents.map((agent) => (
+                  <option key={agent.$id} value={agent.$id}>
+                    {agent.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {canFilterByAgent && agents.length > 0 && (
+            <div>
+              <Label htmlFor="clientTeamFilter">Team</Label>
+              <select
+                id="clientTeamFilter"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                value={teamLeadId ?? ""}
+                onChange={(event) => {
+                  setTeamLeadId(event.target.value);
+                  setCurrentPage(1);
+                }}>
+                <option value="">All Teams</option>
+                {agents.filter(agent => agent.role === 'team_lead').map((tl) => (
+                  <option key={tl.$id} value={tl.$id}>
+                    Team of {tl.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {canFilterByBranch && (
             <div>
               <Label htmlFor="clientBranchFilter">Branch</Label>

@@ -456,7 +456,7 @@ export interface HistoryEntry extends Lead {
   closedAt: string;
 }
 
-export type PaymentStatus = 'not_paid' | 'partially_paid' | 'fully_paid';
+export type PaymentStatus = 'not_paid' | 'partially_paid' | 'fully_paid' | 'non_upfront';
 
 export interface ClientPaymentPlan {
   percent: number;
