@@ -73,6 +73,7 @@ function matchesCompany(recordCompany: string, filter: CompanyFilter): boolean {
 interface PaymentsSectionProps {
   records: PaymentInsightRecord[];
   isLoading: boolean;
+  rangeLabel?: string;
 }
 
 interface CompanyRow {
@@ -137,7 +138,7 @@ function statusVariant(status: PaymentStatus) {
   return "inactive" as const;
 }
 
-export function PaymentsSection({ records, isLoading }: PaymentsSectionProps) {
+export function PaymentsSection({ records, isLoading, rangeLabel }: PaymentsSectionProps) {
   const [statusFilter, setStatusFilter] = useState<"all" | PaymentStatus>(
     "all",
   );
@@ -213,7 +214,7 @@ export function PaymentsSection({ records, isLoading }: PaymentsSectionProps) {
           <div>
             <CardTitle className="text-base sm:text-lg">Payments</CardTitle>
             <CardDescription>
-              All-time by company + per-month received
+              {rangeLabel ? `${rangeLabel} — by company` : "All-time by company + per-month received"}
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">

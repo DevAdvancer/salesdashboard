@@ -27,6 +27,11 @@ interface TechnicalPaymentSummary {
 interface TechnicalPaymentsSectionProps {
   payments: TechnicalPaymentSummary[];
   isLoading: boolean;
+  dateFilter?: {
+    from?: string;
+    to?: string;
+  };
+  rangeLabel?: string;
 }
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
@@ -47,18 +52,38 @@ function formatDate(iso: string) {
 export function TechnicalPaymentsSection({
   payments,
   isLoading,
+  dateFilter,
+  rangeLabel,
 }: TechnicalPaymentsSectionProps) {
+  // Filter payments by date range if provided
+  const filteredPayments = useMemo(() => {
+    if (!dateFilter?.from && !dateFilter?.to) return payments;
+    return payments.filter((p) => {
+      const paymentDate = new Date(p.createdAt);
+      if (dateFilter.from) {
+        const fromDate = new Date(dateFilter.from);
+        if (paymentDate < fromDate) return false;
+      }
+      if (dateFilter.to) {
+        const toDate = new Date(dateFilter.to);
+        toDate.setHours(23, 59, 59, 999);
+        if (paymentDate > toDate) return false;
+      }
+      return true;
+    });
+  }, [payments, dateFilter]);
+
   const stats = useMemo(() => {
-    const assessmentTotal = payments
+    const assessmentTotal = filteredPayments
       .filter((p) => p.type === "assessment")
       .reduce((sum, p) => sum + p.amount, 0);
-    const interviewTotal = payments
+    const interviewTotal = filteredPayments
       .filter((p) => p.type === "interview")
       .reduce((sum, p) => sum + p.amount, 0);
-    const assessmentCount = payments.filter(
+    const assessmentCount = filteredPayments.filter(
       (p) => p.type === "assessment",
     ).length;
-    const interviewCount = payments.filter(
+    const interviewCount = filteredPayments.filter(
       (p) => p.type === "interview",
     ).length;
     return {
@@ -68,17 +93,17 @@ export function TechnicalPaymentsSection({
       interviewCount,
       grandTotal: assessmentTotal + interviewTotal,
     };
-  }, [payments]);
+  }, [filteredPayments]);
 
   const recentPayments = useMemo(
     () =>
-      [...payments]
+      [...filteredPayments]
         .sort(
           (a, b) =>
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
         )
         .slice(0, 10),
-    [payments],
+    [filteredPayments],
   );
 
   return (
@@ -90,12 +115,12 @@ export function TechnicalPaymentsSection({
               Technical Payments
             </CardTitle>
             <CardDescription>
-              Assessment and Interview upfront collections
+              Assessment and Interview upfront collections {rangeLabel && `— ${rangeLabel}`}
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="default">
-              {payments.length} transactions
+              {filteredPayments.length} transactions
             </Badge>
             <Badge className="bg-emerald-600 text-white">
               {currencyFormatter.format(stats.grandTotal)}
@@ -249,7 +274,7 @@ export function TechnicalPaymentsSection({
         </div>
 
         {/* Type Breakdown */}
-        {!isLoading && payments.length > 0 && (
+        {!isLoading && filteredPayments.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span>Type breakdown:</span>
             <Badge

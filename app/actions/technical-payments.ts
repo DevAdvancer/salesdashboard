@@ -84,26 +84,6 @@ async function listAllTechnicalPayments(): Promise<any[]> {
   });
 }
 
-async function listTechnicalPaymentsByUserIds(userIds: string[]): Promise<any[]> {
-  if (!userIds.length) return [];
-  const { databases } = await createAdminClient();
-  const CHUNK = 100;
-  const chunks: string[][] = [];
-  for (let i = 0; i < userIds.length; i += CHUNK) {
-    chunks.push(userIds.slice(i, i + CHUNK));
-  }
-  const results = await Promise.all(
-    chunks.map((chunk) =>
-      databases.listDocuments(DATABASE_ID, COLLECTIONS.TECHNICAL_PAYMENTS, [
-        Query.equal('userId', chunk),
-        Query.orderDesc('createdAt'),
-        Query.limit(5000),
-      ])
-    )
-  );
-  return results.flatMap((r) => r.documents);
-}
-
 async function listTechnicalPaymentsByLeadIds(leadIds: string[]): Promise<any[]> {
   if (!leadIds.length) return [];
   const { databases } = await createAdminClient();
@@ -202,7 +182,7 @@ export async function listTechnicalPaymentsAction(
   const { databases } = await createAdminClient();
 
   // Resolve scoped user IDs
-  let scopedUserIds: string[];
+  let scopedUserIds: string[] | null;
 
   if (actor.role === 'team_lead') {
     const agents = await listAllDocuments<any>({
@@ -218,11 +198,16 @@ export async function listTechnicalPaymentsAction(
       maxPages: 100,
     });
     scopedUserIds = [actor.$id, ...agents.map((a: any) => a.$id)];
+  } else if (actor.role === 'admin' || actor.role === 'developer' || actor.role === 'monitor' || actor.role === 'operations') {
+    // Admin-like roles see all payments across all users — no userId filter
+    scopedUserIds = null;
   } else {
     scopedUserIds = [actor.$id];
   }
 
-  const payments = await listTechnicalPaymentsByUserIds(scopedUserIds);
+  const payments = scopedUserIds
+    ? await listTechnicalPaymentsByUserIds(scopedUserIds)
+    : await listAllTechnicalPayments();
 
   // Collect lead IDs to batch-fetch lead data
   const leadIds = Array.from(new Set(payments.map((p: any) => p.leadId).filter(Boolean)));
@@ -252,7 +237,7 @@ export async function listTechnicalPaymentsAction(
   }
 
   const userDocs =
-    scopedUserIds.length > 0
+    scopedUserIds
       ? await listAllDocuments<any>({
           databases,
           databaseId: DATABASE_ID,
@@ -261,7 +246,14 @@ export async function listTechnicalPaymentsAction(
           pageLimit: 100,
           maxPages: 100,
         })
-      : [];
+      : await listAllDocuments<any>({
+          databases,
+          databaseId: DATABASE_ID,
+          collectionId: COLLECTIONS.USERS,
+          queries: [Query.orderAsc('$id')],
+          pageLimit: 100,
+          maxPages: 500,
+        });
 
   const userNameMap = new Map<string, string>(
     userDocs.map((u: any) => [u.$id, u.name as string || u.$id])
@@ -270,7 +262,7 @@ export async function listTechnicalPaymentsAction(
   const results: TechnicalPaymentSummary[] = [];
   for (const doc of payments) {
     const userId = doc.userId as string;
-    if (!scopedUserIds.includes(userId)) continue;
+    if (scopedUserIds && !scopedUserIds.includes(userId)) continue;
     const leadMeta = leadDataMap.get(doc.leadId as string) ?? { name: 'Unknown', email: '' };
     results.push({
       $id: doc.$id,

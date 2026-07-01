@@ -152,7 +152,7 @@ describe("lead-close-gate", () => {
       ).toBe(true);
     });
 
-    it("returns false when all three required fields are filled", () => {
+    it("returns true when LinkedIn Profile URL is missing", () => {
       const leadData = {
         amount: "100",
         lastName: "Papasani",
@@ -165,14 +165,15 @@ describe("lead-close-gate", () => {
           leadData,
           isBackoutStatus,
         }),
-      ).toBe(false);
+      ).toBe(true);
     });
 
-    it("treats `N/A` as missing for Amount, LastName, and Legal Name", () => {
+    it("returns true when LinkedIn Profile URL is blank", () => {
       const leadData = {
-        amount: "N/A",
-        lastName: "N/A",
-        legalName: "N/A",
+        amount: "100",
+        lastName: "Papasani",
+        legalName: "Narendra",
+        linkedinProfileUrl: "",
       };
       expect(
         isCloseRequiredFieldsMissing({
@@ -182,6 +183,68 @@ describe("lead-close-gate", () => {
           isBackoutStatus,
         }),
       ).toBe(true);
+    });
+
+    it("returns true when LinkedIn Profile URL is N/A", () => {
+      const leadData = {
+        amount: "100",
+        lastName: "Papasani",
+        legalName: "Narendra",
+        linkedinProfileUrl: "N/A",
+      };
+      expect(
+        isCloseRequiredFieldsMissing({
+          isClosed: false,
+          closeStatus: "Closed",
+          leadData,
+          isBackoutStatus,
+        }),
+      ).toBe(true);
+    });
+
+    it("returns false when all required fields including LinkedIn Profile URL are filled", () => {
+      const leadData = {
+        amount: "100",
+        lastName: "Papasani",
+        legalName: "Narendra",
+        linkedinProfileUrl: "https://linkedin.com/in/test",
+      };
+      expect(
+        isCloseRequiredFieldsMissing({
+          isClosed: false,
+          closeStatus: "Closed",
+          leadData,
+          isBackoutStatus,
+        }),
+      ).toBe(false);
+    });
+
+    it("treats `N/A` as missing for Amount, LastName, Legal Name, and LinkedIn Profile URL", () => {
+      const leadData = {
+        amount: "N/A",
+        lastName: "N/A",
+        legalName: "N/A",
+        linkedinProfileUrl: "N/A",
+      };
+      expect(
+        isCloseRequiredFieldsMissing({
+          isClosed: false,
+          closeStatus: "Closed",
+          leadData,
+          isBackoutStatus,
+        }),
+      ).toBe(true);
+    });
+
+    it("bypasses the gate for Backout status even when LinkedIn Profile URL is missing", () => {
+      const leadData = { amount: "100", lastName: "Test", legalName: "Name" };
+      const result = isCloseRequiredFieldsMissing({
+        isClosed: false,
+        closeStatus: "Backout",
+        leadData,
+        isBackoutStatus,
+      });
+      expect(result).toBe(false);
     });
 
     it("treats whitespace-only values as missing", () => {
@@ -226,11 +289,12 @@ describe("lead-close-gate", () => {
       );
     });
 
-    it("accepts the legacy `field_15` Amount value", () => {
+    it("accepts the legacy `field_15` Amount value (LinkedIn URL still required)", () => {
       const leadData = {
         field_15: "250",
         lastName: "Papasani",
         legalName: "Narendra",
+        linkedinProfileUrl: "https://linkedin.com/in/test",
       };
       expect(
         isCloseRequiredFieldsMissing({
@@ -244,21 +308,28 @@ describe("lead-close-gate", () => {
   });
 
   describe("getMissingCloseRequiredFields", () => {
-    it("returns an empty list when all three are filled", () => {
+    it("returns an empty list when all four are filled", () => {
       const leadData = {
         amount: "100",
         lastName: "Papasani",
         legalName: "Narendra",
+        linkedinProfileUrl: "https://linkedin.com/in/test",
       };
       expect(getMissingCloseRequiredFields(leadData)).toEqual([]);
     });
 
-    it("lists Amount, Last Name, and Legal Name in order when all are missing", () => {
-      const leadData = { amount: "", lastName: "", legalName: "" };
+    it("lists Amount, Last Name, Legal Name, and LinkedIn Profile URL in order when all are missing", () => {
+      const leadData = {
+        amount: "",
+        lastName: "",
+        legalName: "",
+        linkedinProfileUrl: "",
+      };
       expect(getMissingCloseRequiredFields(leadData)).toEqual([
         "Total Amount to be Paid",
         "Last Name",
         "Legal Name",
+        "LinkedIn Profile URL",
       ]);
     });
 
@@ -266,18 +337,32 @@ describe("lead-close-gate", () => {
       const leadData = {
         amount: "100",
         lastName: "Papasani",
-        legalName: "",
+        legalName: "Narendra",
+        linkedinProfileUrl: "https://linkedin.com/in/test",
       };
-      expect(getMissingCloseRequiredFields(leadData)).toEqual(["Legal Name"]);
+      expect(getMissingCloseRequiredFields(leadData)).toEqual([]);
     });
 
-    it("recognizes the legacy `field_15` Amount as present", () => {
+    it("lists missing LinkedIn Profile URL specifically", () => {
+      const leadData = {
+        amount: "100",
+        lastName: "Papasani",
+        legalName: "Narendra",
+      };
+      expect(getMissingCloseRequiredFields(leadData)).toEqual([
+        "LinkedIn Profile URL",
+      ]);
+    });
+
+    it("recognizes the legacy `field_15` Amount as present but LinkedIn URL is still required", () => {
       const leadData = {
         field_15: "100",
         lastName: "Papasani",
         legalName: "Narendra",
       };
-      expect(getMissingCloseRequiredFields(leadData)).toEqual([]);
+      expect(getMissingCloseRequiredFields(leadData)).toEqual([
+        "LinkedIn Profile URL",
+      ]);
     });
   });
 

@@ -1,9 +1,20 @@
+jest.mock('@/lib/server/appwrite', () => ({
+  createAdminClient: jest.fn(() => Promise.resolve({ databases: {} })),
+}));
+
 import {
   buildLeadRequestLeadData,
   findLeadRequestDuplicateWarnings,
   normalizePublicLeadRequestInput,
 } from '@/lib/utils/lead-requests';
 import type { Lead } from '@/lib/types';
+
+const mockDatabases = {
+  getDocument: jest.fn(() => Promise.reject(new Error('not found'))),
+};
+
+const mockCreateAdminClient = require('@/lib/server/appwrite').createAdminClient as jest.MockedFunction<typeof jest.fn>;
+mockCreateAdminClient.mockResolvedValue({ databases: mockDatabases });
 
 describe('lead request payload helpers', () => {
   it('normalizes public referral fields and builds lead data JSON-compatible payload', () => {
@@ -90,26 +101,27 @@ describe('lead request payload helpers', () => {
     expect(bonusLeadData.salesPerson).toBe('Dhananjay Patil');
   });
 
-  it('flags duplicate email, phone, and linkedin values against existing leads', () => {
+  it('flags duplicate email, phone, and linkedin values against existing leads', async () => {
     const leads = [
       lead('lead-email', { email: 'jane@example.com' }),
       lead('lead-phone', { phone: '5551112222' }),
       lead('lead-linkedin', { linkedinProfile: 'https://www.linkedin.com/in/jane-doe/' }),
     ];
 
-    expect(
-      findLeadRequestDuplicateWarnings(
-        {
-          email: 'JANE@example.com',
-          phone: '+1 (555) 111-2222',
-          linkedinProfileUrl: 'linkedin.com/in/jane-doe',
-        },
-        leads,
-      ),
-    ).toEqual([
-      { field: 'email', existingLeadId: 'lead-email' },
-      { field: 'phone', existingLeadId: 'lead-phone' },
-      { field: 'linkedinProfileUrl', existingLeadId: 'lead-linkedin' },
+    const result = await findLeadRequestDuplicateWarnings(
+      {
+        email: 'JANE@example.com',
+        phone: '+1 (555) 111-2222',
+        linkedinProfileUrl: 'linkedin.com/in/jane-doe',
+      },
+      leads,
+    );
+    // Owner/assigned names are populated by the server via Appwrite;
+    // in unit tests they resolve to undefined because there is no DB.
+    expect(result).toEqual([
+      { field: 'email', existingLeadId: 'lead-email', existingBranchId: undefined, existingLeadOwnerName: undefined, existingLeadAssignedToName: undefined },
+      { field: 'phone', existingLeadId: 'lead-phone', existingBranchId: undefined, existingLeadOwnerName: undefined, existingLeadAssignedToName: undefined },
+      { field: 'linkedinProfileUrl', existingLeadId: 'lead-linkedin', existingBranchId: undefined, existingLeadOwnerName: undefined, existingLeadAssignedToName: undefined },
     ]);
   });
 });

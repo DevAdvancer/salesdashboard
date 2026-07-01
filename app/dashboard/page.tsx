@@ -73,10 +73,6 @@ function rangeLabel(range: DateRange): string {
   return "no range";
 }
 
-function monthLabel(date: Date): string {
-  return date.toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "America/New_York" });
-}
-
 // ---------------------------------------------------------------------------
 // Main dashboard content
 // ---------------------------------------------------------------------------
@@ -160,16 +156,9 @@ function MainDashboard({
   const [linkedinKpiRows, setLinkedinKpiRows] = useState<LinkedinConnectionKpiRow[] | null>(null);
   const [linkedinKpiLoading, setLinkedinKpiLoading] = useState(true);
 
-  // Referral split (always current month in EST)
-  const currentMonth = useMemo(() => new Date(), []);
-  const monthStartKey = useMemo(
-    () => getMonthStartEst(currentMonth),
-    [currentMonth],
-  );
-  const monthEndKey = useMemo(
-    () => getMonthEndEst(currentMonth),
-    [currentMonth],
-  );
+  // Referral split uses the date range filter
+  const monthStartKey = dateRange.from ?? getMonthStartEst(new Date());
+  const monthEndKey = dateRange.to ?? getMonthEndEst(new Date());
 
 
   // Payment insights (admin-like only)
@@ -317,7 +306,7 @@ function MainDashboard({
 
     (async () => {
       try {
-        const records = await loadDashboardPaymentInsights(user.$id);
+        const records = await loadDashboardPaymentInsights(user.$id, dateRange);
         if (!cancelled) {
           setPaymentRecords(records);
           setPaymentLoading(false);
@@ -334,7 +323,7 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, isAdminLike]);
+  }, [user, isAdminLike, dateRange]);
 
   // ── Fetch referral split (admin-like only, current month by closedAt) ───
   useEffect(() => {
@@ -372,7 +361,7 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, isAdminLike, monthStartKey, monthEndKey]);
+  }, [user, isAdminLike, dateRange]);
 
   // ── Fetch LG handoff summaries (admin-like only) ──────────────────────
   useEffect(() => {
@@ -417,7 +406,11 @@ function MainDashboard({
 
     (async () => {
       try {
-        const payments = await loadTechnicalPaymentsDashboardAction({ actorId: user.$id });
+        const payments = await loadTechnicalPaymentsDashboardAction({
+          actorId: user.$id,
+          dateFrom: dateRange.from,
+          dateTo: dateRange.to,
+        });
         if (!cancelled) {
           setTechnicalPayments(payments);
           setTechnicalPaymentsLoading(false);
@@ -434,7 +427,8 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, isAdminLike, isTeamLead]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isAdminLike, isTeamLead, dateRange]);
 
   // KPI section mode + target derived from range
   const kpiMode = isSingleDay(dateRange) ? "daily" : "monthly";
@@ -516,12 +510,12 @@ function MainDashboard({
         />
       )}
 
-      {/* Referral split — admin-only, current month */}
+      {/* Referral split — admin-only, filtered by date range */}
       {isAdminLike && (
         <ReferralSection
           data={referralData}
           isLoading={referralLoading}
-          monthLabel={monthLabel(currentMonth)}
+          rangeLabel={rangeLabel(dateRange)}
         />
       )}
 
@@ -535,7 +529,7 @@ function MainDashboard({
 
       {/* Payments — admin-only, all-time + per-month */}
       {isAdminLike && (
-        <PaymentsSection records={paymentRecords} isLoading={paymentLoading} />
+        <PaymentsSection records={paymentRecords} isLoading={paymentLoading} rangeLabel={rangeLabel(dateRange)} />
       )}
 
       {/* Technical Payments — admin-like + team_lead */}
@@ -543,6 +537,8 @@ function MainDashboard({
         <TechnicalPaymentsSection
           payments={technicalPayments}
           isLoading={technicalPaymentsLoading}
+          dateFilter={dateRange}
+          rangeLabel={rangeLabel(dateRange)}
         />
       )}
 

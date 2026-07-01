@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedAccount } from "@/lib/server/current-user";
-import { Resend } from "resend";
+import { cookies } from "next/headers";
 import {
   SUPPORT_EMAIL_MAX_JSON_PAYLOAD_BYTES,
   SUPPORT_EMAIL_MAX_JSON_PAYLOAD_LABEL,
 } from "@/lib/utils/support-email-attachments";
-
-const resend = new Resend(process.env.RESEND_API_KEY || "re_xxxxxxxxx");
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Internal Server Error";
@@ -27,53 +25,56 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get the Outlook access token stored during Azure OAuth login
+    const cookieStore = await cookies();
+    const accessTokenCookie = cookieStore.get("outlook_access_token");
+
+    if (!accessTokenCookie?.value) {
+      return NextResponse.json(
+        { error: "Not connected to Outlook. Please connect your Outlook account first." },
+        { status: 401 },
+      );
+    }
+
+    const accessToken = accessTokenCookie.value;
+
     const payload = await request.json();
-    const { message } = payload;
+    const { message, saveToSentItems } = payload;
 
     if (!message) {
       return NextResponse.json({ error: "Invalid payload: missing message" }, { status: 400 });
     }
 
-    const to = message.toRecipients?.map((r: any) => r.emailAddress.address) || [];
-    const cc = message.ccRecipients?.map((r: any) => r.emailAddress.address) || [];
-    const subject = message.subject || "";
-    const html = message.body?.contentType?.toUpperCase() === "HTML" ? message.body.content : undefined;
-    const text = message.body?.contentType?.toUpperCase() !== "HTML" ? message.body.content : undefined;
-
-    const attachments = message.attachments?.map((att: any) => ({
-      filename: att.name,
-      content: Buffer.from(att.contentBytes, "base64"),
-    })) || [];
-
-    const fromEmail = process.env.RESEND_FROM_EMAIL || "Acme <onboarding@resend.dev>";
-
-    const sendOptions: any = {
-      from: fromEmail,
-      to,
-      subject,
+    // Send via Microsoft Graph API
+    const graphPayload = {
+      message,
+      saveToSentItems: saveToSentItems ?? "true",
     };
 
-    if (cc.length > 0) {
-      sendOptions.cc = cc;
+    const graphResponse = await fetch(
+      "https://graph.microsoft.com/v1.0/me/sendMail",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(graphPayload),
+      },
+    );
+
+    if (!graphResponse.ok) {
+      let errorDetail = "Failed to send email via Microsoft Graph";
+      try {
+        const errJson = await graphResponse.json();
+        errorDetail = errJson?.error?.message ?? errorDetail;
+      } catch {
+        // ignore parse failure
+      }
+      return NextResponse.json({ error: errorDetail }, { status: graphResponse.status });
     }
 
-    if (html !== undefined) {
-      sendOptions.html = html;
-    } else if (text !== undefined) {
-      sendOptions.text = text;
-    }
-
-    if (attachments.length > 0) {
-      sendOptions.attachments = attachments;
-    }
-
-    const { data, error } = await resend.emails.send(sendOptions);
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    return NextResponse.json({ success: true, data });
+    return NextResponse.json({ success: true });
   } catch (error: unknown) {
     console.error("Error sending assessment email:", error);
     return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });

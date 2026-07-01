@@ -21,19 +21,19 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
 interface ReferralSectionProps {
   data: ReferralSplit | null;
   isLoading: boolean;
-  monthLabel: string;
+  rangeLabel: string;
 }
 
 export function ReferralSection({
   data,
   isLoading,
-  monthLabel,
+  rangeLabel,
 }: ReferralSectionProps) {
   return (
     <Card id="tour-referral-section">
       <CardHeader>
         <CardTitle className="text-base sm:text-lg">Referral split</CardTitle>
-        <CardDescription>Current month — {monthLabel}</CardDescription>
+        <CardDescription>{rangeLabel}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid gap-4 md:grid-cols-2">

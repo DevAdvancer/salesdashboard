@@ -233,10 +233,28 @@ export function DatePicker({
 }) {
   const { open, setOpen, ref } = usePopover()
   const [visibleMonth, setVisibleMonth] = React.useState(() => getMonthStart(value))
+  const [popperPosition, setPopperPosition] = React.useState<'right' | 'left'>('right')
 
   React.useEffect(() => {
-    if (open) setVisibleMonth(getMonthStart(value))
-  }, [open, value])
+    if (open) {
+      setVisibleMonth(getMonthStart(value))
+
+      // Check if the calendar would go off-screen
+      if (typeof document !== 'undefined' && ref.current) {
+        const buttonRect = ref.current.getBoundingClientRect()
+        const calendarWidth = 18 // Approximate width in rem
+        const spaceLeft = buttonRect.left
+        const spaceRight = window.innerWidth - buttonRect.right
+
+        // If less space on the right, position left
+        if (spaceRight < calendarWidth * 16 && spaceLeft > calendarWidth * 16) {
+          setPopperPosition('left')
+        } else {
+          setPopperPosition('right')
+        }
+      }
+    }
+  }, [open, value, ref])
 
   const label = value ? formatDisplayDate(value) : placeholder
 
@@ -261,7 +279,10 @@ export function DatePicker({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-[18rem] rounded-2xl border border-border bg-popover p-4 text-popover-foreground shadow-xl">
+        <div className={cn(
+          "absolute z-50 mt-2 w-[18rem] rounded-2xl border border-border bg-popover p-4 text-popover-foreground shadow-xl",
+          popperPosition === 'right' ? 'right-0' : 'left-0'
+        )}>
           <div className="mb-3 flex items-center justify-between gap-2">
             <button
               type="button"
@@ -319,18 +340,49 @@ export function DateRangePicker({
   value,
   onChange,
   className,
+  align = 'smart',
 }: {
   id?: string
   value: DateRange
   onChange: (value: DateRange) => void
   className?: string
+  /** 'smart' (default) = auto-detect, 'left' = open to the right, 'right' = open to the left */
+  align?: 'smart' | 'left' | 'right'
 }) {
   const { open, setOpen, ref } = usePopover()
   const [visibleMonth, setVisibleMonth] = React.useState(() => getMonthStart(value.from ?? value.to))
+  const [popperPosition, setPopperPosition] = React.useState<'right' | 'left'>('right')
 
   React.useEffect(() => {
-    if (open) setVisibleMonth(getMonthStart(value.from ?? value.to))
-  }, [open, value.from, value.to])
+    if (open) {
+      setVisibleMonth(getMonthStart(value.from ?? value.to))
+
+      // If align is fixed, use it directly.
+      if (align === 'left') {
+        setPopperPosition('left')
+        return
+      }
+      if (align === 'right') {
+        setPopperPosition('right')
+        return
+      }
+
+      // Smart: check if the calendar would go off-screen
+      if (typeof document !== 'undefined' && ref.current) {
+        const buttonRect = ref.current.getBoundingClientRect()
+        const calendarWidth = 36 // Approximate width in rem
+        const spaceLeft = buttonRect.left
+        const spaceRight = window.innerWidth - buttonRect.right
+
+        // If less space on the right, position left
+        if (spaceRight < calendarWidth * 16 && spaceLeft > calendarWidth * 16) {
+          setPopperPosition('right')
+        } else {
+          setPopperPosition('left')
+        }
+      }
+    }
+  }, [open, value.from, value.to, ref, align])
 
   const selectDate = (nextDate: string) => {
     if (!value.from || (value.from && value.to)) {
@@ -369,7 +421,10 @@ export function DateRangePicker({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-[min(36rem,calc(100vw-1rem))] rounded-2xl border border-border bg-popover p-4 text-popover-foreground shadow-xl lg:w-[min(42rem,calc(100vw-2rem))]">
+        <div className={cn(
+          "absolute z-50 mt-2 w-[min(36rem,calc(100vw-1rem))] rounded-2xl border border-border bg-popover p-4 text-popover-foreground shadow-xl lg:w-[min(42rem,calc(100vw-2rem))]",
+          popperPosition === 'right' ? 'right-0' : 'left-0'
+        )}>
           <div className="mb-3 flex items-center justify-between gap-2">
             <button
               type="button"

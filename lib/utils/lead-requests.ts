@@ -1,5 +1,8 @@
 import type { Lead, LeadData } from '@/lib/types';
 import { normalizeLinkedinProfileUrl } from '@/lib/utils/linkedin';
+import { createAdminClient } from '@/lib/appwrite';
+import { DATABASES, COLLECTIONS } from '@/lib/constants/appwrite';
+import { ID } from 'appwrite';
 
 export type PublicLeadRequestInput = {
   firstName?: unknown;
@@ -41,6 +44,8 @@ export type LeadRequestDuplicateWarning = {
   field: 'email' | 'phone' | 'linkedinProfileUrl';
   existingLeadId: string;
   existingBranchId?: string;
+  existingLeadOwnerName?: string;
+  existingLeadAssignedToName?: string;
 };
 
 export function normalizePublicLeadRequestInput(
@@ -99,10 +104,12 @@ export function buildLeadRequestLeadData(
   return data;
 }
 
-export function findLeadRequestDuplicateWarnings(
+export async function findLeadRequestDuplicateWarnings(
   input: Pick<NormalizedPublicLeadRequestInput, 'email' | 'phone' | 'linkedinProfileUrl'>,
   leads: Lead[],
-): LeadRequestDuplicateWarning[] {
+): Promise<LeadRequestDuplicateWarning[]> {
+  const { databases } = await createAdminClient();
+
   const inputEmail = normalizeDuplicateFieldValue('email', input.email);
   const inputPhone = normalizeDuplicateFieldValue('phone', input.phone);
   const inputLinkedin = normalizeDuplicateFieldValue('linkedinProfileUrl', input.linkedinProfileUrl);
@@ -121,6 +128,8 @@ export function findLeadRequestDuplicateWarnings(
         field: 'email',
         existingLeadId: lead.$id,
         existingBranchId: lead.branchId ?? undefined,
+        existingLeadOwnerName: await getUserDocumentName(databases, lead.ownerId),
+        existingLeadAssignedToName: await getUserDocumentName(databases, lead.assignedToId),
       });
     }
 
@@ -133,6 +142,8 @@ export function findLeadRequestDuplicateWarnings(
         field: 'phone',
         existingLeadId: lead.$id,
         existingBranchId: lead.branchId ?? undefined,
+        existingLeadOwnerName: await getUserDocumentName(databases, lead.ownerId),
+        existingLeadAssignedToName: await getUserDocumentName(databases, lead.assignedToId),
       });
     }
 
@@ -148,6 +159,8 @@ export function findLeadRequestDuplicateWarnings(
         field: 'linkedinProfileUrl',
         existingLeadId: lead.$id,
         existingBranchId: lead.branchId ?? undefined,
+        existingLeadOwnerName: await getUserDocumentName(databases, lead.ownerId),
+        existingLeadAssignedToName: await getUserDocumentName(databases, lead.assignedToId),
       });
     }
 
@@ -162,9 +175,19 @@ export function formatLeadRequestDuplicateMessage(warnings: LeadRequestDuplicate
   return warnings
     .map((warning) => {
       const label =
-        warning.field === 'linkedinProfileUrl' ? 'LinkedIn link' : warning.field;
+        warning.field === 'linkedinProfileUrl' ? 'LinkedIn profile URL' : warning.field;
+      const agentNames = [];
+      if (warning.existingLeadOwnerName) {
+        agentNames.push(`owned by ${warning.existingLeadOwnerName}`);
+      }
+      if (warning.existingLeadAssignedToName) {
+        agentNames.push(`assigned to ${warning.existingLeadAssignedToName}`);
+      }
+      const agentSuffix = agentNames.length > 0
+        ? ` (currently ${agentNames.join(' and ')})`
+        : '';
       const branch = warning.existingBranchId ? ` in branch ${warning.existingBranchId}` : '';
-      return `${label} already exists on lead ${warning.existingLeadId}${branch}`;
+      return `${label} already exists on lead ${warning.existingLeadId}${branch}${agentSuffix}`;
     })
     .join('; ');
 }
@@ -195,4 +218,14 @@ export function normalizeDuplicateFieldValue(
     return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
   }
   return normalizeLinkedinProfileUrl(value) ?? '';
+}
+
+async function getUserDocumentName(databases: any, userId?: string): Promise<string | undefined> {
+  if (!userId) return undefined;
+  try {
+    const userDoc = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, userId);
+    return (userDoc as any).name;
+  } catch {
+    return undefined;
+  }
 }

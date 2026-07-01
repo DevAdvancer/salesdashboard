@@ -247,7 +247,7 @@ export async function moveLeadRequestToLeadAction(input: {
     maxPages: 10,
   });
 
-  const duplicateWarnings = findLeadRequestDuplicateWarnings(normalized, existingLeads);
+  const duplicateWarnings = await findLeadRequestDuplicateWarnings(normalized, existingLeads);
   if (duplicateWarnings.length > 0) {
     const duplicateMessage = formatLeadRequestDuplicateMessage(duplicateWarnings);
     await updateLeadRequest(databases, request.$id, {

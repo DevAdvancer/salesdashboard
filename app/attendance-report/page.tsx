@@ -161,6 +161,7 @@ function AttendanceReportContent() {
                 id="report-date"
                 value={selectedDateRange}
                 onChange={setSelectedDateRange}
+                align="left"
               />
             </div>
 

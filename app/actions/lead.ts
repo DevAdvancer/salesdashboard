@@ -129,6 +129,8 @@ async function validateLeadUniqueness(
     duplicateField?: 'email' | 'phone' | 'linkedinProfileUrl';
     existingLeadId?: string;
     existingBranchId?: string;
+    existingLeadOwnerName?: string;
+    existingLeadAssignedToName?: string;
 }> {
     const { databases } = await createAdminClient();
     const email = data.email as string | undefined;
@@ -163,12 +165,7 @@ async function validateLeadUniqueness(
             try {
                 const leadData = JSON.parse(doc.data as string) as LeadData;
                 if (inputEmail && normalizeDuplicateFieldValue('email', leadData.email) === inputEmail) {
-                    return {
-                        isValid: false,
-                        duplicateField: 'email',
-                        existingLeadId: doc.$id,
-                        existingBranchId: typeof doc.branchId === "string" ? doc.branchId : undefined,
-                    };
+                    return enrichDuplicateResult(databases, doc);
                 }
             } catch {}
         }
@@ -181,12 +178,7 @@ async function validateLeadUniqueness(
             try {
                 const leadData = JSON.parse(doc.data as string) as LeadData;
                 if (inputPhone && normalizeDuplicateFieldValue('phone', leadData.phone) === inputPhone) {
-                    return {
-                        isValid: false,
-                        duplicateField: 'phone',
-                        existingLeadId: doc.$id,
-                        existingBranchId: typeof doc.branchId === "string" ? doc.branchId : undefined,
-                    };
+                    return enrichDuplicateResult(databases, doc);
                 }
             } catch {}
         }
@@ -206,19 +198,58 @@ async function validateLeadUniqueness(
                         if (shouldIgnoreLinkedinDuplicate(doc as Record<string, unknown>, leadData)) {
                             continue;
                         }
-                        return {
-                            isValid: false,
-                            duplicateField: 'linkedinProfileUrl',
-                            existingLeadId: doc.$id,
-                            existingBranchId: typeof doc.branchId === "string" ? doc.branchId : undefined,
-                        };
+                        return enrichDuplicateResult(databases, doc);
                     }
                 } catch {}
             }
         }
     }
 
-    return { isValid: true };
+    /**
+ * Helper to resolve owner/assignee names for a duplicate lead doc.
+ * Returns enriched duplicate result with human-readable agent names.
+ */
+async function enrichDuplicateResult(databases: any, doc: Record<string, unknown>): Promise<{
+    isValid: boolean;
+    duplicateField?: 'email' | 'phone' | 'linkedinProfileUrl';
+    existingLeadId?: string;
+    existingBranchId?: string;
+    existingLeadOwnerName?: string;
+    existingLeadAssignedToName?: string;
+}> {
+    const branchId = typeof doc.branchId === "string" ? doc.branchId : undefined;
+
+    let ownerName: string | undefined;
+    let assignedToName: string | undefined;
+
+    try {
+        if (doc.ownerId) {
+            const ownerDoc = await databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, doc.ownerId as string);
+            ownerName = (ownerDoc as any).name || undefined;
+        }
+    } catch {
+        // Silently ignore if owner doc can't be fetched
+    }
+
+    try {
+        if (doc.assignedToId) {
+            const assignedDoc = await databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, doc.assignedToId as string);
+            assignedToName = (assignedDoc as any).name || undefined;
+        }
+    } catch {
+        // Silently ignore if assignedTo doc can't be fetched
+    }
+
+    return {
+        isValid: false,
+        existingLeadId: doc.$id,
+        existingBranchId: branchId,
+        existingLeadOwnerName: ownerName,
+        existingLeadAssignedToName: assignedToName,
+    };
+}
+
+return { isValid: true };
 }
 
 // Helper to get hierarchy permissions (server-side)
@@ -534,12 +565,16 @@ async function assertLeadUpdateAllowed(
     throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
   }
 
-  if (
-    actorDoc.role === 'admin' ||
-    actorDoc.role === 'developer' ||
-    actorDoc.role === 'monitor'
-  ) {
+  if (actorDoc.role === 'admin' || actorDoc.role === 'developer') {
     return;
+  }
+
+  // Monitor users can update only their own leads (no admin-level update access)
+  if (actorDoc.role === 'monitor') {
+    if (lead.ownerId === actorDoc.$id || lead.assignedToId === actorDoc.$id) {
+      return;
+    }
+    throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
   }
 
   const specialBranchId = getSpecialBranchLeadAccess(actorDoc.email);
@@ -656,14 +691,26 @@ export async function createLeadAction(
             const branchSuffix = validation.existingBranchId
                 ? ' in another branch'
                 : '';
+            const agentNames = [];
+            if (validation.existingLeadOwnerName) {
+                agentNames.push(`owned by ${validation.existingLeadOwnerName}`);
+            }
+            if (validation.existingLeadAssignedToName) {
+                agentNames.push(`assigned to ${validation.existingLeadAssignedToName}`);
+            }
+            const agentSuffix = agentNames.length > 0
+                ? ` (currently ${agentNames.join(' and ')})`
+                : '';
             throw new LeadActionError(
                 'DUPLICATE_FIELD',
-                `A lead with this ${humanField} already exists${branchSuffix}.`,
+                `A lead with this ${humanField} already exists${branchSuffix}${agentSuffix}.`,
                 {
                     field: validation.duplicateField,
                     meta: {
                         existingLeadId: validation.existingLeadId,
                         existingBranchId: validation.existingBranchId,
+                        existingLeadOwnerName: validation.existingLeadOwnerName,
+                        existingLeadAssignedToName: validation.existingLeadAssignedToName,
                     },
                 },
             );
@@ -887,14 +934,26 @@ export async function updateLeadAction(
             const branchSuffix = validation.existingBranchId
                 ? ' in another branch'
                 : '';
+            const agentNames = [];
+            if (validation.existingLeadOwnerName) {
+                agentNames.push(`owned by ${validation.existingLeadOwnerName}`);
+            }
+            if (validation.existingLeadAssignedToName) {
+                agentNames.push(`assigned to ${validation.existingLeadAssignedToName}`);
+            }
+            const agentSuffix = agentNames.length > 0
+                ? ` (currently ${agentNames.join(' and ')})`
+                : '';
             throw new LeadActionError(
                 'DUPLICATE_FIELD',
-                `A lead with this ${humanField} already exists${branchSuffix}.`,
+                `A lead with this ${humanField} already exists${branchSuffix}${agentSuffix}.`,
                 {
                     field: validation.duplicateField,
                     meta: {
                         existingLeadId: validation.existingLeadId,
                         existingBranchId: validation.existingBranchId,
+                        existingLeadOwnerName: validation.existingLeadOwnerName,
+                        existingLeadAssignedToName: validation.existingLeadAssignedToName,
                     },
                 },
             );

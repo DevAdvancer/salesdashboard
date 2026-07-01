@@ -52,12 +52,32 @@ async function listTechnicalPaymentsByUserIds(userIds: string[]): Promise<any[]>
   return results.flatMap((r) => r.documents);
 }
 
+async function listAllTechnicalPaymentsForDashboard(): Promise<any[]> {
+  const { databases } = await createAdminClient();
+  const all: any[] = [];
+  let cursor: string | null = null;
+  for (let i = 0; i < 10; i++) {
+    const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.TECHNICAL_PAYMENTS, [
+      Query.orderDesc('createdAt'),
+      Query.limit(500),
+      ...(cursor ? [Query.cursorAfter(cursor)] : []),
+    ]);
+    all.push(...response.documents);
+    if (!response.documents.length) break;
+    cursor = response.documents[response.documents.length - 1]?.$id ?? null;
+    if (!cursor) break;
+  }
+  return all;
+}
+
 /**
  * Get technical payments for dashboard display.
  * Returns full details with lead and user names.
  */
 export async function loadTechnicalPaymentsDashboardAction(input: {
   actorId: string;
+  dateFrom?: string;
+  dateTo?: string;
 }): Promise<Array<{
   $id: string;
   leadId: string;
@@ -87,11 +107,16 @@ export async function loadTechnicalPaymentsDashboardAction(input: {
       maxPages: 100,
     });
     scopedUserIds = [actor.$id, ...agents.map((a: any) => a.$id)];
+  } else if (actor.role === 'admin' || actor.role === 'developer' || actor.role === 'monitor' || actor.role === 'operations') {
+    // Admin-like roles see all payments across all users
+    scopedUserIds = [];
   } else {
     scopedUserIds = [actor.$id];
   }
 
-  const payments = await listTechnicalPaymentsByUserIds(scopedUserIds);
+  const payments = scopedUserIds.length > 0
+    ? await listTechnicalPaymentsByUserIds(scopedUserIds)
+    : await listAllTechnicalPaymentsForDashboard();
 
   // Collect lead IDs to batch-fetch lead data
   const leadIds = Array.from(new Set(payments.map((p: any) => p.leadId).filter(Boolean)));
@@ -137,9 +162,20 @@ export async function loadTechnicalPaymentsDashboardAction(input: {
   );
 
   const results = [];
+  const normalizedFrom = input.dateFrom ?? "";
+  const normalizedTo = input.dateTo ?? "";
+
   for (const doc of payments) {
     const userId = doc.userId as string;
     if (!scopedUserIds.includes(userId)) continue;
+
+    // Apply date range filter
+    if (normalizedFrom || normalizedTo) {
+      const docDate = typeof doc.createdAt === 'string' ? doc.createdAt.substring(0, 10) : '';
+      if (normalizedFrom && docDate < normalizedFrom) continue;
+      if (normalizedTo && docDate > normalizedTo) continue;
+    }
+
     const leadMeta = leadDataMap.get(doc.leadId as string) ?? { name: 'Unknown', email: '' };
     results.push({
       $id: doc.$id,

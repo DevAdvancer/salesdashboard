@@ -14,6 +14,8 @@ export const MONITOR_ONLY_STATUSES = [
   LEAD_STATUS_LEADS,
 ] as const;
 
+export const LEAD_STATUS_CONNECTION_ACCEPTED = "Connection Accepted";
+
 export const LEAD_WORKFLOW_STATUSES = [
   LEAD_STATUS_INTERESTED,
   LEAD_STATUS_NOT_INTERESTED,
@@ -21,7 +23,10 @@ export const LEAD_WORKFLOW_STATUSES = [
   LEAD_STATUS_BACKED_OUT,
 ];
 
+export const LINKEDIN_SOURCE_STATUS = "LinkedIN/Lead";
+
 const CANONICAL_STATUS_BY_NORMALIZED = new Map<string, string>([
+  ["connectionaccepted", LEAD_STATUS_CONNECTION_ACCEPTED],
   ["interested", LEAD_STATUS_INTERESTED],
   ["notinterested", LEAD_STATUS_NOT_INTERESTED],
   ["pipeline", LEAD_STATUS_PIPELINE],
@@ -49,6 +54,10 @@ export function getLeadCreateStatusOptions() {
   return [LEAD_STATUS_INTERESTED, LEAD_STATUS_NOT_INTERESTED];
 }
 
+export function getLinkedInInitialStatus() {
+  return LEAD_STATUS_CONNECTION_ACCEPTED;
+}
+
 export function getLeadEditAllowedStatuses(currentStatus: unknown) {
   return getLeadEditAllowedStatusesForRole(currentStatus);
 }
@@ -70,6 +79,14 @@ export function getLeadEditAllowedStatusesForRole(
     ? [...MONITOR_ONLY_STATUSES]
     : [];
 
+  // Connection Accepted can only transition to Interested or Not Interested
+  if (normalized === "connectionaccepted") {
+    return [
+      LEAD_STATUS_INTERESTED,
+      LEAD_STATUS_NOT_INTERESTED,
+      ...monitorOnlySuffix,
+    ];
+  }
   if (normalized === "interested") {
     return [
       LEAD_STATUS_INTERESTED,

@@ -1,9 +1,9 @@
 /**
  * Helpers for the "Close Lead" button gating.
  *
- * The Close button must stay disabled until Amount, Last Name, and Legal
- * Name are all filled with a real value. "N/A", blank, and whitespace-only
- * inputs are not accepted.
+ * The Close button must stay disabled until Amount, Last Name, Legal Name,
+ * and LinkedIn Profile URL are all filled with a real value. "N/A", blank,
+ * and whitespace-only inputs are not accepted.
  *
  * Backout is a separate status (the lead is being abandoned, not closed)
  * and intentionally bypasses these checks.
@@ -68,8 +68,8 @@ export interface CloseGateInput {
 
 /**
  * Returns `true` when the user is NOT allowed to close the lead because
- * one of Amount / LastName / Legal Name is missing or filled with an
- * "N/A"-like value. Backout is exempt.
+ * one of Amount / LastName / Legal Name / LinkedIn Profile URL is missing
+ * or filled with an "N/A"-like value. Backout is exempt.
  */
 export function isCloseRequiredFieldsMissing({
   isClosed,
@@ -85,6 +85,7 @@ export function isCloseRequiredFieldsMissing({
 
   if (isTextMissing(leadData?.lastName)) return true;
   if (isTextMissing(leadData?.legalName)) return true;
+  if (isTextMissing(leadData?.linkedinProfileUrl)) return true;
 
   return false;
 }
@@ -92,7 +93,7 @@ export function isCloseRequiredFieldsMissing({
 /**
  * Lists the missing required fields as human labels, for use in toasts
  * and inline error messages. The order matches the lead form: Amount,
- * Last Name, Legal Name.
+ * Last Name, Legal Name, LinkedIn Profile URL.
  */
 export function getMissingCloseRequiredFields(
   leadData: Record<string, unknown> | undefined | null,
@@ -107,6 +108,9 @@ export function getMissingCloseRequiredFields(
   }
   if (isTextMissing(leadData?.legalName)) {
     missing.push("Legal Name");
+  }
+  if (isTextMissing(leadData?.linkedinProfileUrl)) {
+    missing.push("LinkedIn Profile URL");
   }
 
   return missing;

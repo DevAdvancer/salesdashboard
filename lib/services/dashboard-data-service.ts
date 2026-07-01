@@ -274,11 +274,12 @@ export async function loadDashboardAttemptCounts(
 
 export async function loadDashboardPaymentInsights(
   actorId: string,
+  dateRange: DateRange,
 ): Promise<PaymentInsightRecord[]> {
   return cacheClientRead(
     `${DASHBOARD_DATA_SCOPE}:paymentInsights`,
-    [actorId],
-    () => listAllPaymentInsightsAction(actorId),
+    [actorId, dateRange.from ?? "", dateRange.to ?? ""],
+    () => listAllPaymentInsightsAction(actorId, dateRange.from, dateRange.to),
     DASHBOARD_DATA_TTL_MS,
   );
 }
@@ -514,6 +515,7 @@ export async function loadDashboardReferralStats(
     [
       input.userId,
       input.role,
+      ...(input.branchIds ?? []).sort(),
       input.monthStartIso,
       input.monthEndIso,
     ],
