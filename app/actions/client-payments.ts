@@ -1,6 +1,9 @@
 "use server";
 
 import crypto from "crypto";
+import {
+  upsertPendingAmountAction,
+} from "@/app/actions/pending-amounts";
 import { ID, Query } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
 import { assertAuthenticatedUserId } from "@/lib/server/current-user";
@@ -227,6 +230,9 @@ export async function addClientPaymentUpdateAction(input: {
   status: PaymentStatus;
   note?: string | null;
   amount?: number | null;
+  /** Remaining balance after this update — written to pending_amounts for the
+   * current calendar month. Null / 0 means no pending balance. */
+  pendingAmount?: number | null;
 }): Promise<ClientPaymentRecord> {
   const actor = await getActor(input.actorId);
   ensureComponentAccess(actor.role, "history");
@@ -266,6 +272,29 @@ export async function addClientPaymentUpdateAction(input: {
     updatedById: actor.$id,
     updatedByName: actor.name,
   });
+
+  // Write the pending balance to the pending_amounts collection for the
+  // current calendar month. When pendingAmount is 0 or null the row is
+  // marked "cleared" (or a new cleared row is created if none exists).
+  const pendingAmount =
+    typeof input.pendingAmount === "number" && Number.isFinite(input.pendingAmount)
+      ? Math.max(0, Math.floor(input.pendingAmount))
+      : 0;
+  if (pendingAmount >= 0) {
+    const monthKey = now.slice(0, 7); // YYYY-MM
+    try {
+      await upsertPendingAmountAction({
+        actorId: input.actorId,
+        leadId: input.leadId,
+        paymentRecordId: existing.$id,
+        monthKey,
+        pendingAmount,
+      });
+    } catch (err) {
+      console.error("Failed to write pending_amounts row:", err);
+      // Don't fail the whole payment update — pending tracking is best-effort.
+    }
+  }
 
   return mapRecord(doc);
 }
@@ -535,6 +564,16 @@ export interface PaymentInsightRecord {
   totalPaid: number | null;
   /** Number of updates that carried an `amount`. */
   paidUpdateCount: number;
+  /** Sum of all pending amounts across months for this lead. Null when no pending row exists. */
+  pendingTotal: number | null;
+  /** Most recent month-key (YYYY-MM) that has a pending row for this lead, or null. */
+  latestPendingMonth: string | null;
+  /** Bucketed actual paid amounts by payment-update month (YYYY-MM → total).
+   * Used by the monthly payments report to attribute revenue to the correct
+   * calendar month rather than the lead's close date. */
+  paidMonthlyAmounts: Record<string, number>;
+  /** Full contract amount from the lead form (leadAmount / totalAmount / amount). */
+  leadAmount: number;
 }
 
 export interface AdminClientHistoryRow {
@@ -608,11 +647,13 @@ export async function listAllPaymentInsightsAction(
       leadStatus: string;
       isClosed: boolean;
       closedAt: string | null;
+      leadAmount: number;
     }
   >();
   for (const lead of leadDocs as any[]) {
     let company = "";
     let source = "";
+    let leadAmount = 0;
     try {
       const parsed = JSON.parse(lead.data ?? "{}") as Record<string, unknown>;
       company = typeof parsed.company === "string" ? parsed.company.trim() : "";
@@ -628,6 +669,14 @@ export async function listAllPaymentInsightsAction(
       if (!company) {
         company = typeof parsed.email === "string" ? parsed.email.trim() : "";
       }
+      // Parse the full contract amount from the lead form
+      const rawAmount = parsed.leadAmount ?? parsed.totalAmount ?? parsed.amount;
+      if (typeof rawAmount === "number" && Number.isFinite(rawAmount)) {
+        leadAmount = rawAmount;
+      } else if (typeof rawAmount === "string" && rawAmount.trim() !== "") {
+        const num = Number(rawAmount);
+        if (Number.isFinite(num)) leadAmount = num;
+      }
     } catch {
       // ignore parse errors
     }
@@ -637,11 +686,40 @@ export async function listAllPaymentInsightsAction(
       leadStatus: typeof lead.status === "string" ? lead.status : "",
       isClosed: lead.isClosed === true,
       closedAt: typeof lead.closedAt === "string" ? lead.closedAt : null,
+      leadAmount,
     });
   }
 
   const normalizedFrom = dateFrom ? dateFrom.trim() : null;
   const normalizedTo = dateTo ? dateTo.trim() : null;
+
+  // Batch-fetch all pending-amount rows for these leads so we can surface
+  // the remaining balance per lead in the insight records.
+  const pendingDocs =
+    leadIds.length > 0
+      ? await listAllDocuments<any>({
+          databases,
+          databaseId: DATABASE_ID,
+          collectionId: COLLECTIONS.PENDING_AMOUNTS,
+          queries: [Query.equal("leadId", leadIds)],
+          pageLimit: 100,
+          maxPages: 500,
+        })
+      : [];
+  // Build a leadId -> { totalPending, latestMonth } map.
+  const pendingMap = new Map<string, { totalPending: number; latestMonth: string | null }>();
+  for (const pDoc of pendingDocs as any[]) {
+    const pLeadId = typeof pDoc.leadId === "string" ? pDoc.leadId : "";
+    if (!pLeadId) continue;
+    const amount = Number(pDoc.pendingAmount) || 0;
+    const monthKey = typeof pDoc.monthKey === "string" ? pDoc.monthKey : "";
+    const existing = pendingMap.get(pLeadId) || { totalPending: 0, latestMonth: null };
+    existing.totalPending += amount;
+    if (monthKey && (!existing.latestMonth || monthKey > existing.latestMonth)) {
+      existing.latestMonth = monthKey;
+    }
+    pendingMap.set(pLeadId, existing);
+  }
 
   const results: PaymentInsightRecord[] = [];
 
@@ -667,6 +745,19 @@ export async function listAllPaymentInsightsAction(
     const paidUpdates = updates.filter((u: any) => typeof u.amount === "number" && u.amount > 0);
     const totalPaid = paidUpdates.reduce((sum: number, u: any) => sum + u.amount, 0);
     const paidUpdateCount = paidUpdates.length;
+
+    // Bucket each payment by the month it was actually received (YYYY-MM).
+    // This is the single source of truth for revenue attribution: a payment
+    // recorded in July belongs to July, even if the lead closed in June.
+    const paidMonthlyAmounts: Record<string, number> = {};
+    for (const u of paidUpdates) {
+      if (!u.createdAt) continue;
+      const monthKey = u.createdAt.slice(0, 7); // "YYYY-MM"
+      const amount = u.amount ?? 0;
+      if (amount > 0) {
+        paidMonthlyAmounts[monthKey] = (paidMonthlyAmounts[monthKey] || 0) + amount;
+      }
+    }
 
     const leadMeta = leadDataMap.get(leadId);
 
@@ -696,6 +787,10 @@ export async function listAllPaymentInsightsAction(
       wasPartiallyPaid,
       totalPaid: paidUpdateCount > 0 ? totalPaid : null,
       paidUpdateCount,
+      pendingTotal: pendingMap.get(leadId)?.totalPending ?? null,
+      latestPendingMonth: pendingMap.get(leadId)?.latestMonth ?? null,
+      paidMonthlyAmounts,
+      leadAmount: leadMeta?.leadAmount ?? 0,
     });
   }
 

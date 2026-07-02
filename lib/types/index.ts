@@ -603,3 +603,24 @@ export interface TechnicalPayment {
   type: 'assessment' | 'interview';
   createdAt: string;
 }
+
+// ─── Pending Amounts ─────────────────────────────────────────────────────────
+// Tracks the remaining balance on a client payment record, bucketed by
+// calendar month (YYYY-MM). When an operator adds a payment update with a
+// pending amount the remaining balance is written here; when the balance
+// reaches zero the row is marked "cleared".
+export type PendingAmountStatus = 'pending' | 'cleared';
+
+export interface PendingAmount {
+  $id: string;
+  leadId: string;
+  paymentRecordId: string;
+  /** YYYY-MM, e.g. "2026-07" */
+  monthKey: string;
+  pendingAmount: number;
+  status: PendingAmountStatus;
+  createdAt: string;
+  updatedAt?: string | null;
+  updatedById?: string | null;
+  updatedByName?: string | null;
+}

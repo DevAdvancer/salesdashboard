@@ -34,6 +34,7 @@ import {
 } from "@/lib/utils/dashboard-kpi";
 import type { ReferralSplit } from "@/lib/utils/dashboard-referral";
 import type { PaymentInsightRecord } from "@/app/actions/client-payments";
+import { getTechnicalPaymentsByLeadIdsAction } from "@/app/actions/technical-payments";
 import type { TeamLeadAssignmentSummary } from "@/lib/utils/dashboard-insights";
 import { getTodayEst, getMonthStartEst, getMonthEndEst } from "@/lib/utils/est-date";
 
@@ -164,6 +165,7 @@ function MainDashboard({
     [],
   );
   const [paymentLoading, setPaymentLoading] = useState(isAdminLike);
+  const [technicalPaymentsTotal, setTechnicalPaymentsTotal] = useState(0);
   const [referralData, setReferralData] = useState<ReferralSplit | null>(null);
   const [referralLoading, setReferralLoading] = useState(isAdminLike);
 
@@ -318,6 +320,35 @@ function MainDashboard({
       cancelled = true;
     };
   }, [user, isAdminLike, dateRange]);
+
+  // ── Fetch technical payments total for dashboard (uses paymentRecords leadIds) ──
+  useEffect(() => {
+    if (!user || !isAdminLike || paymentRecords.length === 0) {
+      if (paymentRecords.length === 0) setTechnicalPaymentsTotal(0);
+      return;
+    }
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const leadIds = paymentRecords.map((r) => r.leadId);
+        const techPayments = await getTechnicalPaymentsByLeadIdsAction(user.$id, leadIds);
+        if (!cancelled) {
+          const techTotal = techPayments.reduce((sum: number, p: { amount: number }) => sum + p.amount, 0);
+          setTechnicalPaymentsTotal(techTotal);
+        }
+      } catch (error) {
+        console.error("Error loading technical payments total:", error);
+        if (!cancelled) {
+          setTechnicalPaymentsTotal(0);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, isAdminLike, paymentRecords]);
 
   // ── Fetch referral split (admin-like only, current month by closedAt) ───
   useEffect(() => {
@@ -491,6 +522,7 @@ function MainDashboard({
           isLoading={paymentLoading}
           rangeLabel={rangeLabel(dateRange)}
           dateFilter={dateRange}
+          technicalPaymentsTotal={technicalPaymentsTotal}
         />
       )}
 

@@ -133,6 +133,7 @@ function HistoryDetailContent() {
     setClientIntakeInitializedForRecord,
   ] = useState<string | null>(null);
   const [editUpfrontAmount, setEditUpfrontAmount] = useState<string>("");
+  const [pendingAmount, setPendingAmount] = useState<string>("");
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -814,11 +815,16 @@ function HistoryDetailContent() {
         status: paymentStatus,
         note: note,
         amount: enteredAmount,
+        pendingAmount:
+          typeof pendingAmount === "string" && pendingAmount.trim() !== ""
+            ? Number(pendingAmount)
+            : null,
       });
       setPaymentRecord(updated);
       if (updated) {
         setEditUpfrontAmount(String(updated.paymentPlan.upfrontAmount));
       }
+      setPendingAmount("");
       setPaymentNote("");
       toast({ title: "Success", description: "Payment update saved." });
     } catch (err: unknown) {
@@ -1158,45 +1164,70 @@ function HistoryDetailContent() {
                   </div>
                 )}
 
-                <div className="space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                    <div className="space-y-2">
-                      <Label htmlFor="paymentStatus">Update Status</Label>
-                      <select
-                        id="paymentStatus"
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        value={paymentStatus}
-                        onChange={(e) =>
-                          setPaymentStatus(e.target.value as PaymentStatus)
-                        }
-                        disabled={!canEditClientPayments || paymentSaving}>
-                        <option value="not_paid">Not Paid</option>
-                        <option value="partially_paid">Partially Paid</option>
-                        <option value="fully_paid">Fully Paid</option>
-                      </select>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                      <div className="space-y-2">
+                        <Label htmlFor="paymentStatus">Update Status</Label>
+                        <select
+                          id="paymentStatus"
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          value={paymentStatus}
+                          onChange={(e) =>
+                            setPaymentStatus(e.target.value as PaymentStatus)
+                          }
+                          disabled={!canEditClientPayments || paymentSaving}>
+                          <option value="not_paid">Not Paid</option>
+                          <option value="partially_paid">Partially Paid</option>
+                          <option value="fully_paid">Fully Paid</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="paymentNote">Note</Label>
+                        <Textarea
+                          id="paymentNote"
+                          value={paymentNote}
+                          onChange={(e) => setPaymentNote(e.target.value)}
+                          placeholder="Add a follow-up update..."
+                          disabled={!canEditClientPayments || paymentSaving}
+                          className="min-h-[84px]"
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="paymentNote">Note</Label>
-                      <Textarea
-                        id="paymentNote"
-                        value={paymentNote}
-                        onChange={(e) => setPaymentNote(e.target.value)}
-                        placeholder="Add a follow-up update..."
-                        disabled={!canEditClientPayments || paymentSaving}
-                        className="min-h-[84px]"
-                      />
+                    {/* Pending Amount — only shown when the record is partially paid */}
+                    {paymentStatus === "partially_paid" && (
+                      <div className="space-y-2">
+                        <Label htmlFor="pendingAmount">Pending Amount</Label>
+                        <Input
+                          id="pendingAmount"
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={pendingAmount}
+                          onChange={(e) => setPendingAmount(e.target.value)}
+                          placeholder="Enter remaining balance"
+                          disabled={!canEditClientPayments || paymentSaving}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Remaining balance for this month. It will appear in
+                          the pending-amounts table under{" "}
+                          {new Date().toLocaleString("en-US", {
+                            month: "short",
+                            year: "numeric",
+                          })}
+                          .
+                        </p>
+                      </div>
+                    )}
+                    <div className="space-y-1">
+                      <div className="flex justify-end">
+                        <Button
+                          onClick={handleAddPaymentUpdate}
+                          disabled={!canEditClientPayments || paymentSaving}>
+                          {paymentSaving ? "Saving..." : "Add Update"}
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    <div className="flex justify-end">
-                      <Button
-                        onClick={handleAddPaymentUpdate}
-                        disabled={!canEditClientPayments || paymentSaving}>
-                        {paymentSaving ? "Saving..." : "Add Update"}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
 
                 <div className="space-y-3">
                   <Label>Updates</Label>

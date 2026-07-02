@@ -48,6 +48,8 @@ export function addClientPaymentUpdate(input: {
   status: PaymentStatus;
   note?: string | null;
   amount?: number | null;
+  /** Remaining balance after this update — written to pending_amounts. */
+  pendingAmount?: number | null;
 }): Promise<ClientPaymentRecord> {
   return addClientPaymentUpdateAction(input).finally(() => {
     clearClientReadCache();

@@ -201,6 +201,38 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'branch_idx', type: 'key', attributes: ['branchId'] },
     ],
   },
+
+  // ─── Pending Amounts ───────────────────────────────────────────────────────
+  // Tracks the remaining (unpaid) balance on a client payment record,
+  // keyed by (leadId, monthKey). One doc per lead per month. Written
+  // when an operator marks a payment as partially paid and enters a
+  // pending amount; updated on subsequent payment updates; cleared
+  // (status = 'cleared') when the balance reaches zero.
+  [COLLECTIONS.PENDING_AMOUNTS]: {
+    attributes: [
+      { key: 'leadId', type: 'string', required: true, size: 255 },
+      { key: 'paymentRecordId', type: 'string', required: true, size: 255 },
+      { key: 'monthKey', type: 'string', required: true, size: 7 },
+      { key: 'pendingAmount', type: 'integer', required: true },
+      {
+        key: 'status',
+        type: 'enum',
+        required: true,
+        default: 'pending',
+        values: ['pending', 'cleared'],
+      },
+      { key: 'createdAt', type: 'datetime', required: true },
+      { key: 'updatedAt', type: 'datetime', required: false },
+      { key: 'updatedById', type: 'string', required: false, size: 255 },
+      { key: 'updatedByName', type: 'string', required: false, size: 255 },
+    ],
+    indexes: [
+      { key: 'lead_month_unique', type: 'unique', attributes: ['leadId', 'monthKey'] },
+      { key: 'lead_idx', type: 'key', attributes: ['leadId'] },
+      { key: 'month_idx', type: 'key', attributes: ['monthKey'] },
+      { key: 'status_idx', type: 'key', attributes: ['status'] },
+    ],
+  },
 };
 
 // Fields to remove (retired manager/assistant_manager fields, plus the
@@ -292,6 +324,15 @@ async function syncAttr(
         collectionId,
         attr.key,
         attr.required ?? false
+      );
+    } else if (attr.type === 'integer') {
+      await databases.createIntegerAttribute(
+        DATABASE_ID,
+        collectionId,
+        attr.key,
+        attr.required ?? false,
+        (attr as any).min ?? 0,
+        (attr as any).max ?? undefined
       );
     } else if (attr.array) {
       await databases.createArrayAttribute(

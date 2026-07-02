@@ -561,6 +561,40 @@ export const collectionSchemas: Record<string, CollectionSchema> = {
       { key: 'target_agent_unique', type: 'unique', attributes: ['monthlyTargetId', 'agentId'] },
     ],
   },
+
+  // ─── Pending Amounts ────────────────────────────────────────────────────────
+  // One document per (lead_id, month_key) tracking the remaining balance on
+  // a client payment record. Written when an operator adds a payment update
+  // with a pending amount; the status flips from "pending" to "cleared" when
+  // the balance reaches zero. The unique constraint on (leadId, monthKey)
+  // ensures at most one active pending row per lead per calendar month.
+  pending_amounts: {
+    attributes: [
+      { key: 'leadId', type: 'string', required: true, size: 255 },
+      { key: 'paymentRecordId', type: 'string', required: true, size: 255 },
+      // YYYY-MM derived from the payment update that created / updated this row.
+      { key: 'monthKey', type: 'string', required: true, size: 7 },
+      { key: 'pendingAmount', type: 'integer', required: true, min: 0 },
+      {
+        key: 'status',
+        type: 'enum',
+        required: true,
+        default: 'pending',
+        values: ['pending', 'cleared'],
+      },
+      { key: 'createdAt', type: 'datetime', required: true },
+      { key: 'updatedAt', type: 'datetime', required: false },
+      { key: 'updatedById', type: 'string', required: false, size: 255 },
+      { key: 'updatedByName', type: 'string', required: false, size: 255 },
+    ],
+    indexes: [
+      { key: 'lead_month_unique', type: 'unique', attributes: ['leadId', 'monthKey'] },
+      { key: 'lead_idx', type: 'key', attributes: ['leadId'] },
+      { key: 'month_idx', type: 'key', attributes: ['monthKey'] },
+      { key: 'status_idx', type: 'key', attributes: ['status'] },
+      { key: 'payment_record_idx', type: 'key', attributes: ['paymentRecordId'] },
+    ],
+  },
 };
 
 /**

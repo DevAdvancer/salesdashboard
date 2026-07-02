@@ -41,6 +41,10 @@ export const COLLECTIONS = {
   // split amount chosen by the TL within their team's monthly target.
   MONTHLY_TARGET_ASSIGNMENTS: process.env.NEXT_PUBLIC_APPWRITE_MONTHLY_TARGET_ASSIGNMENTS_COLLECTION_ID ?? 'monthly_target_assignments',
   TECHNICAL_PAYMENTS: process.env.NEXT_PUBLIC_APPWRITE_TECHNICAL_PAYMENTS_COLLECTION_ID ?? 'technical_payments',
+  // One doc per (lead, month) tracking the remaining balance on a client
+  // payment record. Written when an operator adds a payment update with a
+  // pending amount; cleared when the balance reaches zero.
+  PENDING_AMOUNTS: process.env.NEXT_PUBLIC_APPWRITE_PENDING_AMOUNTS_COLLECTION_ID ?? 'pending_amounts',
 };
 
 export const BUCKETS = {

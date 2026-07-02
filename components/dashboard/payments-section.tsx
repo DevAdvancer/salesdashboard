@@ -78,13 +78,15 @@ interface PaymentsSectionProps {
     from?: string;
     to?: string;
   };
+  /** Total from assessment + interview technical payments for the selected period. */
+  technicalPaymentsTotal?: number;
 }
 
 interface CompanyRow {
   company: string;
-  total: number;
-  paid: number;
-  remaining: number;
+  total: number;    // leadAmount - full contract amount from lead
+  upfront: number;  // upfrontAmount - portion paid upfront
+  remaining: number; // total - upfront
   count: number;
 }
 
@@ -100,20 +102,11 @@ function toMonthKey(iso: string): {
   return { key, monthStart, sortKey };
 }
 
-function resolvePaidAmount(
-  record: Pick<PaymentInsightRecord, "totalPaid" | "status" | "upfrontAmount">,
-): number {
-  return (
-    record.totalPaid ??
-    (record.status === "fully_paid" ? record.upfrontAmount : 0)
-  );
-}
-
 export function buildMonthlyPaymentsChartData(
   records: Array<
     Pick<
       PaymentInsightRecord,
-      "closedAt" | "totalPaid" | "status" | "upfrontAmount"
+      "paidMonthlyAmounts"
     >
   >,
 ): Array<{ name: string; Total: number; Net: number }> {
@@ -123,11 +116,15 @@ export function buildMonthlyPaymentsChartData(
   >();
 
   for (const record of records) {
-    if (!record.closedAt) continue;
-    const { key, monthStart, sortKey } = toMonthKey(record.closedAt);
-    const ex = map.get(key) ?? { total: 0, monthStart, sortKey };
-    ex.total += resolvePaidAmount(record);
-    map.set(key, ex);
+    // Sum all actual payments by the month they were received, not the month
+    // the lead closed. This ensures revenue is attributed to the correct month.
+    for (const [monthKey, amount] of Object.entries(record.paidMonthlyAmounts)) {
+      if (!amount) continue;
+      const { monthStart, sortKey } = toMonthKey(monthKey);
+      const ex = map.get(monthKey) ?? { total: 0, monthStart, sortKey };
+      ex.total += amount;
+      map.set(monthKey, ex);
+    }
   }
 
   return Array.from(map.entries())
@@ -154,7 +151,7 @@ function statusVariant(status: PaymentStatus) {
   return "inactive" as const;
 }
 
-export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter }: PaymentsSectionProps) {
+export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter, technicalPaymentsTotal = 0 }: PaymentsSectionProps) {
   const [statusFilter, setStatusFilter] = useState<"all" | PaymentStatus>(
     "all",
   );
@@ -205,35 +202,57 @@ export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter }: 
       const ex = map.get(key) ?? {
         company: displayCompany || "Unspecified",
         total: 0,
-        paid: 0,
+        upfront: 0,
         remaining: 0,
         count: 0,
       };
+      const leadAmount = r.leadAmount ?? 0;
       const upfront = r.upfrontAmount ?? 0;
-      // Use the real amount actually collected when available; otherwise
-      // treat the planned upfront as the contract value for the record.
-      const paid = resolvePaidAmount(r);
-      ex.total += upfront;
-      ex.paid += paid;
-      ex.remaining += Math.max(0, upfront - paid);
+      // Remaining = leadAmount - upfrontAmount. Follow-up payments cover this.
+      const remaining = Math.max(0, leadAmount - upfront);
+      ex.total += leadAmount;
+      ex.upfront += upfront;
+      ex.remaining += remaining;
       ex.count += 1;
       map.set(key, ex);
     }
     return Array.from(map.values()).sort((a, b) => b.total - a.total);
   }, [filteredRecords]);
 
+  // Inject technical payments as a regular table row so the grand total
+  // naturally includes them. The row is appended at the end (sorted by
+  // total descending, and tech payments carry no company name).
+  const displayRows = useMemo(() => {
+    if (!technicalPaymentsTotal) return companyRows;
+    return [
+      ...companyRows,
+      {
+        company: "Technical payments",
+        total: technicalPaymentsTotal,
+        upfront: technicalPaymentsTotal,
+        remaining: 0,
+        count: 0,
+      },
+    ];
+  }, [companyRows, technicalPaymentsTotal]);
+
   const grandTotals = useMemo(
     () =>
-      companyRows.reduce(
+      displayRows.reduce(
         (acc, row) => ({
           total: acc.total + row.total,
-          paid: acc.paid + row.paid,
+          upfront: acc.upfront + row.upfront,
           remaining: acc.remaining + row.remaining,
           count: acc.count + row.count,
         }),
-        { total: 0, paid: 0, remaining: 0, count: 0 },
+        {
+          total: 0,
+          upfront: 0,
+          remaining: 0,
+          count: 0,
+        },
       ),
-    [companyRows],
+    [displayRows],
   );
 
   // Per-month chart data is scoped to the company filter (status filter
@@ -312,18 +331,22 @@ export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter }: 
                     <th className="py-2 px-4 font-medium text-right">
                       Records
                     </th>
-                    <th className="py-2 px-4 font-medium text-right">Total</th>
-                    <th className="py-2 px-4 font-medium text-right">Paid</th>
+                    <th className="py-2 px-4 font-medium text-right">
+                      Total
+                    </th>
+                    <th className="py-2 px-4 font-medium text-right">
+                      Upfront
+                    </th>
                     <th className="py-2 pl-4 font-medium text-right">
                       Remaining
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {companyRows.map((row) => (
+                  {displayRows.map((row) => (
                     <tr
                       key={row.company}
-                      className="border-b border-[var(--hairline-soft)] last:border-0">
+                      className={`border-b border-[var(--hairline-soft)] last:border-0 ${row.company === 'Technical payments' ? 'italic text-muted-foreground' : ''}`}>
                       <td className="py-2 pr-4 font-medium">{row.company}</td>
                       <td className="py-2 px-4 text-right tabular-nums">
                         {row.count}
@@ -331,8 +354,8 @@ export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter }: 
                       <td className="py-2 px-4 text-right tabular-nums">
                         {currencyFormatter.format(row.total)}
                       </td>
-                      <td className="py-2 px-4 text-right tabular-nums text-emerald-700">
-                        {currencyFormatter.format(row.paid)}
+                      <td className="py-2 px-4 text-right tabular-nums">
+                        {currencyFormatter.format(row.upfront)}
                       </td>
                       <td className="py-2 pl-4 text-right tabular-nums text-amber-700">
                         {currencyFormatter.format(row.remaining)}
@@ -349,8 +372,8 @@ export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter }: 
                     <td className="py-2 px-4 text-right tabular-nums">
                       {currencyFormatter.format(grandTotals.total)}
                     </td>
-                    <td className="py-2 px-4 text-right tabular-nums text-emerald-700">
-                      {currencyFormatter.format(grandTotals.paid)}
+                    <td className="py-2 px-4 text-right tabular-nums">
+                      {currencyFormatter.format(grandTotals.upfront)}
                     </td>
                     <td className="py-2 pl-4 text-right tabular-nums text-amber-700">
                       {currencyFormatter.format(grandTotals.remaining)}
@@ -365,10 +388,10 @@ export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter }: 
         {/* Per-month chart */}
         <div>
           <h4 className="mb-3 text-sm font-semibold">
-            Per-month by client close date (last 12 months)
+            Per-month received (last 12 months)
           </h4>
           <p className="mb-2 text-xs text-muted-foreground">
-            Sums the paid amounts, grouped by the client closing month.
+            Revenue grouped by the month each payment was actually received.
           </p>
           {isLoading ? (
             <Skeleton className="h-[300px] w-full" />
