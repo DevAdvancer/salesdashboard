@@ -84,6 +84,26 @@ async function listAllTechnicalPayments(): Promise<any[]> {
   });
 }
 
+async function listTechnicalPaymentsByUserIds(userIds: string[]): Promise<any[]> {
+  if (!userIds.length) return [];
+  const { databases } = await createAdminClient();
+  const CHUNK = 100;
+  const chunks: string[][] = [];
+  for (let i = 0; i < userIds.length; i += CHUNK) {
+    chunks.push(userIds.slice(i, i + CHUNK));
+  }
+  const results = await Promise.all(
+    chunks.map((chunk) =>
+      databases.listDocuments(DATABASE_ID, COLLECTIONS.TECHNICAL_PAYMENTS, [
+        Query.equal('userId', chunk),
+        Query.orderDesc('createdAt'),
+        Query.limit(5000),
+      ])
+    )
+  );
+  return results.flatMap((r) => r.documents);
+}
+
 async function listTechnicalPaymentsByLeadIds(leadIds: string[]): Promise<any[]> {
   if (!leadIds.length) return [];
   const { databases } = await createAdminClient();

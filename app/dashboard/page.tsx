@@ -16,7 +16,6 @@ import { KpiLinkedinConnectionSection } from "@/components/dashboard/kpi-linkedi
 import { ReferralSection } from "@/components/dashboard/referral-section";
 import { PaymentsSection } from "@/components/dashboard/payments-section";
 import { LgHandoffSection } from "@/components/dashboard/lg-handoff-section";
-import { TechnicalPaymentsSection } from "@/components/dashboard/technical-payments-section";
 import {
   loadDashboardTopMetrics,
   loadLeadTargetProgress,
@@ -36,7 +35,6 @@ import {
 import type { ReferralSplit } from "@/lib/utils/dashboard-referral";
 import type { PaymentInsightRecord } from "@/app/actions/client-payments";
 import type { TeamLeadAssignmentSummary } from "@/lib/utils/dashboard-insights";
-import { loadTechnicalPaymentsDashboardAction } from "@/app/actions/technical-payments-dashboard";
 import { getTodayEst, getMonthStartEst, getMonthEndEst } from "@/lib/utils/est-date";
 
 type LeadGenerationTeamAssignmentStat = {
@@ -172,10 +170,6 @@ function MainDashboard({
   // LG Handoff summaries (admin-like only)
   const [handoffSummaries, setHandoffSummaries] = useState<TeamLeadAssignmentSummary[] | null>(null);
   const [handoffLoading, setHandoffLoading] = useState(isAdminLike);
-
-  // Technical payments (admin-like + team_lead)
-  const [technicalPayments, setTechnicalPayments] = useState<any[]>([]);
-  const [technicalPaymentsLoading, setTechnicalPaymentsLoading] = useState(isAdminLike || isTeamLead);
 
   // Section loading flags driven by a single readiness gate.
   const initialLoading = !user;
@@ -393,43 +387,6 @@ function MainDashboard({
     };
   }, [user, isAdminLike]);
 
-  // ── Fetch technical payments (admin-like + team_lead) ────────────────────
-  useEffect(() => {
-    if (!user || (!isAdminLike && !isTeamLead)) {
-      return;
-    }
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-      setTechnicalPaymentsLoading(true);
-    });
-
-    (async () => {
-      try {
-        const payments = await loadTechnicalPaymentsDashboardAction({
-          actorId: user.$id,
-          dateFrom: dateRange.from,
-          dateTo: dateRange.to,
-        });
-        if (!cancelled) {
-          setTechnicalPayments(payments);
-          setTechnicalPaymentsLoading(false);
-        }
-      } catch (error) {
-        console.error("Error loading technical payments:", error);
-        if (!cancelled) {
-          setTechnicalPayments([]);
-          setTechnicalPaymentsLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isAdminLike, isTeamLead, dateRange]);
-
   // KPI section mode + target derived from range
   const kpiMode = isSingleDay(dateRange) ? "daily" : "monthly";
   const scopeLabel = isAgent
@@ -529,16 +486,11 @@ function MainDashboard({
 
       {/* Payments — admin-only, all-time + per-month */}
       {isAdminLike && (
-        <PaymentsSection records={paymentRecords} isLoading={paymentLoading} rangeLabel={rangeLabel(dateRange)} />
-      )}
-
-      {/* Technical Payments — admin-like + team_lead */}
-      {(isAdminLike || isTeamLead) && (
-        <TechnicalPaymentsSection
-          payments={technicalPayments}
-          isLoading={technicalPaymentsLoading}
-          dateFilter={dateRange}
+        <PaymentsSection
+          records={paymentRecords}
+          isLoading={paymentLoading}
           rangeLabel={rangeLabel(dateRange)}
+          dateFilter={dateRange}
         />
       )}
 

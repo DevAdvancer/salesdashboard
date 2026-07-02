@@ -1,7 +1,7 @@
 import type { Lead, LeadData } from '@/lib/types';
 import { normalizeLinkedinProfileUrl } from '@/lib/utils/linkedin';
-import { createAdminClient } from '@/lib/appwrite';
-import { DATABASES, COLLECTIONS } from '@/lib/constants/appwrite';
+import { createAdminClient } from '@/lib/server/appwrite';
+import { DATABASE_ID, COLLECTIONS } from '@/lib/constants/appwrite';
 import { ID } from 'appwrite';
 
 export type PublicLeadRequestInput = {
@@ -128,8 +128,8 @@ export async function findLeadRequestDuplicateWarnings(
         field: 'email',
         existingLeadId: lead.$id,
         existingBranchId: lead.branchId ?? undefined,
-        existingLeadOwnerName: await getUserDocumentName(databases, lead.ownerId),
-        existingLeadAssignedToName: await getUserDocumentName(databases, lead.assignedToId),
+        existingLeadOwnerName: await getUserDocumentName(databases, lead.ownerId ?? undefined),
+        existingLeadAssignedToName: await getUserDocumentName(databases, lead.assignedToId ?? undefined),
       });
     }
 
@@ -142,8 +142,8 @@ export async function findLeadRequestDuplicateWarnings(
         field: 'phone',
         existingLeadId: lead.$id,
         existingBranchId: lead.branchId ?? undefined,
-        existingLeadOwnerName: await getUserDocumentName(databases, lead.ownerId),
-        existingLeadAssignedToName: await getUserDocumentName(databases, lead.assignedToId),
+        existingLeadOwnerName: await getUserDocumentName(databases, lead.ownerId ?? undefined),
+        existingLeadAssignedToName: await getUserDocumentName(databases, lead.assignedToId ?? undefined),
       });
     }
 
@@ -159,8 +159,8 @@ export async function findLeadRequestDuplicateWarnings(
         field: 'linkedinProfileUrl',
         existingLeadId: lead.$id,
         existingBranchId: lead.branchId ?? undefined,
-        existingLeadOwnerName: await getUserDocumentName(databases, lead.ownerId),
-        existingLeadAssignedToName: await getUserDocumentName(databases, lead.assignedToId),
+        existingLeadOwnerName: await getUserDocumentName(databases, lead.ownerId ?? undefined),
+        existingLeadAssignedToName: await getUserDocumentName(databases, lead.assignedToId ?? undefined),
       });
     }
 

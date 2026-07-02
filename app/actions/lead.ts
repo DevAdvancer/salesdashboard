@@ -242,7 +242,7 @@ async function enrichDuplicateResult(databases: any, doc: Record<string, unknown
 
     return {
         isValid: false,
-        existingLeadId: doc.$id,
+        existingLeadId: doc.$id as string,
         existingBranchId: branchId,
         existingLeadOwnerName: ownerName,
         existingLeadAssignedToName: assignedToName,

@@ -57,7 +57,7 @@ async function listAllTechnicalPaymentsForDashboard(): Promise<any[]> {
   const all: any[] = [];
   let cursor: string | null = null;
   for (let i = 0; i < 10; i++) {
-    const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.TECHNICAL_PAYMENTS, [
+    const response: any = await databases.listDocuments(DATABASE_ID, COLLECTIONS.TECHNICAL_PAYMENTS, [
       Query.orderDesc('createdAt'),
       Query.limit(500),
       ...(cursor ? [Query.cursorAfter(cursor)] : []),
@@ -165,11 +165,12 @@ export async function loadTechnicalPaymentsDashboardAction(input: {
   const normalizedFrom = input.dateFrom ?? "";
   const normalizedTo = input.dateTo ?? "";
 
+  const isAdminLike = scopedUserIds.length === 0;
+
   for (const doc of payments) {
     const userId = doc.userId as string;
-    if (!scopedUserIds.includes(userId)) continue;
 
-    // Apply date range filter
+    // Apply date range filter (always needed)
     if (normalizedFrom || normalizedTo) {
       const docDate = typeof doc.createdAt === 'string' ? doc.createdAt.substring(0, 10) : '';
       if (normalizedFrom && docDate < normalizedFrom) continue;

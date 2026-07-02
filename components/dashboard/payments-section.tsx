@@ -74,6 +74,10 @@ interface PaymentsSectionProps {
   records: PaymentInsightRecord[];
   isLoading: boolean;
   rangeLabel?: string;
+  dateFilter?: {
+    from?: string;
+    to?: string;
+  };
 }
 
 interface CompanyRow {
@@ -132,13 +136,25 @@ export function buildMonthlyPaymentsChartData(
     .map(([name, d]) => ({ name, Total: d.total, Net: 0 }));
 }
 
+function toComparableIsoDate(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  // Handle YYYY-MM-DD date-only strings
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  // Handle ISO timestamps — extract the date portion
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+}
+
 function statusVariant(status: PaymentStatus) {
   if (status === "fully_paid") return "active" as const;
   if (status === "partially_paid") return "default" as const;
   return "inactive" as const;
 }
 
-export function PaymentsSection({ records, isLoading, rangeLabel }: PaymentsSectionProps) {
+export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter }: PaymentsSectionProps) {
   const [statusFilter, setStatusFilter] = useState<"all" | PaymentStatus>(
     "all",
   );
@@ -151,9 +167,25 @@ export function PaymentsSection({ records, isLoading, rangeLabel }: PaymentsSect
   );
 
   const filteredRecords = useMemo(() => {
-    if (statusFilter === "all") return companyFiltered;
-    return companyFiltered.filter((r) => r.status === statusFilter);
-  }, [companyFiltered, statusFilter]);
+    let recordsToFilter = companyFiltered;
+
+    // Apply date range filter if provided
+    if (dateFilter?.from || dateFilter?.to) {
+      recordsToFilter = recordsToFilter.filter((r) => {
+        const recordDate = toComparableIsoDate(r.closedAt) || toComparableIsoDate(r.createdAt);
+        if (dateFilter.from) {
+          if (recordDate && recordDate < dateFilter.from) return false;
+        }
+        if (dateFilter.to) {
+          if (recordDate && recordDate > dateFilter.to) return false;
+        }
+        return true;
+      });
+    }
+
+    if (statusFilter === "all") return recordsToFilter;
+    return recordsToFilter.filter((r) => r.status === statusFilter);
+  }, [companyFiltered, statusFilter, dateFilter]);
 
   // Per-month chart data is also scoped to the company filter (status filter
   // intentionally does not affect it — the chart shows total received,

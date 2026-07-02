@@ -554,7 +554,9 @@ export interface AdminClientHistoryRow {
  * for use in the Financial Insights dashboard.
  */
 export async function listAllPaymentInsightsAction(
-  actorId: string
+  actorId: string,
+  dateFrom?: string | null,
+  dateTo?: string | null,
 ): Promise<PaymentInsightRecord[]> {
   const actor = await getActor(actorId);
 
@@ -638,6 +640,9 @@ export async function listAllPaymentInsightsAction(
     });
   }
 
+  const normalizedFrom = dateFrom ? dateFrom.trim() : null;
+  const normalizedTo = dateTo ? dateTo.trim() : null;
+
   const results: PaymentInsightRecord[] = [];
 
   for (const doc of paymentDocs as any[]) {
@@ -664,6 +669,17 @@ export async function listAllPaymentInsightsAction(
     const paidUpdateCount = paidUpdates.length;
 
     const leadMeta = leadDataMap.get(leadId);
+
+    // Apply date range filter if dates are provided
+    if (normalizedFrom || normalizedTo) {
+      const closedDate = toComparableIsoDate(leadMeta?.closedAt);
+      if (normalizedFrom && (!closedDate || closedDate < normalizedFrom)) {
+        continue;
+      }
+      if (normalizedTo && (!closedDate || closedDate > normalizedTo)) {
+        continue;
+      }
+    }
 
     results.push({
       leadId,
