@@ -195,9 +195,14 @@ export function DynamicLeadForm({
   } = useForm({
     resolver: zodResolver(schema),
     defaultValues,
-    key: selectedSource,
     resetOptions: { keepValues: true, keepDirty: true },
   });
+
+  // Force re-initialize when source changes (so schema/LinkedIn requirement updates)
+  useEffect(() => {
+    reset(defaultValues);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSource]);
 
   // Sync server-side field errors into react-hook-form so the existing
   // per-field render (errors[field.key]?.message + border-red-500) picks
