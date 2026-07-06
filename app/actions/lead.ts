@@ -98,7 +98,17 @@ function shouldIgnoreLinkedinDuplicate(
 
 function assertRequiredLeadData(data: LeadData) {
     const missing: Array<{ key: string; label: string }> = [];
+
+    // Skip LinkedIn URL validation for referral sources
+    const isReferral = isReferralSource(data.source);
+    const linkedinKeys = ['linkedinProfileUrl', 'linkedinProfile'];
+
     for (const key of REQUIRED_LEAD_FIELD_KEYS) {
+        // Skip LinkedIn fields if source is referral
+        if (isReferral && linkedinKeys.includes(key)) {
+            continue;
+        }
+
         if (Object.prototype.hasOwnProperty.call(data, key) && isBlankLeadValue(data[key])) {
             missing.push({ key, label: REQUIRED_LEAD_FIELD_LABELS[key] ?? key });
         }
@@ -1717,6 +1727,15 @@ async function getAgentsByTeamLead(databases: any, teamLeadId: string): Promise<
   }
 }
 
+function normalizeSource(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function isReferralSource(source: unknown): boolean {
+  return normalizeSource(source) === "referral";
+}
+
 export async function loadLeadTargetProgressAction(input: {
   userId: string;
   role: string;
@@ -1765,6 +1784,8 @@ export async function loadLeadTargetProgressAction(input: {
           const hasOverlap = userBranchIds.some((b: string) => input.branchIds!.includes(b));
           if (!hasOverlap) return false;
         }
+        // Exclude agents without a team lead (unassigned agents)
+        if (user.role === "agent" && !user.teamLeadId) return false;
         return user.$id !== input.userId;
       });
     }
@@ -1825,7 +1846,7 @@ export async function loadLeadTargetProgressAction(input: {
   }
 
   const kpiRows = scopeUsers.map((user) => {
-    // Count leads created by this user:
+    // Count leads created by this user (excluding referral sources):
     const createdCount = allLeads.filter((lead) => {
       let creatorId = lead.ownerId;
       try {
@@ -1834,7 +1855,18 @@ export async function loadLeadTargetProgressAction(input: {
           creatorId = leadData.creatorId;
         }
       } catch {}
-      return creatorId === user.$id;
+
+      if (creatorId !== user.$id) return false;
+
+      // Exclude referral sources from KPI
+      try {
+        const leadData = JSON.parse(lead.data);
+        if (leadData && isReferralSource(leadData.source)) {
+          return false;
+        }
+      } catch {}
+
+      return true;
     }).length;
 
     // Count leads assigned to this user:

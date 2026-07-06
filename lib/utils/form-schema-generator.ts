@@ -1,5 +1,151 @@
 import { z } from 'zod';
 import { FormField } from '@/lib/types';
+import { normalizeLeadSource } from './required-lead-fields';
+import { isLinkedinProfileField } from './lead-linkedin-field';
+
+/**
+ * Generate a source-aware Zod schema from form configuration
+ * LinkedIn fields are optional when source is "referral"
+ */
+export function generateSourceAwareZodSchema(
+  formConfig: FormField[],
+  source: unknown = '',
+): z.ZodObject<any> {
+  const isReferral = normalizeLeadSource(source) === 'referral';
+  const schemaShape: Record<string, z.ZodTypeAny> = {};
+
+  for (const field of formConfig) {
+    // Skip hidden fields - they don't need validation in the form
+    if (!field.visible) {
+      continue;
+    }
+
+    let fieldSchema: z.ZodTypeAny;
+
+    // Map field types to appropriate Zod validators
+    switch (field.type) {
+      case 'email':
+        // Email validation with format checking (Requirement 11.2)
+        fieldSchema = z
+          .string()
+          .email('Please enter a valid email address');
+        break;
+
+      case 'phone':
+        // Phone validation with format checking (Requirement 11.3)
+        // Accepts formats like: +1234567890, (123) 456-7890, 123-456-7890, +1 (123) 456-7890, etc.
+        // Requires at least 10 digits total
+        fieldSchema = z
+          .string()
+          .refine(
+            (val) => {
+              // Remove all non-digit characters to count digits
+              const digits = val.replace(/\D/g, '');
+              // Must have at least 10 digits
+              if (digits.length < 10) return false;
+              // Must match phone pattern
+              return /^[\+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{1,4}[-\s\.]?[0-9]{1,9}$/.test(val);
+            },
+            { message: 'Please enter a valid phone number' }
+          );
+        break;
+
+      case 'dropdown':
+        // Dropdown validation with enum constraint
+        if (field.options && field.options.length > 0) {
+          // Create enum from options array
+          fieldSchema = z.enum(field.options as [string, ...string[]]);
+        } else {
+          // Fallback to string if no options defined
+          fieldSchema = z.string();
+        }
+        break;
+
+      case 'textarea':
+        // Textarea is just a multi-line text field
+        fieldSchema = z.string();
+        break;
+
+      case 'checklist':
+        // Checklist returns an array of selected values
+        if (field.options && field.options.length > 0) {
+          fieldSchema = z.array(z.enum(field.options as [string, ...string[]]));
+        } else {
+          fieldSchema = z.array(z.string());
+        }
+        break;
+
+      case 'text':
+      default:
+        // Default text field validation
+        fieldSchema = z.string();
+        break;
+    }
+
+    // Detect LinkedIn fields early so both custom validation and
+    // required/optional logic can use it for referral bypass.
+    const isLinkedinField = isLinkedinProfileField(field);
+
+    // Apply custom validation rules if specified — skip for LinkedIn on referral
+    if (field.validation && field.type === 'text' && !(isReferral && isLinkedinField)) {
+      // For text fields, apply pattern and length validation
+      // We need to cast since we know it's a ZodString at this point
+      let textSchema = fieldSchema as z.ZodString;
+
+      if (field.validation.pattern) {
+        textSchema = textSchema.regex(
+          new RegExp(field.validation.pattern),
+          `Please enter a valid ${field.label.toLowerCase()}`
+        );
+      }
+
+      if (field.validation.minLength !== undefined) {
+        textSchema = textSchema.min(
+          field.validation.minLength,
+          `${field.label} must be at least ${field.validation.minLength} characters`
+        );
+      }
+
+      if (field.validation.maxLength !== undefined) {
+        textSchema = textSchema.max(
+          field.validation.maxLength,
+          `${field.label} must be at most ${field.validation.maxLength} characters`
+        );
+      }
+
+      fieldSchema = textSchema;
+    }
+
+    // Apply required/optional based on field configuration and source (Requirements 3.9, 11.1)
+    const isRequiredNormally = field.required && !(isReferral && isLinkedinField);
+
+    if (isRequiredNormally) {
+      // For required fields, ensure non-empty values
+      if (field.type === 'text' || field.type === 'email' || field.type === 'phone' || field.type === 'textarea') {
+        fieldSchema = (fieldSchema as z.ZodString).min(1, `${field.label} is required`);
+      } else if (field.type === 'checklist') {
+        fieldSchema = (fieldSchema as z.ZodArray<any>).min(1, `${field.label} is required`);
+      }
+    } else {
+      // For optional fields, allow empty strings or undefined
+      if (field.type === 'text' || field.type === 'email' || field.type === 'phone' || field.type === 'textarea') {
+        fieldSchema = fieldSchema.optional().or(z.literal(''));
+      } else if (field.type === 'checklist') {
+        fieldSchema = fieldSchema.optional();
+      } else if (field.type === 'dropdown') {
+        fieldSchema = fieldSchema.optional().or(z.literal(''));
+      } else {
+        fieldSchema = fieldSchema.optional();
+      }
+    }
+
+    // Add the field schema to the shape object using the field's key
+    schemaShape[field.key] = fieldSchema;
+  }
+
+  // Return a Zod object schema
+  return z.object(schemaShape);
+}
 
 /**
  * Generate a Zod schema from form configuration

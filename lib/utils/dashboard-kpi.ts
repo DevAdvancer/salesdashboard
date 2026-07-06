@@ -17,17 +17,49 @@ export interface KpiRow {
 }
 
 /**
+ * Normalizes a source string for matching: lowercases, trims whitespace,
+ * strips everything that isn't a letter or digit.
+ */
+function normalizeSource(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+const REFERRAL_SOURCE_NORMALIZED = "referral";
+
+function isReferralSource(source: unknown): boolean {
+  return normalizeSource(source) === REFERRAL_SOURCE_NORMALIZED;
+}
+
+/**
  * Counts how many leads a user created within a date range.
  * A lead "belongs" to its `ownerId` or its original `creatorId` inside JSON data.
+ *
+ * All leads count regardless of status (including "not interested").
+ * Leads with source === "referral" are excluded from KPI counting.
  */
 function countLeadsForUser(leads: Lead[], userId: string): number {
   return leads.filter((lead) => {
-    if (lead.ownerId === userId) return true;
+    // Check if the lead was created by this user
+    let creatorId = lead.ownerId;
     try {
-      const data = JSON.parse(lead.data);
-      if (data && data.creatorId === userId) return true;
+      const leadData = JSON.parse(lead.data);
+      if (leadData && leadData.creatorId) {
+        creatorId = leadData.creatorId;
+      }
     } catch {}
-    return false;
+
+    if (creatorId !== userId) return false;
+
+    // Exclude referral sources from KPI
+    try {
+      const leadData = JSON.parse(lead.data);
+      if (leadData && isReferralSource(leadData.source)) {
+        return false;
+      }
+    } catch {}
+
+    return true;
   }).length;
 }
 

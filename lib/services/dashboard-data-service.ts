@@ -496,7 +496,14 @@ async function resolveScopeUsers(input: {
   }
 
   const all = await getAssignableUsers(role, branchIds ?? [], userId, "all");
-  return all.filter((candidate) => candidate.$id !== userId && isKpiEligible(candidate));
+  const filtered = all.filter(
+    (candidate) =>
+      candidate.$id !== userId &&
+      isKpiEligible(candidate) &&
+      // Exclude agents without a team lead (unassigned agents)
+      !(candidate.role === "agent" && !candidate.teamLeadId),
+  );
+  return filtered;
 }
 
 export interface ReferralStatsInput {

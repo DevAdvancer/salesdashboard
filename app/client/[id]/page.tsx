@@ -1193,10 +1193,25 @@ function HistoryDetailContent() {
                         />
                       </div>
                     </div>
-                    {/* Pending Amount — only shown when the record is partially paid */}
-                    {paymentStatus === "partially_paid" && (
+                    {/* Pending Amount — shown when partially_paid (staying partial)
+                        or when transitioning from partially_paid to fully_paid. */}
+                    {(paymentStatus === "partially_paid" ||
+                      (paymentStatus === "fully_paid" &&
+                        paymentRecord?.status === "partially_paid")) && (
                       <div className="space-y-2">
-                        <Label htmlFor="pendingAmount">Pending Amount</Label>
+                        {paymentStatus === "fully_paid" &&
+                          paymentRecord?.status === "partially_paid" && (
+                            <p className="text-xs text-muted-foreground">
+                              This lead had a pending balance from a previous
+                              payment cycle. Enter the remaining amount to carry
+                              it into this month.
+                            </p>
+                          )}
+                        <Label htmlFor="pendingAmount">
+                          {paymentStatus === "fully_paid"
+                            ? "Remaining Balance (carried to current month)"
+                            : "Pending Amount"}
+                        </Label>
                         <Input
                           id="pendingAmount"
                           type="number"

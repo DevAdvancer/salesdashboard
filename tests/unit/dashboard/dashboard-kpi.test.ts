@@ -261,4 +261,35 @@ describe("buildLeadTargetProgress", () => {
     expect(alice?.assignedLeadCount).toBe(1);
     expect(bob?.assignedLeadCount).toBe(2);
   });
+
+  it("excludes referral source leads from KPI count", () => {
+    const users = [makeUser("u1", "Alice")];
+    const leads = [
+      { ...makeLead("l1", "u1"), data: JSON.stringify({ creatorId: "u1", source: "referral" }) },
+      { ...makeLead("l2", "u1"), data: JSON.stringify({ creatorId: "u1", source: "website" }) },
+      { ...makeLead("l3", "u1"), data: JSON.stringify({ creatorId: "u1", source: "Referral" }) }, // case-insensitive
+    ];
+    const rows = buildLeadTargetProgress({
+      leads,
+      users,
+      range: { from: "2026-06-22", to: "2026-06-22" },
+    });
+    // Only l2 (website) should count; both l1 and l3 are referral
+    expect(rows[0].leadCount).toBe(1);
+  });
+
+  it("includes not-interested leads in KPI (only referral is excluded)", () => {
+    const users = [makeUser("u1", "Alice")];
+    const leads = [
+      { ...makeLead("l1", "u1"), status: "Not Interested", data: JSON.stringify({ creatorId: "u1", source: "website" }) },
+      { ...makeLead("l2", "u1"), status: "Not Interested", data: JSON.stringify({ creatorId: "u1", source: "referral" }) },
+    ];
+    const rows = buildLeadTargetProgress({
+      leads,
+      users,
+      range: { from: "2026-06-22", to: "2026-06-22" },
+    });
+    // l1 counts (not interested but not referral); l2 excluded (referral)
+    expect(rows[0].leadCount).toBe(1);
+  });
 });

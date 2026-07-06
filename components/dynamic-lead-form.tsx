@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FormField } from "@/lib/types";
 import {
-  generateZodSchema,
+  generateSourceAwareZodSchema,
   getVisibleFields,
 } from "@/lib/utils/form-schema-generator";
 import { Input } from "@/components/ui/input";
@@ -109,9 +109,18 @@ export function DynamicLeadForm({
 
   // Filter out ownerId and assignedToId from configurable form fields (Requirement 4.5)
   // These are handled automatically: ownerId by createLead, assignedToId by the dropdown
-  const filteredConfig = formConfig.filter(
-    (f) => f.key !== "ownerId" && f.key !== "assignedToId",
-  );
+  // Also filter out referral name fields — the showReferralName block below renders
+  // it only when source is "Referral", avoiding duplication and default rendering.
+  const filteredConfig = formConfig.filter((f) => {
+    if (f.key === "ownerId" || f.key === "assignedToId") return false;
+    // Match by key OR by label (form-config may store the field with a generated key)
+    const isReferralField =
+      f.key === "referralName" ||
+      f.key === "referral" ||
+      f.label.toLowerCase().replace(/[^a-z]/g, "") === "referralname";
+    if (isReferralField) return false;
+    return true;
+  });
 
   // If lastName is not in the config (removed by user), inject it manually just under firstName (or at start if firstName missing)
   const hasLastName = filteredConfig.some((f) => f.key === "lastName");
@@ -171,18 +180,23 @@ export function DynamicLeadForm({
   }
 
   // Generate zod schema from form config (Requirements 10.5, 11.1, 11.2, 11.3)
-  const schema = generateZodSchema(effectiveConfig);
+  // LinkedIn is optional when source is "Referral"
+  const schema = generateSourceAwareZodSchema(effectiveConfig, selectedSource);
 
   // Initialize react-hook-form (Requirement 10.4)
+  // Key forces reinit when source changes so the schema (and LinkedIn requirement) updates
   const {
     register,
     handleSubmit,
     setError,
     clearErrors,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(schema),
     defaultValues,
+    key: selectedSource,
+    resetOptions: { keepValues: true, keepDirty: true },
   });
 
   // Sync server-side field errors into react-hook-form so the existing
@@ -223,7 +237,7 @@ export function DynamicLeadForm({
           <div key={field.id} className="space-y-2">
             <Label htmlFor={field.key}>
               {field.label}
-              {shouldShowRequiredAsterisk(field.key, field.required) && (
+              {shouldShowRequiredAsterisk(field.key, field.required, selectedSource, field) && (
                 <span className="text-red-500 ml-1">*</span>
               )}
             </Label>
@@ -253,7 +267,7 @@ export function DynamicLeadForm({
           <div key={field.id} className="space-y-2">
             <Label htmlFor={field.key}>
               {field.label}
-              {shouldShowRequiredAsterisk(field.key, field.required) && (
+              {shouldShowRequiredAsterisk(field.key, field.required, selectedSource, field) && (
                 <span className="text-red-500 ml-1">*</span>
               )}
             </Label>
@@ -285,7 +299,7 @@ export function DynamicLeadForm({
           <div key={field.id} className="space-y-2">
             <Label htmlFor={field.key}>
               {field.label}
-              {shouldShowRequiredAsterisk(field.key, field.required) && (
+              {shouldShowRequiredAsterisk(field.key, field.required, selectedSource, field) && (
                 <span className="text-red-500 ml-1">*</span>
               )}
             </Label>
@@ -325,7 +339,7 @@ export function DynamicLeadForm({
           <div key={field.id} className="space-y-2">
             <Label>
               {field.label}
-              {shouldShowRequiredAsterisk(field.key, field.required) && (
+              {shouldShowRequiredAsterisk(field.key, field.required, selectedSource, field) && (
                 <span className="text-red-500 ml-1">*</span>
               )}
             </Label>
