@@ -667,6 +667,19 @@ export async function listLeads(
       queries.push(Query.equal('isClosed', false));
     }
 
+    const normalizedRequestedStatus =
+      typeof filters.status === 'string'
+        ? filters.status.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
+        : '';
+    const shouldExcludeNotInterestedFromActiveList =
+      (filters.isClosed === undefined || filters.isClosed === false) &&
+      normalizedRequestedStatus !== 'notinterested';
+
+    if (shouldExcludeNotInterestedFromActiveList) {
+      queries.push(Query.notEqual('status', 'Not Interested'));
+      queries.push(Query.notEqual('status', 'Not-Interested'));
+    }
+
     // Apply status filter
     if (filters.status) {
       queries.push(Query.equal('status', filters.status));

@@ -66,6 +66,11 @@ function shouldIgnoreLinkedinDuplicate(doc: Record<string, unknown>, leadData: L
   return normalizedStatus === 'notinterested' || normalizedStatus === 'backedout';
 }
 
+function shouldIgnoreNotInterestedDuplicate(doc: Record<string, unknown>, leadData: LeadData) {
+  const status = typeof doc.status === 'string' ? doc.status : leadData.status;
+  return normalizeLeadStatus(status) === 'notinterested';
+}
+
 /**
  * Check for a duplicate value in a specific field across all leads
  *
@@ -135,6 +140,9 @@ async function checkDuplicateField(
         inputNormalized &&
         normalizeDuplicateFieldValue(field, leadData[field]) === inputNormalized
       ) {
+        if (shouldIgnoreNotInterestedDuplicate(doc as Record<string, unknown>, leadData)) {
+          continue;
+        }
         return {
           isValid: false,
           duplicateField: field,

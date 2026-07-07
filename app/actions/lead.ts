@@ -141,6 +141,7 @@ async function validateLeadUniqueness(
     existingBranchId?: string;
     existingLeadOwnerName?: string;
     existingLeadAssignedToName?: string;
+    existingLeadStatus?: string;
 }> {
     const { databases } = await createAdminClient();
     const email = data.email as string | undefined;
@@ -175,7 +176,7 @@ async function validateLeadUniqueness(
             try {
                 const leadData = JSON.parse(doc.data as string) as LeadData;
                 if (inputEmail && normalizeDuplicateFieldValue('email', leadData.email) === inputEmail) {
-                    return enrichDuplicateResult(databases, doc);
+                    return enrichDuplicateResult(databases, doc, 'email');
                 }
             } catch {}
         }
@@ -188,7 +189,7 @@ async function validateLeadUniqueness(
             try {
                 const leadData = JSON.parse(doc.data as string) as LeadData;
                 if (inputPhone && normalizeDuplicateFieldValue('phone', leadData.phone) === inputPhone) {
-                    return enrichDuplicateResult(databases, doc);
+                    return enrichDuplicateResult(databases, doc, 'phone');
                 }
             } catch {}
         }
@@ -208,7 +209,7 @@ async function validateLeadUniqueness(
                         if (shouldIgnoreLinkedinDuplicate(doc as Record<string, unknown>, leadData)) {
                             continue;
                         }
-                        return enrichDuplicateResult(databases, doc);
+                        return enrichDuplicateResult(databases, doc, 'linkedinProfileUrl');
                     }
                 } catch {}
             }
@@ -219,15 +220,21 @@ async function validateLeadUniqueness(
  * Helper to resolve owner/assignee names for a duplicate lead doc.
  * Returns enriched duplicate result with human-readable agent names.
  */
-async function enrichDuplicateResult(databases: any, doc: Record<string, unknown>): Promise<{
+async function enrichDuplicateResult(
+    databases: any,
+    doc: Record<string, unknown>,
+    duplicateField?: 'email' | 'phone' | 'linkedinProfileUrl',
+): Promise<{
     isValid: boolean;
     duplicateField?: 'email' | 'phone' | 'linkedinProfileUrl';
     existingLeadId?: string;
     existingBranchId?: string;
     existingLeadOwnerName?: string;
     existingLeadAssignedToName?: string;
+    existingLeadStatus?: string;
 }> {
     const branchId = typeof doc.branchId === "string" ? doc.branchId : undefined;
+    const status = typeof doc.status === "string" ? doc.status : undefined;
 
     let ownerName: string | undefined;
     let assignedToName: string | undefined;
@@ -252,14 +259,129 @@ async function enrichDuplicateResult(databases: any, doc: Record<string, unknown
 
     return {
         isValid: false,
+        duplicateField,
         existingLeadId: doc.$id as string,
         existingBranchId: branchId,
         existingLeadOwnerName: ownerName,
         existingLeadAssignedToName: assignedToName,
+        existingLeadStatus: status,
     };
 }
 
 return { isValid: true };
+}
+
+function parseLeadDataSafely(data: string): LeadData {
+    try {
+        return JSON.parse(data) as LeadData;
+    } catch {
+        return {};
+    }
+}
+
+function isNotInterestedStatus(status: unknown): boolean {
+    return typeof status === 'string' && normalizeLeadStatus(status) === 'notinterested';
+}
+
+async function restoreNotInterestedDuplicateLead(input: {
+    databases: Awaited<ReturnType<typeof createAdminClient>>['databases'];
+    duplicateLeadId: string;
+    nextOwnerId: string;
+    createInput: CreateLeadInput;
+    actorId: string;
+    actorName?: string;
+}): Promise<Lead> {
+    const { databases, duplicateLeadId, nextOwnerId, createInput, actorId, actorName } = input;
+    const existingLead = await databases.getDocument(
+        DATABASE_ID,
+        LEADS_COLLECTION_ID,
+        duplicateLeadId,
+    ) as unknown as Lead;
+
+    if (!isNotInterestedStatus(existingLead.status)) {
+        throw new LeadActionError('DUPLICATE_FIELD', 'A lead with this value already exists.', {
+            meta: { existingLeadId: duplicateLeadId },
+        });
+    }
+
+    const currentData = parseLeadDataSafely(existingLead.data);
+    const mergedData: LeadData = {
+        ...currentData,
+        ...createInput.data,
+    };
+
+    if (!createInput.data.linkedinRequestId) {
+        delete (mergedData as Record<string, unknown>).linkedinRequestId;
+    }
+
+    const existingCreatorId =
+        typeof currentData.creatorId === 'string' && currentData.creatorId.trim()
+            ? currentData.creatorId
+            : null;
+    mergedData.creatorId = existingCreatorId ?? nextOwnerId;
+
+    const nextAssignedToId = createInput.assignedToId || nextOwnerId;
+    const permissions: string[] = [
+        Permission.read(Role.user(nextOwnerId)),
+        Permission.update(Role.user(nextOwnerId)),
+        Permission.delete(Role.user(nextOwnerId)),
+    ];
+
+    permissions.push(...await getHierarchyPermissions(nextOwnerId));
+
+    if (nextAssignedToId && nextAssignedToId !== nextOwnerId) {
+        permissions.push(
+            Permission.read(Role.user(nextAssignedToId)),
+            Permission.update(Role.user(nextAssignedToId)),
+        );
+        permissions.push(...await getHierarchyPermissions(nextAssignedToId));
+    }
+
+    const nowIso = new Date().toISOString();
+    const reopenedLead = await databases.updateDocument(
+        DATABASE_ID,
+        LEADS_COLLECTION_ID,
+        duplicateLeadId,
+        {
+            data: JSON.stringify(mergedData),
+            status: createInput.status || 'New',
+            ownerId: nextOwnerId,
+            assignedToId: nextAssignedToId,
+            branchId: createInput.branchId ?? existingLead.branchId ?? null,
+            isClosed: false,
+            closedAt: null,
+        },
+        [...new Set(permissions)],
+    );
+
+    await markPriorNotInterestedRowsReopened(duplicateLeadId, actorId, databases, nowIso);
+
+    try {
+        await databases.createDocument(
+            DATABASE_ID,
+            process.env.NEXT_PUBLIC_APPWRITE_AUDIT_LOGS_COLLECTION_ID!,
+            ID.unique(),
+            {
+                action: 'LEAD_UPDATE',
+                actorId,
+                actorName: actorName || 'System',
+                targetId: duplicateLeadId,
+                targetType: 'LEAD',
+                metadata: JSON.stringify({
+                    restoredFromStatus: existingLead.status,
+                    ownerId: nextOwnerId,
+                    assignedToId: nextAssignedToId,
+                    isClosed: false,
+                    closedAt: null,
+                }),
+                performedAt: nowIso,
+            }
+        );
+    } catch (error) {
+        console.error('Failed to log restored not interested lead', error);
+    }
+
+    return reopenedLead as unknown as Lead;
 }
 
 // Helper to get hierarchy permissions (server-side)
@@ -692,6 +814,33 @@ export async function createLeadAction(
         // Validate uniqueness
         const validation = await validateLeadUniqueness(input.data);
         if (!validation.isValid) {
+            if (validation.existingLeadId) {
+                const duplicateStatus = validation.existingLeadStatus;
+                const shouldRestoreNotInterested =
+                    isNotInterestedStatus(duplicateStatus) ||
+                    (!duplicateStatus &&
+                        isNotInterestedStatus(
+                            (
+                                await databases.getDocument(
+                                    DATABASE_ID,
+                                    LEADS_COLLECTION_ID,
+                                    validation.existingLeadId,
+                                ) as unknown as Lead
+                            ).status,
+                        ));
+
+                if (shouldRestoreNotInterested) {
+                    return restoreNotInterestedDuplicateLead({
+                        databases,
+                        duplicateLeadId: validation.existingLeadId,
+                        nextOwnerId: finalOwnerId,
+                        createInput: input,
+                        actorId: creatingUserId || finalOwnerId,
+                        actorName: creatingUserName || actorDoc.name || actorDoc.$id,
+                    });
+                }
+            }
+
             const humanField =
                 validation.duplicateField === 'email'
                     ? 'email address'
@@ -1271,6 +1420,19 @@ export async function listLeadsAction(
       queries.push(Query.equal('isClosed', filters.isClosed));
     } else {
       queries.push(Query.equal('isClosed', false));
+    }
+
+    const normalizedRequestedStatus =
+      typeof filters.status === 'string'
+        ? filters.status.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
+        : '';
+    const shouldExcludeNotInterestedFromActiveList =
+      (filters.isClosed === undefined || filters.isClosed === false) &&
+      normalizedRequestedStatus !== 'notinterested';
+
+    if (shouldExcludeNotInterestedFromActiveList) {
+      queries.push(Query.notEqual('status', 'Not Interested'));
+      queries.push(Query.notEqual('status', 'Not-Interested'));
     }
 
     // Apply status filter

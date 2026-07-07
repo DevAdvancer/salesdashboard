@@ -697,11 +697,9 @@ export async function notInterestedLeadAction(
   permissions.push(...hierarchyPerms);
 
   const nowIso = new Date().toISOString();
-  // When a lead is marked "Not Interested", we hand it back to the
-  // unassigned owner but keep it OPEN (isClosed: false). The intent is
-  // for the lead to land in the unassigned queue so other agents can
-  // pick it up and try a fresh outreach. Closing it would hide it from
-  // everyone's active dashboard and defeat that re-engagement flow.
+  // "Not Interested" should disappear from the active leads view, so we
+  // archive it under the unassigned owner. A later duplicate create flow
+  // can restore the same lead for a fresh owner/assignee.
   let updatedDataJson = currentLead.data;
   try {
     const leadData = JSON.parse(currentLead.data);
@@ -717,9 +715,9 @@ export async function notInterestedLeadAction(
     leadId,
     {
       ownerId: unassignedOwnerId,
-      // Keep assignedToId as-is so the original assignee is preserved for reports
-      isClosed: false,
-      closedAt: null,
+      assignedToId: null,
+      isClosed: true,
+      closedAt: nowIso,
       status: "Not Interested",
       data: updatedDataJson,
     },
@@ -769,9 +767,9 @@ export async function notInterestedLeadAction(
       metadata: JSON.stringify({
         status: "Not Interested",
         ownerId: unassignedOwnerId,
-        assignedToId: currentLead.assignedToId ?? null,
-        isClosed: false,
-        closedAt: null,
+        assignedToId: null,
+        isClosed: true,
+        closedAt: nowIso,
       }),
       performedAt: nowIso,
     });

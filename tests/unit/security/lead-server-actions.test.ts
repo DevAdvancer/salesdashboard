@@ -38,6 +38,7 @@ jest.mock('node-appwrite', () => ({
   Query: {
     contains: jest.fn((key, values) => `contains:${key}:${JSON.stringify(values)}`),
     equal: jest.fn((key, value) => `equal:${key}:${JSON.stringify(value)}`),
+    notEqual: jest.fn((key, value) => `notEqual:${key}:${JSON.stringify(value)}`),
     greaterThanEqual: jest.fn((key, value) => `gte:${key}:${value}`),
     lessThanEqual: jest.fn((key, value) => `lte:${key}:${value}`),
     limit: jest.fn((limit) => `limit:${limit}`),
@@ -65,6 +66,12 @@ describe('lead server action authorization', () => {
   beforeEach(() => {
     jest.resetModules();
     jest.clearAllMocks();
+    mockListDocuments.mockReset();
+    mockGetDocument.mockReset();
+    mockCreateDocument.mockReset();
+    mockUpdateDocument.mockReset();
+    mockUpdateFile.mockReset();
+    mockGetDepartmentScopedUserIds.mockReset();
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID = 'database';
     process.env.NEXT_PUBLIC_APPWRITE_LEADS_COLLECTION_ID = 'leads';
@@ -1039,6 +1046,146 @@ describe('lead server action authorization', () => {
 
     expect(mockUpdateDocument).toHaveBeenCalled();
     expect(createNotificationsForRecipients).not.toHaveBeenCalled();
+  });
+
+  it('restores a not interested duplicate lead to the new owner and assignee on create', async () => {
+    mockGetDocument.mockImplementation((_databaseId, _collectionId, documentId: string) => {
+      switch (documentId) {
+        case 'agent-2':
+          return Promise.resolve({
+            $id: 'agent-2',
+            email: 'agent2@example.com',
+            name: 'Agent Two',
+            role: 'agent',
+            branchIds: ['branch-1'],
+            managerId: null,
+            managerIds: [],
+            teamLeadId: 'tl-1',
+          });
+        case 'old-owner':
+          return Promise.resolve({
+            $id: 'old-owner',
+            name: 'Old Owner',
+            managerId: null,
+            managerIds: [],
+            teamLeadId: null,
+          });
+        case 'old-agent':
+          return Promise.resolve({
+            $id: 'old-agent',
+            name: 'Old Agent',
+            managerId: null,
+            managerIds: [],
+            teamLeadId: 'tl-1',
+          });
+        case 'lead-dup':
+          return Promise.resolve({
+            $id: 'lead-dup',
+            data: JSON.stringify({
+              firstName: 'Existing',
+              lastName: 'Lead',
+              email: 'dup@example.com',
+              phone: '5552223333',
+              creatorId: 'creator-1',
+              linkedinRequestId: 'old-request',
+            }),
+            ownerId: 'old-owner',
+            assignedToId: 'old-agent',
+            branchId: 'branch-old',
+            isClosed: true,
+            closedAt: '2026-01-02T00:00:00.000Z',
+            status: 'Not Interested',
+          });
+        case 'tl-1':
+          return Promise.resolve({
+            $id: 'tl-1',
+            name: 'Team Lead',
+            managerId: null,
+            managerIds: [],
+            teamLeadId: null,
+          });
+        default:
+          return Promise.resolve({
+            $id: documentId,
+            name: documentId,
+            managerId: null,
+            managerIds: [],
+            teamLeadId: null,
+          });
+      }
+    });
+    mockListDocuments.mockResolvedValueOnce({
+      documents: [
+        {
+          $id: 'lead-dup',
+          ownerId: 'old-owner',
+          assignedToId: 'old-agent',
+          branchId: 'branch-old',
+          status: 'Not Interested',
+          data: JSON.stringify({
+            email: 'dup@example.com',
+            phone: '5552223333',
+          }),
+        },
+      ],
+    });
+    mockUpdateDocument.mockResolvedValueOnce({
+      $id: 'lead-dup',
+      ownerId: 'agent-2',
+      assignedToId: 'agent-2',
+      branchId: 'branch-1',
+      isClosed: false,
+      closedAt: null,
+      status: 'Generated',
+      data: JSON.stringify({
+        firstName: 'Fresh',
+        lastName: 'Lead',
+        email: 'dup@example.com',
+        phone: '5552223333',
+        creatorId: 'creator-1',
+      }),
+    });
+
+    const { createLeadAction } = await import('@/app/actions/lead');
+
+    await expect(
+      createLeadAction(
+        'agent-2',
+        {
+          data: {
+            firstName: 'Fresh',
+            lastName: 'Lead',
+            email: 'dup@example.com',
+            phone: '5552223333',
+          },
+          status: 'Generated',
+          branchId: 'branch-1',
+        },
+        'agent-2',
+        'Agent Two',
+      ),
+    ).resolves.toMatchObject({
+      $id: 'lead-dup',
+      ownerId: 'agent-2',
+      assignedToId: 'agent-2',
+      isClosed: false,
+      status: 'Generated',
+    });
+
+    expect(mockUpdateDocument).toHaveBeenCalledWith(
+      'database',
+      'leads',
+      'lead-dup',
+      expect.objectContaining({
+        ownerId: 'agent-2',
+        assignedToId: 'agent-2',
+        branchId: 'branch-1',
+        isClosed: false,
+        closedAt: null,
+        status: 'Generated',
+      }),
+      expect.any(Array),
+    );
   });
 
   it('rejects blank required lead fields before updating', async () => {
