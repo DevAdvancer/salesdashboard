@@ -81,22 +81,10 @@ export function FollowupsPaymentTable({
               </TableCell>
               <TableCell>
                 <Badge
-                  variant={
-                    payment.status === "cleared"
-                      ? "secondary"
-                      : payment.status === "pending"
-                      ? "default"
-                      : "outline"
-                  }
-                  className={
-                    payment.status === "cleared"
-                      ? "bg-emerald-100 text-emerald-800"
-                      : payment.status === "pending"
-                      ? "bg-amber-100 text-amber-800"
-                      : ""
-                  }
+                  variant="secondary"
+                  className="bg-emerald-100 text-emerald-800"
                 >
-                  {payment.status || "pending"}
+                  Paid
                 </Badge>
               </TableCell>
               {canEdit && (

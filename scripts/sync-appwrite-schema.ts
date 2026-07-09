@@ -262,7 +262,7 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'amount', type: 'integer', required: true },
       { key: 'date', type: 'string', required: true, size: 10 },
       { key: 'remark', type: 'string', required: false, size: 1000 },
-      { key: 'status', type: 'string', required: false, size: 50, default: 'pending' },
+      { key: 'status', type: 'string', required: false, size: 50, default: 'paid' },
       { key: 'createdAt', type: 'datetime', required: true },
       { key: 'updatedAt', type: 'datetime', required: false },
       { key: 'updatedById', type: 'string', required: false, size: 255 },
@@ -273,6 +273,19 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'company_idx', type: 'key', attributes: ['company'] },
       { key: 'date_idx', type: 'key', attributes: ['date'] },
       { key: 'status_idx', type: 'key', attributes: ['status'] },
+    ],
+  },
+  [COLLECTIONS.HOLIDAY_CALENDAR]: {
+    attributes: [
+      { key: 'holidayDate', type: 'string', required: true, size: 10 },
+      { key: 'name', type: 'string', required: true, size: 255 },
+      { key: 'createdAt', type: 'datetime', required: true },
+      { key: 'createdById', type: 'string', required: false, size: 255 },
+      { key: 'createdByName', type: 'string', required: false, size: 255 },
+    ],
+    indexes: [
+      { key: 'holiday_date_idx', type: 'unique', attributes: ['holidayDate'] },
+      { key: 'created_idx', type: 'key', attributes: ['createdAt'] },
     ],
   },
 };

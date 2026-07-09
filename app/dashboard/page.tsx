@@ -13,11 +13,14 @@ import { DashboardDateRange } from "@/components/dashboard/dashboard-date-range"
 import { TopMetricsRow } from "@/components/dashboard/top-metrics-row";
 import { KpiLeadTargetSection } from "@/components/dashboard/kpi-lead-target-section";
 import { KpiLinkedinConnectionSection } from "@/components/dashboard/kpi-linkedin-connection-section";
+import { HolidayCalendarSection } from "@/components/dashboard/holiday-calendar-section";
 import { ReferralSection } from "@/components/dashboard/referral-section";
 import { PaymentsSection } from "@/components/dashboard/payments-section";
 import { LgHandoffSection } from "@/components/dashboard/lg-handoff-section";
 import {
+  clearDashboardDataCache,
   loadDashboardTopMetrics,
+  loadDashboardHolidayCalendar,
   loadLeadTargetProgress,
   loadLinkedinConnectionKpiProgress,
   loadDashboardPaymentInsights,
@@ -28,15 +31,16 @@ import {
 import type { LinkedinConnectionKpiRow } from "@/app/actions/linkedin";
 import {
   isSingleDay,
-  workingDaysInRange,
   type DateRange,
   type KpiRow,
 } from "@/lib/utils/dashboard-kpi";
+import { workingDaysInRange as countWorkingDaysInRange } from "@/lib/utils/holiday-calendar";
 import type { ReferralSplit } from "@/lib/utils/dashboard-referral";
 import type { PaymentInsightRecord } from "@/app/actions/client-payments";
 import { getTechnicalPaymentsByLeadIdsAction } from "@/app/actions/technical-payments";
 import type { TeamLeadAssignmentSummary } from "@/lib/utils/dashboard-insights";
 import { getTodayEst, getMonthStartEst, getMonthEndEst } from "@/lib/utils/est-date";
+import type { HolidayCalendarEntry } from "@/lib/types";
 
 type LeadGenerationTeamAssignmentStat = {
   teamLeadId: string;
@@ -154,6 +158,8 @@ function MainDashboard({
   // LinkedIn Connection KPI rows
   const [linkedinKpiRows, setLinkedinKpiRows] = useState<LinkedinConnectionKpiRow[] | null>(null);
   const [linkedinKpiLoading, setLinkedinKpiLoading] = useState(true);
+  const [holidayCalendar, setHolidayCalendar] = useState<HolidayCalendarEntry[]>([]);
+  const [holidayLoading, setHolidayLoading] = useState(true);
 
   // Referral split uses the date range filter
   const monthStartKey = dateRange.from ?? getMonthStartEst(new Date());
@@ -288,6 +294,37 @@ function MainDashboard({
       cancelled = true;
     };
   }, [user, dateRange]);
+
+  // ── Fetch holiday calendar (all dashboard viewers use this to disable
+  // holiday selection and to exclude weekday holidays from KPI targets) ──
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setHolidayLoading(true);
+    });
+
+    (async () => {
+      try {
+        const rows = await loadDashboardHolidayCalendar(user.$id);
+        if (!cancelled) {
+          setHolidayCalendar(rows);
+          setHolidayLoading(false);
+        }
+      } catch (error) {
+        console.error("Error loading holiday calendar:", error);
+        if (!cancelled) {
+          setHolidayCalendar([]);
+          setHolidayLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   // ── Fetch payment insights (admin-like only) ──────────────────────────
   useEffect(() => {
@@ -433,6 +470,35 @@ function MainDashboard({
     : isTeamLead
       ? "Your team"
       : "All members";
+  const holidayDateKeys = useMemo(
+    () => holidayCalendar.map((holiday) => holiday.date).filter(Boolean),
+    [holidayCalendar],
+  );
+
+  useEffect(() => {
+    if (holidayDateKeys.length === 0) return;
+    if (!dateRange.from || !dateRange.to || dateRange.from !== dateRange.to) return;
+    if (!holidayDateKeys.includes(dateRange.from)) return;
+
+    const previousWorkingDay = (() => {
+      const cursor = new Date(`${dateRange.from}T00:00:00`);
+      for (let i = 0; i < 370; i += 1) {
+        const year = cursor.getFullYear();
+        const month = String(cursor.getMonth() + 1).padStart(2, "0");
+        const day = String(cursor.getDate()).padStart(2, "0");
+        const iso = `${year}-${month}-${day}`;
+        if (countWorkingDaysInRange(iso, iso, holidayDateKeys) > 0) {
+          return iso;
+        }
+        cursor.setDate(cursor.getDate() - 1);
+      }
+      return null;
+    })();
+
+    if (previousWorkingDay) {
+      setDateRange({ from: previousWorkingDay, to: previousWorkingDay });
+    }
+  }, [dateRange.from, dateRange.to, holidayDateKeys]);
 
   // Use rows[0] as the source of truth once loaded; otherwise compute a
   // fallback from the range so the UI never shows "0" on load. The
@@ -440,11 +506,43 @@ function MainDashboard({
   // 31-day month has roughly 22 working days, a one-week range has 5.
   const kpiTarget: number = (() => {
     if (kpiRows && kpiRows.length > 0) return kpiRows[0].target;
-    if (kpiMode === "daily") return 1;
     const fromIso = dateRange.from ?? getTodayEst();
     const toIso = dateRange.to ?? fromIso;
-    return Math.max(1, workingDaysInRange(fromIso, toIso));
+    return countWorkingDaysInRange(fromIso, toIso, holidayDateKeys);
   })();
+
+  async function reloadHolidayAwareDashboardData() {
+    clearDashboardDataCache();
+    if (!user) return;
+
+    const [holidays, topMetricsResult, leadRows, linkedinRows] =
+      await Promise.all([
+        loadDashboardHolidayCalendar(user.$id),
+        loadDashboardTopMetrics({
+          userId: user.$id,
+          role: user.role,
+          branchIds: user.branchIds,
+          dateRange,
+        }),
+        loadLeadTargetProgress({
+          userId: user.$id,
+          role: user.role,
+          branchIds: user.branchIds,
+          dateRange,
+        }),
+        loadLinkedinConnectionKpiProgress({
+          userId: user.$id,
+          role: user.role,
+          branchIds: user.branchIds,
+          dateRange,
+        }),
+      ]);
+
+    setHolidayCalendar(holidays);
+    setTopMetrics(topMetricsResult);
+    setKpiRows(leadRows);
+    setLinkedinKpiRows(linkedinRows);
+  }
 
   if (initialLoading) {
     return (
@@ -474,7 +572,12 @@ function MainDashboard({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <DashboardDateRange value={dateRange} onChange={setDateRange} />
+          <DashboardDateRange
+            value={dateRange}
+            onChange={setDateRange}
+            disabledDates={holidayDateKeys}
+            disableHolidaySelection
+          />
           <AttendanceSelfToggle />
         </div>
       </div>
@@ -561,6 +664,15 @@ function MainDashboard({
           </Button>
         )}
       </div>
+
+      {isAdmin && (
+        <HolidayCalendarSection
+          currentUserId={user.$id}
+          holidays={holidayCalendar}
+          isLoading={holidayLoading}
+          onCalendarChanged={reloadHolidayAwareDashboardData}
+        />
+      )}
     </div>
   );
 }

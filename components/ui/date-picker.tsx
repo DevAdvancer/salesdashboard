@@ -129,6 +129,7 @@ function CalendarMonth({
   range,
   minDate,
   maxDate,
+  disabledDates,
   onSelect,
 }: {
   month: Date
@@ -136,6 +137,7 @@ function CalendarMonth({
   range?: DateRange
   minDate?: string
   maxDate?: string
+  disabledDates?: Set<string>
   onSelect: (value: string) => void
 }) {
   const days = buildMonthDays(month)
@@ -153,7 +155,9 @@ function CalendarMonth({
       <div className="mt-1 grid grid-cols-7 gap-1">
         {days.map((day) => {
           const disabled = Boolean(
-            (minDate && day.value < minDate) || (maxDate && day.value > maxDate),
+            (minDate && day.value < minDate) ||
+            (maxDate && day.value > maxDate) ||
+            disabledDates?.has(day.value),
           )
           const active = selected === day.value || Boolean(range && isRangeEdge(day.value, range))
           const insideRange = Boolean(range && isInRange(day.value, range))
@@ -341,6 +345,7 @@ export function DateRangePicker({
   onChange,
   className,
   align = 'smart',
+  disabledDates = [],
 }: {
   id?: string
   value: DateRange
@@ -348,10 +353,12 @@ export function DateRangePicker({
   className?: string
   /** 'smart' (default) = auto-detect, 'left' = open to the right, 'right' = open to the left */
   align?: 'smart' | 'left' | 'right'
+  disabledDates?: string[]
 }) {
   const { open, setOpen, ref } = usePopover()
   const [visibleMonth, setVisibleMonth] = React.useState(() => getMonthStart(value.from ?? value.to))
   const [popperPosition, setPopperPosition] = React.useState<'right' | 'left'>('right')
+  const disabledDateSet = React.useMemo(() => new Set(disabledDates), [disabledDates])
 
   React.useEffect(() => {
     if (open) {
@@ -385,6 +392,8 @@ export function DateRangePicker({
   }, [open, value.from, value.to, ref, align])
 
   const selectDate = (nextDate: string) => {
+    if (disabledDateSet.has(nextDate)) return
+
     if (!value.from || (value.from && value.to)) {
       onChange({ from: nextDate, to: undefined })
       return
@@ -447,8 +456,18 @@ export function DateRangePicker({
             </button>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            <CalendarMonth month={visibleMonth} range={value} onSelect={selectDate} />
-            <CalendarMonth month={addMonths(visibleMonth, 1)} range={value} onSelect={selectDate} />
+            <CalendarMonth
+              month={visibleMonth}
+              range={value}
+              disabledDates={disabledDateSet}
+              onSelect={selectDate}
+            />
+            <CalendarMonth
+              month={addMonths(visibleMonth, 1)}
+              range={value}
+              disabledDates={disabledDateSet}
+              onSelect={selectDate}
+            />
           </div>
           <div className="mt-4 flex items-center justify-between gap-2">
             <button

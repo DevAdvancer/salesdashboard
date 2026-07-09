@@ -54,16 +54,17 @@ export function KpiLeadTargetSection({
 }: KpiLeadTargetSectionProps) {
   const [open, setOpen] = useState<"complete" | "incomplete" | null>(null);
 
-  const { completed, pending, completedRows, pendingRows, totalActive } = useMemo(() => {
+  const { completed, pending, completedRows, pendingRows, totalActive, noKpiRequired } = useMemo(() => {
     const all = rows ?? [];
-    const completedRows = all.filter((r) => r.leadCount >= r.target);
-    const pendingRows = all.filter((r) => r.leadCount < r.target);
+    const completedRows = all.filter((r) => r.target > 0 && r.leadCount >= r.target);
+    const pendingRows = all.filter((r) => r.target > 0 && r.leadCount < r.target);
     return {
       completed: completedRows.length,
       pending: pendingRows.length,
       completedRows,
       pendingRows,
       totalActive: all.length,
+      noKpiRequired: all.length > 0 && all.every((r) => r.target === 0),
     };
   }, [rows]);
 
@@ -105,6 +106,10 @@ export function KpiLeadTargetSection({
         ) : totalActive === 0 ? (
           <div className="flex h-24 items-center justify-center rounded-md border border-dashed border-[var(--hairline)] text-sm text-[var(--mute)]">
             No active members in scope for this period.
+          </div>
+        ) : noKpiRequired ? (
+          <div className="flex h-24 items-center justify-center rounded-md border border-dashed border-[var(--hairline)] text-sm text-[var(--mute)]">
+            No KPI applies for the selected holiday / non-working day range.
           </div>
         ) : (
           <div className="grid gap-6 md:grid-cols-2">

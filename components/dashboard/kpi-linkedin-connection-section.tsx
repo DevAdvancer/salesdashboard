@@ -44,7 +44,7 @@ export function KpiLinkedinConnectionSection({
 }: KpiLinkedinConnectionSectionProps) {
   const [open, setOpen] = useState<"complete" | "incomplete" | null>(null);
 
-  const { completed, pending, completedRows, pendingRows, totalActive } = useMemo(() => {
+  const { completed, pending, completedRows, pendingRows, totalActive, noKpiRequired } = useMemo(() => {
     const all = rows ?? [];
     const completedRows = all.filter((r) => r.target > 0 && r.sentCount >= r.target);
     const pendingRows = all.filter((r) => r.target > 0 && r.sentCount < r.target);
@@ -54,6 +54,7 @@ export function KpiLinkedinConnectionSection({
       completedRows,
       pendingRows,
       totalActive: all.length,
+      noKpiRequired: all.length > 0 && all.every((r) => r.target === 0),
     };
   }, [rows]);
 
@@ -94,6 +95,10 @@ export function KpiLinkedinConnectionSection({
         ) : totalActive === 0 ? (
           <div className="flex h-24 items-center justify-center rounded-md border border-dashed border-[var(--hairline)] text-sm text-[var(--mute)]">
             No active members with LinkedIn accounts in scope for this period.
+          </div>
+        ) : noKpiRequired ? (
+          <div className="flex h-24 items-center justify-center rounded-md border border-dashed border-[var(--hairline)] text-sm text-[var(--mute)]">
+            No LinkedIn KPI applies for the selected holiday / non-working day range.
           </div>
         ) : (
           <div className="grid gap-6 md:grid-cols-2">

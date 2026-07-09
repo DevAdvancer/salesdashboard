@@ -23,7 +23,6 @@ export interface FollowupsPaymentFormValues {
   amount: number;
   date: string;
   remark?: string | null;
-  status: string;
 }
 
 export function FollowupsPaymentForm({
@@ -36,7 +35,6 @@ export function FollowupsPaymentForm({
   const [amount, setAmount] = useState(payment?.amount?.toString() || "0");
   const [date, setDate] = useState(payment?.date || new Date().toISOString().slice(0, 10));
   const [remark, setRemark] = useState(payment?.remark || "");
-  const [status, setStatus] = useState(payment?.status || "pending");
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -46,7 +44,6 @@ export function FollowupsPaymentForm({
       amount: parseFloat(amount) || 0,
       date,
       remark: remark || null,
-      status,
     });
   }
 
@@ -112,15 +109,7 @@ export function FollowupsPaymentForm({
 
       <div className="space-y-2">
         <label className="text-sm font-medium">Status</label>
-        <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="cleared">Cleared</SelectItem>
-          </SelectContent>
-        </Select>
+        <Input value="Paid" disabled />
       </div>
 
       <div className="flex justify-end gap-2">

@@ -1,4 +1,8 @@
 import type { Lead, User } from "@/lib/types";
+import {
+  parseIsoDate,
+  workingDaysInRange as countWorkingDaysInRange,
+} from "@/lib/utils/holiday-calendar";
 
 export interface DateRange {
   from?: string;
@@ -79,40 +83,16 @@ function daysInMonth(isoDate: string): number {
 }
 
 /**
- * Parses an ISO date string (YYYY-MM-DD) at local midnight.
- */
-function parseIsoDate(iso: string): Date {
-  const [year, month, day] = iso.split("-").map(Number);
-  return new Date(year, month - 1, day);
-}
-
-/**
- * Returns true if the given local date falls on a weekend (Saturday or
- * Sunday). The KPI only counts Monday-Friday as "working days" so the
- * monthly target doesn't ask agents to add leads on their days off.
- */
-function isWeekend(date: Date): boolean {
-  const day = date.getDay();
-  return day === 0 || day === 6;
-}
-
-/**
  * Counts the number of working days (Monday through Friday) in the
  * inclusive range [fromIso, toIso]. Both bounds are YYYY-MM-DD strings
  * parsed at local midnight. If `toIso` is before `fromIso`, returns 0.
  */
-export function workingDaysInRange(fromIso: string, toIso: string): number {
-  const start = parseIsoDate(fromIso);
-  const end = parseIsoDate(toIso);
-  if (end.getTime() < start.getTime()) return 0;
-
-  let count = 0;
-  const cursor = new Date(start);
-  while (cursor.getTime() <= end.getTime()) {
-    if (!isWeekend(cursor)) count += 1;
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return count;
+export function workingDaysInRange(
+  fromIso: string,
+  toIso: string,
+  holidayDateKeys?: Iterable<string>,
+): number {
+  return countWorkingDaysInRange(fromIso, toIso, holidayDateKeys);
 }
 
 /**

@@ -110,7 +110,6 @@ export default function PreviousFollowupsPaymentsPage() {
     amount: number;
     date: string;
     remark?: string | null;
-    status: string;
   }) {
     if (!user || !canMutate) {
       return;
@@ -127,7 +126,6 @@ export default function PreviousFollowupsPaymentsPage() {
           amount: payment.amount,
           date: payment.date,
           remark: payment.remark,
-          status: payment.status,
         });
         toast({
           title: "Payment updated",
@@ -141,7 +139,6 @@ export default function PreviousFollowupsPaymentsPage() {
           amount: payment.amount,
           date: payment.date,
           remark: payment.remark,
-          status: payment.status,
         });
         toast({
           title: "Payment added",
@@ -227,14 +224,14 @@ export default function PreviousFollowupsPaymentsPage() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Pending Amount</CardTitle>
+              <CardTitle className="text-sm font-medium">Paid Amount</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-amber-600">
-                {payments.filter(p => p.status !== 'cleared').reduce((sum, p) => sum + p.amount, 0).toLocaleString()}
+              <div className="text-2xl font-bold text-emerald-600">
+                {payments.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground">
-                {payments.filter(p => p.status !== 'cleared').length} pending
+                All followup payments are marked paid
               </p>
             </CardContent>
           </Card>
@@ -258,20 +255,9 @@ export default function PreviousFollowupsPaymentsPage() {
               <CardTitle className="text-sm font-medium">Status</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center gap-2">
-                <Badge
-                  variant={payments.filter(p => p.status !== 'cleared').length > 0 ? "destructive" : "secondary"}
-                  className="text-xs"
-                >
-                  {payments.filter(p => p.status !== 'cleared').length} Pending
-                </Badge>
-                <Badge
-                  variant="secondary"
-                  className="text-xs"
-                >
-                  {payments.filter(p => p.status === 'cleared').length} Cleared
-                </Badge>
-              </div>
+              <Badge variant="secondary" className="text-xs bg-emerald-100 text-emerald-800">
+                {payments.length} Paid
+              </Badge>
             </CardContent>
           </Card>
         </div>

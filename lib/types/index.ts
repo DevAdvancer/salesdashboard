@@ -637,6 +637,8 @@ export const FOLLOWUPS_PAYMENT_COMPANIES: FollowupsPaymentCompany[] = [
   'Vizva INC',
 ];
 
+export type FollowupsPaymentStatus = 'paid';
+
 export interface PreviousFollowupsPayment {
   $id: string;
   leadId: string;
@@ -645,9 +647,18 @@ export interface PreviousFollowupsPayment {
   amount: number;
   date: string; // YYYY-MM-DD
   remark?: string | null;
-  status?: string;
+  status: FollowupsPaymentStatus;
   createdAt: string;
   updatedAt?: string | null;
   updatedById?: string | null;
   updatedByName?: string | null;
+}
+
+export interface HolidayCalendarEntry {
+  $id: string;
+  date: string;
+  name: string;
+  createdAt: string;
+  createdById?: string | null;
+  createdByName?: string | null;
 }

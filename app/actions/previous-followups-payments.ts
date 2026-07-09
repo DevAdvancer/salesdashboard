@@ -10,10 +10,12 @@ import {
   FOLLOWUPS_PAYMENT_COMPANIES,
   type FollowupsPaymentCompany,
   type PreviousFollowupsPayment,
+  type FollowupsPaymentStatus,
   type User,
 } from "@/lib/types";
 
 const MANUAL_FOLLOWUP_LEAD_ID_PREFIX = "manual_followup:";
+const FOLLOWUPS_PAYMENT_STATUS: FollowupsPaymentStatus = "paid";
 
 async function getActor(userId: string): Promise<User> {
   await assertAuthenticatedUserId(userId);
@@ -59,7 +61,7 @@ function mapFollowupsDoc(doc: any): PreviousFollowupsPayment {
     amount: Number(doc.amount) || 0,
     date: doc.date,
     remark: doc.remark || null,
-    status: doc.status || "pending",
+    status: FOLLOWUPS_PAYMENT_STATUS,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt ?? null,
     updatedById: doc.updatedById ?? null,
@@ -88,7 +90,6 @@ export async function createPreviousFollowupsPaymentAction(input: {
   amount: number;
   date: string;
   remark?: string | null;
-  status?: string | null;
 }): Promise<PreviousFollowupsPayment> {
   const actor = await getActor(input.actorId);
   ensureComponentAccess(actor.role, "followups-payments");
@@ -102,7 +103,7 @@ export async function createPreviousFollowupsPaymentAction(input: {
     amount: Math.floor(Number(input.amount) || 0),
     date: input.date, // YYYY-MM-DD
     remark: input.remark?.trim() || null,
-    status: input.status?.trim() || "pending",
+    status: FOLLOWUPS_PAYMENT_STATUS,
     createdAt: new Date().toISOString(),
   });
 
@@ -117,7 +118,6 @@ export async function updatePreviousFollowupsPaymentAction(input: {
   amount?: number | null;
   date?: string | null;
   remark?: string | null;
-  status?: string | null;
 }): Promise<PreviousFollowupsPayment> {
   const actor = await getActor(input.actorId);
   ensureComponentAccess(actor.role, "followups-payments");
@@ -138,7 +138,7 @@ export async function updatePreviousFollowupsPaymentAction(input: {
   if (input.amount !== undefined) payload.amount = Math.floor(Number(input.amount) || 0);
   if (input.date !== undefined) payload.date = input.date;
   if (input.remark !== undefined) payload.remark = input.remark?.trim() || null;
-  if (input.status !== undefined) payload.status = input.status;
+  payload.status = FOLLOWUPS_PAYMENT_STATUS;
 
   const doc = await databases.updateDocument(
     DATABASE_ID,

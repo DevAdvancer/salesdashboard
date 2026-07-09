@@ -21,6 +21,7 @@ import {
 import { REQUIRED_LEAD_FIELD_KEYS } from "@/lib/utils/required-lead-fields";
 import { expandIsoDateToStart, expandIsoDateToEnd } from "@/lib/utils/iso-date-range";
 import { workingDaysInRange, type KpiRow } from "@/lib/utils/dashboard-kpi";
+import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const LEADS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_LEADS_COLLECTION_ID!;
@@ -1991,15 +1992,19 @@ export async function loadLeadTargetProgressAction(input: {
 
   const fromIso = input.dateRange.from;
   const toIso = input.dateRange.to ?? input.dateRange.from;
+  const holidayDateKeys =
+    fromIso && toIso
+      ? await listHolidayDateKeys({ databases, from: fromIso, to: toIso })
+      : [];
   const singleDay = Boolean(fromIso && toIso && fromIso === toIso);
   let target: number;
   let mode: "daily" | "monthly";
 
   if (singleDay) {
-    target = 1;
+    target = workingDaysInRange(fromIso!, toIso!, holidayDateKeys);
     mode = "daily";
   } else if (fromIso && toIso) {
-    target = Math.max(1, workingDaysInRange(fromIso, toIso));
+    target = workingDaysInRange(fromIso, toIso, holidayDateKeys);
     mode = "monthly";
   } else {
     const effectiveDate = toIso ?? new Date().toISOString().slice(0, 10);

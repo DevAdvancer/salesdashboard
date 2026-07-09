@@ -47,6 +47,8 @@ export const COLLECTIONS = {
   PENDING_AMOUNTS: process.env.NEXT_PUBLIC_APPWRITE_PENDING_AMOUNTS_COLLECTION_ID ?? 'pending_amounts',
   // One doc per followup payment entry to track manual followup payments.
   PREVIOUS_FOLLOWUPS_PAYMENTS: process.env.NEXT_PUBLIC_APPWRITE_PREVIOUS_FOLLOWUPS_PAYMENTS_COLLECTION_ID ?? 'previous_followups_payments',
+  // One doc per holiday date used to exclude weekday holidays from KPI math.
+  HOLIDAY_CALENDAR: process.env.NEXT_PUBLIC_APPWRITE_HOLIDAY_CALENDAR_COLLECTION_ID ?? 'holiday_calendar',
 };
 
 export const BUCKETS = {

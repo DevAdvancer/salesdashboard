@@ -25,6 +25,7 @@ import {
 import { workingDaysInRange } from "@/lib/utils/dashboard-kpi";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import { expandIsoDateToEnd, expandIsoDateToStart } from "@/lib/utils/iso-date-range";
+import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
 import {
   getAgentsByTeamLead,
   getAssignableUsers,
@@ -1859,15 +1860,19 @@ export async function loadLinkedinConnectionKpiAction(input: {
 
   const fromIso = input.dateRange.from;
   const toIso = input.dateRange.to ?? input.dateRange.from;
+  const holidayDateKeys =
+    fromIso && toIso
+      ? await listHolidayDateKeys({ databases, from: fromIso, to: toIso })
+      : [];
   const singleDay = Boolean(fromIso && toIso && fromIso === toIso);
   let daysCount: number;
   let mode: "daily" | "monthly";
 
   if (singleDay) {
-    daysCount = 1;
+    daysCount = workingDaysInRange(fromIso!, toIso!, holidayDateKeys);
     mode = "daily";
   } else if (fromIso && toIso) {
-    daysCount = Math.max(1, workingDaysInRange(fromIso, toIso));
+    daysCount = workingDaysInRange(fromIso, toIso, holidayDateKeys);
     mode = "monthly";
   } else {
     const effectiveDate = toIso ?? new Date().toISOString().slice(0, 10);

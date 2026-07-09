@@ -1,6 +1,7 @@
 "use client";
 
 import { getAssessmentAttempts } from "@/app/actions/assessment";
+import { listHolidayCalendarAction } from "@/app/actions/holiday-calendar";
 import {
   listAllPaymentInsightsAction,
   listClientPaymentSummariesAction,
@@ -33,6 +34,7 @@ import {
 import { isVisibleClientLead } from "@/lib/utils/client-history";
 import { cacheClientRead, clearClientReadCache } from "@/lib/utils/client-read-cache";
 import type { Branch, Department, Lead, LgHandoff, User } from "@/lib/types";
+import type { HolidayCalendarEntry } from "@/lib/types";
 import type { TeamLeadAssignmentSummary } from "@/lib/utils/dashboard-insights";
 
 const DASHBOARD_DATA_SCOPE = "dashboard:data";
@@ -41,6 +43,7 @@ const DASHBOARD_TOP_METRICS_SCOPE = "dashboard:topMetrics";
 const DASHBOARD_LEAD_TARGET_SCOPE = "dashboard:leadTarget";
 const DASHBOARD_REFERRAL_SCOPE = "dashboard:referral";
 const DASHBOARD_LG_HANDOFFS_SCOPE = "dashboard:lgHandoffs";
+const DASHBOARD_HOLIDAY_SCOPE = "dashboard:holidays";
 
 export type AssignedDashboardAgent = User & {
   branchNames: string;
@@ -101,6 +104,7 @@ export function clearDashboardDataCache(): void {
   clearClientReadCache(DASHBOARD_REFERRAL_SCOPE);
   clearClientReadCache(DASHBOARD_LG_HANDOFFS_SCOPE);
   clearClientReadCache("dashboard:linkedinConnectionKpi");
+  clearClientReadCache(DASHBOARD_HOLIDAY_SCOPE);
 }
 
 export async function loadDashboardData(
@@ -280,6 +284,17 @@ export async function loadDashboardPaymentInsights(
     `${DASHBOARD_DATA_SCOPE}:paymentInsights`,
     [actorId, dateRange.from ?? "", dateRange.to ?? ""],
     () => listAllPaymentInsightsAction(actorId, dateRange.from, dateRange.to),
+    DASHBOARD_DATA_TTL_MS,
+  );
+}
+
+export async function loadDashboardHolidayCalendar(
+  actorId: string,
+): Promise<HolidayCalendarEntry[]> {
+  return cacheClientRead(
+    DASHBOARD_HOLIDAY_SCOPE,
+    [actorId],
+    () => listHolidayCalendarAction({ currentUserId: actorId }),
     DASHBOARD_DATA_TTL_MS,
   );
 }
