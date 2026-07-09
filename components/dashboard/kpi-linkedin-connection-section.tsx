@@ -253,9 +253,14 @@ function KpiAccountsDialog({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="truncate text-sm font-medium">{row.userName}</span>
+                    <span className="text-xs text-muted-foreground">
+                      ({row.idNames.length} ID{row.idNames.length === 1 ? "" : "s"})
+                    </span>
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">
-                    Accounts: {row.company}
+                    {row.target > 0
+                      ? `${Math.min(100, Math.round((row.sentCount / row.target) * 100))}% of target`
+                      : "No target set"}
                   </div>
                 </div>
                 <div className="shrink-0 text-right text-sm tabular-nums">

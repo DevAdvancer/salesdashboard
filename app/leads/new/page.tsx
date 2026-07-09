@@ -31,6 +31,7 @@ import {
   getLinkedinProfileValue,
   isLinkedinProfileField,
 } from "@/lib/utils/lead-linkedin-field";
+import { normalizeLeadSource } from "@/lib/utils/required-lead-fields";
 import { parseLeadActionError } from "@/lib/utils/lead-action-error";
 
 export default function NewLeadPage() {
@@ -858,7 +859,10 @@ function LegacyNewLeadContent() {
       setDuplicateError(null);
 
       const rawLinkedinValue = getLinkedinProfileValue(data, formFields);
-      if (!rawLinkedinValue) {
+      const isReferralLead =
+        normalizeLeadSource(data.source ?? data.sourceName) === "referral";
+
+      if (!rawLinkedinValue && !isReferralLead) {
         toast({
           title: "Missing LinkedIn profile link",
           description: "LinkedIn profile link is required.",
@@ -868,8 +872,10 @@ function LegacyNewLeadContent() {
         return;
       }
 
-      data.linkedinProfileUrl = rawLinkedinValue;
-      if (!data.linkedinProfile) data.linkedinProfile = rawLinkedinValue;
+      if (rawLinkedinValue) {
+        data.linkedinProfileUrl = rawLinkedinValue;
+        if (!data.linkedinProfile) data.linkedinProfile = rawLinkedinValue;
+      }
 
       // Validate lead uniqueness before creating
       const validation = await validateLeadUniqueness(data);

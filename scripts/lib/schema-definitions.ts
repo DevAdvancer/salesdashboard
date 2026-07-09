@@ -595,6 +595,36 @@ export const collectionSchemas: Record<string, CollectionSchema> = {
       { key: 'payment_record_idx', type: 'key', attributes: ['paymentRecordId'] },
     ],
   },
+
+  // ─── Previous Followups Payment ────────────────────────────────────────────────────
+  // One document per followup payment entry to track payments for followup services.
+  // This is separate from client payments and tracks manual additions to total paid.
+  previous_followups_payments: {
+    attributes: [
+      { key: 'leadId', type: 'string', required: true, size: 255 },
+      {
+        key: 'company',
+        type: 'enum',
+        required: true,
+        values: ['Silverspace INC', 'Flawless-ED', 'Vizva INC'],
+      },
+      { key: 'candidateName', type: 'string', required: true, size: 255 },
+      { key: 'amount', type: 'integer', required: true },
+      { key: 'date', type: 'string', required: true, size: 10 }, // YYYY-MM-DD
+      { key: 'remark', type: 'string', required: false, size: 1000 },
+      { key: 'status', type: 'string', required: false, size: 50, default: 'pending' },
+      { key: 'createdAt', type: 'datetime', required: true },
+      { key: 'updatedAt', type: 'datetime', required: false },
+      { key: 'updatedById', type: 'string', required: false, size: 255 },
+      { key: 'updatedByName', type: 'string', required: false, size: 255 },
+    ],
+    indexes: [
+      { key: 'lead_idx', type: 'key', attributes: ['leadId'] },
+      { key: 'company_idx', type: 'key', attributes: ['company'] },
+      { key: 'date_idx', type: 'key', attributes: ['date'] },
+      { key: 'status_idx', type: 'key', attributes: ['status'] },
+    ],
+  },
 };
 
 /**

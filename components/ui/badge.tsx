@@ -13,6 +13,9 @@ const badgeVariants = cva(
         default: "bg-[var(--soft-cloud)] text-[var(--ink)] border border-[var(--hairline)]",
         active: "bg-green-100 text-green-800 border border-green-300",
         inactive: "bg-gray-100 text-gray-600 border border-gray-300",
+        destructive: "bg-red-100 text-red-800 border border-red-300",
+        secondary: "bg-gray-100 text-gray-800 border border-gray-300",
+        outline: "bg-transparent text-[var(--ink)] border border-[var(--hairline)]",
       },
     },
     defaultVariants: {

@@ -550,6 +550,8 @@ export interface PaymentInsightRecord {
   company: string;
   source: string;
   leadStatus: string;
+  /** Synthetic records created from standalone followup payments only. */
+  isFollowupOnly?: boolean;
   isClosed: boolean;
   closedAt: string | null;
   upfrontAmount: number;
@@ -572,8 +574,23 @@ export interface PaymentInsightRecord {
    * Used by the monthly payments report to attribute revenue to the correct
    * calendar month rather than the lead's close date. */
   paidMonthlyAmounts: Record<string, number>;
+  /** Bucketed followup payments by the payment entry date month (YYYY-MM → total). */
+  followupsMonthlyAmounts: Record<string, number>;
   /** Full contract amount from the lead form (leadAmount / totalAmount / amount). */
   leadAmount: number;
+  /** Followup payments total for this lead from previous_followups_payments */
+  followupsTotal: number;
+  /** Number of followup payment entries for this lead */
+  followupsCount: number;
+  /** Individual followups payment entries with candidate name and date */
+  followupsPayments: Array<{
+    company: string;
+    candidateName: string;
+    amount: number;
+    date: string;
+    remark: string | null;
+    status: string;
+  }>;
 }
 
 export interface AdminClientHistoryRow {
@@ -721,6 +738,86 @@ export async function listAllPaymentInsightsAction(
     pendingMap.set(pLeadId, existing);
   }
 
+  // Fetch all previous followups payments so manual entries that are not tied
+  // to a client-payment lead still contribute to the monthly payments totals.
+  const followupsDocs = await listAllDocuments<any>({
+    databases,
+    databaseId: DATABASE_ID,
+    collectionId: COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS,
+    queries: [],
+    pageLimit: 100,
+    maxPages: 500,
+  });
+  // Build two maps:
+  // 1. leadId -> { total, count } for totals
+  // 2. leadId -> array of payment details
+  const followupsMap = new Map<string, { total: number; count: number; monthlyAmounts: Record<string, number> }>();
+  const followupsDetailsMap = new Map<string, Array<{
+    company: string;
+    candidateName: string;
+    amount: number;
+    date: string;
+    remark: string | null;
+    status: string;
+  }>>();
+  const standaloneFollowups: Array<{
+    leadId: string;
+    company: string;
+    candidateName: string;
+    amount: number;
+    date: string;
+    remark: string | null;
+    status: string;
+    createdAt: string;
+  }> = [];
+  for (const fDoc of followupsDocs as any[]) {
+    const fLeadId = typeof fDoc.leadId === "string" ? fDoc.leadId : "";
+    const company =
+      typeof fDoc.company === "string" && fDoc.company.trim()
+        ? fDoc.company.trim()
+        : "Unknown";
+    const amount = Number(fDoc.amount) || 0;
+    const date = typeof fDoc.date === "string" ? fDoc.date : "";
+    const detail = {
+      company,
+      candidateName: fDoc.candidateName,
+      amount,
+      date,
+      remark: fDoc.remark || null,
+      status: fDoc.status || "pending",
+    };
+
+    if (!fLeadId || !leadDataMap.has(fLeadId)) {
+      standaloneFollowups.push({
+        leadId: fLeadId || `manual-followup-${fDoc.$id}`,
+        company,
+        candidateName: fDoc.candidateName,
+        amount,
+        date,
+        remark: fDoc.remark || null,
+        status: fDoc.status || "pending",
+        createdAt:
+          typeof fDoc.createdAt === "string"
+            ? fDoc.createdAt
+            : `${date || new Date().toISOString().slice(0, 10)}T00:00:00.000Z`,
+      });
+      continue;
+    }
+
+    const existing = followupsMap.get(fLeadId) || { total: 0, count: 0, monthlyAmounts: {} };
+    existing.total += amount;
+    existing.count += 1;
+    if (date.length >= 7) {
+      const monthKey = date.slice(0, 7);
+      existing.monthlyAmounts[monthKey] = (existing.monthlyAmounts[monthKey] || 0) + amount;
+    }
+    followupsMap.set(fLeadId, existing);
+
+    const details = followupsDetailsMap.get(fLeadId) || [];
+    details.push(detail);
+    followupsDetailsMap.set(fLeadId, details);
+  }
+
   const results: PaymentInsightRecord[] = [];
 
   for (const doc of paymentDocs as any[]) {
@@ -777,6 +874,7 @@ export async function listAllPaymentInsightsAction(
       company: leadMeta?.company ?? "Unknown",
       source: leadMeta?.source ?? "",
       leadStatus: leadMeta?.leadStatus ?? "",
+      isFollowupOnly: false,
       isClosed: leadMeta?.isClosed === true,
       closedAt: leadMeta?.closedAt ?? null,
       upfrontAmount: paymentPlan.upfrontAmount,
@@ -790,7 +888,57 @@ export async function listAllPaymentInsightsAction(
       pendingTotal: pendingMap.get(leadId)?.totalPending ?? null,
       latestPendingMonth: pendingMap.get(leadId)?.latestMonth ?? null,
       paidMonthlyAmounts,
+      followupsMonthlyAmounts: followupsMap.get(leadId)?.monthlyAmounts ?? {},
       leadAmount: leadMeta?.leadAmount ?? 0,
+      followupsTotal: followupsMap.get(leadId)?.total ?? 0,
+      followupsCount: followupsMap.get(leadId)?.count ?? 0,
+      followupsPayments: followupsDetailsMap.get(leadId) || [],
+    });
+  }
+
+  for (const followup of standaloneFollowups) {
+    if (normalizedFrom && followup.date && followup.date < normalizedFrom) {
+      continue;
+    }
+    if (normalizedTo && followup.date && followup.date > normalizedTo) {
+      continue;
+    }
+
+    results.push({
+      leadId: followup.leadId,
+      company: followup.company,
+      source: "Followup payment",
+      leadStatus: "followup_payment",
+      isFollowupOnly: true,
+      isClosed: false,
+      closedAt: null,
+      upfrontAmount: 0,
+      months: 0,
+      percent: 0,
+      status: "fully_paid",
+      createdAt: followup.createdAt,
+      wasPartiallyPaid: false,
+      totalPaid: followup.amount,
+      paidUpdateCount: 0,
+      pendingTotal: null,
+      latestPendingMonth: null,
+      paidMonthlyAmounts: {},
+      followupsMonthlyAmounts: followup.date
+        ? { [followup.date.slice(0, 7)]: followup.amount }
+        : {},
+      leadAmount: 0,
+      followupsTotal: followup.amount,
+      followupsCount: 1,
+      followupsPayments: [
+        {
+          company: followup.company,
+          candidateName: followup.candidateName,
+          amount: followup.amount,
+          date: followup.date,
+          remark: followup.remark,
+          status: followup.status,
+        },
+      ],
     });
   }
 

@@ -305,6 +305,23 @@ describe("lead-close-gate", () => {
         }),
       ).toBe(false);
     });
+
+    it("accepts LinkedIn values stored under the legacy aliases before closing", () => {
+      const leadData = {
+        amount: "250",
+        lastName: "Papasani",
+        legalName: "Narendra",
+        field_16: "https://linkedin.com/in/legacy-test",
+      };
+      expect(
+        isCloseRequiredFieldsMissing({
+          isClosed: false,
+          closeStatus: "Closed",
+          leadData,
+          isBackoutStatus,
+        }),
+      ).toBe(false);
+    });
   });
 
   describe("getMissingCloseRequiredFields", () => {
@@ -363,6 +380,16 @@ describe("lead-close-gate", () => {
       expect(getMissingCloseRequiredFields(leadData)).toEqual([
         "LinkedIn Profile URL",
       ]);
+    });
+
+    it("does not report LinkedIn as missing when only the legacy field_16 alias is filled", () => {
+      const leadData = {
+        amount: "100",
+        lastName: "Papasani",
+        legalName: "Narendra",
+        field_16: "https://linkedin.com/in/legacy-test",
+      };
+      expect(getMissingCloseRequiredFields(leadData)).toEqual([]);
     });
   });
 

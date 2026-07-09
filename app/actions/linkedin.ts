@@ -1792,6 +1792,7 @@ export interface LinkedinConnectionKpiRow {
   sentCount: number;
   target: number;
   mode: "daily" | "monthly";
+  idNames: string[];
 }
 
 export async function loadLinkedinConnectionKpiAction(input: {
@@ -1910,6 +1911,7 @@ export async function loadLinkedinConnectionKpiAction(input: {
 
   const kpiRows = Array.from(userRowsMap.values()).map((u) => {
     const uniqCompanies = Array.from(new Set(u.companies));
+    const uniqIdNames = Array.from(new Set(u.idNames));
     return {
       accountId: u.userId, // use userId as the unique key
       idName: u.userName,
@@ -1919,6 +1921,7 @@ export async function loadLinkedinConnectionKpiAction(input: {
       sentCount: u.sentCount,
       target: u.target,
       mode,
+      idNames: uniqIdNames,
     };
   });
 

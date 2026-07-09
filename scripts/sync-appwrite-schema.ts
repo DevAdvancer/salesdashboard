@@ -9,9 +9,10 @@ import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { DATABASE_ID, COLLECTIONS } from '../lib/constants/appwrite';
 
-// Load env vars
-const envPath = path.resolve(process.cwd(), '.env.local');
-dotenv.config({ path: envPath });
+// Load env vars. Keep `.env.local` as the override layer when present,
+// but support repos that only define Appwrite credentials in `.env`.
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local'), override: true });
 
 const ENDPOINT = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT || 'https://cloud.appwrite.io/v1';
 const PROJECT_ID = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID;
@@ -51,6 +52,21 @@ interface SchemaIndex {
   key: string;
   type: string;
   attributes: string[];
+}
+
+function humanizeCollectionName(collectionId: string): string {
+  return collectionId
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function isNotFoundError(error: unknown): boolean {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    return Number((error as { code: unknown }).code) === 404;
+  }
+
+  return false;
 }
 
 // Collection schema definitions - matches lib/types/index.ts
@@ -233,6 +249,32 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'status_idx', type: 'key', attributes: ['status'] },
     ],
   },
+  [COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS]: {
+    attributes: [
+      { key: 'leadId', type: 'string', required: true, size: 255 },
+      {
+        key: 'company',
+        type: 'enum',
+        required: true,
+        values: ['Silverspace INC', 'Flawless-ED', 'Vizva INC'],
+      },
+      { key: 'candidateName', type: 'string', required: true, size: 255 },
+      { key: 'amount', type: 'integer', required: true },
+      { key: 'date', type: 'string', required: true, size: 10 },
+      { key: 'remark', type: 'string', required: false, size: 1000 },
+      { key: 'status', type: 'string', required: false, size: 50, default: 'pending' },
+      { key: 'createdAt', type: 'datetime', required: true },
+      { key: 'updatedAt', type: 'datetime', required: false },
+      { key: 'updatedById', type: 'string', required: false, size: 255 },
+      { key: 'updatedByName', type: 'string', required: false, size: 255 },
+    ],
+    indexes: [
+      { key: 'lead_idx', type: 'key', attributes: ['leadId'] },
+      { key: 'company_idx', type: 'key', attributes: ['company'] },
+      { key: 'date_idx', type: 'key', attributes: ['date'] },
+      { key: 'status_idx', type: 'key', attributes: ['status'] },
+    ],
+  },
 };
 
 // Fields to remove (retired manager/assistant_manager fields, plus the
@@ -290,16 +332,17 @@ async function syncAttr(
         attr.key,
         attr.size,
         attr.required ?? false,
-        attr.default as string | undefined
+        attr.default as string | undefined,
+        attr.array ?? false
       );
-    } else if (attr.type === 'email' && attr.size) {
+    } else if (attr.type === 'email') {
       await databases.createEmailAttribute(
         DATABASE_ID,
         collectionId,
         attr.key,
-        attr.size,
         attr.required ?? false,
-        attr.default as string | undefined
+        attr.default as string | undefined,
+        attr.array ?? false
       );
     } else if (attr.type === 'enum' && attr.values) {
       await databases.createEnumAttribute(
@@ -333,14 +376,6 @@ async function syncAttr(
         attr.required ?? false,
         (attr as any).min ?? 0,
         (attr as any).max ?? undefined
-      );
-    } else if (attr.array) {
-      await databases.createArrayAttribute(
-        DATABASE_ID,
-        collectionId,
-        attr.key,
-        attr.size ?? 255,
-        attr.required ?? false
       );
     }
     console.log(`    ✅ Created`);
@@ -386,6 +421,27 @@ async function syncIndex(
 
 async function syncCollection(collectionId: string, schema: typeof collectionSchemas['users'], dryRun: boolean) {
   console.log(`\n🔍 Collection: ${collectionId}`);
+
+  try {
+    await databases.getCollection(DATABASE_ID, collectionId);
+  } catch (error) {
+    if (!isNotFoundError(error)) {
+      throw error;
+    }
+
+    if (dryRun) {
+      console.log(`  [DRY RUN] Would CREATE collection: ${collectionId}`);
+      return;
+    }
+
+    console.log(`  ➕ Creating collection: ${collectionId}`);
+    await databases.createCollection(
+      DATABASE_ID,
+      collectionId,
+      humanizeCollectionName(collectionId)
+    );
+    console.log(`  ✅ Collection created`);
+  }
 
   // Get current schema
   const attrsRes = await databases.listAttributes(DATABASE_ID, collectionId);

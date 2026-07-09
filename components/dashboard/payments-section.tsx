@@ -106,7 +106,7 @@ export function buildMonthlyPaymentsChartData(
   records: Array<
     Pick<
       PaymentInsightRecord,
-      "paidMonthlyAmounts"
+      "paidMonthlyAmounts" | "followupsMonthlyAmounts"
     >
   >,
 ): Array<{ name: string; Total: number; Net: number }> {
@@ -118,7 +118,17 @@ export function buildMonthlyPaymentsChartData(
   for (const record of records) {
     // Sum all actual payments by the month they were received, not the month
     // the lead closed. This ensures revenue is attributed to the correct month.
-    for (const [monthKey, amount] of Object.entries(record.paidMonthlyAmounts)) {
+    for (const [monthKey, amount] of Object.entries(record.paidMonthlyAmounts) as Array<[string, number]>) {
+      if (!amount) continue;
+      const { monthStart, sortKey } = toMonthKey(monthKey);
+      const ex = map.get(monthKey) ?? { total: 0, monthStart, sortKey };
+      ex.total += amount;
+      map.set(monthKey, ex);
+    }
+
+    // Followup payments are attributed to the explicit followup payment date,
+    // so they also contribute to the month they were actually received.
+    for (const [monthKey, amount] of Object.entries(record.followupsMonthlyAmounts || {}) as Array<[string, number]>) {
       if (!amount) continue;
       const { monthStart, sortKey } = toMonthKey(monthKey);
       const ex = map.get(monthKey) ?? { total: 0, monthStart, sortKey };
@@ -145,10 +155,25 @@ function toComparableIsoDate(value: string | null | undefined): string | null {
   return parsed.toISOString().slice(0, 10);
 }
 
+function formatMonthYear(monthKey: string): string {
+  const year = monthKey.slice(0, 4);
+  const month = monthKey.slice(5);
+  return `${month}/${year}`;
+}
+
 function statusVariant(status: PaymentStatus) {
   if (status === "fully_paid") return "active" as const;
   if (status === "partially_paid") return "default" as const;
   return "inactive" as const;
+}
+
+function formatDate(dateString: string) {
+  const date = new Date(dateString);
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter, technicalPaymentsTotal = 0 }: PaymentsSectionProps) {
@@ -194,7 +219,7 @@ export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter, te
   // Group by company — all time
   const companyRows = useMemo<CompanyRow[]>(() => {
     const map = new Map<string, CompanyRow>();
-    for (const r of filteredRecords) {
+    for (const r of filteredRecords.filter((record) => !record.isFollowupOnly)) {
       const displayCompany = r.company?.trim()
         ? canonicalCompanyName(r.company)
         : "Unspecified";
@@ -219,22 +244,8 @@ export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter, te
     return Array.from(map.values()).sort((a, b) => b.total - a.total);
   }, [filteredRecords]);
 
-  // Inject technical payments as a regular table row so the grand total
-  // naturally includes them. The row is appended at the end (sorted by
-  // total descending, and tech payments carry no company name).
-  const displayRows = useMemo(() => {
-    if (!technicalPaymentsTotal) return companyRows;
-    return [
-      ...companyRows,
-      {
-        company: "Technical payments",
-        total: technicalPaymentsTotal,
-        upfront: technicalPaymentsTotal,
-        remaining: 0,
-        count: 0,
-      },
-    ];
-  }, [companyRows, technicalPaymentsTotal]);
+  // Show only company rows in the main table
+  const displayRows = companyRows;
 
   const grandTotals = useMemo(
     () =>
@@ -398,6 +409,130 @@ export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter, te
           ) : (
             <FinancialInsightsChart data={monthlyChartData} />
           )}
+        </div>
+
+        {/* Payments by Person Table */}
+        <div>
+          <h4 className="mb-3 text-sm font-semibold">Payments by Person</h4>
+          <p className="mb-2 text-xs text-muted-foreground">
+            Shows what each person has paid: Technical Payments + Followups + Pending Amounts
+          </p>
+          {(() => {
+            // Get all followup payment entries and add company info
+            const allFollowups = records.flatMap(r =>
+              (r.followupsPayments || []).map(fp => ({
+                ...fp,
+                company: fp.company || r.company,
+              }))
+            );
+
+            // Group followups by person (userId) — we need to aggregate per user
+            // Since we don't have userId in the followup records, show as a flat list for now
+            if (allFollowups.length === 0 && !technicalPaymentsTotal) {
+              return (
+                <div className="flex h-24 items-center justify-center rounded-md border border-dashed border-[var(--hairline)] text-sm text-[var(--mute)]">
+                  No payments by person to display
+                </div>
+              );
+            }
+
+            return (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[var(--hairline)] text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      <th className="py-2 pr-4 font-medium">Name</th>
+                      <th className="py-2 px-4 font-medium">Type</th>
+                      <th className="py-2 px-4 font-medium">Company</th>
+                      <th className="py-2 px-4 font-medium">Candidate</th>
+                      <th className="py-2 px-4 font-medium">Date</th>
+                      <th className="py-2 px-4 font-medium">Remark</th>
+                      <th className="py-2 pl-4 font-medium text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Technical payments row placeholder */}
+                    {technicalPaymentsTotal ? (
+                      <tr className="border-b border-[var(--hairline-soft)]">
+                        <td className="py-2 pr-4 font-medium">Team</td>
+                        <td className="py-2 px-4">
+                          <Badge variant="default" className="bg-blue-100 text-blue-800">
+                            Technical
+                          </Badge>
+                        </td>
+                        <td className="py-2 px-4 text-muted-foreground">—</td>
+                        <td className="py-2 px-4 text-muted-foreground">—</td>
+                        <td className="py-2 px-4 text-muted-foreground">—</td>
+                        <td className="py-2 px-4 text-muted-foreground">—</td>
+                        <td className="py-2 pl-4 text-right font-mono font-medium">
+                          {currencyFormatter.format(technicalPaymentsTotal)}
+                        </td>
+                      </tr>
+                    ) : null}
+
+                    {/* Followups payments rows */}
+                    {allFollowups.map((fp, idx) => (
+                      <tr
+                        key={`followup-${fp.date}-${idx}`}
+                        className="border-b border-[var(--hairline-soft)]"
+                      >
+                        <td className="py-2 pr-4 font-medium">
+                          {/* TODO: Show person name when we have userId */}
+                          —
+                        </td>
+                        <td className="py-2 px-4">
+                          <Badge variant="default" className="bg-amber-100 text-amber-800">
+                            Followup
+                          </Badge>
+                        </td>
+                        <td className="py-2 px-4">{fp.company}</td>
+                        <td className="py-2 px-4">{fp.candidateName}</td>
+                        <td className="py-2 px-4 text-muted-foreground">
+                          {fp.date ? formatDate(fp.date) : "—"}
+                        </td>
+                        <td className="py-2 px-4 text-muted-foreground truncate max-w-[200px]" title={fp.remark || ""}>
+                          {fp.remark || "—"}
+                        </td>
+                        <td className="py-2 pl-4 text-right font-mono font-medium">
+                          {currencyFormatter.format(fp.amount)}
+                        </td>
+                      </tr>
+                    ))}
+
+                    {/* Pending amounts per person */}
+                    {records.filter(r => r.pendingTotal && r.pendingTotal > 0).map((record) => (
+                      <tr
+                        key={`pending-${record.leadId}`}
+                        className="border-b border-[var(--hairline-soft)]"
+                      >
+                        <td className="py-2 pr-4 font-medium">—</td>
+                        <td className="py-2 px-4">
+                          <Badge variant="outline" className="bg-orange-100 text-orange-800">
+                            Pending
+                          </Badge>
+                        </td>
+                        <td className="py-2 px-4">{record.company}</td>
+                        <td className="py-2 px-4 text-muted-foreground">
+                          {record.latestPendingMonth ? formatMonthYear(record.latestPendingMonth) : "—"}
+                        </td>
+                        <td className="py-2 px-4 text-muted-foreground">—</td>
+                        <td className="py-2 px-4 text-muted-foreground">
+                          {record.paidMonthlyAmounts
+                            ? (Object.entries(record.paidMonthlyAmounts) as Array<[string, number]>)
+                                .map(([month, amt]) => `${formatMonthYear(month)}: ${currencyFormatter.format(amt)}`)
+                                .join(', ')
+                            : '—'}
+                        </td>
+                        <td className="py-2 pl-4 text-right font-mono font-medium text-amber-700">
+                          {currencyFormatter.format(record.pendingTotal ?? 0)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Status mix badges */}

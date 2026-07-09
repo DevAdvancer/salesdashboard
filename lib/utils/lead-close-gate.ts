@@ -14,6 +14,7 @@
  */
 
 const LEGACY_AMOUNT_KEYS = ["field_15"] as const;
+const LINKEDIN_KEYS = ["linkedinProfileUrl", "linkedinProfile", "field_16"] as const;
 const NA_LIKE_PATTERN = /^n\/?a$/i;
 
 /**
@@ -59,6 +60,19 @@ export function isTextMissing(rawValue: unknown): boolean {
   return NA_LIKE_PATTERN.test(text);
 }
 
+function getLeadLinkedinValue(
+  leadData: Record<string, unknown> | undefined | null,
+): unknown {
+  if (!leadData) return undefined;
+  for (const key of LINKEDIN_KEYS) {
+    const value = leadData[key];
+    if (value !== undefined && value !== null) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 export interface CloseGateInput {
   isClosed: boolean;
   closeStatus: string;
@@ -85,7 +99,7 @@ export function isCloseRequiredFieldsMissing({
 
   if (isTextMissing(leadData?.lastName)) return true;
   if (isTextMissing(leadData?.legalName)) return true;
-  if (isTextMissing(leadData?.linkedinProfileUrl)) return true;
+  if (isTextMissing(getLeadLinkedinValue(leadData))) return true;
 
   return false;
 }
@@ -109,7 +123,7 @@ export function getMissingCloseRequiredFields(
   if (isTextMissing(leadData?.legalName)) {
     missing.push("Legal Name");
   }
-  if (isTextMissing(leadData?.linkedinProfileUrl)) {
+  if (isTextMissing(getLeadLinkedinValue(leadData))) {
     missing.push("LinkedIn Profile URL");
   }
 

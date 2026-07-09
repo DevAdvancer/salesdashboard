@@ -30,7 +30,8 @@
     "backfill:lg-handoffs:dry": "tsx scripts/backfill-lg-handoffs.ts",
     "backfill:lg-handoffs:apply": "tsx scripts/backfill-lg-handoffs.ts -- --apply",
     "migrate:company-names": "tsx scripts/migrate-company-names.ts",
-    "migrate:company-names:apply": "tsx scripts/migrate-company-names.ts -- --apply"
+    "migrate:company-names:apply": "tsx scripts/migrate-company-names.ts -- --apply",
+    "create:followups-collection": "tsx scripts/create-followups-collection.ts"
   },
   "dependencies": {
     "@azure/msal-browser": "^4.29.0",
@@ -42,6 +43,7 @@
     "appwrite": "^22.4.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
     "dotenv": "^17.3.1",
     "driver.js": "^1.4.0",
     "fast-check": "^4.5.3",

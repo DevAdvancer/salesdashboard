@@ -36,6 +36,7 @@ export type ComponentKey =
   | 'payments-report'
   | 'target-report'
   | 'technical-payments'
+  | 'followups-payments'
   | 'resume-dashboard'
   | 'resume-chat'
   | 'resume-hierarchy';

@@ -272,7 +272,8 @@ export type ComponentKey =
   | 'resume-dashboard'
   | 'resume-chat'
   | 'resume-hierarchy'
-  | 'technical-payments';
+  | 'technical-payments'
+  | 'followups-payments';
 
 export interface AccessRule {
   $id?: string;
@@ -619,6 +620,32 @@ export interface PendingAmount {
   monthKey: string;
   pendingAmount: number;
   status: PendingAmountStatus;
+  createdAt: string;
+  updatedAt?: string | null;
+  updatedById?: string | null;
+  updatedByName?: string | null;
+}
+
+export type FollowupsPaymentCompany =
+  | 'Silverspace INC'
+  | 'Flawless-ED'
+  | 'Vizva INC';
+
+export const FOLLOWUPS_PAYMENT_COMPANIES: FollowupsPaymentCompany[] = [
+  'Silverspace INC',
+  'Flawless-ED',
+  'Vizva INC',
+];
+
+export interface PreviousFollowupsPayment {
+  $id: string;
+  leadId: string;
+  company: FollowupsPaymentCompany;
+  candidateName: string;
+  amount: number;
+  date: string; // YYYY-MM-DD
+  remark?: string | null;
+  status?: string;
   createdAt: string;
   updatedAt?: string | null;
   updatedById?: string | null;

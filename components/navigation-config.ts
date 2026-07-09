@@ -63,6 +63,7 @@ export const appIcons = {
   paymentsReport: Wallet,
   targetReport: Target,
   technicalPayments: Wallet,
+  followupsPayments: Wallet,
   resumeDashboard: FileSpreadsheet,
   resumeHierarchy: Network,
 } satisfies Record<string, AppIcon>;
@@ -87,6 +88,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'payments-report', label: 'Payments Report', href: '/payments-report', icon: appIcons.paymentsReport },
   { key: 'target-report', label: 'Target Report', href: '/target-report', icon: appIcons.targetReport },
   { key: 'technical-payments', label: 'Technical Payments', href: '/technical-payments', icon: appIcons.technicalPayments },
+  { key: 'followups-payments', label: 'Followups Payments', href: '/previous-followups-payments', icon: appIcons.followupsPayments },
   { key: 'resume-dashboard', label: 'Resume Dashboard', href: '/resume-dashboard', icon: appIcons.resumeDashboard },
   { key: 'resume-hierarchy', label: 'Resume Hierarchy', href: '/resume-hierarchy', icon: appIcons.resumeHierarchy },
   { key: 'mock', label: 'Mock Interview', href: '/mock', icon: appIcons.mock },

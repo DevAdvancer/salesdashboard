@@ -23,7 +23,8 @@ export type ComponentKey =
   | 'linkedin-requests'
   | 'linkedin-account-management'
   | 'linkedin-reports'
-  | 'target-report';
+  | 'target-report'
+  | 'followups-payments';
 
 export type UserRole = 'admin' | 'developer' | 'team_lead' | 'agent' | 'lead_generation' | 'monitor' | 'operations';
 
@@ -216,4 +217,12 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'linkedin-account-management', role: 'lead_generation', allowed: false },
   { componentKey: 'linkedin-reports', role: 'lead_generation', allowed: false },
   { componentKey: 'target-report', role: 'lead_generation', allowed: true },
+  // Followups Payments rules — admin/developer/monitor/operations/team_lead only
+  { componentKey: 'followups-payments', role: 'admin', allowed: true },
+  { componentKey: 'followups-payments', role: 'developer', allowed: true },
+  { componentKey: 'followups-payments', role: 'monitor', allowed: true },
+  { componentKey: 'followups-payments', role: 'operations', allowed: true },
+  { componentKey: 'followups-payments', role: 'team_lead', allowed: true },
+  { componentKey: 'followups-payments', role: 'agent', allowed: false },
+  { componentKey: 'followups-payments', role: 'lead_generation', allowed: false },
 ];

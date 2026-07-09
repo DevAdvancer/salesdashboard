@@ -333,8 +333,16 @@ function MainDashboard({
       try {
         const leadIds = paymentRecords.map((r) => r.leadId);
         const techPayments = await getTechnicalPaymentsByLeadIdsAction(user.$id, leadIds);
+
+        // Filter by date range to only include payments from the selected period
+        const filteredTechPayments = techPayments.filter(p => {
+          const paymentDate = p.createdAt.substring(0, 10);
+          return (!dateRange.from || paymentDate >= dateRange.from) &&
+                 (!dateRange.to || paymentDate <= dateRange.to);
+        });
+
         if (!cancelled) {
-          const techTotal = techPayments.reduce((sum: number, p: { amount: number }) => sum + p.amount, 0);
+          const techTotal = filteredTechPayments.reduce((sum: number, p: { amount: number }) => sum + p.amount, 0);
           setTechnicalPaymentsTotal(techTotal);
         }
       } catch (error) {
@@ -348,7 +356,7 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, isAdminLike, paymentRecords]);
+  }, [user, isAdminLike, paymentRecords, dateRange]);
 
   // ── Fetch referral split (admin-like only, current month by closedAt) ───
   useEffect(() => {
