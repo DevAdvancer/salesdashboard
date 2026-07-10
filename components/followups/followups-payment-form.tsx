@@ -4,7 +4,14 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import {
   FOLLOWUPS_PAYMENT_COMPANIES,
   type FollowupsPaymentCompany,
@@ -30,10 +37,14 @@ export function FollowupsPaymentForm({
   onSave,
   onCancel,
 }: FollowupsPaymentFormProps) {
-  const [company, setCompany] = useState<FollowupsPaymentCompany>(payment?.company || FOLLOWUPS_PAYMENT_COMPANIES[0]);
-  const [candidateName, setCandidateName] = useState(payment?.candidateName || "");
+  const [company, setCompany] = useState<FollowupsPaymentCompany>(
+    payment?.company || FOLLOWUPS_PAYMENT_COMPANIES[0],
+  );
+  const [candidateName, setCandidateName] = useState(
+    payment?.candidateName || "",
+  );
   const [amount, setAmount] = useState(payment?.amount?.toString() || "0");
-  const [date, setDate] = useState(payment?.date || new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(payment?.date || getCurrentEasternIsoDate());
   const [remark, setRemark] = useState(payment?.remark || "");
 
   function handleSubmit(e: React.FormEvent) {
@@ -51,7 +62,11 @@ export function FollowupsPaymentForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
         <label className="text-sm font-medium">Company</label>
-        <Select value={company} onValueChange={(value) => setCompany(value as FollowupsPaymentCompany)}>
+        <Select
+          value={company}
+          onValueChange={(value) =>
+            setCompany(value as FollowupsPaymentCompany)
+          }>
           <SelectTrigger>
             <SelectValue placeholder="Select company" />
           </SelectTrigger>

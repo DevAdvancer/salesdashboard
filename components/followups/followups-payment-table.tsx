@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -12,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { PreviousFollowupsPayment } from "@/lib/types";
-import { format } from "date-fns";
+import { formatEasternCalendarDate } from "@/lib/utils/eastern-date";
 
 interface FollowupsPaymentTableProps {
   payments: PreviousFollowupsPayment[];
@@ -65,7 +64,7 @@ export function FollowupsPaymentTable({
           {payments.map((payment) => (
             <TableRow key={payment.$id}>
               <TableCell className="text-muted-foreground">
-                {payment.date ? format(new Date(payment.date), "MMM dd, yyyy") : "—"}
+                {formatEasternCalendarDate(payment.date)}
               </TableCell>
               <TableCell className="text-muted-foreground">
                 {payment.company}
@@ -82,8 +81,7 @@ export function FollowupsPaymentTable({
               <TableCell>
                 <Badge
                   variant="secondary"
-                  className="bg-emerald-100 text-emerald-800"
-                >
+                  className="bg-emerald-100 text-emerald-800">
                   Paid
                 </Badge>
               </TableCell>
@@ -93,8 +91,7 @@ export function FollowupsPaymentTable({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => onEdit(payment)}
-                    >
+                      onClick={() => onEdit(payment)}>
                       Edit
                     </Button>
                     {onDelete && (
@@ -102,8 +99,7 @@ export function FollowupsPaymentTable({
                         variant="ghost"
                         size="sm"
                         onClick={() => onDelete(payment)}
-                        className="text-red-600 hover:text-red-700"
-                      >
+                        className="text-red-600 hover:text-red-700">
                         Delete
                       </Button>
                     )}

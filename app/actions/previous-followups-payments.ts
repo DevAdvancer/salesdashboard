@@ -138,7 +138,7 @@ export async function updatePreviousFollowupsPaymentAction(input: {
 
   await databases.getDocument(DATABASE_ID, COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS, input.paymentId);
 
-  const payload: any = {
+  const payload: Record<string, unknown> = {
     updatedAt: new Date().toISOString(),
     updatedById: actor.$id,
     updatedByName: actor.name,
@@ -148,7 +148,7 @@ export async function updatePreviousFollowupsPaymentAction(input: {
   if (input.candidateName !== undefined) payload.candidateName = (input.candidateName || '').trim();
   if (input.amount !== undefined) payload.amount = Math.floor(Number(input.amount) || 0);
   if (input.date !== undefined) payload.date = input.date;
-  if (input.remark !== undefined) payload.paymentRemark = input.remark?.trim() || null;
+  if (input.remark !== undefined) payload.paymentRemark = input.remark?.trim() || "";
   payload.status = FOLLOWUPS_PAYMENT_STATUS;
 
   const doc = await databases.updateDocument(

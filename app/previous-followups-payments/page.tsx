@@ -23,28 +23,37 @@ import {
 } from "@/app/actions/previous-followups-payments";
 import type { ComponentKey } from "@/lib/contexts/access-control-context";
 import type { PreviousFollowupsPayment } from "@/lib/types";
+import { getCurrentEasternMonthKey } from "@/lib/utils/eastern-date";
 
 const FollowupsPaymentForm = dynamic(
-  () => import("@/components/followups/followups-payment-form").then((m) => m.FollowupsPaymentForm),
-  { loading: () => <Skeleton className="h-96 w-full" />, ssr: false }
+  () =>
+    import("@/components/followups/followups-payment-form").then(
+      (m) => m.FollowupsPaymentForm,
+    ),
+  { loading: () => <Skeleton className="h-96 w-full" />, ssr: false },
 );
 
 const FollowupsPaymentTable = dynamic(
-  () => import("@/components/followups/followups-payment-table").then((m) => m.FollowupsPaymentTable),
-  { loading: () => <Skeleton className="h-[400px] w-full" />, ssr: false }
+  () =>
+    import("@/components/followups/followups-payment-table").then(
+      (m) => m.FollowupsPaymentTable,
+    ),
+  { loading: () => <Skeleton className="h-[400px] w-full" />, ssr: false },
 );
 
 const COMPONENT_KEY: ComponentKey = "followups-payments";
 
 export default function PreviousFollowupsPaymentsPage() {
-  const { user, isAdmin, isTeamLead, isOperations, serverSessionReady } = useAuth();
+  const { user, isAdmin, isTeamLead, isOperations, serverSessionReady } =
+    useAuth();
   const { toast } = useToast();
   const canMutate = isAdmin || isTeamLead;
 
   const [payments, setPayments] = useState<PreviousFollowupsPayment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [editingPayment, setEditingPayment] = useState<PreviousFollowupsPayment | null>(null);
+  const [editingPayment, setEditingPayment] =
+    useState<PreviousFollowupsPayment | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const loadPayments = useCallback(async () => {
@@ -62,7 +71,8 @@ export default function PreviousFollowupsPaymentsPage() {
       console.error("Failed to load followup payments:", error);
       toast({
         title: "Failed to load payments",
-        description: error instanceof Error ? error.message : "Please try again.",
+        description:
+          error instanceof Error ? error.message : "Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -75,7 +85,7 @@ export default function PreviousFollowupsPaymentsPage() {
     void loadPayments();
   }, [loadPayments, serverSessionReady, user]);
 
-  const thisMonthKey = new Date().toISOString().slice(0, 7);
+  const thisMonthKey = getCurrentEasternMonthKey();
   const thisMonthPayments = useMemo(
     () => payments.filter((payment) => payment.date.startsWith(thisMonthKey)),
     [payments, thisMonthKey],
@@ -93,7 +103,9 @@ export default function PreviousFollowupsPaymentsPage() {
         <div className="container mx-auto py-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold">Previous Followups Payments</h1>
+              <h1 className="text-2xl font-bold">
+                Previous Followups Payments
+              </h1>
               <p className="text-muted-foreground">
                 Access restricted to admin, team leads, and operations
               </p>
@@ -142,7 +154,8 @@ export default function PreviousFollowupsPaymentsPage() {
         });
         toast({
           title: "Payment added",
-          description: "The amount will be included in this month's followup payments.",
+          description:
+            "The amount will be included in this month's followup payments.",
         });
       }
 
@@ -152,7 +165,8 @@ export default function PreviousFollowupsPaymentsPage() {
       console.error("Failed to save followup payment:", error);
       toast({
         title: "Failed to save payment",
-        description: error instanceof Error ? error.message : "Please try again.",
+        description:
+          error instanceof Error ? error.message : "Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -165,7 +179,9 @@ export default function PreviousFollowupsPaymentsPage() {
       return;
     }
 
-    const confirmed = window.confirm(`Delete payment for ${payment.candidateName}?`);
+    const confirmed = window.confirm(
+      `Delete payment for ${payment.candidateName}?`,
+    );
     if (!confirmed) return;
 
     try {
@@ -182,7 +198,8 @@ export default function PreviousFollowupsPaymentsPage() {
       console.error("Failed to delete followup payment:", error);
       toast({
         title: "Failed to delete payment",
-        description: error instanceof Error ? error.message : "Please try again.",
+        description:
+          error instanceof Error ? error.message : "Please try again.",
         variant: "destructive",
       });
     }
@@ -210,11 +227,15 @@ export default function PreviousFollowupsPaymentsPage() {
         <div className="grid gap-6 md:grid-cols-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Total Payments</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Total Payments
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {payments.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}
+                {payments
+                  .reduce((sum, p) => sum + p.amount, 0)
+                  .toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground">
                 {payments.length} entries
@@ -228,7 +249,9 @@ export default function PreviousFollowupsPaymentsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-emerald-600">
-                {payments.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}
+                {payments
+                  .reduce((sum, p) => sum + p.amount, 0)
+                  .toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground">
                 All followup payments are marked paid
@@ -242,7 +265,9 @@ export default function PreviousFollowupsPaymentsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-emerald-600">
-                {thisMonthPayments.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}
+                {thisMonthPayments
+                  .reduce((sum, p) => sum + p.amount, 0)
+                  .toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground">
                 {thisMonthPayments.length} payments
@@ -255,7 +280,9 @@ export default function PreviousFollowupsPaymentsPage() {
               <CardTitle className="text-sm font-medium">Status</CardTitle>
             </CardHeader>
             <CardContent>
-              <Badge variant="secondary" className="text-xs bg-emerald-100 text-emerald-800">
+              <Badge
+                variant="secondary"
+                className="text-xs bg-emerald-100 text-emerald-800">
                 {payments.length} Paid
               </Badge>
             </CardContent>
@@ -265,9 +292,7 @@ export default function PreviousFollowupsPaymentsPage() {
         <Card className="mt-8">
           <CardHeader>
             <CardTitle>Payment History</CardTitle>
-            <CardDescription>
-              All recorded followup payments
-            </CardDescription>
+            <CardDescription>All recorded followup payments</CardDescription>
           </CardHeader>
           <CardContent>
             <FollowupsPaymentTable
@@ -289,7 +314,9 @@ export default function PreviousFollowupsPaymentsPage() {
             <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
               <CardHeader>
                 <CardTitle>
-                  {editingPayment ? "Edit Followup Payment" : "Add Followup Payment"}
+                  {editingPayment
+                    ? "Edit Followup Payment"
+                    : "Add Followup Payment"}
                 </CardTitle>
                 <CardDescription>
                   {editingPayment
@@ -304,7 +331,9 @@ export default function PreviousFollowupsPaymentsPage() {
                   onCancel={closeDialog}
                 />
                 {isSaving ? (
-                  <p className="mt-3 text-sm text-muted-foreground">Saving payment...</p>
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Saving payment...
+                  </p>
                 ) : null}
               </CardContent>
             </Card>
