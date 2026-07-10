@@ -1,0 +1,60 @@
+{
+  "repairedCount": 11,
+  "repaired": [
+    {
+      "id": "6a514c8b0034c0351f9f",
+      "candidateName": "MUSBAU TIAMIYU",
+      "paymentRemark": "Category - Pending"
+    },
+    {
+      "id": "6a51534d0021d08a40d6",
+      "candidateName": "Sai Naga Sowmya Potluri",
+      "paymentRemark": "Category - Pending"
+    },
+    {
+      "id": "6a5153630004e7972910",
+      "candidateName": "Sai Swetha Kadali",
+      "paymentRemark": "Category - Pending"
+    },
+    {
+      "id": "6a51537c002403b39ca7",
+      "candidateName": "Surya Vyagri Kiran Uppuluri",
+      "paymentRemark": "Category - Pending"
+    },
+    {
+      "id": "6a5156170018fa05e936",
+      "candidateName": "Mokka Mounika",
+      "paymentRemark": "Category - Pending"
+    },
+    {
+      "id": "6a515651003531579b76",
+      "candidateName": "Roshani Kesharwani",
+      "paymentRemark": "Category - Pending"
+    },
+    {
+      "id": "6a51567400216b8568aa",
+      "candidateName": "Guru Revanth Nethi",
+      "paymentRemark": "Category - Pending"
+    },
+    {
+      "id": "6a51568b003532aecd1f",
+      "candidateName": "Shaik Niyazuddin",
+      "paymentRemark": "Category - Pending"
+    },
+    {
+      "id": "6a5158f000172d3828d8",
+      "candidateName": "Manoj Chowdary Nalluri",
+      "paymentRemark": "BGC"
+    },
+    {
+      "id": "6a515930000c5f1b7cea",
+      "candidateName": "Haritha Anand",
+      "paymentRemark": "Pending Amount"
+    },
+    {
+      "id": "6a515950001fa9408a33",
+      "candidateName": "Venkata Naganjani Raavi",
+      "paymentRemark": null
+    }
+  ]
+}

@@ -261,6 +261,7 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'candidateName', type: 'string', required: true, size: 255 },
       { key: 'amount', type: 'integer', required: true },
       { key: 'date', type: 'string', required: true, size: 10 },
+      { key: 'remark', type: 'string', required: false, size: 1000 },
       { key: 'paymentRemark', type: 'string', required: false, size: 1000 },
       { key: 'status', type: 'string', required: false, size: 50, default: 'paid' },
       { key: 'createdAt', type: 'datetime', required: true },
