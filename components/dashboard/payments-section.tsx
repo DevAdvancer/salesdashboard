@@ -84,9 +84,10 @@ interface PaymentsSectionProps {
 
 interface CompanyRow {
   company: string;
-  total: number;    // leadAmount - full contract amount from lead
-  upfront: number;  // upfrontAmount - portion paid upfront
-  remaining: number; // total - upfront
+  total: number; // leadAmount - full contract amount from lead
+  upfront: number; // upfrontAmount - portion paid upfront
+  pending: number; // collected via followup payments shown under company summary
+  remaining: number; // total - upfront - pending
   count: number;
 }
 
@@ -104,10 +105,7 @@ function toMonthKey(iso: string): {
 
 export function buildMonthlyPaymentsChartData(
   records: Array<
-    Pick<
-      PaymentInsightRecord,
-      "paidMonthlyAmounts" | "followupsMonthlyAmounts"
-    >
+    Pick<PaymentInsightRecord, "paidMonthlyAmounts" | "followupsMonthlyAmounts">
   >,
 ): Array<{ name: string; Total: number; Net: number }> {
   const map = new Map<
@@ -118,7 +116,9 @@ export function buildMonthlyPaymentsChartData(
   for (const record of records) {
     // Sum all actual payments by the month they were received, not the month
     // the lead closed. This ensures revenue is attributed to the correct month.
-    for (const [monthKey, amount] of Object.entries(record.paidMonthlyAmounts) as Array<[string, number]>) {
+    for (const [monthKey, amount] of Object.entries(
+      record.paidMonthlyAmounts,
+    ) as Array<[string, number]>) {
       if (!amount) continue;
       const { monthStart, sortKey } = toMonthKey(monthKey);
       const ex = map.get(monthKey) ?? { total: 0, monthStart, sortKey };
@@ -128,7 +128,9 @@ export function buildMonthlyPaymentsChartData(
 
     // Followup payments are attributed to the explicit followup payment date,
     // so they also contribute to the month they were actually received.
-    for (const [monthKey, amount] of Object.entries(record.followupsMonthlyAmounts || {}) as Array<[string, number]>) {
+    for (const [monthKey, amount] of Object.entries(
+      record.followupsMonthlyAmounts || {},
+    ) as Array<[string, number]>) {
       if (!amount) continue;
       const { monthStart, sortKey } = toMonthKey(monthKey);
       const ex = map.get(monthKey) ?? { total: 0, monthStart, sortKey };
@@ -167,16 +169,13 @@ function statusVariant(status: PaymentStatus) {
   return "inactive" as const;
 }
 
-function formatDate(dateString: string) {
-  const date = new Date(dateString);
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter, technicalPaymentsTotal = 0 }: PaymentsSectionProps) {
+export function PaymentsSection({
+  records,
+  isLoading,
+  rangeLabel,
+  dateFilter,
+  technicalPaymentsTotal = 0,
+}: PaymentsSectionProps) {
   const [statusFilter, setStatusFilter] = useState<"all" | PaymentStatus>(
     "all",
   );
@@ -194,7 +193,8 @@ export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter, te
     // Apply date range filter if provided
     if (dateFilter?.from || dateFilter?.to) {
       recordsToFilter = recordsToFilter.filter((r) => {
-        const recordDate = toComparableIsoDate(r.closedAt) || toComparableIsoDate(r.createdAt);
+        const recordDate =
+          toComparableIsoDate(r.closedAt) || toComparableIsoDate(r.createdAt);
         if (dateFilter.from) {
           if (recordDate && recordDate < dateFilter.from) return false;
         }
@@ -219,7 +219,7 @@ export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter, te
   // Group by company — all time
   const companyRows = useMemo<CompanyRow[]>(() => {
     const map = new Map<string, CompanyRow>();
-    for (const r of filteredRecords.filter((record) => !record.isFollowupOnly)) {
+    for (const r of filteredRecords) {
       const displayCompany = r.company?.trim()
         ? canonicalCompanyName(r.company)
         : "Unspecified";
@@ -228,13 +228,23 @@ export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter, te
         company: displayCompany || "Unspecified",
         total: 0,
         upfront: 0,
+        pending: 0,
         remaining: 0,
         count: 0,
       };
+      const followupsCollected = Math.max(0, r.followupsTotal ?? 0);
+
+      ex.pending += followupsCollected;
+
+      if (r.isFollowupOnly) {
+        map.set(key, ex);
+        continue;
+      }
+
       const leadAmount = r.leadAmount ?? 0;
       const upfront = r.upfrontAmount ?? 0;
-      // Remaining = leadAmount - upfrontAmount. Follow-up payments cover this.
-      const remaining = Math.max(0, leadAmount - upfront);
+      // Remaining = contract total - upfront - followup collections.
+      const remaining = Math.max(0, leadAmount - upfront - followupsCollected);
       ex.total += leadAmount;
       ex.upfront += upfront;
       ex.remaining += remaining;
@@ -253,12 +263,14 @@ export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter, te
         (acc, row) => ({
           total: acc.total + row.total,
           upfront: acc.upfront + row.upfront,
+          pending: acc.pending + row.pending,
           remaining: acc.remaining + row.remaining,
           count: acc.count + row.count,
         }),
         {
           total: 0,
           upfront: 0,
+          pending: 0,
           remaining: 0,
           count: 0,
         },
@@ -276,7 +288,9 @@ export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter, te
           <div>
             <CardTitle className="text-base sm:text-lg">Payments</CardTitle>
             <CardDescription>
-              {rangeLabel ? `${rangeLabel} — by company` : "All-time by company + per-month received"}
+              {rangeLabel
+                ? `${rangeLabel} — by company`
+                : "All-time by company + per-month received"}
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -342,11 +356,12 @@ export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter, te
                     <th className="py-2 px-4 font-medium text-right">
                       Records
                     </th>
-                    <th className="py-2 px-4 font-medium text-right">
-                      Total
-                    </th>
+                    <th className="py-2 px-4 font-medium text-right">Total</th>
                     <th className="py-2 px-4 font-medium text-right">
                       Upfront
+                    </th>
+                    <th className="py-2 px-4 font-medium text-right">
+                      Pending
                     </th>
                     <th className="py-2 pl-4 font-medium text-right">
                       Remaining
@@ -357,7 +372,7 @@ export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter, te
                   {displayRows.map((row) => (
                     <tr
                       key={row.company}
-                      className={`border-b border-[var(--hairline-soft)] last:border-0 ${row.company === 'Technical payments' ? 'italic text-muted-foreground' : ''}`}>
+                      className={`border-b border-[var(--hairline-soft)] last:border-0 ${row.company === "Technical payments" ? "italic text-muted-foreground" : ""}`}>
                       <td className="py-2 pr-4 font-medium">{row.company}</td>
                       <td className="py-2 px-4 text-right tabular-nums">
                         {row.count}
@@ -367,6 +382,9 @@ export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter, te
                       </td>
                       <td className="py-2 px-4 text-right tabular-nums">
                         {currencyFormatter.format(row.upfront)}
+                      </td>
+                      <td className="py-2 px-4 text-right tabular-nums text-blue-700">
+                        {currencyFormatter.format(row.pending)}
                       </td>
                       <td className="py-2 pl-4 text-right tabular-nums text-amber-700">
                         {currencyFormatter.format(row.remaining)}
@@ -386,8 +404,23 @@ export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter, te
                     <td className="py-2 px-4 text-right tabular-nums">
                       {currencyFormatter.format(grandTotals.upfront)}
                     </td>
+                    <td className="py-2 px-4 text-right tabular-nums text-blue-700">
+                      {currencyFormatter.format(grandTotals.pending)}
+                    </td>
                     <td className="py-2 pl-4 text-right tabular-nums text-amber-700">
                       {currencyFormatter.format(grandTotals.remaining)}
+                    </td>
+                  </tr>
+                  <tr className="font-semibold text-emerald-700">
+                    <td colSpan={4} className="py-2 pr-4">
+                      Total Revenue
+                    </td>
+                    <td
+                      colSpan={2}
+                      className="py-2 pl-4 text-right tabular-nums">
+                      {currencyFormatter.format(
+                        grandTotals.upfront + grandTotals.pending,
+                      )}
                     </td>
                   </tr>
                 </tfoot>
@@ -415,20 +448,17 @@ export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter, te
         <div>
           <h4 className="mb-3 text-sm font-semibold">Payments by Person</h4>
           <p className="mb-2 text-xs text-muted-foreground">
-            Shows what each person has paid: Technical Payments + Followups + Pending Amounts
+            Shows team technical payments and open pending amounts.
           </p>
           {(() => {
-            // Get all followup payment entries and add company info
-            const allFollowups = records.flatMap(r =>
-              (r.followupsPayments || []).map(fp => ({
-                ...fp,
-                company: fp.company || r.company,
-              }))
+            const pendingRows = filteredRecords.filter(
+              (record) =>
+                !record.isFollowupOnly &&
+                record.pendingTotal &&
+                record.pendingTotal > 0,
             );
 
-            // Group followups by person (userId) — we need to aggregate per user
-            // Since we don't have userId in the followup records, show as a flat list for now
-            if (allFollowups.length === 0 && !technicalPaymentsTotal) {
+            if (pendingRows.length === 0 && !technicalPaymentsTotal) {
               return (
                 <div className="flex h-24 items-center justify-center rounded-md border border-dashed border-[var(--hairline)] text-sm text-[var(--mute)]">
                   No payments by person to display
@@ -447,7 +477,9 @@ export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter, te
                       <th className="py-2 px-4 font-medium">Candidate</th>
                       <th className="py-2 px-4 font-medium">Date</th>
                       <th className="py-2 px-4 font-medium">Remark</th>
-                      <th className="py-2 pl-4 font-medium text-right">Amount</th>
+                      <th className="py-2 pl-4 font-medium text-right">
+                        Amount
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -456,7 +488,9 @@ export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter, te
                       <tr className="border-b border-[var(--hairline-soft)]">
                         <td className="py-2 pr-4 font-medium">Team</td>
                         <td className="py-2 px-4">
-                          <Badge variant="default" className="bg-blue-100 text-blue-800">
+                          <Badge
+                            variant="default"
+                            className="bg-blue-100 text-blue-800">
                             Technical
                           </Badge>
                         </td>
@@ -470,58 +504,39 @@ export function PaymentsSection({ records, isLoading, rangeLabel, dateFilter, te
                       </tr>
                     ) : null}
 
-                    {/* Followups payments rows */}
-                    {allFollowups.map((fp, idx) => (
-                      <tr
-                        key={`followup-${fp.date}-${idx}`}
-                        className="border-b border-[var(--hairline-soft)]"
-                      >
-                        <td className="py-2 pr-4 font-medium">
-                          {/* TODO: Show person name when we have userId */}
-                          —
-                        </td>
-                        <td className="py-2 px-4">
-                          <Badge variant="default" className="bg-amber-100 text-amber-800">
-                            Followup
-                          </Badge>
-                        </td>
-                        <td className="py-2 px-4">{fp.company}</td>
-                        <td className="py-2 px-4">{fp.candidateName}</td>
-                        <td className="py-2 px-4 text-muted-foreground">
-                          {fp.date ? formatDate(fp.date) : "—"}
-                        </td>
-                        <td className="py-2 px-4 text-muted-foreground truncate max-w-[200px]" title={fp.remark || ""}>
-                          {fp.remark || "—"}
-                        </td>
-                        <td className="py-2 pl-4 text-right font-mono font-medium">
-                          {currencyFormatter.format(fp.amount)}
-                        </td>
-                      </tr>
-                    ))}
-
                     {/* Pending amounts per person */}
-                    {records.filter(r => r.pendingTotal && r.pendingTotal > 0).map((record) => (
+                    {pendingRows.map((record) => (
                       <tr
                         key={`pending-${record.leadId}`}
-                        className="border-b border-[var(--hairline-soft)]"
-                      >
+                        className="border-b border-[var(--hairline-soft)]">
                         <td className="py-2 pr-4 font-medium">—</td>
                         <td className="py-2 px-4">
-                          <Badge variant="outline" className="bg-orange-100 text-orange-800">
+                          <Badge
+                            variant="outline"
+                            className="bg-orange-100 text-orange-800">
                             Pending
                           </Badge>
                         </td>
                         <td className="py-2 px-4">{record.company}</td>
                         <td className="py-2 px-4 text-muted-foreground">
-                          {record.latestPendingMonth ? formatMonthYear(record.latestPendingMonth) : "—"}
+                          {record.latestPendingMonth
+                            ? formatMonthYear(record.latestPendingMonth)
+                            : "—"}
                         </td>
                         <td className="py-2 px-4 text-muted-foreground">—</td>
                         <td className="py-2 px-4 text-muted-foreground">
                           {record.paidMonthlyAmounts
-                            ? (Object.entries(record.paidMonthlyAmounts) as Array<[string, number]>)
-                                .map(([month, amt]) => `${formatMonthYear(month)}: ${currencyFormatter.format(amt)}`)
-                                .join(', ')
-                            : '—'}
+                            ? (
+                                Object.entries(
+                                  record.paidMonthlyAmounts,
+                                ) as Array<[string, number]>
+                              )
+                                .map(
+                                  ([month, amt]) =>
+                                    `${formatMonthYear(month)}: ${currencyFormatter.format(amt)}`,
+                                )
+                                .join(", ")
+                            : "—"}
                         </td>
                         <td className="py-2 pl-4 text-right font-mono font-medium text-amber-700">
                           {currencyFormatter.format(record.pendingTotal ?? 0)}

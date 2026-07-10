@@ -783,7 +783,7 @@ export async function listAllPaymentInsightsAction(
       candidateName: fDoc.candidateName,
       amount,
       date,
-      remark: fDoc.remark || null,
+      remark: fDoc.paymentRemark || fDoc.remark || null,
       status: fDoc.status || "pending",
     };
 
@@ -794,7 +794,7 @@ export async function listAllPaymentInsightsAction(
         candidateName: fDoc.candidateName,
         amount,
         date,
-        remark: fDoc.remark || null,
+        remark: fDoc.paymentRemark || fDoc.remark || null,
         status: fDoc.status || "pending",
         createdAt:
           typeof fDoc.createdAt === "string"

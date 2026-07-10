@@ -60,7 +60,7 @@ function mapFollowupsDoc(doc: any): PreviousFollowupsPayment {
     candidateName: doc.candidateName,
     amount: Number(doc.amount) || 0,
     date: doc.date,
-    remark: doc.remark || null,
+    remark: doc.paymentRemark || doc.remark || null,
     status: FOLLOWUPS_PAYMENT_STATUS,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt ?? null,
@@ -96,16 +96,27 @@ export async function createPreviousFollowupsPaymentAction(input: {
   assertCanMutateFollowups(actor);
 
   const { databases } = await createAdminClient();
-  const doc = await databases.createDocument(DATABASE_ID, COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS, ID.unique(), {
+  const payload: Record<string, unknown> = {
     leadId: input.leadId?.trim() || makeManualLeadId(),
     company: normalizeCompany(input.company),
     candidateName: input.candidateName.trim(),
     amount: Math.floor(Number(input.amount) || 0),
-    date: input.date, // YYYY-MM-DD
-    remark: input.remark?.trim() || null,
+    date: input.date,
     status: FOLLOWUPS_PAYMENT_STATUS,
     createdAt: new Date().toISOString(),
-  });
+  };
+
+  const paymentRemark = input.remark?.trim();
+  if (paymentRemark) {
+    payload.paymentRemark = paymentRemark;
+  }
+
+  const doc = await databases.createDocument(
+    DATABASE_ID,
+    COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS,
+    ID.unique(),
+    payload,
+  );
 
   return mapFollowupsDoc(doc);
 }
@@ -137,7 +148,7 @@ export async function updatePreviousFollowupsPaymentAction(input: {
   if (input.candidateName !== undefined) payload.candidateName = (input.candidateName || '').trim();
   if (input.amount !== undefined) payload.amount = Math.floor(Number(input.amount) || 0);
   if (input.date !== undefined) payload.date = input.date;
-  if (input.remark !== undefined) payload.remark = input.remark?.trim() || null;
+  if (input.remark !== undefined) payload.paymentRemark = input.remark?.trim() || null;
   payload.status = FOLLOWUPS_PAYMENT_STATUS;
 
   const doc = await databases.updateDocument(
