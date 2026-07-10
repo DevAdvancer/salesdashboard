@@ -419,7 +419,9 @@ export function PaymentsSection({
                       colSpan={2}
                       className="py-2 pl-4 text-right tabular-nums">
                       {currencyFormatter.format(
-                        grandTotals.upfront + grandTotals.pending,
+                        grandTotals.upfront +
+                          grandTotals.pending +
+                          technicalPaymentsTotal,
                       )}
                     </td>
                   </tr>

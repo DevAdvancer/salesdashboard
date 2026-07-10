@@ -6,6 +6,7 @@ import { assertAuthenticatedUserId } from "@/lib/server/current-user";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { isRoleEligibleForComponent } from "@/lib/constants/component-access";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
+import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
 import {
   FOLLOWUPS_PAYMENT_COMPANIES,
   type FollowupsPaymentCompany,
@@ -16,6 +17,60 @@ import {
 
 const MANUAL_FOLLOWUP_LEAD_ID_PREFIX = "manual_followup:";
 const FOLLOWUPS_PAYMENT_STATUS: FollowupsPaymentStatus = "paid";
+const FOLLOWUPS_LEGACY_REMARK_KEY = "remark";
+
+function isUnknownAttributeError(message: string, attribute: string): boolean {
+  return message.includes("Unknown attribute") && message.includes(`"${attribute}"`);
+}
+
+async function updateFollowupsDocumentWithFallback(
+  databases: Awaited<ReturnType<typeof createAdminClient>>["databases"],
+  paymentId: string,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const nextPayload: Record<string, unknown> = { ...payload };
+
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    try {
+      return await databases.updateDocument(
+        DATABASE_ID,
+        COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS,
+        paymentId,
+        nextPayload,
+      );
+    } catch (error) {
+      const message = getAppwriteErrorMessage(error);
+      let changed = false;
+
+      if (isUnknownAttributeError(message, "paymentRemark")) {
+        const remarkValue = nextPayload.paymentRemark;
+        delete nextPayload.paymentRemark;
+        if (remarkValue !== undefined) {
+          nextPayload[FOLLOWUPS_LEGACY_REMARK_KEY] = remarkValue;
+        }
+        changed = true;
+      }
+
+      if (isUnknownAttributeError(message, FOLLOWUPS_LEGACY_REMARK_KEY)) {
+        delete nextPayload[FOLLOWUPS_LEGACY_REMARK_KEY];
+        changed = true;
+      }
+
+      for (const attribute of ["updatedAt", "updatedById", "updatedByName"]) {
+        if (isUnknownAttributeError(message, attribute)) {
+          delete nextPayload[attribute];
+          changed = true;
+        }
+      }
+
+      if (!changed) {
+        throw new Error(message);
+      }
+    }
+  }
+
+  throw new Error("Failed to update followup payment");
+}
 
 async function getActor(userId: string): Promise<User> {
   await assertAuthenticatedUserId(userId);
@@ -151,11 +206,10 @@ export async function updatePreviousFollowupsPaymentAction(input: {
   if (input.remark !== undefined) payload.paymentRemark = input.remark?.trim() || "";
   payload.status = FOLLOWUPS_PAYMENT_STATUS;
 
-  const doc = await databases.updateDocument(
-    DATABASE_ID,
-    COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS,
+  const doc = await updateFollowupsDocumentWithFallback(
+    databases,
     input.paymentId,
-    payload
+    payload,
   );
 
   return mapFollowupsDoc(doc);
