@@ -141,20 +141,16 @@ function MainDashboard({
   const visibilityLabel = isAgent ? "Assigned to you" : "Total active leads";
   const router = useRouter();
 
-  // Date range — initially null to prevent hydration mismatch and double-fetching, initialized via useEffect.
-  const [dateRange, setDateRange] = useState<DateRange | null>(null);
-
-  // Initialize date range from localStorage
-  useEffect(() => {
-    const savedFilter = localStorage.getItem('dashboard_date_filter');
+  // Date range — initialized synchronously from localStorage to prevent hydration mismatch and double-fetching.
+  const [dateRange, setDateRange] = useState<DateRange | null>(() => {
+    if (typeof window === "undefined") return null;
+    const savedFilter = window.localStorage.getItem('dashboard_date_filter');
     const today = getTodayEst();
     if (savedFilter === 'month') {
-      const monthStart = getMonthStartEst(new Date());
-      setDateRange({ from: monthStart, to: today });
-    } else {
-      setDateRange({ from: today, to: today });
+      return { from: getMonthStartEst(new Date()), to: today };
     }
-  }, []);
+    return { from: today, to: today };
+  });
 
   const handleDateRangeChange = (newRange: DateRange) => {
     setDateRange(newRange);
