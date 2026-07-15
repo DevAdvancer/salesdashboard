@@ -191,10 +191,12 @@ export function DynamicLeadForm({
     setError,
     clearErrors,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(schema),
     defaultValues,
+    mode: "onChange",
     resetOptions: { keepValues: true, keepDirty: true },
   });
 
@@ -233,6 +235,8 @@ export function DynamicLeadForm({
   const renderField = (field: FormField) => {
     const error = errors[field.key];
     const errorMessage = error?.message as string | undefined;
+    const fieldValue = watch(field.key);
+    const showAsterisk = shouldShowRequiredAsterisk(field.key, field.required, selectedSource, field) && !fieldValue;
 
     switch (field.type) {
       case "text":
@@ -242,7 +246,7 @@ export function DynamicLeadForm({
           <div key={field.id} className="space-y-2">
             <Label htmlFor={field.key}>
               {field.label}
-              {shouldShowRequiredAsterisk(field.key, field.required, selectedSource, field) && (
+              {showAsterisk && (
                 <span className="text-red-500 ml-1">*</span>
               )}
             </Label>
@@ -272,7 +276,7 @@ export function DynamicLeadForm({
           <div key={field.id} className="space-y-2">
             <Label htmlFor={field.key}>
               {field.label}
-              {shouldShowRequiredAsterisk(field.key, field.required, selectedSource, field) && (
+              {showAsterisk && (
                 <span className="text-red-500 ml-1">*</span>
               )}
             </Label>
@@ -304,7 +308,7 @@ export function DynamicLeadForm({
           <div key={field.id} className="space-y-2">
             <Label htmlFor={field.key}>
               {field.label}
-              {shouldShowRequiredAsterisk(field.key, field.required, selectedSource, field) && (
+              {showAsterisk && (
                 <span className="text-red-500 ml-1">*</span>
               )}
             </Label>
@@ -344,7 +348,7 @@ export function DynamicLeadForm({
           <div key={field.id} className="space-y-2">
             <Label>
               {field.label}
-              {shouldShowRequiredAsterisk(field.key, field.required, selectedSource, field) && (
+              {showAsterisk && (
                 <span className="text-red-500 ml-1">*</span>
               )}
             </Label>

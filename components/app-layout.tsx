@@ -20,7 +20,7 @@ const PRESENCE_EXPIRES_AFTER_MS = 5 * 60 * 1000;
 const PRESENCE_HEARTBEAT_MS = 2 * 60 * 1000;
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, activeDashboard } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
@@ -31,12 +31,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const lastPresenceSyncKey = useRef<string | null>(null);
 
   useEffect(() => {
+    // Post-login landing page depends on the user's active dashboard. Resume-
+    // department users (and leadership previewing the resume view) land on
+    // /resume-dashboard, which they can access; /dashboard is a sales-only
+    // route and would trip ProtectedRoute's permission guard for them.
+    const homePath = activeDashboard === 'resume' ? '/resume-dashboard' : '/dashboard';
+
     // Reset redirect tracking if we've successfully navigated
     if (lastRedirectPath.current && lastRedirectPath.current !== pathname) {
       // We haven't reached the destination yet, don't reset
       if (
         (lastRedirectPath.current === '/login' && pathname !== '/login') ||
-        (lastRedirectPath.current === '/dashboard' && pathname !== '/dashboard')
+        (lastRedirectPath.current === homePath && pathname !== homePath)
       ) {
          // wait for it
       } else {
@@ -47,11 +53,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     if (!loading && !user && !isPublicRoute && lastRedirectPath.current !== '/login') {
       lastRedirectPath.current = '/login';
       router.replace('/login');
-    } else if (!loading && user && pathname === '/login' && lastRedirectPath.current !== '/dashboard') {
-      lastRedirectPath.current = '/dashboard';
-      router.replace('/dashboard');
+    } else if (!loading && user && pathname === '/login' && lastRedirectPath.current !== homePath) {
+      lastRedirectPath.current = homePath;
+      router.replace(homePath);
     }
-  }, [user, loading, isPublicRoute, pathname, router]);
+  }, [user, loading, isPublicRoute, pathname, router, activeDashboard]);
 
   useEffect(() => {
     if (!user || isPublicRoute) return;

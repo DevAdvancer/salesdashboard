@@ -258,6 +258,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(userDoc);
       // Un-gate: the JWT cookie is now set; downstream pages may fire.
       setServerSessionReady(true);
+      // Return the resolved doc so callers can route by department immediately
+      // (state updates are async — reading `user` right after login is stale).
+      return userDoc;
     } catch (error) {
       console.error('Login error:', error);
       // On login failure we still un-gate (with a false user) so protected

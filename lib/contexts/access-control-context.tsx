@@ -38,8 +38,11 @@ export type ComponentKey =
   | 'technical-payments'
   | 'followups-payments'
   | 'resume-dashboard'
+  | 'resume-profiles'
   | 'resume-chat'
-  | 'resume-hierarchy';
+  | 'resume-hierarchy'
+  | 'request-calls'
+  | 'call-requests';
 
 interface AccessControlContextType {
   canAccess: (componentKey: ComponentKey) => boolean;
@@ -70,6 +73,10 @@ const SALES_ONLY_COMPONENTS = new Set<ComponentKey>([
   'linkedin-reports',
   'payments-report',
   'target-report',
+  // Sales → Resume call-request raising page. A Sales-team feature;
+  // resume-team members never raise call requests. Leadership roles are
+  // exempt from the block via canCrossDashboards.
+  'request-calls',
 ]);
 
 function canCrossDashboards(role: NonNullable<ReturnType<typeof useAuth>['user']>['role']) {
@@ -150,7 +157,7 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
     // dashboard. Sales-team members are blocked here regardless of role
     // eligibility, and the empty `COMPONENT_ACCESS` entry for this key
     // means no role-only path opens it.
-    if (componentKey === 'resume-dashboard') {
+    if (componentKey === 'resume-dashboard' || componentKey === 'resume-profiles') {
       if (user.department === 'resume') return true;
       if (
         user.role === 'admin' ||
@@ -183,6 +190,24 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
     // page is a Resume-team-only view; it never renders Sales-team
     // members even if a Sales TL shares the same $id in their data.
     if (componentKey === 'resume-hierarchy') {
+      if (user.department === 'resume') return true;
+      if (
+        user.role === 'admin' ||
+        user.role === 'developer' ||
+        user.role === 'monitor' ||
+        user.role === 'operations'
+      ) {
+        return true;
+      }
+      return false;
+    }
+
+    // Same gating as the resume dashboard / chat / hierarchy. The Calls
+    // page is a Resume-team-only view where incoming Sales call requests
+    // land. Resume-team members always see it; leadership can open it via
+    // the department switcher. Its COMPONENT_ACCESS entry is empty so no
+    // role-only path opens it for Sales-team users.
+    if (componentKey === 'call-requests') {
       if (user.department === 'resume') return true;
       if (
         user.role === 'admin' ||

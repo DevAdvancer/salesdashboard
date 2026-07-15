@@ -87,7 +87,6 @@ export const DEFAULT_FIELDS: FormField[] = [
       'Not Interested',
       'Pipeline / Follow up',
       'Prospect',
-      'Signed/Closure',
       'Backed Out'
     ]
   },

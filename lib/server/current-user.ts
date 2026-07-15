@@ -37,6 +37,11 @@ export async function getAuthenticatedUserDoc(): Promise<User> {
     name: doc.name,
     email: doc.email,
     role: doc.role,
+    // `department` drives the resume/sales split — dropping it here made every
+    // server action that gates on `actor.department` (e.g. call requests) treat
+    // resume users as sales, denying resume TLs/agents access to their pages.
+    department: doc.department || "sales",
+    isActive: doc.isActive,
     teamLeadId: doc.teamLeadId || null,
     branchIds: doc.branchIds || [],
     branchId: doc.branchId || null,

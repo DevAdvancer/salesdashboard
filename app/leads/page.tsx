@@ -540,7 +540,15 @@ function LeadsContent() {
       ...(isMonitor ? [...MONITOR_ONLY_STATUSES] : []),
     ]
       .map((v) => v.trim())
-      .filter(Boolean);
+      .filter((v) => {
+        if (!v) return false;
+        const clean = v.toLowerCase().replace(/[^a-z0-9]/g, "");
+        return (
+          clean !== "signed" &&
+          clean !== "closure" &&
+          clean !== "signedclosure"
+        );
+      });
     return Array.from(new Set(merged));
   }, [formConfigQuery.data, isMonitor]);
 

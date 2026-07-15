@@ -23,7 +23,6 @@ describe("lead status workflow", () => {
   it("allows final statuses after Pipeline / Follow up", () => {
     expect(getLeadEditAllowedStatuses("Pipeline / Follow up")).toEqual([
       "Pipeline / Follow up",
-      "Signed/Closure",
       "Backed Out",
     ]);
   });

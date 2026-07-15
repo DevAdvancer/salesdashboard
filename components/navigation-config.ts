@@ -16,6 +16,7 @@ import {
   MessageSquare,
   Network,
   NotebookTabs,
+  PhoneCall,
   ShieldCheck,
   Settings,
   Target,
@@ -66,6 +67,9 @@ export const appIcons = {
   followupsPayments: Wallet,
   resumeDashboard: FileSpreadsheet,
   resumeHierarchy: Network,
+  requestCalls: PhoneCall,
+  callRequests: PhoneCall,
+  resumeProfiles: FileText,
 } satisfies Record<string, AppIcon>;
 
 export const NAV_ITEMS: NavItem[] = [
@@ -78,6 +82,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'leads', label: 'Leads', href: '/leads', icon: appIcons.leads },
   { key: 'lead-requests', label: 'Lead Requests', href: '/lead-requests', icon: appIcons.leadRequests },
   { key: 'history', label: 'Client', href: '/client', icon: appIcons.clients },
+  { key: 'request-calls', label: 'Request Calls', href: '/request-calls', icon: appIcons.requestCalls },
   { key: 'work-queue', label: 'Work Queue', href: '/work-queue', icon: appIcons.workQueue },
   { key: 'reports', label: 'Reports', href: '/reports', icon: appIcons.reports },
   { key: 'coaching-notes', label: 'Coaching Notes', href: '/coaching-notes', icon: appIcons.coachingNotes },
@@ -90,6 +95,8 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'technical-payments', label: 'Technical Payments', href: '/technical-payments', icon: appIcons.technicalPayments },
   { key: 'followups-payments', label: 'Followups Payments', href: '/previous-followups-payments', icon: appIcons.followupsPayments },
   { key: 'resume-dashboard', label: 'Resume Dashboard', href: '/resume-dashboard', icon: appIcons.resumeDashboard },
+  { key: 'call-requests', label: 'Calls', href: '/call-requests', icon: appIcons.callRequests },
+  { key: 'resume-profiles', label: 'Resume Profiles', href: '/resume', icon: appIcons.resumeProfiles },
   { key: 'resume-hierarchy', label: 'Resume Hierarchy', href: '/resume-hierarchy', icon: appIcons.resumeHierarchy },
   { key: 'mock', label: 'Mock Interview', href: '/mock', icon: appIcons.mock },
   { key: 'assessment-support', label: 'Assessment Support', href: '/assessment-support', icon: appIcons.assessmentSupport },

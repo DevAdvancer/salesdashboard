@@ -411,13 +411,28 @@ export function PaymentsSection({
                       {currencyFormatter.format(grandTotals.remaining)}
                     </td>
                   </tr>
-                  <tr className="font-semibold text-emerald-700">
-                    <td colSpan={4} className="py-2 pr-4">
-                      Total Revenue
+                  <tr className="border-t border-[var(--hairline-soft)] font-semibold text-blue-700">
+                    <td colSpan={3} className="py-2 pr-4">
+                      Technical paid (Assessments & Interviews)
                     </td>
-                    <td
-                      colSpan={2}
-                      className="py-2 pl-4 text-right tabular-nums">
+                    <td className="py-2 px-4 text-right tabular-nums">
+                      {currencyFormatter.format(technicalPaymentsTotal)}
+                    </td>
+                    <td colSpan={2}></td>
+                  </tr>
+                  <tr className="border-t-2 border-[var(--hairline)] font-bold text-emerald-700">
+                    <td colSpan={3} className="py-2 pr-4">
+                      Total Revenue (Upfront + Pending + Technical)
+                    </td>
+                    <td className="py-2 px-4 text-right tabular-nums">
+                      {currencyFormatter.format(
+                        grandTotals.upfront + technicalPaymentsTotal,
+                      )}
+                    </td>
+                    <td className="py-2 px-4 text-right tabular-nums">
+                      {currencyFormatter.format(grandTotals.pending)}
+                    </td>
+                    <td className="py-2 pl-4 text-right tabular-nums">
                       {currencyFormatter.format(
                         grandTotals.upfront +
                           grandTotals.pending +
@@ -450,7 +465,7 @@ export function PaymentsSection({
         <div>
           <h4 className="mb-3 text-sm font-semibold">Payments by Person</h4>
           <p className="mb-2 text-xs text-muted-foreground">
-            Shows team technical payments and open pending amounts.
+            Shows open pending amounts by company.
           </p>
           {(() => {
             const pendingRows = filteredRecords.filter(
@@ -460,10 +475,10 @@ export function PaymentsSection({
                 record.pendingTotal > 0,
             );
 
-            if (pendingRows.length === 0 && !technicalPaymentsTotal) {
+            if (pendingRows.length === 0) {
               return (
                 <div className="flex h-24 items-center justify-center rounded-md border border-dashed border-[var(--hairline)] text-sm text-[var(--mute)]">
-                  No payments by person to display
+                  No pending payments to display
                 </div>
               );
             }
@@ -485,26 +500,6 @@ export function PaymentsSection({
                     </tr>
                   </thead>
                   <tbody>
-                    {/* Technical payments row placeholder */}
-                    {technicalPaymentsTotal ? (
-                      <tr className="border-b border-[var(--hairline-soft)]">
-                        <td className="py-2 pr-4 font-medium">Team</td>
-                        <td className="py-2 px-4">
-                          <Badge
-                            variant="default"
-                            className="bg-blue-100 text-blue-800">
-                            Technical
-                          </Badge>
-                        </td>
-                        <td className="py-2 px-4 text-muted-foreground">—</td>
-                        <td className="py-2 px-4 text-muted-foreground">—</td>
-                        <td className="py-2 px-4 text-muted-foreground">—</td>
-                        <td className="py-2 px-4 text-muted-foreground">—</td>
-                        <td className="py-2 pl-4 text-right font-mono font-medium">
-                          {currencyFormatter.format(technicalPaymentsTotal)}
-                        </td>
-                      </tr>
-                    ) : null}
 
                     {/* Pending amounts per person */}
                     {pendingRows.map((record) => (

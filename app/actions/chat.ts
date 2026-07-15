@@ -43,6 +43,17 @@ function truncateNotificationBody(value: string) {
   return `${trimmed.slice(0, 157)}...`;
 }
 
+/**
+ * Resume-team chat lives in its own collection; the Sales team keeps using
+ * `chat_messages`. Both tables share an identical document shape so the same
+ * read/write code serves either department — only the target collection differs.
+ */
+function chatCollectionForDepartment(department: Department) {
+  return department === "resume"
+    ? COLLECTIONS.RESUME_CHAT_MESSAGES
+    : COLLECTIONS.CHAT_MESSAGES;
+}
+
 export async function listChatMessagesAction(input: {
   currentUserId: string;
   channel?: ChatChannelType;
@@ -63,12 +74,16 @@ export async function listChatMessagesAction(input: {
   const channel: ChatChannelType = input.channel ?? "general";
 
   const { databases } = await createAdminClient();
-  const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.CHAT_MESSAGES, [
-    Query.equal("channel", channel),
-    Query.equal("department", input.department),
-    Query.orderAsc("createdAt"),
-    Query.limit(Math.min(Math.max(input.limit ?? 200, 1), 200)),
-  ]);
+  const response = await databases.listDocuments(
+    DATABASE_ID,
+    chatCollectionForDepartment(input.department),
+    [
+      Query.equal("channel", channel),
+      Query.equal("department", input.department),
+      Query.orderAsc("createdAt"),
+      Query.limit(Math.min(Math.max(input.limit ?? 200, 1), 200)),
+    ],
+  );
 
   return response.documents as unknown as ChatMessage[];
 }
@@ -107,7 +122,7 @@ export async function sendChatMessageAction(input: {
   const createdAt = new Date().toISOString();
   const doc = await databases.createDocument(
     DATABASE_ID,
-    COLLECTIONS.CHAT_MESSAGES,
+    chatCollectionForDepartment(input.department),
     ID.unique(),
     {
       channel,

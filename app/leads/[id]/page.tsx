@@ -51,6 +51,7 @@ import { LeadNotesCard } from "@/components/leads/lead-notes-card";
 import { storage } from "@/lib/appwrite";
 import { BUCKETS } from "@/lib/constants/appwrite";
 import {
+  LEAD_STATUS_SIGNED_CLOSURE,
   LEAD_WORKFLOW_STATUSES,
   MONITOR_ONLY_STATUSES,
   getLeadEditAllowedStatusesForRole,
@@ -833,10 +834,19 @@ function LeadDetailContent() {
               ...roleScopedOptions,
             ]),
           );
-          const options =
+          const rawOptions =
             value && !mergedOptions.includes(value)
               ? [value, ...mergedOptions]
               : mergedOptions;
+          const options = rawOptions.filter((opt) => {
+            const clean = opt.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+            return (
+              clean !== "signed" &&
+              clean !== "closure" &&
+              clean !== "signedclosure" &&
+              canonicalizeLeadStatus(opt) !== LEAD_STATUS_SIGNED_CLOSURE
+            );
+          });
 
           return (
             <>
@@ -900,8 +910,10 @@ function LeadDetailContent() {
         // bypasses the close-time gate entirely.
         const isCloseRequiredField =
           field.key === "lastName" || field.key === "legalName";
+        const strValue = String(value || "").trim().toLowerCase();
+        const isMissingValue = strValue === "" || strValue === "n/a" || strValue === "na";
         const isCloseRequiredFieldMissing =
-          isCloseRequiredField && Boolean(lead && !lead.isClosed);
+          isCloseRequiredField && Boolean(lead && !lead.isClosed) && isMissingValue;
         return (
           <>
             <Input

@@ -50,7 +50,22 @@ export function showBrowserNotification(title: string, options?: NotificationOpt
   }
 }
 
-// Request permission on module load (client-side only)
-if (typeof window !== 'undefined') {
-  requestNotificationPermission();
+/**
+ * Prime the OS notification permission from a real user gesture.
+ *
+ * Chromium-based browsers (Chrome/Edge) silently ignore
+ * `Notification.requestPermission()` unless it is triggered by a user
+ * gesture (click, keydown, etc.). The previous implementation called it on
+ * module load, so the prompt never appeared and permission stayed at
+ * `default` — which is why `showBrowserNotification` never fired. Call this
+ * from an onClick / send handler instead. Safe to call repeatedly: it's a
+ * no-op once permission is already granted or denied.
+ */
+export function primeNotificationPermission(): void {
+  if (typeof window === 'undefined' || !('Notification' in window)) {
+    return;
+  }
+  if (Notification.permission === 'default') {
+    void Notification.requestPermission().catch(() => {});
+  }
 }

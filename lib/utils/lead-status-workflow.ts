@@ -97,7 +97,6 @@ export function getLeadEditAllowedStatusesForRole(
   if (normalized === "pipelinefollowup") {
     return [
       LEAD_STATUS_PIPELINE,
-      LEAD_STATUS_SIGNED_CLOSURE,
       LEAD_STATUS_BACKED_OUT,
       ...monitorOnlySuffix,
     ];
@@ -106,7 +105,7 @@ export function getLeadEditAllowedStatusesForRole(
     return [LEAD_STATUS_NOT_INTERESTED, ...monitorOnlySuffix];
   }
   if (normalized === "signedclosure") {
-    return [LEAD_STATUS_SIGNED_CLOSURE, ...monitorOnlySuffix];
+    return [...LEAD_WORKFLOW_STATUSES, ...monitorOnlySuffix];
   }
   if (normalized === "backedout") {
     return [LEAD_STATUS_BACKED_OUT, ...monitorOnlySuffix];
@@ -126,7 +125,7 @@ export function getLeadEditAllowedStatusesForRole(
       : [LEAD_STATUS_LEADS];
   }
 
-  return canonical
+  return canonical && canonical !== LEAD_STATUS_SIGNED_CLOSURE
     ? [canonical, ...LEAD_WORKFLOW_STATUSES, ...monitorOnlySuffix]
     : [...LEAD_WORKFLOW_STATUSES, ...monitorOnlySuffix];
 }

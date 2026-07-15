@@ -173,6 +173,110 @@ export interface CreateLeadInput {
 
 export type LeadRequestStatus = 'pending' | 'moved' | 'rejected';
 
+// ─── Call Requests (Sales → Resume) ─────────────────────────────────────────
+// A Sales agent/team_lead raises a call request against one of their clients.
+// The Resume team lead sees it on the Calls page and either handles it or
+// assigns it to a Resume user. Status walks not_called → pending_documents →
+// call_done. The per-request chat is stored as a JSON array on the document —
+// each message is tagged with the sender's team so the same thread renders
+// "Sales" and "Resume" sides. System lines (status changes) use team 'system'.
+export type CallRequestStatus = 'not_called' | 'pending_documents' | 'call_done';
+
+export const CALL_REQUEST_STATUSES: CallRequestStatus[] = [
+  'not_called',
+  'pending_documents',
+  'call_done',
+];
+
+export function isValidCallRequestStatus(value: string): value is CallRequestStatus {
+  return CALL_REQUEST_STATUSES.includes(value as CallRequestStatus);
+}
+
+export type CallRequestChatTeam = 'sales' | 'resume' | 'system';
+
+export interface CallRequestChatMessage {
+  id: string;
+  team: CallRequestChatTeam;
+  senderId: string;
+  senderName: string;
+  body: string;
+  createdAt: string;
+}
+
+// One snapshot entry of the document checklist confirmed at submit time.
+export interface CallRequestChecklistItem {
+  key: string;
+  label: string;
+  confirmed: boolean;
+}
+
+export interface CallRequest {
+  $id: string;
+  leadId: string;
+  clientName: string;
+  status: CallRequestStatus;
+  requestedById: string;
+  requestedByName: string;
+  assignedToId?: string | null;
+  assignedToName?: string | null;
+  /** JSON string: CallRequestChecklistItem[] */
+  documentsChecklist?: string | null;
+  /** JSON string: CallRequestChatMessage[] */
+  chat?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+  $createdAt?: string;
+  $updatedAt?: string;
+}
+
+export type ResumeProfileStage =
+  | '1. Draft'
+  | '2. Sent'
+  | '3. Modification /Approval (candidate/client)'
+  | '4. Marketing'
+  | '5. Doc Missing (Not calculated in the timeline)';
+
+export const RESUME_PROFILE_STAGES: ResumeProfileStage[] = [
+  '1. Draft',
+  '2. Sent',
+  '3. Modification /Approval (candidate/client)',
+  '4. Marketing',
+  '5. Doc Missing (Not calculated in the timeline)',
+];
+
+export interface ResumeProfile {
+  $id: string;
+  callRequestId?: string | null;
+  leadId?: string | null;
+  candidateName: string;
+  technology?: string | null;
+  usaArrival?: string | null;
+  bachelors?: string | null;
+  masters?: string | null;
+  cpt?: string | null;
+  cptDetails?: string | null;
+  opt?: string | null;
+  optDetails?: string | null;
+  stemOpt?: string | null;
+  stemOptDetails?: string | null;
+  indiaExperience?: string | null;
+  missingDocs?: string | null;
+  resumeTimeline?: string | null;
+  remarks?: string | null;
+  stage: ResumeProfileStage | string;
+  assignedToId?: string | null;
+  assignedToName?: string | null;
+  createdBy?: string | null;
+  createdByName?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+  stageUpdatedAt?: string | null;
+  lastAlertStage?: string | null;
+  lastAlertAt?: string | null;
+  $createdAt?: string;
+  $updatedAt?: string;
+}
+
 export interface LeadRequest {
   $id: string;
   name: string;
@@ -270,10 +374,13 @@ export type ComponentKey =
   | 'payments-report'
   | 'target-report'
   | 'resume-dashboard'
+  | 'resume-profiles'
   | 'resume-chat'
   | 'resume-hierarchy'
   | 'technical-payments'
-  | 'followups-payments';
+  | 'followups-payments'
+  | 'request-calls'
+  | 'call-requests';
 
 export interface AccessRule {
   $id?: string;
@@ -437,7 +544,7 @@ export interface AuthContext {
    * legacy a_session_* cookie loop and may 500 with "No session".
    */
   serverSessionReady: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User | null>;
   logout: () => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
 }

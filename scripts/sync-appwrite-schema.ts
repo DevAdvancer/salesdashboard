@@ -157,6 +157,33 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
     ],
   },
 
+  // ─── Resume Chat Messages ────────────────────────────────────────────────
+  // Dedicated store for the Resume team's chat, isolated from the Sales
+  // `chat_messages` table. Identical shape and channels (announcement /
+  // general); every row is a resume-team message. See app/actions/chat.ts
+  // (chatCollectionForDepartment).
+  [COLLECTIONS.RESUME_CHAT_MESSAGES]: {
+    attributes: [
+      { key: 'channel', type: 'string', required: true, size: 32 },
+      { key: 'body', type: 'string', required: true, size: 8000 },
+      { key: 'createdById', type: 'string', required: true, size: 64 },
+      { key: 'createdByName', type: 'string', required: true, size: 255 },
+      { key: 'createdAt', type: 'datetime', required: true },
+      {
+        key: 'department',
+        type: 'enum',
+        required: false,
+        default: 'resume',
+        values: ['sales', 'resume'],
+      },
+    ],
+    indexes: [
+      { key: 'channel_idx', type: 'key', attributes: ['channel'] },
+      { key: 'department_idx', type: 'key', attributes: ['department'] },
+      { key: 'channel_department_idx', type: 'key', attributes: ['channel', 'department'] },
+    ],
+  },
+
   // ─── LG Handoffs ────────────────────────────────────────────────────────
   // Source of truth for the "Lead Gen Team Handoffs" dashboard count.
   // One document per (lead, original Team Lead) pair, written the
@@ -287,6 +314,87 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
     indexes: [
       { key: 'holiday_date_idx', type: 'unique', attributes: ['holidayDate'] },
       { key: 'created_idx', type: 'key', attributes: ['createdAt'] },
+    ],
+  },
+
+  // ─── Call Requests (Sales → Resume) ──────────────────────────────────────
+  // One document per Sales → Resume call request. `status` walks
+  // not_called → pending_documents → call_done. `documentsChecklist` is a
+  // JSON snapshot of the checklist the Sales user confirmed at submit time.
+  // `chat` is a JSON array of per-request messages, each tagged with the
+  // sender's team ("sales" / "resume" / "system"), so the same thread is
+  // rendered from both sides. See app/actions/call-requests.ts.
+  [COLLECTIONS.CALL_REQUESTS]: {
+    attributes: [
+      { key: 'leadId', type: 'string', required: true, size: 255 },
+      { key: 'clientName', type: 'string', required: true, size: 255 },
+      {
+        key: 'status',
+        type: 'enum',
+        required: true,
+        default: 'not_called',
+        values: ['not_called', 'pending_documents', 'call_done'],
+      },
+      { key: 'requestedById', type: 'string', required: true, size: 255 },
+      { key: 'requestedByName', type: 'string', required: true, size: 255 },
+      { key: 'assignedToId', type: 'string', required: false, size: 255 },
+      { key: 'assignedToName', type: 'string', required: false, size: 255 },
+      { key: 'documentsChecklist', type: 'string', required: false, size: 4000 },
+      // Per-request chat lives here as a JSON array. Sized generously so a
+      // long back-and-forth between the two teams fits in one document.
+      { key: 'chat', type: 'string', required: false, size: 100000 },
+      { key: 'createdAt', type: 'datetime', required: true },
+      { key: 'updatedAt', type: 'datetime', required: false },
+    ],
+    indexes: [
+      { key: 'status_idx', type: 'key', attributes: ['status'] },
+      { key: 'requested_by_idx', type: 'key', attributes: ['requestedById'] },
+      { key: 'assigned_to_idx', type: 'key', attributes: ['assignedToId'] },
+      { key: 'lead_idx', type: 'key', attributes: ['leadId'] },
+      { key: 'created_idx', type: 'key', attributes: ['createdAt'] },
+    ],
+  },
+  [COLLECTIONS.RESUME_PROFILES]: {
+    attributes: [
+      { key: 'callRequestId', type: 'string', required: false, size: 255 },
+      { key: 'leadId', type: 'string', required: false, size: 255 },
+      { key: 'candidateName', type: 'string', required: true, size: 255 },
+      { key: 'technology', type: 'string', required: false, size: 255 },
+      { key: 'usaArrival', type: 'string', required: false, size: 255 },
+      { key: 'bachelors', type: 'string', required: false, size: 255 },
+      { key: 'masters', type: 'string', required: false, size: 255 },
+      { key: 'cpt', type: 'string', required: false, size: 20 },
+      { key: 'cptDetails', type: 'string', required: false, size: 1000 },
+      { key: 'opt', type: 'string', required: false, size: 20 },
+      { key: 'optDetails', type: 'string', required: false, size: 1000 },
+      { key: 'stemOpt', type: 'string', required: false, size: 20 },
+      { key: 'stemOptDetails', type: 'string', required: false, size: 1000 },
+      { key: 'indiaExperience', type: 'string', required: false, size: 2000 },
+      { key: 'missingDocs', type: 'string', required: false, size: 1500 },
+      { key: 'resumeTimeline', type: 'string', required: false, size: 2500 },
+      { key: 'remarks', type: 'string', required: false, size: 2000 },
+      {
+        key: 'stage',
+        type: 'string',
+        required: false,
+        size: 255,
+        default: '1. Draft',
+      },
+      { key: 'assignedToId', type: 'string', required: false, size: 255 },
+      { key: 'assignedToName', type: 'string', required: false, size: 255 },
+      { key: 'createdBy', type: 'string', required: false, size: 255 },
+      { key: 'createdByName', type: 'string', required: false, size: 255 },
+      { key: 'createdAt', type: 'datetime', required: true },
+      { key: 'updatedAt', type: 'datetime', required: false },
+      { key: 'stageUpdatedAt', type: 'datetime', required: false },
+      { key: 'lastAlertStage', type: 'string', required: false, size: 255 },
+      { key: 'lastAlertAt', type: 'datetime', required: false },
+    ],
+    indexes: [
+      { key: 'stage_idx', type: 'key', attributes: ['stage'] },
+      { key: 'assigned_to_idx', type: 'key', attributes: ['assignedToId'] },
+      { key: 'call_req_idx', type: 'key', attributes: ['callRequestId'] },
+      { key: 'stage_updated_idx', type: 'key', attributes: ['stageUpdatedAt'] },
     ],
   },
 };

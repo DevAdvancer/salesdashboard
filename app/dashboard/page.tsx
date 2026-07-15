@@ -37,7 +37,7 @@ import {
 import { workingDaysInRange as countWorkingDaysInRange } from "@/lib/utils/holiday-calendar";
 import type { ReferralSplit } from "@/lib/utils/dashboard-referral";
 import type { PaymentInsightRecord } from "@/app/actions/client-payments";
-import { getTechnicalPaymentsByLeadIdsAction } from "@/app/actions/technical-payments";
+import { listTechnicalPaymentsAction } from "@/app/actions/technical-payments";
 import type { TeamLeadAssignmentSummary } from "@/lib/utils/dashboard-insights";
 import { getTodayEst, getMonthStartEst, getMonthEndEst } from "@/lib/utils/est-date";
 import type { HolidayCalendarEntry } from "@/lib/types";
@@ -174,6 +174,7 @@ function MainDashboard({
   const [technicalPaymentsTotal, setTechnicalPaymentsTotal] = useState(0);
   const [referralData, setReferralData] = useState<ReferralSplit | null>(null);
   const [referralLoading, setReferralLoading] = useState(isAdminLike);
+
 
   // LG Handoff summaries (admin-like only)
   const [handoffSummaries, setHandoffSummaries] = useState<TeamLeadAssignmentSummary[] | null>(null);
@@ -358,28 +359,28 @@ function MainDashboard({
     };
   }, [user, isAdminLike, dateRange]);
 
-  // ── Fetch technical payments total for dashboard (uses paymentRecords leadIds) ──
+  // ── Fetch technical payments total for dashboard (all accessible technical payments in date range) ──
   useEffect(() => {
-    if (!user || !isAdminLike || paymentRecords.length === 0) {
-      if (paymentRecords.length === 0) setTechnicalPaymentsTotal(0);
+    if (!user || !isAdminLike) {
+      setTechnicalPaymentsTotal(0);
       return;
     }
     let cancelled = false;
 
     (async () => {
       try {
-        const leadIds = paymentRecords.map((r) => r.leadId);
-        const techPayments = await getTechnicalPaymentsByLeadIdsAction(user.$id, leadIds);
+        const techPayments = await listTechnicalPaymentsAction(user.$id);
 
         // Filter by date range to only include payments from the selected period
         const filteredTechPayments = techPayments.filter(p => {
-          const paymentDate = p.createdAt.substring(0, 10);
+          const paymentDate = p.createdAt?.substring(0, 10);
+          if (!paymentDate) return false;
           return (!dateRange.from || paymentDate >= dateRange.from) &&
                  (!dateRange.to || paymentDate <= dateRange.to);
         });
 
         if (!cancelled) {
-          const techTotal = filteredTechPayments.reduce((sum: number, p: { amount: number }) => sum + p.amount, 0);
+          const techTotal = filteredTechPayments.reduce((sum: number, p: { amount: number }) => sum + (Number(p.amount) || 0), 0);
           setTechnicalPaymentsTotal(techTotal);
         }
       } catch (error) {
@@ -393,7 +394,7 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, isAdminLike, paymentRecords, dateRange]);
+  }, [user, isAdminLike, dateRange]);
 
   // ── Fetch referral split (admin-like only, current month by closedAt) ───
   useEffect(() => {

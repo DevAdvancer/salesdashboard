@@ -39,6 +39,7 @@ export const COMPONENT_ACCESS: RoleAccessMap = {
   // short-circuit in AccessControlProvider.canAccess (resume team members
   // and the leadership roles). Sales-team members are blocked at that gate.
   'resume-dashboard': [],
+  'resume-profiles': [],
   // Same gating as resume-dashboard — opened only by the department
   // short-circuit in canAccess, never by role eligibility alone.
   'resume-chat': [],
@@ -46,6 +47,16 @@ export const COMPONENT_ACCESS: RoleAccessMap = {
   // hierarchy page is a Resume-team-only view. Leadership roles can
   // open it via the short-circuit in canAccess.
   'resume-hierarchy': [],
+  // Sales → Resume call-request raising page. Sales agents and team
+  // leads raise requests against their own clients; leadership roles
+  // can view. Resume-team members are blocked by SALES_ONLY_COMPONENTS
+  // in AccessControlProvider regardless of role.
+  'request-calls': ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent'],
+  // Empty by design — `call-requests` (the Resume "Calls" page) opens
+  // only via the department short-circuit in AccessControlProvider
+  // .canAccess (resume team members + leadership). Sales-team members
+  // are blocked at that gate.
+  'call-requests': [],
 };
 
 export function isRoleEligibleForComponent(

@@ -85,14 +85,14 @@ export function Navigation({
     : NAV_ITEMS.filter((item) => canAccess(item.key as ComponentKey));
 
   // Define section grouping
-  const agentItemKeys = new Set(["dashboard", "leads", "history", "work-queue"]);
+  const agentItemKeys = new Set(["dashboard", "leads", "history", "request-calls", "work-queue"]);
   const attendanceItemKeys = new Set(["attendance", "attendance-report"]);
   const teamLeadItemKeys = new Set(["user-management", "reports", "coaching-notes", "review-queue"]);
   const adminItemKeys = new Set(["branch-management", "hierarchy", "lead-requests", "audit-logs", "settings"]);
   const technicalItemKeys = new Set(["mock", "interview-support", "assessment-support"]);
   const linkedinItemKeys = new Set(["linkedin-requests", "linkedin-account-management", "linkedin-reports"]);
   const paymentsItemKeys = new Set(["payments-report", "target-report", "technical-payments", "followups-payments"]);
-  const resumeItemKeys = new Set(["resume-dashboard", "resume-hierarchy"]);
+  const resumeItemKeys = new Set(["resume-dashboard", "resume-profiles", "call-requests", "resume-hierarchy"]);
 
   // Resume-team members get a slim sidebar: the Resume Dashboard, the
   // Resume Team chat, and (for the resume team lead) User Management so
@@ -123,7 +123,13 @@ export function Navigation({
   const technicalItems = itemsForUser.filter((item) => technicalItemKeys.has(item.key));
   const linkedinItems = itemsForUser.filter((item) => linkedinItemKeys.has(item.key));
   const paymentsItems = itemsForUser.filter((item) => paymentsItemKeys.has(item.key));
-  const chatItem = itemsForUser.find((item) => item.key === "chat") ?? null;
+  // The collapsible Chatting section is driven by the sales "chat" item on the
+  // Sales sidebar and the "resume-chat" item on the Resume sidebar (resume
+  // users never have the "chat" key in itemsForUser, only "resume-chat").
+  const chatItem =
+    itemsForUser.find((item) => item.key === "chat") ??
+    itemsForUser.find((item) => item.key === "resume-chat") ??
+    null;
   // Resume CRM uses its own chat channels; route the collapsible chat
   // section to /resume-chat/* when the user is on the Resume sidebar so
   // announcement / general open the resume counterparts, not the sales
@@ -313,16 +319,22 @@ export function Navigation({
   if (activeDashboard === "resume") {
     const resumeDashboardItem =
       itemsForUser.find((item) => item.key === "resume-dashboard") ?? null;
+    const resumeProfilesItem =
+      itemsForUser.find((item) => item.key === "resume-profiles") ?? null;
     const resumeHierarchyItem =
       itemsForUser.find((item) => item.key === "resume-hierarchy") ?? null;
+    const resumeCallsItem =
+      itemsForUser.find((item) => item.key === "call-requests") ?? null;
     const resumeUserMgmtItem =
       itemsForUser.find((item) => item.key === "user-management") ?? null;
 
-    if (resumeDashboardItem) {
+    if (resumeDashboardItem || resumeProfilesItem || resumeCallsItem) {
       renderedItems.push(
         <div key="section-resume-workspace">
           {renderSectionHeader("Resume Workspace")}
-          {renderNavButton(resumeDashboardItem)}
+          {resumeDashboardItem && renderNavButton(resumeDashboardItem)}
+          {resumeCallsItem && renderNavButton(resumeCallsItem)}
+          {resumeProfilesItem && renderNavButton(resumeProfilesItem)}
         </div>
       );
     }

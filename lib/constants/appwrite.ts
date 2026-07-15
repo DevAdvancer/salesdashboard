@@ -16,6 +16,11 @@ export const COLLECTIONS = {
   NOTIFICATIONS: process.env.NEXT_PUBLIC_APPWRITE_NOTIFICATIONS_COLLECTION_ID ?? 'notifications',
   ATTENDANCE: process.env.NEXT_PUBLIC_APPWRITE_ATTENDANCE_COLLECTION_ID ?? 'attendance',
   CHAT_MESSAGES: process.env.NEXT_PUBLIC_APPWRITE_CHAT_MESSAGES_COLLECTION_ID ?? 'chat_messages',
+  // Dedicated store for the Resume team's chat, kept separate from the Sales
+  // `chat_messages` table. Same document shape (channel/body/author/createdAt)
+  // and same channels (announcement / general); the department column is still
+  // written for parity but every row here is a resume-team message.
+  RESUME_CHAT_MESSAGES: process.env.NEXT_PUBLIC_APPWRITE_RESUME_CHAT_MESSAGES_COLLECTION_ID ?? 'resume_chat_messages',
   CLIENT_PAYMENTS: process.env.NEXT_PUBLIC_APPWRITE_CLIENT_PAYMENTS_COLLECTION_ID ?? 'client_payments',
   LEAD_REQUESTS: process.env.NEXT_PUBLIC_APPWRITE_LEAD_REQUESTS_COLLECTION_ID ?? 'lead_requests',
   LINKEDIN_ACCOUNTS: process.env.NEXT_PUBLIC_APPWRITE_LINKEDIN_ACCOUNTS_COLLECTION_ID ?? 'linkedin_accounts',
@@ -49,6 +54,13 @@ export const COLLECTIONS = {
   PREVIOUS_FOLLOWUPS_PAYMENTS: process.env.NEXT_PUBLIC_APPWRITE_PREVIOUS_FOLLOWUPS_PAYMENTS_COLLECTION_ID ?? 'previous_followups_payments',
   // One doc per holiday date used to exclude weekday holidays from KPI math.
   HOLIDAY_CALENDAR: process.env.NEXT_PUBLIC_APPWRITE_HOLIDAY_CALENDAR_COLLECTION_ID ?? 'holiday_calendar',
+  // One doc per Sales → Resume "call request". Carries the request status
+  // (not_called → pending_documents → call_done), the assigned Resume user,
+  // a snapshot of the document checklist confirmed at submit time, and the
+  // per-request chat stored as a JSON array (each message tagged with the
+  // sender's team). See app/actions/call-requests.ts.
+  CALL_REQUESTS: process.env.NEXT_PUBLIC_APPWRITE_CALL_REQUESTS_COLLECTION_ID ?? 'call_requests',
+  RESUME_PROFILES: process.env.NEXT_PUBLIC_APPWRITE_RESUME_PROFILES_COLLECTION_ID ?? 'resume_profiles',
 };
 
 export const BUCKETS = {

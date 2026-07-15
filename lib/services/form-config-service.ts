@@ -47,7 +47,7 @@ export const DEFAULT_FIELDS: FormField[] = [
     required: true,
     visible: true,
     order: 7,
-    options: ['Interested', 'Not Interested', 'Pipeline', 'Prospect', 'Signed'],
+    options: ['Interested', 'Not Interested', 'Pipeline / Follow up', 'Prospect'],
   },
   { id: '8', type: 'text', label: 'Legal Name', key: 'legalName', required: true, visible: true, order: 8 },
   {
@@ -186,6 +186,12 @@ function dedupeOptions(options: unknown, fieldKey?: string): string[] | undefine
     if (typeof entry !== 'string') continue;
     const normalized = entry.trim();
     if (!normalized) continue;
+    if (fieldKey === 'status') {
+      const clean = normalized.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (clean === 'signed' || clean === 'closure' || clean === 'signedclosure') {
+        continue;
+      }
+    }
     const canonical = canonicalizeOption(normalized, fieldKey);
     const key = buildOptionKey(canonical, fieldKey);
     if (seen.has(key)) continue;
