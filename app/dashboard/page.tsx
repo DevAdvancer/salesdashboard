@@ -597,7 +597,7 @@ function MainDashboard({
         mode={kpiMode}
         target={kpiTarget}
         scopeLabel={scopeLabel}
-        rangeLabel={rangeLabel(dateRange)}
+        rangeLabel={dateRange ? rangeLabel(dateRange) : ""}
       />
 
       {/* LinkedIn daily/monthly Connection limit KPI */}
@@ -606,7 +606,7 @@ function MainDashboard({
           rows={linkedinKpiRows}
           isLoading={linkedinKpiLoading}
           mode={kpiMode}
-          rangeLabel={rangeLabel(dateRange)}
+          rangeLabel={dateRange ? rangeLabel(dateRange) : ""}
         />
       )}
 
@@ -615,7 +615,7 @@ function MainDashboard({
         <ReferralSection
           data={referralData}
           isLoading={referralLoading}
-          rangeLabel={rangeLabel(dateRange)}
+          rangeLabel={dateRange ? rangeLabel(dateRange) : ""}
         />
       )}
 
@@ -632,8 +632,8 @@ function MainDashboard({
         <PaymentsSection
           records={paymentRecords}
           isLoading={paymentLoading}
-          rangeLabel={rangeLabel(dateRange)}
-          dateFilter={dateRange}
+          rangeLabel={dateRange ? rangeLabel(dateRange) : ""}
+          dateFilter={dateRange!}
           technicalPaymentsTotal={technicalPaymentsTotal}
         />
       )}
