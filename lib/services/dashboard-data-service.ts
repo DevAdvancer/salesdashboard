@@ -38,7 +38,7 @@ import type { HolidayCalendarEntry } from "@/lib/types";
 import type { TeamLeadAssignmentSummary } from "@/lib/utils/dashboard-insights";
 
 const DASHBOARD_DATA_SCOPE = "dashboard:data";
-const DASHBOARD_DATA_TTL_MS = 60 * 1000;
+const DASHBOARD_DATA_TTL_MS = 5 * 60 * 1000;
 const DASHBOARD_TOP_METRICS_SCOPE = "dashboard:topMetrics";
 const DASHBOARD_LEAD_TARGET_SCOPE = "dashboard:leadTarget";
 const DASHBOARD_REFERRAL_SCOPE = "dashboard:referral";

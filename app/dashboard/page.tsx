@@ -141,11 +141,32 @@ function MainDashboard({
   const visibilityLabel = isAgent ? "Assigned to you" : "Total active leads";
   const router = useRouter();
 
-  // Date range — defaults to today in EST (single day).
-  const [dateRange, setDateRange] = useState<DateRange>(() => ({
-    from: getTodayEst(),
-    to: getTodayEst(),
-  }));
+  // Date range — initially null to prevent hydration mismatch and double-fetching, initialized via useEffect.
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+
+  // Initialize date range from localStorage
+  useEffect(() => {
+    const savedFilter = localStorage.getItem('dashboard_date_filter');
+    const today = getTodayEst();
+    if (savedFilter === 'month') {
+      const monthStart = getMonthStartEst(new Date());
+      setDateRange({ from: monthStart, to: today });
+    } else {
+      setDateRange({ from: today, to: today });
+    }
+  }, []);
+
+  const handleDateRangeChange = (newRange: DateRange) => {
+    setDateRange(newRange);
+    
+    // Check if it's a single day to determine the filter type.
+    if (newRange.from && newRange.to && newRange.from === newRange.to) {
+      localStorage.setItem('dashboard_date_filter', 'today');
+    } else {
+      // Treat any multi-day range as 'month' for persistence
+      localStorage.setItem('dashboard_date_filter', 'month');
+    }
+  };
 
   // Top metrics
   const [topMetrics, setTopMetrics] = useState<TopMetrics | null>(null);
@@ -162,8 +183,8 @@ function MainDashboard({
   const [holidayLoading, setHolidayLoading] = useState(true);
 
   // Referral split uses the date range filter
-  const monthStartKey = dateRange.from ?? getMonthStartEst(new Date());
-  const monthEndKey = dateRange.to ?? getMonthEndEst(new Date());
+  const monthStartKey = dateRange?.from ?? getMonthStartEst(new Date());
+  const monthEndKey = dateRange?.to ?? getMonthEndEst(new Date());
 
 
   // Payment insights (admin-like only)
@@ -180,12 +201,10 @@ function MainDashboard({
   const [handoffSummaries, setHandoffSummaries] = useState<TeamLeadAssignmentSummary[] | null>(null);
   const [handoffLoading, setHandoffLoading] = useState(isAdminLike);
 
-  // Section loading flags driven by a single readiness gate.
-  const initialLoading = !user;
 
   // ── Fetch top metrics when range changes ──────────────────────────────
   useEffect(() => {
-    if (!user) return;
+    if (!user || !dateRange) return;
     let cancelled = false;
     // Start loading inside a microtask to satisfy the lint rule
     // against synchronous setState in effect bodies.
@@ -228,7 +247,7 @@ function MainDashboard({
 
   // ── Fetch KPI rows when range changes ─────────────────────────────────
   useEffect(() => {
-    if (!user) return;
+    if (!user || !dateRange) return;
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
@@ -263,7 +282,7 @@ function MainDashboard({
 
   // ── Fetch LinkedIn KPI rows when range changes ─────────────────────────
   useEffect(() => {
-    if (!user) return;
+    if (!user || !dateRange) return;
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
@@ -329,7 +348,7 @@ function MainDashboard({
 
   // ── Fetch payment insights (admin-like only) ──────────────────────────
   useEffect(() => {
-    if (!user || !isAdminLike) {
+    if (!user || !isAdminLike || !dateRange) {
       return;
     }
     let cancelled = false;
@@ -361,7 +380,7 @@ function MainDashboard({
 
   // ── Fetch technical payments total for dashboard (all accessible technical payments in date range) ──
   useEffect(() => {
-    if (!user || !isAdminLike) {
+    if (!user || !isAdminLike || !dateRange) {
       setTechnicalPaymentsTotal(0);
       return;
     }
@@ -398,7 +417,7 @@ function MainDashboard({
 
   // ── Fetch referral split (admin-like only, current month by closedAt) ───
   useEffect(() => {
-    if (!user || !isAdminLike) {
+    if (!user || !isAdminLike || !dateRange) {
       return;
     }
     let cancelled = false;
@@ -465,7 +484,7 @@ function MainDashboard({
   }, [user, isAdminLike]);
 
   // KPI section mode + target derived from range
-  const kpiMode = isSingleDay(dateRange) ? "daily" : "monthly";
+  const kpiMode = (dateRange && isSingleDay(dateRange)) ? "daily" : "monthly";
   const scopeLabel = isAgent
     ? "Just you"
     : isTeamLead
@@ -477,7 +496,7 @@ function MainDashboard({
   );
 
   useEffect(() => {
-    if (holidayDateKeys.length === 0) return;
+    if (holidayDateKeys.length === 0 || !dateRange) return;
     if (!dateRange.from || !dateRange.to || dateRange.from !== dateRange.to) return;
     if (!holidayDateKeys.includes(dateRange.from)) return;
 
@@ -507,6 +526,7 @@ function MainDashboard({
   // 31-day month has roughly 22 working days, a one-week range has 5.
   const kpiTarget: number = (() => {
     if (kpiRows && kpiRows.length > 0) return kpiRows[0].target;
+    if (!dateRange) return 0;
     const fromIso = dateRange.from ?? getTodayEst();
     const toIso = dateRange.to ?? fromIso;
     return countWorkingDaysInRange(fromIso, toIso, holidayDateKeys);
@@ -514,7 +534,7 @@ function MainDashboard({
 
   async function reloadHolidayAwareDashboardData() {
     clearDashboardDataCache();
-    if (!user) return;
+    if (!user || !dateRange) return;
 
     const [holidays, topMetricsResult, leadRows, linkedinRows] =
       await Promise.all([
@@ -574,8 +594,8 @@ function MainDashboard({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <DashboardDateRange
-            value={dateRange}
-            onChange={setDateRange}
+            value={dateRange!}
+            onChange={handleDateRangeChange}
             disabledDates={holidayDateKeys}
             disableHolidaySelection
           />
