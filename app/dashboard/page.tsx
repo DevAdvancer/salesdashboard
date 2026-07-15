@@ -518,7 +518,7 @@ function MainDashboard({
     if (previousWorkingDay) {
       setDateRange({ from: previousWorkingDay, to: previousWorkingDay });
     }
-  }, [dateRange.from, dateRange.to, holidayDateKeys]);
+  }, [dateRange?.from, dateRange?.to, holidayDateKeys]);
 
   // Use rows[0] as the source of truth once loaded; otherwise compute a
   // fallback from the range so the UI never shows "0" on load. The
@@ -564,6 +564,8 @@ function MainDashboard({
     setKpiRows(leadRows);
     setLinkedinKpiRows(linkedinRows);
   }
+
+  const initialLoading = !user || !dateRange;
 
   if (initialLoading) {
     return (
