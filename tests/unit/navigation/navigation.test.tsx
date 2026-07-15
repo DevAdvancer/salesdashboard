@@ -36,7 +36,7 @@ describe("Navigation Component", () => {
           name: "Test Agent",
           email: "agent@test.com",
           role: "agent",
-          managerId: "manager-1",
+          teamLeadId: "teamLead-1",
         },
         isManager: false,
         isAgent: true,
@@ -62,15 +62,15 @@ describe("Navigation Component", () => {
     });
   });
 
-  describe("Manager sees all components", () => {
-    it("should show all navigation items for manager", () => {
+  describe("TeamLead sees all components", () => {
+    it("should show all navigation items for teamLead", () => {
       mockUseAuth.mockReturnValue({
         user: {
-          $id: "manager-1",
-          name: "Test Manager",
-          email: "manager@test.com",
-          role: "manager",
-          managerId: null,
+          $id: "teamLead-1",
+          name: "Test TeamLead",
+          email: "teamLead@test.com",
+          role: "team_lead",
+          teamLeadId: null,
         },
         isManager: true,
         isAgent: false,
@@ -105,8 +105,8 @@ describe("Navigation Component", () => {
           $id: "user-1",
           name: "Test User",
           email: "user@test.com",
-          role: "manager",
-          managerId: null,
+          role: "team_lead",
+          teamLeadId: null,
         },
         isManager: true,
         isAgent: false,
@@ -149,8 +149,8 @@ describe("Navigation Component", () => {
           $id: "user-1",
           name: "Test User",
           email: "user@test.com",
-          role: "manager",
-          managerId: null,
+          role: "team_lead",
+          teamLeadId: null,
         },
         isManager: true,
         isAgent: false,

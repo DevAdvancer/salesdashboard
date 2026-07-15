@@ -31,7 +31,7 @@ function simulateCreateLead(creatingUserId: string, input: CreateLeadInput): Lea
 
 // Arbitraries
 const userIdArb = fc.integer({ min: 1, max: 10000 }).map((n) => `user-${n}`);
-const roleArb = fc.constantFrom<UserRole>('admin', 'manager', 'team_lead', 'agent');
+const roleArb = fc.constantFrom<UserRole>('admin', 'team_lead', 'team_lead', 'agent');
 const branchIdArb = fc.stringMatching(/^[a-z0-9]{4,12}$/);
 
 const leadDataArb = fc.record({

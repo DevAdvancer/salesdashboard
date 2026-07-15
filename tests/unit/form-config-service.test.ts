@@ -12,7 +12,7 @@ jest.mock('@/lib/appwrite', () => ({
 }));
 
 describe('Form Configuration Service', () => {
-  const mockManagerId = 'manager-123';
+  const mockManagerId = 'teamLead-123';
   const mockFormConfig = {
     $id: 'current',
     fields: JSON.stringify([

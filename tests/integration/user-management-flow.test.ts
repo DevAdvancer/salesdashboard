@@ -7,7 +7,7 @@
  * Requirements: 1.1-1.5, 5.4, 8.1-8.6, 12.1-12.4
  */
 
-import { createAgent, getAgentsByManager, getUserById } from '@/lib/services/user-service';
+import { createAgent, getAgentsByTeamLead, getUserById } from '@/lib/services/user-service';
 import { listLeads } from '@/lib/services/lead-service';
 import { databases, account } from '@/lib/appwrite';
 import { Permission, Role } from 'appwrite';
@@ -40,7 +40,7 @@ jest.mock('@/lib/services/lead-validator', () => ({
 }));
 
 describe('Integration: User Management Flow', () => {
-  const managerId = 'manager-signup-001';
+  const teamLeadId = 'teamLead-signup-001';
   const agentId = 'agent-created-001';
 
   beforeEach(() => {
@@ -48,7 +48,7 @@ describe('Integration: User Management Flow', () => {
   });
 
   it('should complete the user management flow: signup → create agent → agent sees assigned leads', async () => {
-    // Step 1: Manager signs up (simulated by creating user doc with manager role)
+    // Step 1: TeamLead signs up (simulated by creating user doc with teamLead role)
     // Step 2: Team Lead creates an agent
 
     const teamLeadId = 'teamlead-001';
@@ -58,7 +58,6 @@ describe('Integration: User Management Flow', () => {
       name: 'Test Agent',
       email: 'agent@example.com',
       role: 'agent',
-      managerId: managerId,
       teamLeadId: teamLeadId,
       branchIds: ['branch-1'],
       $createdAt: new Date().toISOString(),
@@ -71,7 +70,7 @@ describe('Integration: User Management Flow', () => {
       name: 'Test Team Lead',
       email: 'tl@example.com',
       role: 'team_lead',
-      managerId: managerId,
+      teamLeadId: teamLeadId,
       branchIds: ['branch-1', 'branch-2'],
       $createdAt: new Date().toISOString(),
       $updatedAt: new Date().toISOString(),
@@ -88,9 +87,9 @@ describe('Integration: User Management Flow', () => {
       branchIds: ['branch-1'],
     });
 
-    // Verify agent has correct role and managerId
+    // Verify agent has correct role and teamLeadId
     expect(createdAgent.role).toBe('agent');
-    expect(createdAgent.managerId).toBe(managerId);
+    expect(createdAgent.teamLeadId).toBe(teamLeadId);
     expect(createdAgent.teamLeadId).toBe(teamLeadId);
     expect(createdAgent.name).toBe('Test Agent');
 
@@ -109,7 +108,6 @@ describe('Integration: User Management Flow', () => {
       expect.any(String),
       expect.objectContaining({
         role: 'agent',
-        managerId: managerId,
         teamLeadId: teamLeadId,
         branchIds: ['branch-1'],
       }),
@@ -119,22 +117,22 @@ describe('Integration: User Management Flow', () => {
       ])
     );
 
-    // Step 3: Manager can see their agents
+    // Step 3: TeamLead can see their agents
     (databases.listDocuments as jest.Mock).mockResolvedValue({
       documents: [agentDoc],
     });
 
-    const agents = await getAgentsByManager(managerId);
+    const agents = await getAgentsByTeamLead(teamLeadId);
     expect(agents).toHaveLength(1);
     expect(agents[0].$id).toBe(agentId);
-    expect(agents[0].managerId).toBe(managerId);
+    expect(agents[0].teamLeadId).toBe(teamLeadId);
 
     // Step 4: Agent can only see assigned leads
     const assignedLead: Lead = {
       $id: 'lead-for-agent',
       data: JSON.stringify({ firstName: 'Test', lastName: 'Lead' }),
       status: 'New',
-      ownerId: managerId,
+      ownerId: teamLeadId,
       assignedToId: agentId,
       branchId: 'branch-1',
       isClosed: false,
@@ -159,7 +157,7 @@ describe('Integration: User Management Flow', () => {
       name: 'Test Team Lead',
       email: 'tl@example.com',
       role: 'team_lead',
-      managerId: managerId,
+      teamLeadId: teamLeadId,
       branchIds: ['branch-1'],
     };
     (databases.getDocument as jest.Mock).mockResolvedValue(teamLeadDoc);
@@ -179,8 +177,8 @@ describe('Integration: User Management Flow', () => {
     ).rejects.toThrow('A user with this email already exists');
   });
 
-  it('should filter agents by manager ID', async () => {
-    const otherManagerId = 'manager-other';
+  it('should filter agents by teamLead ID', async () => {
+    const otherManagerId = 'teamLead-other';
 
     const myAgents = [
       {
@@ -188,7 +186,7 @@ describe('Integration: User Management Flow', () => {
         name: 'My Agent 1',
         email: 'agent1@example.com',
         role: 'agent',
-        managerId: managerId,
+        teamLeadId: teamLeadId,
         $createdAt: new Date().toISOString(),
         $updatedAt: new Date().toISOString(),
       },
@@ -198,26 +196,26 @@ describe('Integration: User Management Flow', () => {
       documents: myAgents,
     });
 
-    const agents = await getAgentsByManager(managerId);
+    const agents = await getAgentsByTeamLead(teamLeadId);
     expect(agents).toHaveLength(1);
-    expect(agents.every((a) => a.managerId === managerId)).toBe(true);
+    expect(agents.every((a) => a.teamLeadId === teamLeadId)).toBe(true);
   });
 
   it('should get user by ID for session restoration', async () => {
     const userDoc = {
-      $id: managerId,
-      name: 'Test Manager',
-      email: 'manager@example.com',
-      role: 'manager',
-      managerId: null,
+      $id: teamLeadId,
+      name: 'Test TeamLead',
+      email: 'teamLead@example.com',
+      role: 'team_lead',
+      teamLeadId: null,
       $createdAt: new Date().toISOString(),
       $updatedAt: new Date().toISOString(),
     };
 
     (databases.getDocument as jest.Mock).mockResolvedValue(userDoc);
 
-    const user = await getUserById(managerId);
-    expect(user.role).toBe('manager');
-    expect(user.managerId).toBeNull();
+    const user = await getUserById(teamLeadId);
+    expect(user.role).toBe('team_lead');
+    expect(user.teamLeadId).toBeNull();
   });
 });

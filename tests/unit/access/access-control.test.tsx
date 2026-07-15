@@ -4,7 +4,7 @@
  * Tests cover:
  * - Default rules apply correctly
  * - Custom rules override defaults
- * - Manager always has access
+ * - TeamLead always has access
  * - Agent respects rules
  *
  * Requirements: 2.4, 2.5, 2.6
@@ -76,10 +76,10 @@ describe('Access Control System', () => {
       });
     });
 
-    it('should grant manager access to all components by default', async () => {
-      // Setup: Manager user with no custom rules
+    it('should grant teamLead access to all components by default', async () => {
+      // Setup: TeamLead user with no custom rules
       mockUseAuth.mockReturnValue({
-        user: { $id: 'manager-1', role: 'manager', email: 'manager@test.com' },
+        user: { $id: 'teamLead-1', role: 'team_lead', email: 'teamLead@test.com' },
         isManager: true,
         isAdmin: false,
       });
@@ -95,7 +95,7 @@ describe('Access Control System', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // Test all standard components - managers should have access by default
+      // Test all standard components - teamLeads should have access by default
       const components: ComponentKey[] = [
         'dashboard',
         'leads',
@@ -371,11 +371,11 @@ describe('Access Control System', () => {
     });
   });
 
-  describe('Manager Always Has Access', () => {
-    it('should grant manager access regardless of custom rules', async () => {
-      // Setup: Manager with rules that would deny access to agents
+  describe('TeamLead Always Has Access', () => {
+    it('should grant teamLead access regardless of custom rules', async () => {
+      // Setup: TeamLead with rules that would deny access to agents
       mockUseAuth.mockReturnValue({
-        user: { $id: 'manager-1', role: 'manager', email: 'manager@test.com' },
+        user: { $id: 'teamLead-1', role: 'team_lead', email: 'teamLead@test.com' },
         isManager: true,
         isAdmin: false,
       });
@@ -406,7 +406,7 @@ describe('Access Control System', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // Manager should have access to everything
+      // TeamLead should have access to everything
       const components: ComponentKey[] = [
         'dashboard',
         'leads',
@@ -421,10 +421,10 @@ describe('Access Control System', () => {
       });
     });
 
-    it('should respect explicit deny rules for managers from custom rules', async () => {
-      // Setup: Manager with rules that explicitly deny manager access
+    it('should respect explicit deny rules for teamLeads from custom rules', async () => {
+      // Setup: TeamLead with rules that explicitly deny teamLead access
       mockUseAuth.mockReturnValue({
-        user: { $id: 'manager-1', role: 'manager', email: 'manager@test.com' },
+        user: { $id: 'teamLead-1', role: 'team_lead', email: 'teamLead@test.com' },
         isManager: true,
         isAdmin: false,
       });
@@ -433,13 +433,13 @@ describe('Access Control System', () => {
         {
           $id: 'rule-1',
           componentKey: 'dashboard',
-          role: 'manager',
+          role: 'team_lead',
           allowed: false,
         },
         {
           $id: 'rule-2',
           componentKey: 'leads',
-          role: 'manager',
+          role: 'team_lead',
           allowed: false,
         },
       ];
@@ -455,17 +455,17 @@ describe('Access Control System', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // Custom deny rules are respected for managers (only admins bypass)
+      // Custom deny rules are respected for teamLeads (only admins bypass)
       expect(result.current.canAccess('dashboard')).toBe(false);
       expect(result.current.canAccess('leads')).toBe(false);
-      // Components without custom rules fall back to manager defaults (true)
+      // Components without custom rules fall back to teamLead defaults (true)
       expect(result.current.canAccess('history')).toBe(true);
     });
 
-    it('should maintain manager access after rules refresh', async () => {
-      // Setup: Manager user
+    it('should maintain teamLead access after rules refresh', async () => {
+      // Setup: TeamLead user
       mockUseAuth.mockReturnValue({
-        user: { $id: 'manager-1', role: 'manager', email: 'manager@test.com' },
+        user: { $id: 'teamLead-1', role: 'team_lead', email: 'teamLead@test.com' },
         isManager: true,
         isAdmin: false,
       });
@@ -696,10 +696,10 @@ describe('Access Control System', () => {
       expect(result.current.canAccess('user-management')).toBe(false);
     });
 
-    it('should maintain manager access even when database fetch fails', async () => {
-      // Setup: Manager user with database error
+    it('should maintain teamLead access even when database fetch fails', async () => {
+      // Setup: TeamLead user with database error
       mockUseAuth.mockReturnValue({
-        user: { $id: 'manager-1', role: 'manager', email: 'manager@test.com' },
+        user: { $id: 'teamLead-1', role: 'team_lead', email: 'teamLead@test.com' },
         isManager: true,
         isAdmin: false,
       });
@@ -714,7 +714,7 @@ describe('Access Control System', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // Manager should still have access
+      // TeamLead should still have access
       expect(result.current.canAccess('dashboard')).toBe(true);
       expect(result.current.canAccess('leads')).toBe(true);
       expect(result.current.canAccess('user-management')).toBe(true);

@@ -37,8 +37,8 @@ jest.mock('appwrite', () => ({
   }
 }));
 
-describe('Lead Visibility - Multi-Branch Manager', () => {
-  const mockManagerId = 'manager-1';
+describe('Lead Visibility - Multi-Branch TeamLead', () => {
+  const mockManagerId = 'teamLead-1';
   const branchA = 'branch-a';
   const branchB = 'branch-b';
 
@@ -46,12 +46,12 @@ describe('Lead Visibility - Multi-Branch Manager', () => {
     jest.clearAllMocks();
     // The listLeads service calls getUserById(actorId) → getDocument
     // to load the viewer's role and branchIds for visibility scoping.
-    // We mock it to return a manager with both branch IDs.
+    // We mock it to return a teamLead with both branch IDs.
     (databases.getDocument as jest.Mock).mockResolvedValue({
       $id: mockManagerId,
-      name: 'Test Manager',
-      email: 'manager@example.com',
-      role: 'manager',
+      name: 'Test TeamLead',
+      email: 'teamLead@example.com',
+      role: 'team_lead',
       branchIds: [branchA, branchB],
     });
   });
@@ -63,7 +63,7 @@ describe('Lead Visibility - Multi-Branch Manager', () => {
       documents: [],
     });
 
-    await listLeads({}, mockManagerId, 'manager', branchIds);
+    await listLeads({}, mockManagerId, 'team_lead', branchIds);
 
     // The first listDocuments call is from getLeadVisibilityUserIds (hierarchy lookup),
     // the second call is the actual lead query where branch filtering applies.
@@ -84,7 +84,7 @@ describe('Lead Visibility - Multi-Branch Manager', () => {
       documents: [],
     });
 
-    await listLeads({}, mockManagerId, 'manager', branchIds);
+    await listLeads({}, mockManagerId, 'team_lead', branchIds);
 
     const callArgs = (databases.listDocuments as jest.Mock).mock.calls[1];
     const queries = callArgs[2];

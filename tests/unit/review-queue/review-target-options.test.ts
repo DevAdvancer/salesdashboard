@@ -46,7 +46,6 @@ describe('review target options', () => {
         name: 'Alex Teamlead',
         email: 'alex@example.com',
         role: 'team_lead',
-        managerId: null,
         teamLeadId: null,
         branchIds: [],
       },

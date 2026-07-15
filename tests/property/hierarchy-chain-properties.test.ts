@@ -4,9 +4,9 @@ import { User, UserRole } from '@/lib/types';
 /**
  * Feature: team-lead-role-hierarchy, Property 6: Hierarchy chain correctness
  *
- * For any Manager creating a Team_Lead, the Team_Lead's managerId SHALL equal the Manager's
+ * For any TeamLead creating a Team_Lead, the Team_Lead's teamLeadId SHALL equal the TeamLead's
  * user ID. For any Team_Lead creating an Agent, the Agent's teamLeadId SHALL equal the
- * Team_Lead's user ID and the Agent's managerId SHALL equal the Team_Lead's managerId.
+ * Team_Lead's user ID and the Agent's teamLeadId SHALL equal the Team_Lead's teamLeadId.
  *
  * Validates: Requirements 3.5, 3.6
  */
@@ -17,28 +17,26 @@ const managerArb = fc.record({
   $id: fc.uuid(),
   name: fc.string({ minLength: 1, maxLength: 128 }),
   email: fc.emailAddress(),
-  role: fc.constant<UserRole>('manager'),
-  managerId: fc.constant(null as string | null),
+  role: fc.constant<UserRole>('team_lead'),
   teamLeadId: fc.constant(null as string | null),
   branchIds: fc.uniqueArray(branchIdArb, { minLength: 1, maxLength: 5 }),
 });
 
 describe('Hierarchy Chain Properties', () => {
   describe('Property 6: Hierarchy chain correctness', () => {
-    it('team lead managerId should equal the creating manager ID', () => {
+    it('team lead teamLeadId should equal the creating teamLead ID', () => {
       fc.assert(
-        fc.property(managerArb, (manager) => {
-          // Simulate createTeamLead: managerId is set to the manager's $id
+        fc.property(managerArb, (teamLead) => {
+          // Simulate createTeamLead: teamLeadId is set to the teamLead's $id
           const teamLead: User = {
             $id: 'tl-id',
             name: 'TL',
             email: 'tl@test.com',
             role: 'team_lead',
-            managerId: manager.$id,
-            teamLeadId: null,
-            branchIds: manager.branchIds.slice(0, 1),
+            teamLeadId: teamLead.$id,
+            branchIds: teamLead.branchIds.slice(0, 1),
           };
-          expect(teamLead.managerId).toBe(manager.$id);
+          expect(teamLead.teamLeadId).toBe(teamLead.$id);
         }),
         { numRuns: 100 }
       );
@@ -49,50 +47,47 @@ describe('Hierarchy Chain Properties', () => {
         fc.property(
           managerArb,
           fc.uuid(),
-          (manager, teamLeadId) => {
+          (teamLead, teamLeadId) => {
             const teamLead: User = {
               $id: teamLeadId,
               name: 'TL',
               email: 'tl@test.com',
               role: 'team_lead',
-              managerId: manager.$id,
-              teamLeadId: null,
-              branchIds: manager.branchIds.slice(0, 1),
+              teamLeadId: teamLead.$id,
+              branchIds: teamLead.branchIds.slice(0, 1),
             };
 
-            // Simulate createAgent: teamLeadId = teamLead.$id, managerId = teamLead.managerId
+            // Simulate createAgent: teamLeadId = teamLead.$id, teamLeadId = teamLead.teamLeadId
             const agent: User = {
               $id: 'agent-id',
               name: 'Agent',
               email: 'agent@test.com',
               role: 'agent',
-              managerId: teamLead.managerId,
-              teamLeadId: teamLead.$id,
+              teamLeadId: teamLead.teamLeadId,
               branchIds: teamLead.branchIds.slice(0, 1),
             };
 
             expect(agent.teamLeadId).toBe(teamLeadId);
-            expect(agent.managerId).toBe(manager.$id);
+            expect(agent.teamLeadId).toBe(teamLead.$id);
           }
         ),
         { numRuns: 100 }
       );
     });
 
-    it('full chain: agent.managerId === teamLead.managerId === manager.$id', () => {
+    it('full chain: agent.teamLeadId === teamLead.teamLeadId === teamLead.$id', () => {
       fc.assert(
         fc.property(
           managerArb,
           fc.uuid(),
-          (manager, tlId) => {
+          (teamLead, tlId) => {
             const teamLead: User = {
               $id: tlId,
               name: 'TL',
               email: 'tl@test.com',
               role: 'team_lead',
-              managerId: manager.$id,
-              teamLeadId: null,
-              branchIds: manager.branchIds,
+              teamLeadId: teamLead.$id,
+              branchIds: teamLead.branchIds,
             };
 
             const agent: User = {
@@ -100,14 +95,13 @@ describe('Hierarchy Chain Properties', () => {
               name: 'Agent',
               email: 'agent@test.com',
               role: 'agent',
-              managerId: teamLead.managerId,
-              teamLeadId: teamLead.$id,
+              teamLeadId: teamLead.teamLeadId,
               branchIds: teamLead.branchIds.slice(0, 1),
             };
 
             // The full chain is preserved
-            expect(agent.managerId).toBe(teamLead.managerId);
-            expect(teamLead.managerId).toBe(manager.$id);
+            expect(agent.teamLeadId).toBe(teamLead.teamLeadId);
+            expect(teamLead.teamLeadId).toBe(teamLead.$id);
             expect(agent.teamLeadId).toBe(teamLead.$id);
           }
         ),

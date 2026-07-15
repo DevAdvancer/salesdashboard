@@ -79,7 +79,7 @@ describe('Permission Error Handling', () => {
   });
 
   it('should render content when user has access', () => {
-    const mockUser = { $id: '1', role: 'manager', name: 'Test Manager', email: 'manager@test.com' };
+    const mockUser = { $id: '1', role: 'team_lead', name: 'Test TeamLead', email: 'teamLead@test.com' };
     const mockCanAccess = jest.fn().mockReturnValue(true);
 
     (useAuth as jest.Mock).mockReturnValue({ user: mockUser });

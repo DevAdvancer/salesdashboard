@@ -25,11 +25,10 @@ describe("LeadFollowUpCard", () => {
     role: "team_lead",
     branchIds: ["branch-1"],
     branchId: "branch-1",
-    managerId: null,
-    managerIds: [],
+    teamLeadId: null,
+    teamLeadIds: [],
     assistantManagerId: null,
     assistantManagerIds: [],
-    teamLeadId: null,
   };
 
   const lead: Lead = {

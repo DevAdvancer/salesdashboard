@@ -75,7 +75,7 @@ describe('active user role creation actions', () => {
     return userCreateCall?.[3] as Record<string, unknown> | undefined;
   }
 
-  it('creates team leads without retired manager attributes', async () => {
+  it('creates team leads without retired teamLead attributes', async () => {
     const { createTeamLeadAction } = await import('@/app/actions/user');
 
     await createTeamLeadAction({
@@ -95,13 +95,13 @@ describe('active user role creation actions', () => {
         branchIds: ['branch-1'],
       }),
     );
-    expect(getCreatedUserPayload()).not.toHaveProperty('managerId');
-    expect(getCreatedUserPayload()).not.toHaveProperty('managerIds');
+    expect(getCreatedUserPayload()).not.toHaveProperty('teamLeadId');
+    expect(getCreatedUserPayload()).not.toHaveProperty('teamLeadIds');
     expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerId');
     expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerIds');
   });
 
-  it('creates agents without retired manager attributes', async () => {
+  it('creates agents without retired teamLead attributes', async () => {
     const { createAgentAction } = await import('@/app/actions/user');
 
     await createAgentAction({
@@ -123,13 +123,13 @@ describe('active user role creation actions', () => {
         branchIds: ['branch-1'],
       }),
     );
-    expect(getCreatedUserPayload()).not.toHaveProperty('managerId');
-    expect(getCreatedUserPayload()).not.toHaveProperty('managerIds');
+    expect(getCreatedUserPayload()).not.toHaveProperty('teamLeadId');
+    expect(getCreatedUserPayload()).not.toHaveProperty('teamLeadIds');
     expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerId');
     expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerIds');
   });
 
-  it('creates monitors without retired manager attributes', async () => {
+  it('creates monitors without retired teamLead attributes', async () => {
     const { createAgentAction } = await import('@/app/actions/user');
 
     await createAgentAction({
@@ -150,13 +150,13 @@ describe('active user role creation actions', () => {
         branchIds: [],
       }),
     );
-    expect(getCreatedUserPayload()).not.toHaveProperty('managerId');
-    expect(getCreatedUserPayload()).not.toHaveProperty('managerIds');
+    expect(getCreatedUserPayload()).not.toHaveProperty('teamLeadId');
+    expect(getCreatedUserPayload()).not.toHaveProperty('teamLeadIds');
     expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerId');
     expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerIds');
   });
 
-  it('creates operations users without retired manager attributes', async () => {
+  it('creates operations users without retired teamLead attributes', async () => {
     const { createAgentAction } = await import('@/app/actions/user');
 
     await createAgentAction({
@@ -177,8 +177,8 @@ describe('active user role creation actions', () => {
         branchIds: [],
       }),
     );
-    expect(getCreatedUserPayload()).not.toHaveProperty('managerId');
-    expect(getCreatedUserPayload()).not.toHaveProperty('managerIds');
+    expect(getCreatedUserPayload()).not.toHaveProperty('teamLeadId');
+    expect(getCreatedUserPayload()).not.toHaveProperty('teamLeadIds');
     expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerId');
     expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerIds');
   });

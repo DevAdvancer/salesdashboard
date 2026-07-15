@@ -40,7 +40,7 @@ jest.mock('@/lib/appwrite', () => ({
 }));
 
 describe('Integration: Form Builder Flow', () => {
-  const managerId = 'manager-form-001';
+  const teamLeadId = 'teamLead-form-001';
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -57,7 +57,7 @@ describe('Integration: Form Builder Flow', () => {
     expect(initialConfig.fields).toEqual(DEFAULT_FIELDS);
     expect(initialConfig.version).toBe(0);
 
-    // Step 2: Manager adds a custom field
+    // Step 2: TeamLead adds a custom field
     const customField: FormField = {
       id: '14',
       type: 'text',
@@ -89,10 +89,10 @@ describe('Integration: Form Builder Flow', () => {
       $id: 'current',
       fields: JSON.stringify(updatedFields),
       version: 1,
-      updatedBy: managerId,
+      updatedBy: teamLeadId,
     });
 
-    const publishedConfig = await addField(customField, managerId);
+    const publishedConfig = await addField(customField, teamLeadId);
     expect(publishedConfig.version).toBe(1);
     expect(publishedConfig.fields).toHaveLength(DEFAULT_FIELDS.length + 1);
 
@@ -322,23 +322,23 @@ describe('Integration: Form Builder Flow', () => {
         $id: 'current',
         fields: JSON.stringify(currentFields),
         version: 3,
-        updatedBy: managerId,
+        updatedBy: teamLeadId,
       })
       .mockResolvedValueOnce({
         $id: 'current',
         fields: JSON.stringify(currentFields),
         version: 3,
-        updatedBy: managerId,
+        updatedBy: teamLeadId,
       });
 
     (databases.updateDocument as jest.Mock).mockResolvedValueOnce({
       $id: 'current',
       fields: JSON.stringify(currentFields),
       version: 4,
-      updatedBy: managerId,
+      updatedBy: teamLeadId,
     });
 
-    const result = await updateFormConfig(currentFields, managerId);
+    const result = await updateFormConfig(currentFields, teamLeadId);
     expect(result.version).toBe(4);
   });
 });

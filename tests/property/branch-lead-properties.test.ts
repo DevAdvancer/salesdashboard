@@ -390,14 +390,14 @@ describe('Lead Validator Properties', () => {
 
 interface UserRecord {
   $id: string;
-  role: 'admin' | 'manager' | 'agent';
+  role: 'admin' | 'team_lead' | 'agent';
   branchId: string | null;
 }
 
 /**
  * Simulates listLeads branch filtering logic.
  * - Admin: sees all leads across all branches
- * - Manager: sees only leads in their branch (or own leads if no branch)
+ * - TeamLead: sees only leads in their branch (or own leads if no branch)
  * - Agent: sees only leads assigned to them
  */
 function simulateListLeads(
@@ -410,11 +410,11 @@ function simulateListLeads(
   if (user.role === 'agent') {
     return allLeads.filter((l) => (l as any).assignedToId === user.$id);
   }
-  // Manager
+  // TeamLead
   if (user.branchId) {
     return allLeads.filter((l) => l.branchId === user.branchId);
   }
-  // Manager without branch sees only own leads
+  // TeamLead without branch sees only own leads
   return allLeads.filter((l) => (l as any).ownerId === user.$id);
 }
 
@@ -443,16 +443,16 @@ const userIdArb = fc.integer({ min: 1, max: 10000 }).map((n) => `user-${n}`);
 
 describe('Lead Service Branch Properties', () => {
   /**
-   * Feature: admin-branch-management, Property 11: Manager sees only branch leads
+   * Feature: admin-branch-management, Property 11: TeamLead sees only branch leads
    *
-   * For any set of leads across multiple branches, when a manager lists leads,
-   * the returned leads all have a branchId matching the manager's branchId,
+   * For any set of leads across multiple branches, when a teamLead lists leads,
+   * the returned leads all have a branchId matching the teamLead's branchId,
    * and no leads from other branches are included.
    *
    * **Validates: Requirements 4.1**
    */
-  describe('Property 11: Manager sees only branch leads', () => {
-    it('should return only leads matching the manager branch', () => {
+  describe('Property 11: TeamLead sees only branch leads', () => {
+    it('should return only leads matching the teamLead branch', () => {
       fc.assert(
         fc.property(
           branchIdArb,
@@ -468,18 +468,18 @@ describe('Lead Service Branch Properties', () => {
             }),
             { minLength: 1, maxLength: 20 }
           ),
-          (managerBranch, otherBranch, managerId, leads) => {
+          (managerBranch, otherBranch, teamLeadId, leads) => {
             fc.pre(managerBranch !== otherBranch);
 
-            const manager: UserRecord = {
-              $id: managerId,
-              role: 'manager',
+            const teamLead: UserRecord = {
+              $id: teamLeadId,
+              role: 'team_lead',
               branchId: managerBranch,
             };
 
-            const result = simulateListLeads(leads as any, manager);
+            const result = simulateListLeads(leads as any, teamLead);
 
-            // Every returned lead must belong to the manager's branch
+            // Every returned lead must belong to the teamLead's branch
             return result.every((l) => l.branchId === managerBranch);
           }
         ),
@@ -495,7 +495,7 @@ describe('Lead Service Branch Properties', () => {
           userIdArb,
           leadIdArb,
           leadIdArb,
-          (managerBranch, otherBranch, managerId, leadId1, leadId2) => {
+          (managerBranch, otherBranch, teamLeadId, leadId1, leadId2) => {
             fc.pre(managerBranch !== otherBranch);
             fc.pre(leadId1 !== leadId2);
 
@@ -504,7 +504,7 @@ describe('Lead Service Branch Properties', () => {
                 $id: leadId1,
                 data: { name: 'Branch Lead' },
                 branchId: managerBranch,
-                ownerId: managerId,
+                ownerId: teamLeadId,
                 assignedToId: null,
               },
               {
@@ -516,13 +516,13 @@ describe('Lead Service Branch Properties', () => {
               },
             ];
 
-            const manager: UserRecord = {
-              $id: managerId,
-              role: 'manager',
+            const teamLead: UserRecord = {
+              $id: teamLeadId,
+              role: 'team_lead',
               branchId: managerBranch,
             };
 
-            const result = simulateListLeads(leads, manager);
+            const result = simulateListLeads(leads, teamLead);
 
             return (
               result.length === 1 &&
@@ -624,7 +624,7 @@ describe('Lead Service Branch Properties', () => {
   /**
    * Feature: admin-branch-management, Property 15: Lead creation inherits creator's branchId
    *
-   * For any lead created by a user (manager or agent) who has a branchId,
+   * For any lead created by a user (teamLead or agent) who has a branchId,
    * the resulting lead's branchId matches the creator's branchId.
    *
    * **Validates: Requirements 4.5**
@@ -635,7 +635,7 @@ describe('Lead Service Branch Properties', () => {
         fc.property(
           userIdArb,
           branchIdArb,
-          fc.constantFrom('manager', 'agent') as fc.Arbitrary<'manager' | 'agent'>,
+          fc.constantFrom('team_lead', 'agent') as fc.Arbitrary<'team_lead' | 'agent'>,
           (userId, creatorBranch, role) => {
             const creator: UserRecord = {
               $id: userId,
@@ -656,7 +656,7 @@ describe('Lead Service Branch Properties', () => {
       fc.assert(
         fc.property(
           userIdArb,
-          fc.constantFrom('manager', 'agent') as fc.Arbitrary<'manager' | 'agent'>,
+          fc.constantFrom('team_lead', 'agent') as fc.Arbitrary<'team_lead' | 'agent'>,
           (userId, role) => {
             const creator: UserRecord = {
               $id: userId,

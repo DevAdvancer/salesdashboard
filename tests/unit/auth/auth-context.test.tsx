@@ -72,19 +72,18 @@ describe('AuthContext', () => {
   });
 
   describe('signup', () => {
-    it('should create manager account by default', async () => {
+    it('should create teamLead account by default', async () => {
       const mockAccountData = {
         $id: 'user-123',
-        email: 'manager@test.com',
-        name: 'Test Manager',
+        email: 'teamLead@test.com',
+        name: 'Test TeamLead',
       };
 
       const mockUserDoc = {
         $id: 'user-123',
-        name: 'Test Manager',
-        email: 'manager@test.com',
-        role: 'manager',
-        managerId: null,
+        name: 'Test TeamLead',
+        email: 'teamLead@test.com',
+        role: 'team_lead',
         teamLeadId: null,
         branchIds: [],
         branchId: null,
@@ -104,14 +103,14 @@ describe('AuthContext', () => {
       });
 
       await act(async () => {
-        await result.current.signup('Test Manager', 'manager@test.com', 'password123');
+        await result.current.signup('Test TeamLead', 'teamLead@test.com', 'password123');
       });
 
       expect(mockAccount.create).toHaveBeenCalledWith(
         expect.any(String),
-        'manager@test.com',
+        'teamLead@test.com',
         'password123',
-        'Test Manager'
+        'Test TeamLead'
       );
 
       expect(mockDatabases.createDocument).toHaveBeenCalledWith(
@@ -119,15 +118,15 @@ describe('AuthContext', () => {
         'test-users-collection',
         'user-123',
         {
-          name: 'Test Manager',
-          email: 'manager@test.com',
-          role: 'manager',
-          managerId: null,
+          name: 'Test TeamLead',
+          email: 'teamLead@test.com',
+          role: 'team_lead',
+          teamLeadId: null,
         }
       );
 
       expect(mockAccount.createEmailPasswordSession).toHaveBeenCalledWith(
-        'manager@test.com',
+        'teamLead@test.com',
         'password123'
       );
 
@@ -150,8 +149,7 @@ describe('AuthContext', () => {
         name: 'Test Agent',
         email: 'agent@test.com',
         role: 'agent',
-        managerId: 'manager-123',
-        teamLeadId: null,
+        teamLeadId: 'teamLead-123',
         branchIds: [],
         branchId: null,
         $createdAt: '2024-01-01T00:00:00.000Z',
@@ -195,7 +193,6 @@ describe('AuthContext', () => {
         name: 'Focus User',
         email: 'focus@test.com',
         role: 'agent',
-        managerId: null,
         teamLeadId: null,
         branchIds: [],
         branchId: null,
@@ -244,8 +241,7 @@ describe('AuthContext', () => {
         $id: 'user-789',
         name: 'Test User',
         email: 'user@test.com',
-        role: 'manager' as const,
-        managerId: null,
+        role: 'team_lead' as const,
         teamLeadId: null,
         branchIds: [],
         branchId: null,
@@ -276,13 +272,12 @@ describe('AuthContext', () => {
   });
 
   describe('role-based helpers', () => {
-    it('should correctly identify manager role', async () => {
+    it('should correctly identify teamLead role', async () => {
       const mockUserDoc = {
-        $id: 'user-manager',
-        name: 'Manager User',
-        email: 'manager@test.com',
-        role: 'manager' as const,
-        managerId: null,
+        $id: 'user-teamLead',
+        name: 'TeamLead User',
+        email: 'teamLead@test.com',
+        role: 'team_lead' as const,
         teamLeadId: null,
         branchIds: [],
         branchId: null,
@@ -290,7 +285,7 @@ describe('AuthContext', () => {
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
 
-      mockAccount.get.mockResolvedValue({ $id: 'user-manager' } as any);
+      mockAccount.get.mockResolvedValue({ $id: 'user-teamLead' } as any);
       mockDatabases.getDocument.mockResolvedValue(mockUserDoc as any);
 
       const { result } = renderHook(() => useAuth(), { wrapper });
@@ -309,8 +304,7 @@ describe('AuthContext', () => {
         name: 'Agent User',
         email: 'agent@test.com',
         role: 'agent' as const,
-        managerId: 'manager-123',
-        teamLeadId: null,
+        teamLeadId: 'teamLead-123',
         branchIds: [],
         branchId: null,
         $createdAt: '2024-01-01T00:00:00.000Z',

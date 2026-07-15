@@ -12,7 +12,7 @@ function lead(overrides: Partial<Lead>): Lead {
     $id: 'lead-default',
     data: JSON.stringify({ amount: '0' }),
     status: 'Prospect',
-    ownerId: 'manager-1',
+    ownerId: 'teamLead-1',
     assignedToId: null,
     branchId: null,
     isClosed: false,
@@ -29,11 +29,10 @@ function user(overrides: Partial<User>): User {
     name: 'User Default',
     email: 'user@example.com',
     role: 'agent',
-    managerId: null,
-    managerIds: [],
+    teamLeadId: null,
+    teamLeadIds: [],
     assistantManagerId: null,
     assistantManagerIds: [],
-    teamLeadId: null,
     branchIds: [],
     branchId: null,
     ...overrides,
@@ -48,10 +47,10 @@ const branches: Branch[] = [
 describe('buildLeadershipDashboardInsights', () => {
   it('supplements users with missing lead owners and assignees before building follow-up names', async () => {
     const baseUsers = [
-      user({ $id: 'manager-1', name: 'Mina Manager', role: 'manager', branchIds: ['branch-1'] }),
+      user({ $id: 'teamLead-1', name: 'Mina TeamLead', role: 'team_lead', branchIds: ['branch-1'] }),
     ];
     const referencedUsers = new Map([
-      ['manager-2', user({ $id: 'manager-2', name: 'Morgan Owner', role: 'manager', branchIds: ['branch-1'] })],
+      ['teamLead-2', user({ $id: 'teamLead-2', name: 'Morgan Owner', role: 'team_lead', branchIds: ['branch-1'] })],
       ['agent-2', user({ $id: 'agent-2', name: 'Casey Assignee', role: 'agent', branchIds: ['branch-1'] })],
     ]);
     const fetchedIds: string[] = [];
@@ -60,7 +59,7 @@ describe('buildLeadershipDashboardInsights', () => {
       leads: [
         lead({
           $id: 'lead-with-missing-users',
-          ownerId: 'manager-2',
+          ownerId: 'teamLead-2',
           assignedToId: 'agent-2',
           branchId: 'branch-1',
           nextFollowUpAt: '2026-05-06T18:00:00.000Z',
@@ -74,13 +73,13 @@ describe('buildLeadershipDashboardInsights', () => {
       },
     });
 
-    expect(fetchedIds.sort()).toEqual(['agent-2', 'manager-2']);
+    expect(fetchedIds.sort()).toEqual(['agent-2', 'teamLead-2']);
 
     const insights = buildLeadershipDashboardInsights({
       leads: [
         lead({
           $id: 'lead-with-missing-users',
-          ownerId: 'manager-2',
+          ownerId: 'teamLead-2',
           assignedToId: 'agent-2',
           branchId: 'branch-1',
           nextFollowUpAt: '2026-05-06T18:00:00.000Z',

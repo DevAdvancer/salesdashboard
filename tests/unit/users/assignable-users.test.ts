@@ -27,7 +27,7 @@ describe("getAssignableUsers", () => {
     const { Query } = await import("appwrite");
 
     await getAssignableUsers("admin", [], "admin-1");
-    await getAssignableUsers("assistant_manager", ["branch-1"], "am-1");
+    await getAssignableUsers("assistant_team_lead", ["branch-1"], "am-1");
     await getAssignableUsers("team_lead", ["branch-1"], "tl-1");
 
     expect(Query.equal).toHaveBeenCalledWith("role", expect.arrayContaining(["agent"]));

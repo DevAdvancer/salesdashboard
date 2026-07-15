@@ -4,7 +4,7 @@ import { User, UserRole } from '@/lib/types';
 /**
  * Feature: team-lead-role-hierarchy, Property 10: User visibility scoping
  *
- * For any set of users across branches and any querying user with role Manager or Team_Lead,
+ * For any set of users across branches and any querying user with role TeamLead or Team_Lead,
  * only users whose branchIds array has at least one element in common with the querying user's
  * branchIds SHALL be returned.
  *
@@ -33,15 +33,15 @@ const userArb = (branchPool: string[]) =>
     $id: fc.uuid(),
     name: fc.string({ minLength: 1, maxLength: 64 }),
     email: fc.emailAddress(),
-    role: fc.constantFrom<UserRole>('admin', 'manager', 'team_lead', 'agent'),
-    managerId: fc.option(fc.uuid(), { nil: null }),
+    role: fc.constantFrom<UserRole>('admin', 'team_lead', 'team_lead', 'agent'),
+    teamLeadId: fc.option(fc.uuid(), { nil: null }),
     teamLeadId: fc.option(fc.uuid(), { nil: null }),
     branchIds: fc.subarray(branchPool, { minLength: 1 }),
   });
 
 describe('User Visibility Scoping Properties', () => {
   describe('Property 10: User visibility scoping', () => {
-    it('manager should see only users with overlapping branchIds', () => {
+    it('teamLead should see only users with overlapping branchIds', () => {
       fc.assert(
         fc.property(
           fc.uniqueArray(branchIdArb, { minLength: 2, maxLength: 6 }).chain((branchPool) =>
@@ -125,8 +125,8 @@ describe('User Visibility Scoping Properties', () => {
                   $id: fc.uuid(),
                   name: fc.string({ minLength: 1, maxLength: 64 }),
                   email: fc.emailAddress(),
-                  role: fc.constantFrom<UserRole>('admin', 'manager', 'team_lead', 'agent'),
-                  managerId: fc.option(fc.uuid(), { nil: null }),
+                  role: fc.constantFrom<UserRole>('admin', 'team_lead', 'team_lead', 'agent'),
+                  teamLeadId: fc.option(fc.uuid(), { nil: null }),
                   teamLeadId: fc.option(fc.uuid(), { nil: null }),
                   branchIds: fc.subarray(disjointBranches, { minLength: 1 }),
                 }),
@@ -154,8 +154,8 @@ describe('User Visibility Scoping Properties', () => {
                   $id: fc.uuid(),
                   name: fc.string({ minLength: 1, maxLength: 64 }),
                   email: fc.emailAddress(),
-                  role: fc.constantFrom<UserRole>('admin', 'manager', 'team_lead', 'agent'),
-                  managerId: fc.option(fc.uuid(), { nil: null }),
+                  role: fc.constantFrom<UserRole>('admin', 'team_lead', 'team_lead', 'agent'),
+                  teamLeadId: fc.option(fc.uuid(), { nil: null }),
                   teamLeadId: fc.option(fc.uuid(), { nil: null }),
                   branchIds: fc.subarray(branchPool, { minLength: 1 }),
                 }),

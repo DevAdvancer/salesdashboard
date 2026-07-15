@@ -2,7 +2,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { listLeads } from '@/lib/services/lead-service';
-import { getAgentsByManager } from '@/lib/services/user-service';
+import { getAgentsByTeamLead } from '@/lib/services/user-service';
 import { Lead, User } from '@/lib/types';
 
 // Mock dependencies
@@ -19,19 +19,18 @@ jest.mock('next/navigation', () => ({
 
 const mockUseAuth = useAuth as jest.Mock;
 const mockListLeads = listLeads as jest.MockedFunction<typeof listLeads>;
-const mockGetAgentsByManager = getAgentsByManager as jest.MockedFunction<typeof getAgentsByManager>;
+const mockGetAgentsByManager = getAgentsByTeamLead as jest.MockedFunction<typeof getAgentsByTeamLead>;
 
 describe('Lead UI Tests', () => {
   const mockManagerUser: User = {
-    $id: 'manager-1',
-    name: 'Test Manager',
-    email: 'manager@test.com',
-    role: 'manager',
-    managerId: null,
-    managerIds: [],
+    $id: 'teamLead-1',
+    name: 'Test TeamLead',
+    email: 'teamLead@test.com',
+    role: 'team_lead',
+    teamLeadId: null,
+    teamLeadIds: [],
     assistantManagerId: null,
     assistantManagerIds: [],
-    teamLeadId: null,
     branchIds: [],
     branchId: null,
   };
@@ -41,11 +40,10 @@ describe('Lead UI Tests', () => {
     name: 'Test Agent',
     email: 'agent@test.com',
     role: 'agent',
-    managerId: 'manager-1',
-    managerIds: ['manager-1'],
+    teamLeadId: 'teamLead-1',
+    teamLeadIds: ['teamLead-1'],
     assistantManagerId: null,
     assistantManagerIds: [],
-    teamLeadId: null,
     branchIds: [],
     branchId: null,
   };
@@ -55,11 +53,10 @@ describe('Lead UI Tests', () => {
     name: 'Agent Two',
     email: 'agent2@test.com',
     role: 'agent',
-    managerId: 'manager-1',
-    managerIds: ['manager-1'],
+    teamLeadId: 'teamLead-1',
+    teamLeadIds: ['teamLead-1'],
     assistantManagerId: null,
     assistantManagerIds: [],
-    teamLeadId: null,
     branchIds: [],
     branchId: null,
   };
@@ -74,7 +71,7 @@ describe('Lead UI Tests', () => {
         company: 'Acme Corp',
       }),
       status: 'New',
-      ownerId: 'manager-1',
+      ownerId: 'teamLead-1',
       assignedToId: 'agent-1',
       isClosed: false,
       closedAt: null,
@@ -90,7 +87,7 @@ describe('Lead UI Tests', () => {
         company: 'Tech Inc',
       }),
       status: 'Contacted',
-      ownerId: 'manager-1',
+      ownerId: 'teamLead-1',
       assignedToId: 'agent-2',
       isClosed: false,
       closedAt: null,
@@ -106,7 +103,7 @@ describe('Lead UI Tests', () => {
         company: 'StartUp LLC',
       }),
       status: 'Qualified',
-      ownerId: 'manager-1',
+      ownerId: 'teamLead-1',
       assignedToId: null,
       isClosed: false,
       closedAt: null,
@@ -190,8 +187,8 @@ describe('Lead UI Tests', () => {
     });
   });
 
-  describe('Manager Lead Visibility', () => {
-    it('should show all owned leads to managers', async () => {
+  describe('TeamLead Lead Visibility', () => {
+    it('should show all owned leads to teamLeads', async () => {
       mockUseAuth.mockReturnValue({
         user: mockManagerUser,
         isManager: true,
@@ -205,16 +202,16 @@ describe('Lead UI Tests', () => {
         signup: jest.fn(),
       });
 
-      // Mock listLeads to return all leads owned by manager
-      const managerLeads = mockLeads.filter(lead => lead.ownerId === 'manager-1');
+      // Mock listLeads to return all leads owned by teamLead
+      const managerLeads = mockLeads.filter(lead => lead.ownerId === 'teamLead-1');
       mockListLeads.mockResolvedValue(managerLeads);
 
-      // Verify: Manager sees all owned leads
+      // Verify: TeamLead sees all owned leads
       expect(managerLeads).toHaveLength(3);
-      expect(managerLeads.every(lead => lead.ownerId === 'manager-1')).toBe(true);
+      expect(managerLeads.every(lead => lead.ownerId === 'teamLead-1')).toBe(true);
     });
 
-    it('should show both assigned and unassigned leads to managers', async () => {
+    it('should show both assigned and unassigned leads to teamLeads', async () => {
       mockUseAuth.mockReturnValue({
         user: mockManagerUser,
         isManager: true,
@@ -228,10 +225,10 @@ describe('Lead UI Tests', () => {
         signup: jest.fn(),
       });
 
-      const managerLeads = mockLeads.filter(lead => lead.ownerId === 'manager-1');
+      const managerLeads = mockLeads.filter(lead => lead.ownerId === 'teamLead-1');
       mockListLeads.mockResolvedValue(managerLeads);
 
-      // Verify: Manager sees both assigned and unassigned leads
+      // Verify: TeamLead sees both assigned and unassigned leads
       const assignedLeads = managerLeads.filter(lead => lead.assignedToId !== null);
       const unassignedLeads = managerLeads.filter(lead => lead.assignedToId === null);
 
@@ -372,7 +369,7 @@ describe('Lead UI Tests', () => {
           company: 'New Corp',
         }),
         status: 'New',
-        ownerId: 'manager-1',
+        ownerId: 'teamLead-1',
         assignedToId: null,
         isClosed: false,
         closedAt: null,
@@ -389,7 +386,7 @@ describe('Lead UI Tests', () => {
   });
 
   describe('Lead Assignment', () => {
-    it('should allow manager to assign lead to agent', async () => {
+    it('should allow teamLead to assign lead to agent', async () => {
       mockUseAuth.mockReturnValue({
         user: mockManagerUser,
         isManager: true,
@@ -408,7 +405,7 @@ describe('Lead UI Tests', () => {
       mockGetAgentsByManager.mockResolvedValue(mockAgents);
 
       // Verify agents are fetched
-      const agents = await getAgentsByManager('manager-1');
+      const agents = await getAgentsByTeamLead('teamLead-1');
       expect(agents).toHaveLength(2);
       expect(agents).toEqual(mockAgents);
     });

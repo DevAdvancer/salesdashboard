@@ -1,13 +1,13 @@
 /**
- * Unit Test: Admin Manager Creation Authorization
+ * Unit Test: Admin TeamLead Creation Authorization
  *
- * Tests admin authorization for creating manager accounts.
- * Validates Requirements 1.1 (admin can create managers) and 1.3 (non-admin denied).
+ * Tests admin authorization for creating teamLead accounts.
+ * Validates Requirements 1.1 (admin can create teamLeads) and 1.3 (non-admin denied).
  *
  * Requirements: 1.1, 1.3
  */
 
-import { createManager } from '@/lib/services/user-service';
+import { createTeamLead } from '@/lib/services/user-service';
 import { databases, account } from '@/lib/appwrite';
 import { Permission, Role } from 'appwrite';
 
@@ -29,10 +29,10 @@ jest.mock('@/lib/appwrite', () => ({
   },
 }));
 
-describe('Admin Manager Creation Authorization', () => {
+describe('Admin TeamLead Creation Authorization', () => {
   const mockManagerInput = {
-    name: 'Test Manager',
-    email: 'manager@example.com',
+    name: 'Test TeamLead',
+    email: 'teamLead@example.com',
     password: 'securePassword123',
     branchIds: ['branch-1', 'branch-2'],
   };
@@ -52,30 +52,29 @@ describe('Admin Manager Creation Authorization', () => {
     process.env.NEXT_PUBLIC_APPWRITE_BRANCHES_COLLECTION_ID = 'test-branches';
   });
 
-  describe('Successful Manager Creation', () => {
-    it('should allow admin to create manager with valid data', async () => {
+  describe('Successful TeamLead Creation', () => {
+    it('should allow admin to create teamLead with valid data', async () => {
       const mockCreatedManager = {
-        $id: 'manager-456',
+        $id: 'teamLead-456',
         name: mockManagerInput.name,
         email: mockManagerInput.email,
-        role: 'manager',
-        managerId: null,
+        role: 'team_lead',
         teamLeadId: null,
         branchIds: mockManagerInput.branchIds,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
 
-      (account.create as jest.Mock).mockResolvedValue({ $id: 'manager-456' });
+      (account.create as jest.Mock).mockResolvedValue({ $id: 'teamLead-456' });
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedManager);
 
-      const result = await createManager(mockManagerInput, mockCurrentUser);
+      const result = await createTeamLead(mockManagerInput, mockCurrentUser);
 
       // Verify success
-      expect(result.role).toBe('manager');
+      expect(result.role).toBe('team_lead');
       expect(result.name).toBe(mockManagerInput.name);
       expect(result.email).toBe(mockManagerInput.email);
-      expect(result.managerId).toBeNull();
+      expect(result.teamLeadId).toBeNull();
       expect(result.teamLeadId).toBeNull();
       expect(result.branchIds).toEqual(mockManagerInput.branchIds);
 
@@ -95,8 +94,7 @@ describe('Admin Manager Creation Authorization', () => {
         expect.objectContaining({
           name: mockManagerInput.name,
           email: mockManagerInput.email,
-          role: 'manager',
-          managerId: null,
+          role: 'team_lead',
           teamLeadId: null,
           branchIds: mockManagerInput.branchIds,
         }),
@@ -107,25 +105,24 @@ describe('Admin Manager Creation Authorization', () => {
       );
     });
 
-    it('should create manager with correct permissions', async () => {
+    it('should create teamLead with correct permissions', async () => {
       const mockCreatedManager = {
-        $id: 'manager-456',
+        $id: 'teamLead-456',
         name: mockManagerInput.name,
         email: mockManagerInput.email,
-        role: 'manager',
-        managerId: null,
+        role: 'team_lead',
         teamLeadId: null,
         branchIds: mockManagerInput.branchIds,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
 
-      (account.create as jest.Mock).mockResolvedValue({ $id: 'manager-456' });
+      (account.create as jest.Mock).mockResolvedValue({ $id: 'teamLead-456' });
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedManager);
 
-      await createManager(mockManagerInput, mockCurrentUser);
+      await createTeamLead(mockManagerInput, mockCurrentUser);
 
-      // Verify permissions include read and update for the manager user
+      // Verify permissions include read and update for the teamLead user
       expect(databases.createDocument).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(String),
@@ -138,28 +135,27 @@ describe('Admin Manager Creation Authorization', () => {
       );
     });
 
-    it('should allow admin to assign multiple branches to manager', async () => {
+    it('should allow admin to assign multiple branches to teamLead', async () => {
       const inputWithMultipleBranches = {
         ...mockManagerInput,
         branchIds: ['branch-1', 'branch-2', 'branch-3'],
       };
 
       const mockCreatedManager = {
-        $id: 'manager-456',
+        $id: 'teamLead-456',
         name: inputWithMultipleBranches.name,
         email: inputWithMultipleBranches.email,
-        role: 'manager',
-        managerId: null,
+        role: 'team_lead',
         teamLeadId: null,
         branchIds: inputWithMultipleBranches.branchIds,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
 
-      (account.create as jest.Mock).mockResolvedValue({ $id: 'manager-456' });
+      (account.create as jest.Mock).mockResolvedValue({ $id: 'teamLead-456' });
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedManager);
 
-      const result = await createManager(inputWithMultipleBranches, mockCurrentUser);
+      const result = await createTeamLead(inputWithMultipleBranches, mockCurrentUser);
 
       expect(result.branchIds).toEqual(['branch-1', 'branch-2', 'branch-3']);
       expect(databases.createDocument).toHaveBeenCalledWith(
@@ -175,24 +171,24 @@ describe('Admin Manager Creation Authorization', () => {
   });
 
   describe('Validation Error Cases', () => {
-    it('should reject manager creation when email already exists', async () => {
+    it('should reject teamLead creation when email already exists', async () => {
       const duplicateError = new Error('User already exists');
       (duplicateError as any).code = 409;
 
       (account.create as jest.Mock).mockRejectedValue(duplicateError);
 
-      await expect(createManager(mockManagerInput, mockCurrentUser)).rejects.toThrow(
+      await expect(createTeamLead(mockManagerInput, mockCurrentUser)).rejects.toThrow(
         'A user with this email already exists'
       );
     });
 
-    it('should reject manager creation with no branches assigned', async () => {
+    it('should reject teamLead creation with no branches assigned', async () => {
       const inputWithNoBranches = {
         ...mockManagerInput,
         branchIds: [],
       };
 
-      await expect(createManager(inputWithNoBranches, mockCurrentUser)).rejects.toThrow(
+      await expect(createTeamLead(inputWithNoBranches, mockCurrentUser)).rejects.toThrow(
         'At least one branch must be assigned'
       );
 
@@ -200,158 +196,152 @@ describe('Admin Manager Creation Authorization', () => {
       expect(account.create).not.toHaveBeenCalled();
     });
 
-    it('should handle database errors during manager creation', async () => {
-      (account.create as jest.Mock).mockResolvedValue({ $id: 'manager-456' });
+    it('should handle database errors during teamLead creation', async () => {
+      (account.create as jest.Mock).mockResolvedValue({ $id: 'teamLead-456' });
       (databases.createDocument as jest.Mock).mockRejectedValue(
         new Error('Database connection failed')
       );
 
-      await expect(createManager(mockManagerInput, mockCurrentUser)).rejects.toThrow();
+      await expect(createTeamLead(mockManagerInput, mockCurrentUser)).rejects.toThrow();
     });
 
     it('should handle network errors during account creation', async () => {
       const networkError = new Error('Network error');
       (account.create as jest.Mock).mockRejectedValue(networkError);
 
-      await expect(createManager(mockManagerInput, mockCurrentUser)).rejects.toThrow();
+      await expect(createTeamLead(mockManagerInput, mockCurrentUser)).rejects.toThrow();
     });
   });
 
   describe('Edge Cases', () => {
-    it('should handle manager creation with single branch', async () => {
+    it('should handle teamLead creation with single branch', async () => {
       const inputWithOneBranch = {
         ...mockManagerInput,
         branchIds: ['branch-1'],
       };
 
       const mockCreatedManager = {
-        $id: 'manager-456',
+        $id: 'teamLead-456',
         name: inputWithOneBranch.name,
         email: inputWithOneBranch.email,
-        role: 'manager',
-        managerId: null,
+        role: 'team_lead',
         teamLeadId: null,
         branchIds: ['branch-1'],
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
 
-      (account.create as jest.Mock).mockResolvedValue({ $id: 'manager-456' });
+      (account.create as jest.Mock).mockResolvedValue({ $id: 'teamLead-456' });
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedManager);
 
-      const result = await createManager(inputWithOneBranch, mockCurrentUser);
+      const result = await createTeamLead(inputWithOneBranch, mockCurrentUser);
 
       expect(result.branchIds).toEqual(['branch-1']);
     });
 
-    it('should set managerId and teamLeadId to null for managers', async () => {
+    it('should set teamLeadId and teamLeadId to null for teamLeads', async () => {
       const mockCreatedManager = {
-        $id: 'manager-456',
+        $id: 'teamLead-456',
         name: mockManagerInput.name,
         email: mockManagerInput.email,
-        role: 'manager',
-        managerId: null,
+        role: 'team_lead',
         teamLeadId: null,
         branchIds: mockManagerInput.branchIds,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
 
-      (account.create as jest.Mock).mockResolvedValue({ $id: 'manager-456' });
+      (account.create as jest.Mock).mockResolvedValue({ $id: 'teamLead-456' });
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedManager);
 
-      const result = await createManager(mockManagerInput, mockCurrentUser);
+      const result = await createTeamLead(mockManagerInput, mockCurrentUser);
 
-      expect(result.managerId).toBeNull();
+      expect(result.teamLeadId).toBeNull();
       expect(result.teamLeadId).toBeNull();
     });
 
-    it('should handle special characters in manager name and email', async () => {
+    it('should handle special characters in teamLead name and email', async () => {
       const inputWithSpecialChars = {
         name: "O'Brien-Smith",
-        email: 'manager+test@example.com',
+        email: 'teamLead+test@example.com',
         password: 'securePassword123',
         branchIds: ['branch-1'],
       };
 
       const mockCreatedManager = {
-        $id: 'manager-456',
+        $id: 'teamLead-456',
         name: inputWithSpecialChars.name,
         email: inputWithSpecialChars.email,
-        role: 'manager',
-        managerId: null,
+        role: 'team_lead',
         teamLeadId: null,
         branchIds: inputWithSpecialChars.branchIds,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
 
-      (account.create as jest.Mock).mockResolvedValue({ $id: 'manager-456' });
+      (account.create as jest.Mock).mockResolvedValue({ $id: 'teamLead-456' });
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedManager);
 
-      const result = await createManager(inputWithSpecialChars, mockCurrentUser);
+      const result = await createTeamLead(inputWithSpecialChars, mockCurrentUser);
 
       expect(result.name).toBe("O'Brien-Smith");
-      expect(result.email).toBe('manager+test@example.com');
+      expect(result.email).toBe('teamLead+test@example.com');
     });
   });
 
-  describe('Manager Role Verification', () => {
-    it('should ensure created user has manager role', async () => {
+  describe('TeamLead Role Verification', () => {
+    it('should ensure created user has teamLead role', async () => {
       const mockCreatedManager = {
-        $id: 'manager-456',
+        $id: 'teamLead-456',
         name: mockManagerInput.name,
         email: mockManagerInput.email,
-        role: 'manager',
-        managerId: null,
+        role: 'team_lead',
         teamLeadId: null,
         branchIds: mockManagerInput.branchIds,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
 
-      (account.create as jest.Mock).mockResolvedValue({ $id: 'manager-456' });
+      (account.create as jest.Mock).mockResolvedValue({ $id: 'teamLead-456' });
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedManager);
 
-      const result = await createManager(mockManagerInput, mockCurrentUser);
+      const result = await createTeamLead(mockManagerInput, mockCurrentUser);
 
-      expect(result.role).toBe('manager');
+      expect(result.role).toBe('team_lead');
       expect(databases.createDocument).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(String),
         expect.any(String),
         expect.objectContaining({
-          role: 'manager',
+          role: 'team_lead',
         }),
         expect.any(Array)
       );
     });
 
-    it('should not assign manager to another manager or team lead', async () => {
+    it('should not assign teamLead to another teamLead or team lead', async () => {
       const mockCreatedManager = {
-        $id: 'manager-456',
+        $id: 'teamLead-456',
         name: mockManagerInput.name,
         email: mockManagerInput.email,
-        role: 'manager',
-        managerId: null,
+        role: 'team_lead',
         teamLeadId: null,
         branchIds: mockManagerInput.branchIds,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
 
-      (account.create as jest.Mock).mockResolvedValue({ $id: 'manager-456' });
+      (account.create as jest.Mock).mockResolvedValue({ $id: 'teamLead-456' });
       (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedManager);
 
-      await createManager(mockManagerInput, mockCurrentUser);
+      await createTeamLead(mockManagerInput, mockCurrentUser);
 
-      // Verify managerId and teamLeadId are explicitly set to null
+      // Verify teamLeadId and teamLeadId are explicitly set to null
       expect(databases.createDocument).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(String),
         expect.any(String),
         expect.objectContaining({
-          managerId: null,
           teamLeadId: null,
         }),
         expect.any(Array)

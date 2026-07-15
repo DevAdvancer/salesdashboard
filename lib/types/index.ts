@@ -312,6 +312,8 @@ export interface LeadListFilters {
   teamLeadId?: string;
   dateFrom?: string;
   dateTo?: string;
+  closedAtFrom?: string;
+  closedAtTo?: string;
   searchQuery?: string;
   isClosed?: boolean;
 }

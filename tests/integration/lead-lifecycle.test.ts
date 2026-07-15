@@ -40,7 +40,7 @@ jest.mock('@/lib/services/lead-validator', () => ({
 }));
 
 describe('Integration: Complete Lead Lifecycle', () => {
-  const managerId = 'manager-001';
+  const teamLeadId = 'teamLead-001';
   const agentId = 'agent-001';
   const newAgentId = 'agent-002';
 
@@ -60,12 +60,12 @@ describe('Integration: Complete Lead Lifecycle', () => {
   });
 
   it('should complete the full lead lifecycle: create → assign → edit → close → reopen', async () => {
-    // Step 1: Manager creates a lead
+    // Step 1: TeamLead creates a lead
     const createdLead: Lead = {
       $id: 'lead-lifecycle-1',
       data: JSON.stringify(leadData),
       status: 'Interested',
-      ownerId: managerId,
+      ownerId: teamLeadId,
       assignedToId: null,
       branchId: null,
       isClosed: false,
@@ -76,7 +76,7 @@ describe('Integration: Complete Lead Lifecycle', () => {
 
     (databases.createDocument as jest.Mock).mockResolvedValue(createdLead);
 
-    currentLead = await createLead(managerId, {
+    currentLead = await createLead(teamLeadId, {
       data: leadData,
       status: 'Interested',
     });
@@ -89,18 +89,18 @@ describe('Integration: Complete Lead Lifecycle', () => {
       'test-leads-collection',
       'unique()',
       expect.objectContaining({
-        ownerId: managerId,
+        ownerId: teamLeadId,
         branchId: null,
         isClosed: false,
       }),
       expect.arrayContaining([
-        Permission.read(Role.user(managerId)),
-        Permission.update(Role.user(managerId)),
-        Permission.delete(Role.user(managerId)),
+        Permission.read(Role.user(teamLeadId)),
+        Permission.update(Role.user(teamLeadId)),
+        Permission.delete(Role.user(teamLeadId)),
       ])
     );
 
-    // Step 2: Manager assigns lead to agent
+    // Step 2: TeamLead assigns lead to agent
     const assignedLead: Lead = {
       ...currentLead,
       assignedToId: agentId,
@@ -157,7 +157,7 @@ describe('Integration: Complete Lead Lifecycle', () => {
     (databases.getDocument as jest.Mock).mockResolvedValue(currentLead);
     (databases.updateDocument as jest.Mock).mockResolvedValue(closedLead);
 
-    currentLead = await closeLead(currentLead.$id, 'Won', managerId, 'Manager', 'manager');
+    currentLead = await closeLead(currentLead.$id, 'Won', teamLeadId, 'TeamLead', 'team_lead');
 
     expect(currentLead.isClosed).toBe(true);
     expect(currentLead.closedAt).toBeTruthy();
@@ -178,11 +178,11 @@ describe('Integration: Complete Lead Lifecycle', () => {
       documents: [currentLead],
     });
 
-    const closedLeads = await listLeads({ isClosed: true }, managerId, 'manager');
+    const closedLeads = await listLeads({ isClosed: true }, teamLeadId, 'team_lead');
     expect(closedLeads).toHaveLength(1);
     expect(closedLeads[0].isClosed).toBe(true);
 
-    // Step 6: Manager reopens the lead
+    // Step 6: TeamLead reopens the lead
     const reopenedLead: Lead = {
       ...currentLead,
       isClosed: false,
@@ -213,7 +213,7 @@ describe('Integration: Complete Lead Lifecycle', () => {
         $id: 'lead-a',
         data: JSON.stringify({ firstName: 'A' }),
         status: 'New',
-        ownerId: managerId,
+        ownerId: teamLeadId,
         assignedToId: agentId,
         branchId: null,
         isClosed: false,
@@ -223,7 +223,7 @@ describe('Integration: Complete Lead Lifecycle', () => {
         $id: 'lead-b',
         data: JSON.stringify({ firstName: 'B' }),
         status: 'New',
-        ownerId: managerId,
+        ownerId: teamLeadId,
         assignedToId: newAgentId,
         branchId: null,
         isClosed: false,
@@ -240,12 +240,12 @@ describe('Integration: Complete Lead Lifecycle', () => {
     expect(agentLeads).toHaveLength(1);
     expect(agentLeads[0].assignedToId).toBe(agentId);
 
-    // Manager query returns all owned leads
+    // TeamLead query returns all owned leads
     (databases.listDocuments as jest.Mock).mockResolvedValue({
       documents: allLeads,
     });
 
-    const managerLeads = await listLeads({}, managerId, 'manager');
+    const managerLeads = await listLeads({}, teamLeadId, 'team_lead');
     expect(managerLeads).toHaveLength(2);
   });
 
@@ -254,7 +254,7 @@ describe('Integration: Complete Lead Lifecycle', () => {
       $id: 'lead-reassign',
       data: JSON.stringify(leadData),
       status: 'New',
-      ownerId: managerId,
+      ownerId: teamLeadId,
       assignedToId: agentId,
       branchId: null,
       isClosed: false,

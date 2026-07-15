@@ -1471,6 +1471,14 @@ export async function listLeadsAction(
       const to = expandIsoDateToEnd(filters.dateTo);
       queries.push(Query.lessThanEqual('$createdAt', to));
     }
+    if (filters.closedAtFrom) {
+      const from = expandIsoDateToStart(filters.closedAtFrom);
+      queries.push(Query.greaterThanEqual('closedAt', from));
+    }
+    if (filters.closedAtTo) {
+      const to = expandIsoDateToEnd(filters.closedAtTo);
+      queries.push(Query.lessThanEqual('closedAt', to));
+    }
 
     // Order by creation date (newest first)
     queries.push(Query.orderDesc('$createdAt'));

@@ -13,7 +13,7 @@ import { Branch, UpdateBranchInput } from '@/lib/types';
 
 interface BranchStore {
   branches: Branch[];
-  managers: { $id: string; role: 'manager'; branchId: string | null }[];
+  teamLeads: { $id: string; role: 'team_lead'; branchId: string | null }[];
   leads: { $id: string; branchId: string | null; isClosed: boolean }[];
 }
 
@@ -32,9 +32,9 @@ function simulateCreateBranch(store: BranchStore, name: string): Branch | Error 
 }
 
 function simulateDeleteBranch(store: BranchStore, branchId: string): void | Error {
-  const hasManagers = store.managers.some(m => m.branchId === branchId);
+  const hasManagers = store.teamLeads.some(m => m.branchId === branchId);
   if (hasManagers) {
-    return new Error('Cannot delete branch with assigned managers');
+    return new Error('Cannot delete branch with assigned teamLeads');
   }
   const hasActiveLeads = store.leads.some(l => l.branchId === branchId && !l.isClosed);
   if (hasActiveLeads) {
@@ -60,7 +60,7 @@ function simulateUpdateBranch(store: BranchStore, branchId: string, input: Updat
 
 function simulateGetBranchStats(store: BranchStore, branchId: string) {
   return {
-    managerCount: store.managers.filter(m => m.branchId === branchId).length,
+    managerCount: store.teamLeads.filter(m => m.branchId === branchId).length,
     leadCount: store.leads.filter(l => l.branchId === branchId).length,
   };
 }
@@ -82,7 +82,7 @@ describe('Branch Service Properties', () => {
     it('should create branch with isActive=true and the provided name', () => {
       fc.assert(
         fc.property(branchNameArb, (name) => {
-          const store: BranchStore = { branches: [], managers: [], leads: [] };
+          const store: BranchStore = { branches: [], teamLeads: [], leads: [] };
           const result = simulateCreateBranch(store, name);
 
           if (result instanceof Error) return false;
@@ -105,7 +105,7 @@ describe('Branch Service Properties', () => {
     it('should reject creation of a branch with a duplicate name', () => {
       fc.assert(
         fc.property(branchNameArb, (name) => {
-          const store: BranchStore = { branches: [], managers: [], leads: [] };
+          const store: BranchStore = { branches: [], teamLeads: [], leads: [] };
 
           // Create first branch
           const first = simulateCreateBranch(store, name);
@@ -123,30 +123,30 @@ describe('Branch Service Properties', () => {
   /**
    * Feature: admin-branch-management, Property 6: Branch deletion guard
    *
-   * For any branch that has at least one assigned manager or at least one active lead,
+   * For any branch that has at least one assigned teamLead or at least one active lead,
    * attempting to delete that branch results in a rejection error.
-   * For any branch with zero managers and zero active leads, deletion succeeds.
+   * For any branch with zero teamLeads and zero active leads, deletion succeeds.
    *
    * Validates: Requirements 2.3
    */
   describe('Property 6: Branch deletion guard', () => {
-    it('should prevent deletion when branch has assigned managers', () => {
+    it('should prevent deletion when branch has assigned teamLeads', () => {
       fc.assert(
         fc.property(
           branchNameArb,
           fc.integer({ min: 1, max: 5 }),
           (name, managerCount) => {
-            const store: BranchStore = { branches: [], managers: [], leads: [] };
+            const store: BranchStore = { branches: [], teamLeads: [], leads: [] };
             const branch = simulateCreateBranch(store, name);
             if (branch instanceof Error) return false;
 
-            // Add managers to the branch
+            // Add teamLeads to the branch
             for (let i = 0; i < managerCount; i++) {
-              store.managers.push({ $id: `mgr-${i}`, role: 'manager', branchId: branch.$id });
+              store.teamLeads.push({ $id: `mgr-${i}`, role: 'team_lead', branchId: branch.$id });
             }
 
             const result = simulateDeleteBranch(store, branch.$id);
-            return result instanceof Error && result.message === 'Cannot delete branch with assigned managers';
+            return result instanceof Error && result.message === 'Cannot delete branch with assigned teamLeads';
           }
         ),
         { numRuns: 100 }
@@ -159,7 +159,7 @@ describe('Branch Service Properties', () => {
           branchNameArb,
           fc.integer({ min: 1, max: 5 }),
           (name, leadCount) => {
-            const store: BranchStore = { branches: [], managers: [], leads: [] };
+            const store: BranchStore = { branches: [], teamLeads: [], leads: [] };
             const branch = simulateCreateBranch(store, name);
             if (branch instanceof Error) return false;
 
@@ -176,14 +176,14 @@ describe('Branch Service Properties', () => {
       );
     });
 
-    it('should allow deletion when branch has no managers and no active leads', () => {
+    it('should allow deletion when branch has no teamLeads and no active leads', () => {
       fc.assert(
         fc.property(branchNameArb, (name) => {
-          const store: BranchStore = { branches: [], managers: [], leads: [] };
+          const store: BranchStore = { branches: [], teamLeads: [], leads: [] };
           const branch = simulateCreateBranch(store, name);
           if (branch instanceof Error) return false;
 
-          // Only closed leads (no active leads, no managers)
+          // Only closed leads (no active leads, no teamLeads)
           store.leads.push({ $id: 'closed-1', branchId: branch.$id, isClosed: true });
 
           const result = simulateDeleteBranch(store, branch.$id);
@@ -197,8 +197,8 @@ describe('Branch Service Properties', () => {
   /**
    * Feature: admin-branch-management, Property 7: Branch listing includes correct stats
    *
-   * For any set of branches, managers, and leads, listing branches returns every branch
-   * with a managerCount equal to the number of managers whose branchId matches that branch,
+   * For any set of branches, teamLeads, and leads, listing branches returns every branch
+   * with a managerCount equal to the number of teamLeads whose branchId matches that branch,
    * and a leadCount equal to the number of leads whose branchId matches that branch.
    *
    * Validates: Requirements 2.4
@@ -209,19 +209,19 @@ describe('Branch Service Properties', () => {
 
       fc.assert(
         fc.property(branchCountArb, fc.integer({ min: 0, max: 10 }), fc.integer({ min: 0, max: 10 }), (branchCount, totalManagers, totalLeads) => {
-          const store: BranchStore = { branches: [], managers: [], leads: [] };
+          const store: BranchStore = { branches: [], teamLeads: [], leads: [] };
 
           // Create branches
           for (let i = 0; i < branchCount; i++) {
             simulateCreateBranch(store, `Branch-${i}`);
           }
 
-          // Distribute managers across branches
+          // Distribute teamLeads across branches
           for (let i = 0; i < totalManagers; i++) {
             const branchIdx = i % branchCount;
-            store.managers.push({
+            store.teamLeads.push({
               $id: `mgr-${i}`,
-              role: 'manager',
+              role: 'team_lead',
               branchId: store.branches[branchIdx].$id,
             });
           }
@@ -239,7 +239,7 @@ describe('Branch Service Properties', () => {
           // Verify stats for each branch
           return store.branches.every(branch => {
             const stats = simulateGetBranchStats(store, branch.$id);
-            const expectedManagers = store.managers.filter(m => m.branchId === branch.$id).length;
+            const expectedManagers = store.teamLeads.filter(m => m.branchId === branch.$id).length;
             const expectedLeads = store.leads.filter(l => l.branchId === branch.$id).length;
             return stats.managerCount === expectedManagers && stats.leadCount === expectedLeads;
           });
@@ -250,34 +250,34 @@ describe('Branch Service Properties', () => {
   });
 
   /**
-   * Feature: admin-branch-management, Property 9: Multiple managers per branch
+   * Feature: admin-branch-management, Property 9: Multiple teamLeads per branch
    *
-   * For any branch that already has one or more assigned managers, assigning an
-   * additional manager to that branch succeeds without error.
+   * For any branch that already has one or more assigned teamLeads, assigning an
+   * additional teamLead to that branch succeeds without error.
    *
    * Validates: Requirements 3.3
    */
-  describe('Property 9: Multiple managers per branch', () => {
-    it('should allow multiple managers to be assigned to the same branch', () => {
+  describe('Property 9: Multiple teamLeads per branch', () => {
+    it('should allow multiple teamLeads to be assigned to the same branch', () => {
       fc.assert(
         fc.property(
           branchNameArb,
           fc.integer({ min: 2, max: 10 }),
           (name, managerCount) => {
-            const store: BranchStore = { branches: [], managers: [], leads: [] };
+            const store: BranchStore = { branches: [], teamLeads: [], leads: [] };
             const branch = simulateCreateBranch(store, name);
             if (branch instanceof Error) return false;
 
-            // Assign multiple managers — all should succeed
+            // Assign multiple teamLeads — all should succeed
             for (let i = 0; i < managerCount; i++) {
-              store.managers.push({
+              store.teamLeads.push({
                 $id: `mgr-${i}`,
-                role: 'manager',
+                role: 'team_lead',
                 branchId: branch.$id,
               });
             }
 
-            const assignedManagers = store.managers.filter(m => m.branchId === branch.$id);
+            const assignedManagers = store.teamLeads.filter(m => m.branchId === branch.$id);
             return assignedManagers.length === managerCount;
           }
         ),
@@ -303,7 +303,7 @@ describe('Branch Service Properties', () => {
 
       fc.assert(
         fc.property(branchNameArb, updateInputArb, (originalName, update) => {
-          const store: BranchStore = { branches: [], managers: [], leads: [] };
+          const store: BranchStore = { branches: [], teamLeads: [], leads: [] };
           const branch = simulateCreateBranch(store, originalName);
           if (branch instanceof Error) return false;
 

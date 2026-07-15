@@ -78,7 +78,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
   describe('Field Rendering Order - Requirement 3.8', () => {
     it('should render fields in correct order based on order property', () => {
       mockUseAuth.mockReturnValue({
-        user: { $id: '1', name: 'Manager', email: 'manager@test.com', role: 'manager', managerId: null },
+        user: { $id: '1', name: 'TeamLead', email: 'teamLead@test.com', role: 'team_lead', teamLeadId: null },
         isManager: true,
         isAgent: false,
         loading: false,
@@ -101,7 +101,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
 
     it('should render fields sorted by order property even if config is unsorted', () => {
       mockUseAuth.mockReturnValue({
-        user: { $id: '1', name: 'Manager', email: 'manager@test.com', role: 'manager', managerId: null },
+        user: { $id: '1', name: 'TeamLead', email: 'teamLead@test.com', role: 'team_lead', teamLeadId: null },
         isManager: true,
         isAgent: false,
         loading: false,
@@ -131,7 +131,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
   describe('Agent Visibility Filtering - Requirement 3.8', () => {
     it('should only show visible fields to agents', () => {
       mockUseAuth.mockReturnValue({
-        user: { $id: '2', name: 'Agent', email: 'agent@test.com', role: 'agent', managerId: '1' },
+        user: { $id: '2', name: 'Agent', email: 'agent@test.com', role: 'agent', teamLeadId: '1' },
         isManager: false,
         isAgent: true,
         loading: false,
@@ -153,9 +153,9 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
       expect(screen.queryByLabelText(/Hidden Field/i)).not.toBeInTheDocument();
     });
 
-    it('should show all visible fields to managers', () => {
+    it('should show all visible fields to teamLeads', () => {
       mockUseAuth.mockReturnValue({
-        user: { $id: '1', name: 'Manager', email: 'manager@test.com', role: 'manager', managerId: null },
+        user: { $id: '1', name: 'TeamLead', email: 'teamLead@test.com', role: 'team_lead', teamLeadId: null },
         isManager: true,
         isAgent: false,
         loading: false,
@@ -173,7 +173,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
       expect(screen.getByLabelText(/Phone/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/Status/i)).toBeInTheDocument();
 
-      // Hidden field should not be present (even for managers in lead forms)
+      // Hidden field should not be present (even for teamLeads in lead forms)
       expect(screen.queryByLabelText(/Hidden Field/i)).not.toBeInTheDocument();
     });
   });
@@ -181,7 +181,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
   describe('Validation Error Display - Requirements 3.9, 11.4', () => {
     it('should display validation errors for required fields when empty', async () => {
       mockUseAuth.mockReturnValue({
-        user: { $id: '1', name: 'Manager', email: 'manager@test.com', role: 'manager', managerId: null },
+        user: { $id: '1', name: 'TeamLead', email: 'teamLead@test.com', role: 'team_lead', teamLeadId: null },
         isManager: true,
         isAgent: false,
         loading: false,
@@ -211,7 +211,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
 
     it('should display validation error for invalid email format', async () => {
       mockUseAuth.mockReturnValue({
-        user: { $id: '1', name: 'Manager', email: 'manager@test.com', role: 'manager', managerId: null },
+        user: { $id: '1', name: 'TeamLead', email: 'teamLead@test.com', role: 'team_lead', teamLeadId: null },
         isManager: true,
         isAgent: false,
         loading: false,
@@ -249,7 +249,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
 
     it('should clear validation errors when fields are corrected', async () => {
       mockUseAuth.mockReturnValue({
-        user: { $id: '1', name: 'Manager', email: 'manager@test.com', role: 'manager', managerId: null },
+        user: { $id: '1', name: 'TeamLead', email: 'teamLead@test.com', role: 'team_lead', teamLeadId: null },
         isManager: true,
         isAgent: false,
         loading: false,
@@ -283,7 +283,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
   describe('Form Submission - Requirement 11.5', () => {
     it('should call onSubmit with form data when validation passes', async () => {
       mockUseAuth.mockReturnValue({
-        user: { $id: '1', name: 'Manager', email: 'manager@test.com', role: 'manager', managerId: null },
+        user: { $id: '1', name: 'TeamLead', email: 'teamLead@test.com', role: 'team_lead', teamLeadId: null },
         isManager: true,
         isAgent: false,
         loading: false,
@@ -327,7 +327,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
 
     it('should disable submit button while submitting', async () => {
       mockUseAuth.mockReturnValue({
-        user: { $id: '1', name: 'Manager', email: 'manager@test.com', role: 'manager', managerId: null },
+        user: { $id: '1', name: 'TeamLead', email: 'teamLead@test.com', role: 'team_lead', teamLeadId: null },
         isManager: true,
         isAgent: false,
         loading: false,
@@ -364,7 +364,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
 
     it('should show loading state when isLoading prop is true', () => {
       mockUseAuth.mockReturnValue({
-        user: { $id: '1', name: 'Manager', email: 'manager@test.com', role: 'manager', managerId: null },
+        user: { $id: '1', name: 'TeamLead', email: 'teamLead@test.com', role: 'team_lead', teamLeadId: null },
         isManager: true,
         isAgent: false,
         loading: false,
@@ -383,7 +383,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
   describe('Field Type Rendering', () => {
     it('should render text input for text field type', () => {
       mockUseAuth.mockReturnValue({
-        user: { $id: '1', name: 'Manager', email: 'manager@test.com', role: 'manager', managerId: null },
+        user: { $id: '1', name: 'TeamLead', email: 'teamLead@test.com', role: 'team_lead', teamLeadId: null },
         isManager: true,
         isAgent: false,
         loading: false,
@@ -412,7 +412,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
 
     it('should render email input for email field type', () => {
       mockUseAuth.mockReturnValue({
-        user: { $id: '1', name: 'Manager', email: 'manager@test.com', role: 'manager', managerId: null },
+        user: { $id: '1', name: 'TeamLead', email: 'teamLead@test.com', role: 'team_lead', teamLeadId: null },
         isManager: true,
         isAgent: false,
         loading: false,
@@ -441,7 +441,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
 
     it('should render phone input for phone field type', () => {
       mockUseAuth.mockReturnValue({
-        user: { $id: '1', name: 'Manager', email: 'manager@test.com', role: 'manager', managerId: null },
+        user: { $id: '1', name: 'TeamLead', email: 'teamLead@test.com', role: 'team_lead', teamLeadId: null },
         isManager: true,
         isAgent: false,
         loading: false,
@@ -470,7 +470,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
 
     it('should render textarea for textarea field type', () => {
       mockUseAuth.mockReturnValue({
-        user: { $id: '1', name: 'Manager', email: 'manager@test.com', role: 'manager', managerId: null },
+        user: { $id: '1', name: 'TeamLead', email: 'teamLead@test.com', role: 'team_lead', teamLeadId: null },
         isManager: true,
         isAgent: false,
         loading: false,
@@ -499,7 +499,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
 
     it('should render select dropdown for dropdown field type', () => {
       mockUseAuth.mockReturnValue({
-        user: { $id: '1', name: 'Manager', email: 'manager@test.com', role: 'manager', managerId: null },
+        user: { $id: '1', name: 'TeamLead', email: 'teamLead@test.com', role: 'team_lead', teamLeadId: null },
         isManager: true,
         isAgent: false,
         loading: false,
@@ -547,7 +547,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
       ];
 
       mockUseAuth.mockReturnValue({
-        user: { $id: 'monitor-1', name: 'Monitor', email: 'monitor@test.com', role: 'monitor', managerId: null, branchIds: [] },
+        user: { $id: 'monitor-1', name: 'Monitor', email: 'monitor@test.com', role: 'monitor', teamLeadId: null, branchIds: [] },
         isManager: false,
         isAgent: false,
         isMonitor: true,
@@ -578,7 +578,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
       ];
 
       mockUseAuth.mockReturnValue({
-        user: { $id: 'manager-1', name: 'Manager', email: 'manager@test.com', role: 'manager', managerId: null, branchIds: [] },
+        user: { $id: 'teamLead-1', name: 'TeamLead', email: 'teamLead@test.com', role: 'team_lead', teamLeadId: null, branchIds: [] },
         isManager: true,
         isAgent: false,
         isMonitor: false,
@@ -597,7 +597,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
 
     it('should render checkboxes for checklist field type', () => {
       mockUseAuth.mockReturnValue({
-        user: { $id: '1', name: 'Manager', email: 'manager@test.com', role: 'manager', managerId: null },
+        user: { $id: '1', name: 'TeamLead', email: 'teamLead@test.com', role: 'team_lead', teamLeadId: null },
         isManager: true,
         isAgent: false,
         loading: false,
@@ -635,7 +635,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
   describe('Required Field Indicators', () => {
     it('should display asterisk for required fields', () => {
       mockUseAuth.mockReturnValue({
-        user: { $id: '1', name: 'Manager', email: 'manager@test.com', role: 'manager', managerId: null },
+        user: { $id: '1', name: 'TeamLead', email: 'teamLead@test.com', role: 'team_lead', teamLeadId: null },
         isManager: true,
         isAgent: false,
         loading: false,

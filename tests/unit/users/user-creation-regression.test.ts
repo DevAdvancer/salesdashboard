@@ -2,7 +2,7 @@
  * Unit Test: User Creation Regression Tests
  *
  * Tests team lead and agent creation flows to ensure no regressions
- * after changes to createManagerAction.
+ * after changes to createTeamLeadAction.
  *
  * Requirements: 4.1, 4.2
  */
@@ -29,7 +29,7 @@ jest.mock('@/lib/appwrite', () => ({
 }));
 
 describe('User Creation Regression Tests', () => {
-  const mockManagerId = 'manager-123';
+  const mockManagerId = 'teamLead-123';
   const mockTeamLeadId = 'teamlead-456';
 
   beforeEach(() => {
@@ -40,21 +40,20 @@ describe('User Creation Regression Tests', () => {
   });
 
   describe('Team Lead Creation Flow', () => {
-    it('should allow manager to create team lead with valid data', async () => {
+    it('should allow teamLead to create team lead with valid data', async () => {
       const mockTeamLeadInput = {
         name: 'Test Team Lead',
         email: 'teamlead@example.com',
         password: 'securePassword123',
-        managerId: mockManagerId,
+        teamLeadId: mockManagerId,
         branchIds: ['branch-1', 'branch-2'],
       };
 
       const mockManagerDoc = {
         $id: mockManagerId,
-        name: 'Test Manager',
-        email: 'manager@example.com',
-        role: 'manager',
-        managerId: null,
+        name: 'Test TeamLead',
+        email: 'teamLead@example.com',
+        role: 'team_lead',
         teamLeadId: null,
         branchIds: ['branch-1', 'branch-2', 'branch-3'],
       };
@@ -64,8 +63,7 @@ describe('User Creation Regression Tests', () => {
         name: mockTeamLeadInput.name,
         email: mockTeamLeadInput.email,
         role: 'team_lead',
-        managerId: mockManagerId,
-        teamLeadId: null,
+        teamLeadId: mockManagerId,
         branchIds: mockTeamLeadInput.branchIds,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
@@ -81,9 +79,9 @@ describe('User Creation Regression Tests', () => {
       expect(result.role).toBe('team_lead');
       expect(result.name).toBe(mockTeamLeadInput.name);
       expect(result.email).toBe(mockTeamLeadInput.email);
-      expect(result.managerId).toBe(mockManagerId);
+      expect(result.teamLeadId).toBe(mockManagerId);
 
-      // Verify manager document was retrieved
+      // Verify teamLead document was retrieved
       expect(databases.getDocument).toHaveBeenCalledWith(
         'test-database',
         'users',
@@ -107,7 +105,7 @@ describe('User Creation Regression Tests', () => {
           name: mockTeamLeadInput.name,
           email: mockTeamLeadInput.email,
           role: 'team_lead',
-          managerId: mockManagerId,
+          teamLeadId: mockManagerId,
           branchIds: mockTeamLeadInput.branchIds,
         }),
         expect.any(Array)
@@ -119,16 +117,15 @@ describe('User Creation Regression Tests', () => {
         name: 'Test Team Lead',
         email: 'teamlead@example.com',
         password: 'securePassword123',
-        managerId: mockManagerId,
-        branchIds: ['branch-1', 'branch-99'], // branch-99 not in manager's branches
+        teamLeadId: mockManagerId,
+        branchIds: ['branch-1', 'branch-99'], // branch-99 not in teamLead's branches
       };
 
       const mockManagerDoc = {
         $id: mockManagerId,
-        name: 'Test Manager',
-        email: 'manager@example.com',
-        role: 'manager',
-        managerId: null,
+        name: 'Test TeamLead',
+        email: 'teamLead@example.com',
+        role: 'team_lead',
         teamLeadId: null,
         branchIds: ['branch-1', 'branch-2'],
       };
@@ -145,16 +142,15 @@ describe('User Creation Regression Tests', () => {
         name: 'Test Team Lead',
         email: 'existing@example.com',
         password: 'securePassword123',
-        managerId: mockManagerId,
+        teamLeadId: mockManagerId,
         branchIds: ['branch-1'],
       };
 
       const mockManagerDoc = {
         $id: mockManagerId,
-        name: 'Test Manager',
-        email: 'manager@example.com',
-        role: 'manager',
-        managerId: null,
+        name: 'Test TeamLead',
+        email: 'teamLead@example.com',
+        role: 'team_lead',
         teamLeadId: null,
         branchIds: ['branch-1', 'branch-2'],
       };
@@ -175,7 +171,7 @@ describe('User Creation Regression Tests', () => {
         name: 'Test Team Lead',
         email: 'teamlead@example.com',
         password: 'securePassword123',
-        managerId: mockManagerId,
+        teamLeadId: mockManagerId,
         branchIds: [],
       };
 
@@ -204,8 +200,7 @@ describe('User Creation Regression Tests', () => {
         name: 'Test Team Lead',
         email: 'teamlead@example.com',
         role: 'team_lead',
-        managerId: mockManagerId,
-        teamLeadId: null,
+        teamLeadId: mockManagerId,
         branchIds: ['branch-1', 'branch-2'],
       };
 
@@ -216,8 +211,7 @@ describe('User Creation Regression Tests', () => {
         name: mockAgentInput.name,
         email: mockAgentInput.email,
         role: 'agent',
-        managerId: mockManagerId,
-        teamLeadId: mockTeamLeadId,
+        teamLeadId: mockManagerId,
         branchIds: mockAgentInput.branchIds,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
@@ -233,7 +227,7 @@ describe('User Creation Regression Tests', () => {
       expect(result.role).toBe('agent');
       expect(result.name).toBe(mockAgentInput.name);
       expect(result.email).toBe(mockAgentInput.email);
-      expect(result.managerId).toBe(mockManagerId);
+      expect(result.teamLeadId).toBe(mockManagerId);
       expect(result.teamLeadId).toBe(mockTeamLeadId);
 
       // Verify team lead document was retrieved
@@ -260,8 +254,7 @@ describe('User Creation Regression Tests', () => {
           name: mockAgentInput.name,
           email: mockAgentInput.email,
           role: 'agent',
-          managerId: mockManagerId,
-          teamLeadId: mockTeamLeadId,
+          teamLeadId: mockManagerId,
           branchIds: mockAgentInput.branchIds,
         }),
         expect.any(Array)
@@ -282,8 +275,7 @@ describe('User Creation Regression Tests', () => {
         name: 'Test Team Lead',
         email: 'teamlead@example.com',
         role: 'team_lead',
-        managerId: mockManagerId,
-        teamLeadId: null,
+        teamLeadId: mockManagerId,
         branchIds: ['branch-1', 'branch-2'],
       };
 
@@ -308,8 +300,7 @@ describe('User Creation Regression Tests', () => {
         name: 'Test Team Lead',
         email: 'teamlead@example.com',
         role: 'team_lead',
-        managerId: mockManagerId,
-        teamLeadId: null,
+        teamLeadId: mockManagerId,
         branchIds: ['branch-1', 'branch-2'],
       };
 
@@ -324,7 +315,7 @@ describe('User Creation Regression Tests', () => {
       );
     });
 
-    it('should correctly set managerId from team lead document', async () => {
+    it('should correctly set teamLeadId from team lead document', async () => {
       const mockAgentInput = {
         name: 'Test Agent',
         email: 'agent@example.com',
@@ -338,8 +329,7 @@ describe('User Creation Regression Tests', () => {
         name: 'Test Team Lead',
         email: 'teamlead@example.com',
         role: 'team_lead',
-        managerId: mockManagerId,
-        teamLeadId: null,
+        teamLeadId: mockManagerId,
         branchIds: ['branch-1', 'branch-2'],
       };
 
@@ -350,8 +340,7 @@ describe('User Creation Regression Tests', () => {
         name: mockAgentInput.name,
         email: mockAgentInput.email,
         role: 'agent',
-        managerId: mockManagerId,
-        teamLeadId: mockTeamLeadId,
+        teamLeadId: mockManagerId,
         branchIds: mockAgentInput.branchIds,
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
@@ -363,16 +352,15 @@ describe('User Creation Regression Tests', () => {
 
       const result = await createAgent(mockAgentInput);
 
-      // Verify agent was created with correct managerId from team lead
-      expect(result.managerId).toBe(mockManagerId);
+      // Verify agent was created with correct teamLeadId from team lead
+      expect(result.teamLeadId).toBe(mockManagerId);
       expect(result.teamLeadId).toBe(mockTeamLeadId);
       expect(databases.createDocument).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(String),
         expect.any(String),
         expect.objectContaining({
-          managerId: mockManagerId,
-          teamLeadId: mockTeamLeadId,
+          teamLeadId: mockManagerId,
         }),
         expect.any(Array)
       );

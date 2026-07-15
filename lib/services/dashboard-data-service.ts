@@ -107,6 +107,8 @@ export function clearDashboardDataCache(): void {
   clearClientReadCache(DASHBOARD_HOLIDAY_SCOPE);
 }
 
+import { loadDashboardDataServerAction } from "@/app/actions/dashboard";
+
 export async function loadDashboardData(
   input: DashboardDataInput,
 ): Promise<DashboardDataResult> {
@@ -128,105 +130,8 @@ export async function loadDashboardData(
       input.departmentScope ?? 'all',
     ],
     async () => {
-      const [activeLeads, closedLeads, allBranches, lgHandoffs] = await Promise.all([
-        listLeads({ isClosed: false, teamLeadId: input.teamLeadId }, input.user.$id, input.user.role, branchIds),
-        listLeads({ isClosed: true, teamLeadId: input.teamLeadId }, input.user.$id, input.user.role, branchIds),
-        listBranches(),
-        cacheClientRead(
-          `${DASHBOARD_DATA_SCOPE}:handoffs`,
-          [input.user.$id],
-          () => listLgHandoffsAction(),
-          DASHBOARD_DATA_TTL_MS,
-        ).catch((error) => {
-          console.error("Error loading LG handoffs:", error);
-          return [];
-        }),
-      ]);
-
-      const combinedLeads = [...activeLeads, ...closedLeads];
-      const visibleLeadIds = Array.from(new Set(combinedLeads.map((lead) => lead.$id)));
-      const branchNameById = makeBranchNameMap(allBranches);
-      let usersForInsights: User[] = [input.user];
-      let assignedAgents: AssignedDashboardAgent[] = [];
-
-      if (input.isAdminLike && input.teamLeadId) {
-        const selectedTeamLead = await getUserByIdOrNull(input.teamLeadId);
-        if (selectedTeamLead) {
-          const teamAgents = await getAgentsByTeamLead(
-            selectedTeamLead.$id,
-            input.departmentScope,
-          );
-          usersForInsights = [selectedTeamLead, ...teamAgents];
-          if (input.includeAssignedAgents) {
-            assignedAgents = mapAgentsWithBranches(teamAgents, branchNameById);
-          }
-        } else {
-          usersForInsights = [];
-        }
-      } else if (input.isAdminLike) {
-        const visibleUsers = await getAssignableUsers(
-          input.user.role,
-          branchIds,
-          input.user.$id,
-          input.departmentScope,
-        );
-        usersForInsights = [
-          input.user,
-          ...visibleUsers.filter((visibleUser) => visibleUser.$id !== input.user.$id),
-        ];
-      } else if (input.isTeamLead) {
-        const teamAgents = await getAgentsByTeamLead(
-          input.user.$id,
-          input.departmentScope,
-        );
-        usersForInsights = [input.user, ...teamAgents];
-        if (input.includeAssignedAgents) {
-          assignedAgents = mapAgentsWithBranches(teamAgents, branchNameById);
-        }
-      }
-
-      usersForInsights = await resolveLeadUsersForInsights({
-        leads: combinedLeads,
-        users: usersForInsights,
-        getUserByIdOrNull,
-      });
-
-      const branchIdsInScope = new Set([
-        ...usersForInsights.flatMap((visibleUser) => visibleUser.branchIds || []),
-        ...combinedLeads.flatMap((lead) => (lead.branchId ? [lead.branchId] : [])),
-      ]);
-      const branches = allBranches.filter((branch) =>
-        input.includeAllBranchesForAdminLike && input.isAdminLike
-          ? true
-          : branchIdsInScope.has(branch.$id),
-      );
-      const paymentSummaries =
-        visibleLeadIds.length > 0
-          ? await cacheClientRead(
-              `${DASHBOARD_DATA_SCOPE}:paymentSummaries`,
-              [input.user.$id, [...visibleLeadIds].sort()],
-              () =>
-                listClientPaymentSummariesAction({
-                  actorId: input.user.$id,
-                  leadIds: visibleLeadIds,
-                }),
-              DASHBOARD_DATA_TTL_MS,
-            )
-          : [];
-
-      return {
-        activeLeads,
-        closedLeads,
-        visibleLeadIds,
-        assignedAgents,
-        insights: buildLeadershipDashboardInsights({
-          leads: combinedLeads,
-          users: usersForInsights,
-          branches,
-          lgHandoffs,
-          paymentSummaries,
-        }),
-      };
+      // Delegate to the Server Action to prevent fetching massive JSON arrays over the network to the browser
+      return loadDashboardDataServerAction(input);
     },
     DASHBOARD_DATA_TTL_MS,
   );
@@ -357,7 +262,7 @@ export async function loadDashboardTopMetrics(
           input.branchIds,
         ),
         listLeads(
-          { isClosed: true },
+          { isClosed: true, closedAtFrom: dateFrom, closedAtTo: dateTo },
           input.userId,
           input.role,
           input.branchIds,
@@ -548,6 +453,8 @@ export async function loadDashboardReferralStats(
       const closedLeads = await listLeads(
         {
           isClosed: true,
+          closedAtFrom: input.monthStartIso,
+          closedAtTo: input.monthEndIso,
         },
         input.userId,
         input.role,

@@ -23,13 +23,13 @@ describe('getVisibleUserBranches', () => {
     expect(mockLogger).not.toHaveBeenCalled();
   });
 
-  it('should restrict managers to only their assigned branches', () => {
+  it('should restrict teamLeads to only their assigned branches', () => {
     const targetBranches = ['branch-a', 'branch-b', 'branch-c'];
     const viewerBranches = ['branch-a', 'branch-c'];
 
     const result = getVisibleUserBranches(
       targetBranches,
-      'manager',
+      'team_lead',
       viewerBranches,
       mockLogger
     );
@@ -66,7 +66,7 @@ describe('getVisibleUserBranches', () => {
 
     const result = getVisibleUserBranches(
       branches,
-      'manager',
+      'team_lead',
       branches,
       mockLogger
     );
@@ -80,7 +80,7 @@ describe('getVisibleUserBranches', () => {
   it('should handle empty branch lists', () => {
     const result = getVisibleUserBranches(
       [],
-      'manager',
+      'team_lead',
       ['branch-a'],
       mockLogger
     );
@@ -96,7 +96,7 @@ describe('getVisibleUserBranches', () => {
 
     const result = getVisibleUserBranches(
       targetBranches,
-      'manager',
+      'team_lead',
       viewerBranches,
       mockLogger
     );

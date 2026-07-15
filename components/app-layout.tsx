@@ -9,7 +9,6 @@ import {
   checkAndNotifyAdminAttendanceEscalationsAction,
   markAttendancePresenceAction,
 } from '@/app/actions/attendance';
-import { upsertAppwritePresence } from '@/lib/utils/appwrite-presences';
 
 const PUBLIC_ROUTES = ['/login', '/referral'];
 const ADMIN_ATTENDANCE_PING_COOLDOWN_MS = 30 * 60 * 1000;
@@ -101,13 +100,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       lastPresenceSyncKey.current = presenceSyncKey;
       window.sessionStorage.setItem(PRESENCE_PING_STORAGE_KEY, String(now));
 
-      const expiresAt = new Date(Date.now() + PRESENCE_EXPIRES_AFTER_MS).toISOString();
-      await upsertAppwritePresence({
-        presenceId: user.$id,
-        status: 'online',
-        metadata: { path: pathname },
-        expiresAt,
-      }).catch(() => {});
 
       await markAttendancePresenceAction({
         currentUserId: user.$id,

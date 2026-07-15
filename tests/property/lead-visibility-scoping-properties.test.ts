@@ -6,7 +6,7 @@ import { UserRole, Lead } from '@/lib/types';
  *
  * For any set of leads across branches and any querying user:
  * - If the user is Admin, all leads SHALL be returned
- * - If the user is Manager or Team_Lead, only leads whose branchId is in the user's branchIds SHALL be returned
+ * - If the user is TeamLead or Team_Lead, only leads whose branchId is in the user's branchIds SHALL be returned
  * - If the user is Agent, only leads whose assignedToId equals the user's ID SHALL be returned
  *
  * **Validates: Requirements 5.1, 5.2, 5.3, 5.4**
@@ -29,7 +29,7 @@ function filterLeadsByVisibility(
   if (user.role === 'admin') {
     return allLeads;
   }
-  if (user.role === 'manager') {
+  if (user.role === 'team_lead') {
     return allLeads; // Managers see all leads
   }
   if (user.role === 'agent') {
@@ -92,7 +92,7 @@ describe('Lead Visibility Scoping Properties', () => {
       );
     });
 
-    it('manager should see all leads regardless of branch', () => {
+    it('teamLead should see all leads regardless of branch', () => {
       fc.assert(
         fc.property(
           fc.uniqueArray(branchIdArb, { minLength: 2, maxLength: 6 }).chain((branchPool) =>
@@ -100,18 +100,18 @@ describe('Lead Visibility Scoping Properties', () => {
               fc.record({
                 managerBranchIds: fc.subarray(branchPool, { minLength: 1 }),
                 leads: fc.array(leadArb(branchPool, userPool), { minLength: 1, maxLength: 15 }),
-                managerId: fc.constantFrom(...userPool),
+                teamLeadId: fc.constantFrom(...userPool),
               })
             )
           ),
-          ({ managerBranchIds, leads, managerId }) => {
-            const manager: QueryingUser = {
-              $id: managerId,
-              role: 'manager',
+          ({ managerBranchIds, leads, teamLeadId }) => {
+            const teamLead: QueryingUser = {
+              $id: teamLeadId,
+              role: 'team_lead',
               branchIds: managerBranchIds,
             };
 
-            const result = filterLeadsByVisibility(leads, manager);
+            const result = filterLeadsByVisibility(leads, teamLead);
 
             // Managers should see all leads
             expect(result).toHaveLength(leads.length);
@@ -194,10 +194,10 @@ describe('Lead Visibility Scoping Properties', () => {
       );
     });
 
-    it('manager with empty branchIds should see all leads, team_lead should see only their own leads', () => {
+    it('teamLead with empty branchIds should see all leads, team_lead should see only their own leads', () => {
       fc.assert(
         fc.property(
-          fc.constantFrom<UserRole>('manager', 'team_lead'),
+          fc.constantFrom<UserRole>('team_lead', 'team_lead'),
           fc.uniqueArray(branchIdArb, { minLength: 1, maxLength: 4 }).chain((branchPool) =>
             fc.uniqueArray(userIdArb, { minLength: 2, maxLength: 5 }).chain((userPool) =>
               fc.record({
@@ -215,7 +215,7 @@ describe('Lead Visibility Scoping Properties', () => {
 
             const result = filterLeadsByVisibility(leads, user);
 
-            if (role === 'manager') {
+            if (role === 'team_lead') {
               // Managers should see all leads even with empty branchIds
               expect(result).toHaveLength(leads.length);
               expect(result).toEqual(leads);

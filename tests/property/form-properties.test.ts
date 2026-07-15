@@ -556,13 +556,13 @@ describe('Form Configuration Properties', () => {
         fc.property(
           formFieldsArb,
           fc.integer({ min: 0, max: 100 }), // Initial version
-          fc.uuid(), // Manager ID
-          (fields, initialVersion, managerId) => {
+          fc.uuid(), // TeamLead ID
+          (fields, initialVersion, teamLeadId) => {
             // Simulate the current state with an initial version
             const currentConfig = {
               fields,
               version: initialVersion,
-              updatedBy: managerId,
+              updatedBy: teamLeadId,
             };
 
             // Simulate publishing: serialize fields to JSON (as done in updateFormConfig)
@@ -575,7 +575,7 @@ describe('Form Configuration Properties', () => {
             const persistedConfig = {
               fields: fieldsJson,
               version: newVersion,
-              updatedBy: managerId,
+              updatedBy: teamLeadId,
             };
 
             // Simulate retrieval: deserialize fields from JSON (as done in getFormConfig)
@@ -591,7 +591,7 @@ describe('Form Configuration Properties', () => {
             // 1. Version must be incremented by 1
             const versionIncremented = retrievedConfig.version === currentConfig.version + 1;
 
-            // 2. Manager ID must be preserved
+            // 2. TeamLead ID must be preserved
             const managerPreserved = retrievedConfig.updatedBy === currentConfig.updatedBy;
 
             // 3. Same number of fields
@@ -650,9 +650,9 @@ describe('Form Configuration Properties', () => {
         fc.property(
           formFieldsArb,
           fc.integer({ min: 0, max: 50 }), // Initial version
-          fc.uuid(), // Manager ID
+          fc.uuid(), // TeamLead ID
           fc.integer({ min: 1, max: 5 }), // Number of publish operations
-          (fields, initialVersion, managerId, numPublishes) => {
+          (fields, initialVersion, teamLeadId, numPublishes) => {
             let currentVersion = initialVersion;
 
             // Simulate multiple publish operations
@@ -689,7 +689,7 @@ describe('Form Configuration Properties', () => {
           formFieldsArb,
           fc.integer({ min: 0, max: 100 }),
           fc.uuid(),
-          (originalFields, initialVersion, managerId) => {
+          (originalFields, initialVersion, teamLeadId) => {
             // Simulate field modifications
             const modifiedFields = originalFields.map((field, index) => ({
               ...field,
@@ -734,7 +734,7 @@ describe('Form Configuration Properties', () => {
         fc.property(
           fc.integer({ min: 0, max: 100 }),
           fc.uuid(),
-          (initialVersion, managerId) => {
+          (initialVersion, teamLeadId) => {
             const emptyFields: FormField[] = [];
 
             // Simulate publish
@@ -785,7 +785,7 @@ describe('Form Configuration Properties', () => {
           fc.array(complexFieldArb, { minLength: 1, maxLength: 10 }),
           fc.integer({ min: 0, max: 100 }),
           fc.uuid(),
-          (fields, initialVersion, managerId) => {
+          (fields, initialVersion, teamLeadId) => {
             // Simulate publish
             const fieldsJson = JSON.stringify(fields);
             const newVersion = initialVersion + 1;
@@ -839,7 +839,7 @@ describe('Form Configuration Properties', () => {
           formFieldsArb,
           fc.integer({ min: 0, max: 100 }),
           fc.uuid(),
-          (fields, initialVersion, managerId) => {
+          (fields, initialVersion, teamLeadId) => {
             // Simulate first publish
             const fieldsJson1 = JSON.stringify(fields);
             const version1 = initialVersion + 1;
@@ -872,7 +872,7 @@ describe('Form Configuration Properties', () => {
           formFieldsArb,
           fc.integer({ min: 0, max: 100 }),
           fc.uuid(),
-          (fields, initialVersion, managerId) => {
+          (fields, initialVersion, teamLeadId) => {
             // Ensure fields have sequential order
             const orderedFields = fields.map((field, index) => ({
               ...field,

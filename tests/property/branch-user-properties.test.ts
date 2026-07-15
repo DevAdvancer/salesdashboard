@@ -16,7 +16,7 @@ interface UserRecord {
   name: string;
   email: string;
   role: UserRole;
-  managerId: string | null;
+  teamLeadId: string | null;
   branchId: string | null;
 }
 
@@ -26,12 +26,12 @@ interface UserStore {
 
 // --- Simulation helpers ---
 
-function simulateAssignManagerToBranch(store: UserStore, managerId: string, branchId: string): UserStore {
+function simulateAssignManagerToBranch(store: UserStore, teamLeadId: string, branchId: string): UserStore {
   const updatedUsers = store.users.map(user => {
-    if (user.$id === managerId) {
+    if (user.$id === teamLeadId) {
       return { ...user, branchId };
     }
-    if (user.role === 'agent' && user.managerId === managerId) {
+    if (user.role === 'agent' && user.teamLeadId === teamLeadId) {
       return { ...user, branchId };
     }
     return user;
@@ -39,12 +39,12 @@ function simulateAssignManagerToBranch(store: UserStore, managerId: string, bran
   return { users: updatedUsers };
 }
 
-function simulateRemoveManagerFromBranch(store: UserStore, managerId: string): UserStore {
+function simulateRemoveManagerFromBranch(store: UserStore, teamLeadId: string): UserStore {
   const updatedUsers = store.users.map(user => {
-    if (user.$id === managerId) {
+    if (user.$id === teamLeadId) {
       return { ...user, branchId: null };
     }
-    if (user.role === 'agent' && user.managerId === managerId) {
+    if (user.role === 'agent' && user.teamLeadId === teamLeadId) {
       return { ...user, branchId: null };
     }
     return user;
@@ -65,17 +65,17 @@ function simulateCreateAgent(
   agentId: string,
   name: string,
   email: string,
-  managerId: string,
+  teamLeadId: string,
   branchIdOverride?: string
 ): UserStore {
-  const manager = store.users.find(u => u.$id === managerId);
-  const branchId = branchIdOverride !== undefined ? branchIdOverride : (manager?.branchId || null);
+  const teamLead = store.users.find(u => u.$id === teamLeadId);
+  const branchId = branchIdOverride !== undefined ? branchIdOverride : (teamLead?.branchId || null);
   const newAgent: UserRecord = {
     $id: agentId,
     name,
     email,
     role: 'agent',
-    managerId,
+    teamLeadId,
     branchId,
   };
   return { users: [...store.users, newAgent] };
@@ -95,42 +95,42 @@ const emailArb = fc.tuple(
 const agentCountArb = fc.integer({ min: 1, max: 5 });
 
 function makeManager(id: string, branchId: string | null): UserRecord {
-  return { $id: id, name: `Manager ${id}`, email: `${id}@test.com`, role: 'manager', managerId: null, branchId };
+  return { $id: id, name: `TeamLead ${id}`, email: `${id}@test.com`, role: 'team_lead', teamLeadId: null, branchId };
 }
 
-function makeAgent(id: string, managerId: string, branchId: string | null): UserRecord {
-  return { $id: id, name: `Agent ${id}`, email: `${id}@test.com`, role: 'agent', managerId, branchId };
+function makeAgent(id: string, teamLeadId: string, branchId: string | null): UserRecord {
+  return { $id: id, name: `Agent ${id}`, email: `${id}@test.com`, role: 'agent', teamLeadId, branchId };
 }
 
 describe('User Service Branch Properties', () => {
   /**
-   * Feature: admin-branch-management, Property 8: Manager-to-branch assignment cascades to agents
+   * Feature: admin-branch-management, Property 8: TeamLead-to-branch assignment cascades to agents
    *
-   * For any manager with linked agents, assigning or reassigning the manager to a branch
-   * updates the manager's branchId to the target branch AND updates all linked agents'
+   * For any teamLead with linked agents, assigning or reassigning the teamLead to a branch
+   * updates the teamLead's branchId to the target branch AND updates all linked agents'
    * branchId to the same target branch.
    *
    * **Validates: Requirements 3.1, 3.2**
    */
-  describe('Property 8: Manager-to-branch assignment cascades to agents', () => {
-    it('should cascade branchId to all linked agents when manager is assigned to a branch', () => {
+  describe('Property 8: TeamLead-to-branch assignment cascades to agents', () => {
+    it('should cascade branchId to all linked agents when teamLead is assigned to a branch', () => {
       fc.assert(
         fc.property(
           userIdArb,
           branchIdArb,
           branchIdArb,
           agentCountArb,
-          (managerId, oldBranch, newBranch, agentCount) => {
-            const manager = makeManager(managerId, oldBranch);
+          (teamLeadId, oldBranch, newBranch, agentCount) => {
+            const teamLead = makeManager(teamLeadId, oldBranch);
             const agents = Array.from({ length: agentCount }, (_, i) =>
-              makeAgent(`agent-${managerId}-${i}`, managerId, oldBranch)
+              makeAgent(`agent-${teamLeadId}-${i}`, teamLeadId, oldBranch)
             );
-            const store: UserStore = { users: [manager, ...agents] };
+            const store: UserStore = { users: [teamLead, ...agents] };
 
-            const result = simulateAssignManagerToBranch(store, managerId, newBranch);
+            const result = simulateAssignManagerToBranch(store, teamLeadId, newBranch);
 
-            const updatedManager = result.users.find(u => u.$id === managerId)!;
-            const updatedAgents = result.users.filter(u => u.role === 'agent' && u.managerId === managerId);
+            const updatedManager = result.users.find(u => u.$id === teamLeadId)!;
+            const updatedAgents = result.users.filter(u => u.role === 'agent' && u.teamLeadId === teamLeadId);
 
             return (
               updatedManager.branchId === newBranch &&
@@ -142,7 +142,7 @@ describe('User Service Branch Properties', () => {
       );
     });
 
-    it('should not affect agents linked to other managers', () => {
+    it('should not affect agents linked to other teamLeads', () => {
       fc.assert(
         fc.property(
           userIdArb,
@@ -171,31 +171,31 @@ describe('User Service Branch Properties', () => {
   });
 
   /**
-   * Feature: admin-branch-management, Property 10: Manager removal cascades to agents
+   * Feature: admin-branch-management, Property 10: TeamLead removal cascades to agents
    *
-   * For any manager with linked agents who is removed from a branch, the manager's
+   * For any teamLead with linked agents who is removed from a branch, the teamLead's
    * branchId is set to null AND all linked agents' branchId is set to null.
    *
    * **Validates: Requirements 3.4**
    */
-  describe('Property 10: Manager removal cascades to agents', () => {
-    it('should clear branchId for manager and all linked agents', () => {
+  describe('Property 10: TeamLead removal cascades to agents', () => {
+    it('should clear branchId for teamLead and all linked agents', () => {
       fc.assert(
         fc.property(
           userIdArb,
           branchIdArb,
           agentCountArb,
-          (managerId, branchId, agentCount) => {
-            const manager = makeManager(managerId, branchId);
+          (teamLeadId, branchId, agentCount) => {
+            const teamLead = makeManager(teamLeadId, branchId);
             const agents = Array.from({ length: agentCount }, (_, i) =>
-              makeAgent(`agent-${managerId}-${i}`, managerId, branchId)
+              makeAgent(`agent-${teamLeadId}-${i}`, teamLeadId, branchId)
             );
-            const store: UserStore = { users: [manager, ...agents] };
+            const store: UserStore = { users: [teamLead, ...agents] };
 
-            const result = simulateRemoveManagerFromBranch(store, managerId);
+            const result = simulateRemoveManagerFromBranch(store, teamLeadId);
 
-            const updatedManager = result.users.find(u => u.$id === managerId)!;
-            const updatedAgents = result.users.filter(u => u.role === 'agent' && u.managerId === managerId);
+            const updatedManager = result.users.find(u => u.$id === teamLeadId)!;
+            const updatedAgents = result.users.filter(u => u.role === 'agent' && u.teamLeadId === teamLeadId);
 
             return (
               updatedManager.branchId === null &&
@@ -209,16 +209,16 @@ describe('User Service Branch Properties', () => {
   });
 
   /**
-   * Feature: admin-branch-management, Property 12: Manager sees only branch agents
+   * Feature: admin-branch-management, Property 12: TeamLead sees only branch agents
    *
-   * For any set of agents across multiple branches, when a manager lists agents,
-   * the returned agents all have a branchId matching the manager's branchId,
+   * For any set of agents across multiple branches, when a teamLead lists agents,
+   * the returned agents all have a branchId matching the teamLead's branchId,
    * and no agents from other branches are included.
    *
    * **Validates: Requirements 4.2**
    */
-  describe('Property 12: Manager sees only branch agents', () => {
-    it('should return only agents from the manager branch', () => {
+  describe('Property 12: TeamLead sees only branch agents', () => {
+    it('should return only agents from the teamLead branch', () => {
       fc.assert(
         fc.property(
           branchIdArb,
@@ -290,15 +290,15 @@ describe('User Service Branch Properties', () => {
   });
 
   /**
-   * Feature: admin-branch-management, Property 19: Admin can specify manager and branch on agent creation
+   * Feature: admin-branch-management, Property 19: Admin can specify teamLead and branch on agent creation
    *
-   * For any admin user creating an agent with a specified managerId and branchId,
+   * For any admin user creating an agent with a specified teamLeadId and branchId,
    * the resulting agent document has those exact values.
    *
    * **Validates: Requirements 6.2**
    */
-  describe('Property 19: Admin can specify manager and branch on agent creation', () => {
-    it('should create agent with specified managerId and branchId', () => {
+  describe('Property 19: Admin can specify teamLead and branch on agent creation', () => {
+    it('should create agent with specified teamLeadId and branchId', () => {
       fc.assert(
         fc.property(
           userIdArb,
@@ -307,18 +307,18 @@ describe('User Service Branch Properties', () => {
           branchIdArb,
           nameArb,
           emailArb,
-          (agentId, managerId, managerBranch, specifiedBranch, name, email) => {
-            fc.pre(agentId !== managerId);
+          (agentId, teamLeadId, managerBranch, specifiedBranch, name, email) => {
+            fc.pre(agentId !== teamLeadId);
 
-            const manager = makeManager(managerId, managerBranch);
-            const store: UserStore = { users: [manager] };
+            const teamLead = makeManager(teamLeadId, managerBranch);
+            const store: UserStore = { users: [teamLead] };
 
-            // Admin specifies a different branch than the manager's
-            const result = simulateCreateAgent(store, agentId, name, email, managerId, specifiedBranch);
+            // Admin specifies a different branch than the teamLead's
+            const result = simulateCreateAgent(store, agentId, name, email, teamLeadId, specifiedBranch);
             const createdAgent = result.users.find(u => u.$id === agentId)!;
 
             return (
-              createdAgent.managerId === managerId &&
+              createdAgent.teamLeadId === teamLeadId &&
               createdAgent.branchId === specifiedBranch &&
               createdAgent.role === 'agent'
             );
@@ -328,7 +328,7 @@ describe('User Service Branch Properties', () => {
       );
     });
 
-    it('should inherit manager branchId when no override is specified', () => {
+    it('should inherit teamLead branchId when no override is specified', () => {
       fc.assert(
         fc.property(
           userIdArb,
@@ -336,18 +336,18 @@ describe('User Service Branch Properties', () => {
           branchIdArb,
           nameArb,
           emailArb,
-          (agentId, managerId, managerBranch, name, email) => {
-            fc.pre(agentId !== managerId);
+          (agentId, teamLeadId, managerBranch, name, email) => {
+            fc.pre(agentId !== teamLeadId);
 
-            const manager = makeManager(managerId, managerBranch);
-            const store: UserStore = { users: [manager] };
+            const teamLead = makeManager(teamLeadId, managerBranch);
+            const store: UserStore = { users: [teamLead] };
 
-            // No branchId override — should inherit from manager
-            const result = simulateCreateAgent(store, agentId, name, email, managerId);
+            // No branchId override — should inherit from teamLead
+            const result = simulateCreateAgent(store, agentId, name, email, teamLeadId);
             const createdAgent = result.users.find(u => u.$id === agentId)!;
 
             return (
-              createdAgent.managerId === managerId &&
+              createdAgent.teamLeadId === teamLeadId &&
               createdAgent.branchId === managerBranch
             );
           }

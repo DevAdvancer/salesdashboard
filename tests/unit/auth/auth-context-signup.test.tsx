@@ -35,19 +35,18 @@ describe('AuthContext - Signup Flow', () => {
     jest.clearAllMocks();
   });
 
-  it('creates manager account with role=manager and managerId=null on signup', async () => {
+  it('creates teamLead account with role=teamLead and teamLeadId=null on signup', async () => {
     const mockAccountData = {
       $id: 'test-user-id',
-      email: 'manager@example.com',
-      name: 'Test Manager',
+      email: 'teamLead@example.com',
+      name: 'Test TeamLead',
     };
 
     const mockUserDocument = {
       $id: 'test-user-id',
-      name: 'Test Manager',
-      email: 'manager@example.com',
-      role: 'manager',
-      managerId: null,
+      name: 'Test TeamLead',
+      email: 'teamLead@example.com',
+      role: 'team_lead',
       teamLeadId: null,
       branchIds: [],
       branchId: null,
@@ -74,33 +73,33 @@ describe('AuthContext - Signup Flow', () => {
 
     // Call signup
     await act(async () => {
-      await result.current.signup('Test Manager', 'manager@example.com', 'password123');
+      await result.current.signup('Test TeamLead', 'teamLead@example.com', 'password123');
     });
 
     // Verify account.create was called with correct parameters
     expect(account.create).toHaveBeenCalledWith(
       'test-unique-id',
-      'manager@example.com',
+      'teamLead@example.com',
       'password123',
-      'Test Manager'
+      'Test TeamLead'
     );
 
-    // Verify user document was created with manager role and null managerId
+    // Verify user document was created with teamLead role and null teamLeadId
     expect(databases.createDocument).toHaveBeenCalledWith(
       DATABASE_ID,
       COLLECTIONS.USERS,
       'test-user-id',
       {
-        name: 'Test Manager',
-        email: 'manager@example.com',
-        role: 'manager',
-        managerId: null,
+        name: 'Test TeamLead',
+        email: 'teamLead@example.com',
+        role: 'team_lead',
+        teamLeadId: null,
       }
     );
 
     // Verify session was created
     expect(account.createEmailPasswordSession).toHaveBeenCalledWith(
-      'manager@example.com',
+      'teamLead@example.com',
       'password123'
     );
 
@@ -110,19 +109,19 @@ describe('AuthContext - Signup Flow', () => {
     expect(result.current.isAgent).toBe(false);
   });
 
-  it('sets managerId to null for manager accounts', async () => {
+  it('sets teamLeadId to null for teamLead accounts', async () => {
     const mockAccountData = {
-      $id: 'manager-id',
-      email: 'manager@example.com',
-      name: 'Manager User',
+      $id: 'teamLead-id',
+      email: 'teamLead@example.com',
+      name: 'TeamLead User',
     };
 
     const mockUserDocument = {
-      $id: 'manager-id',
-      name: 'Manager User',
-      email: 'manager@example.com',
-      role: 'manager',
-      managerId: null,
+      $id: 'teamLead-id',
+      name: 'TeamLead User',
+      email: 'teamLead@example.com',
+      role: 'team_lead',
+      teamLeadId: null,
       branchId: null,
       $createdAt: '2024-01-01T00:00:00.000Z',
       $updatedAt: '2024-01-01T00:00:00.000Z',
@@ -144,13 +143,13 @@ describe('AuthContext - Signup Flow', () => {
     });
 
     await act(async () => {
-      await result.current.signup('Manager User', 'manager@example.com', 'password123');
+      await result.current.signup('TeamLead User', 'teamLead@example.com', 'password123');
     });
 
-    // Verify managerId is explicitly set to null
+    // Verify teamLeadId is explicitly set to null
     const createDocumentCall = (databases.createDocument as jest.Mock).mock.calls[0];
-    expect(createDocumentCall[3].managerId).toBeNull();
-    expect(createDocumentCall[3].role).toBe('manager');
+    expect(createDocumentCall[3].teamLeadId).toBeNull();
+    expect(createDocumentCall[3].role).toBe('team_lead');
   });
 
   it('throws error when account creation fails', async () => {

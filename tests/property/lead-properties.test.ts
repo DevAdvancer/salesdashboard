@@ -97,9 +97,9 @@ describe('Lead Properties', () => {
     });
   });
 
-  describe('Property 15: Manager lead visibility', () => {
-    it('Feature: saleshub-crm, Property 15: Manager sees all owned leads', () => {
-      const managerIdArb = fc.uuid();
+  describe('Property 15: TeamLead lead visibility', () => {
+    it('Feature: saleshub-crm, Property 15: TeamLead sees all owned leads', () => {
+      const teamLeadIdArb = fc.uuid();
       const leadsArb = fc.array(
         fc.record({
           $id: fc.uuid(),
@@ -115,19 +115,19 @@ describe('Lead Properties', () => {
       );
 
       fc.assert(
-        fc.property(managerIdArb, leadsArb, (managerId, allLeads) => {
-          // Simulate filtering leads for a manager
-          const visibleLeads = allLeads.filter(lead => lead.ownerId === managerId);
+        fc.property(teamLeadIdArb, leadsArb, (teamLeadId, allLeads) => {
+          // Simulate filtering leads for a teamLead
+          const visibleLeads = allLeads.filter(lead => lead.ownerId === teamLeadId);
 
-          // Property: All visible leads must have the manager as ownerId
-          return visibleLeads.every(lead => lead.ownerId === managerId);
+          // Property: All visible leads must have the teamLead as ownerId
+          return visibleLeads.every(lead => lead.ownerId === teamLeadId);
         }),
         { numRuns: 100 }
       );
     });
 
     it('should show all leads regardless of assignment status', () => {
-      const managerIdArb = fc.uuid();
+      const teamLeadIdArb = fc.uuid();
       const leadsArb = fc.array(
         fc.record({
           $id: fc.uuid(),
@@ -143,11 +143,11 @@ describe('Lead Properties', () => {
       );
 
       fc.assert(
-        fc.property(managerIdArb, leadsArb, (managerId, allLeads) => {
-          const ownedLeads = allLeads.filter(lead => lead.ownerId === managerId);
-          const visibleLeads = allLeads.filter(lead => lead.ownerId === managerId);
+        fc.property(teamLeadIdArb, leadsArb, (teamLeadId, allLeads) => {
+          const ownedLeads = allLeads.filter(lead => lead.ownerId === teamLeadId);
+          const visibleLeads = allLeads.filter(lead => lead.ownerId === teamLeadId);
 
-          // Property: Manager sees all owned leads regardless of assignment
+          // Property: TeamLead sees all owned leads regardless of assignment
           return visibleLeads.length === ownedLeads.length;
         }),
         { numRuns: 100 }
@@ -155,7 +155,7 @@ describe('Lead Properties', () => {
     });
 
     it('should show both assigned and unassigned leads', () => {
-      const managerIdArb = fc.uuid();
+      const teamLeadIdArb = fc.uuid();
       const leadsArb = fc.array(
         fc.record({
           $id: fc.uuid(),
@@ -171,20 +171,20 @@ describe('Lead Properties', () => {
       );
 
       fc.assert(
-        fc.property(managerIdArb, leadsArb, (managerId, allLeads) => {
-          const visibleLeads = allLeads.filter(lead => lead.ownerId === managerId);
+        fc.property(teamLeadIdArb, leadsArb, (teamLeadId, allLeads) => {
+          const visibleLeads = allLeads.filter(lead => lead.ownerId === teamLeadId);
           const assignedLeads = visibleLeads.filter(lead => lead.assignedToId !== null);
           const unassignedLeads = visibleLeads.filter(lead => lead.assignedToId === null);
 
-          // Property: Manager sees both assigned and unassigned leads
+          // Property: TeamLead sees both assigned and unassigned leads
           return visibleLeads.length === assignedLeads.length + unassignedLeads.length;
         }),
         { numRuns: 100 }
       );
     });
 
-    it('should not show leads owned by other managers', () => {
-      const managerIdArb = fc.uuid();
+    it('should not show leads owned by other teamLeads', () => {
+      const teamLeadIdArb = fc.uuid();
       const otherManagerIdArb = fc.uuid();
       const leadsArb = fc.array(
         fc.record({
@@ -201,14 +201,14 @@ describe('Lead Properties', () => {
       );
 
       fc.assert(
-        fc.property(managerIdArb, otherManagerIdArb, leadsArb, (managerId, otherManagerId, allLeads) => {
-          fc.pre(managerId !== otherManagerId); // Ensure different managers
+        fc.property(teamLeadIdArb, otherManagerIdArb, leadsArb, (teamLeadId, otherManagerId, allLeads) => {
+          fc.pre(teamLeadId !== otherManagerId); // Ensure different teamLeads
 
-          const visibleLeads = allLeads.filter(lead => lead.ownerId === managerId);
+          const visibleLeads = allLeads.filter(lead => lead.ownerId === teamLeadId);
 
-          // Property: Manager should not see leads owned by other managers
+          // Property: TeamLead should not see leads owned by other teamLeads
           return !visibleLeads.some(lead =>
-            lead.ownerId !== managerId
+            lead.ownerId !== teamLeadId
           );
         }),
         { numRuns: 100 }

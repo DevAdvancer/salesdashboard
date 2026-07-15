@@ -6,7 +6,7 @@ function makeLog(overrides: Partial<AuditLog>): AuditLog {
     $id: 'audit_1',
     action: 'USER_UPDATE',
     actorId: 'user_1',
-    actorName: 'Manager One',
+    actorName: 'TeamLead One',
     targetId: 'target_1',
     targetType: 'user',
     metadata: undefined,

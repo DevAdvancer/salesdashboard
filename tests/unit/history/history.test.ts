@@ -26,7 +26,7 @@ describe('History Functionality', () => {
           $id: 'lead-1',
           data: JSON.stringify({ firstName: 'John', lastName: 'Doe' }),
           status: 'Won',
-          ownerId: 'manager-1',
+          ownerId: 'teamLead-1',
           assignedToId: 'agent-1',
           isClosed: true,
           closedAt: '2024-01-15T10:00:00.000Z',
@@ -39,20 +39,20 @@ describe('History Functionality', () => {
         total: 1,
       });
 
-      const result = await listLeads({ isClosed: true }, 'manager-1', 'manager');
+      const result = await listLeads({ isClosed: true }, 'teamLead-1', 'team_lead');
 
       expect(result).toHaveLength(1);
       expect(result.every((lead) => lead.isClosed === true)).toBe(true);
     });
   });
 
-  describe('Manager Lead Reopen', () => {
-    it('should allow manager to reopen a closed lead', async () => {
+  describe('TeamLead Lead Reopen', () => {
+    it('should allow teamLead to reopen a closed lead', async () => {
       const mockClosedLead = {
         $id: 'lead-1',
         data: JSON.stringify({ firstName: 'John', lastName: 'Doe' }),
         status: 'Won',
-        ownerId: 'manager-1',
+        ownerId: 'teamLead-1',
         assignedToId: 'agent-1',
         isClosed: true,
         closedAt: '2024-01-15T10:00:00.000Z',
@@ -81,7 +81,7 @@ describe('History Functionality', () => {
           $id: 'lead-1',
           data: JSON.stringify({ firstName: 'John', lastName: 'Doe' }),
           status: 'Won',
-          ownerId: 'manager-1',
+          ownerId: 'teamLead-1',
           assignedToId: 'agent-1',
           isClosed: true,
           closedAt: '2024-01-15T10:00:00.000Z',
@@ -96,8 +96,8 @@ describe('History Functionality', () => {
 
       const result = await listLeads(
         { isClosed: true, status: 'Won' },
-        'manager-1',
-        'manager'
+        'teamLead-1',
+        'team_lead'
       );
 
       expect(result).toHaveLength(1);
@@ -110,7 +110,7 @@ describe('History Functionality', () => {
           $id: 'lead-1',
           data: JSON.stringify({ firstName: 'John', lastName: 'Doe' }),
           status: 'Won',
-          ownerId: 'manager-1',
+          ownerId: 'teamLead-1',
           assignedToId: 'agent-1',
           isClosed: true,
           closedAt: '2024-01-15T10:00:00.000Z',
@@ -125,8 +125,8 @@ describe('History Functionality', () => {
 
       const result = await listLeads(
         { isClosed: true, assignedToId: 'agent-1' },
-        'manager-1',
-        'manager'
+        'teamLead-1',
+        'team_lead'
       );
 
       expect(result).toHaveLength(1);
@@ -141,7 +141,7 @@ describe('History Functionality', () => {
           $id: 'lead-1',
           data: JSON.stringify({ firstName: 'John', lastName: 'Doe' }),
           status: 'Won',
-          ownerId: 'manager-1',
+          ownerId: 'teamLead-1',
           assignedToId: 'agent-1',
           isClosed: true,
           closedAt: '2024-01-15T10:00:00.000Z',

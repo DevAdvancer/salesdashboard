@@ -51,7 +51,7 @@ describe('Access Control Properties', () => {
             if (customRule !== undefined) {
               return customRule;
             }
-            // Default: agents cannot access (manager=true, agent=false)
+            // Default: agents cannot access (teamLead=true, agent=false)
             return false;
           };
 
@@ -196,14 +196,14 @@ describe('Access Control Properties', () => {
   });
 
   /**
-   * Feature: saleshub-crm, Property 6: Manager full component access
+   * Feature: saleshub-crm, Property 6: TeamLead full component access
    *
-   * For any manager user and any access configuration, all system components
+   * For any teamLead user and any access configuration, all system components
    * must be visible and accessible regardless of access rules.
    *
    * Validates: Requirements 2.5
    */
-  describe('Property 6: Manager full component access', () => {
+  describe('Property 6: TeamLead full component access', () => {
     const componentKeyArb = fc.constantFrom<ComponentKey>(
       'dashboard',
       'leads',
@@ -215,13 +215,13 @@ describe('Access Control Properties', () => {
 
     const accessRuleArb = fc.record({
       componentKey: componentKeyArb,
-      role: fc.constantFrom('manager' as const, 'agent' as const),
+      role: fc.constantFrom('team_lead' as const, 'agent' as const),
       allowed: fc.boolean(),
     });
 
     const accessRulesArb = fc.array(accessRuleArb, { minLength: 0, maxLength: 20 });
 
-    it('should grant access to all components for manager role', () => {
+    it('should grant access to all components for teamLead role', () => {
       fc.assert(
         fc.property(accessRulesArb, (rules) => {
           // Managers always have full access regardless of rules
@@ -238,26 +238,26 @@ describe('Access Control Properties', () => {
             'settings'
           ];
 
-          // All components should be accessible to managers
+          // All components should be accessible to teamLeads
           return allComponents.every(canAccessAsManager);
         }),
         { numRuns: 100 }
       );
     });
 
-    it('should ignore access rules for manager role', () => {
+    it('should ignore access rules for teamLead role', () => {
       fc.assert(
         fc.property(accessRulesArb, componentKeyArb, (rules, componentKey) => {
-          // Even if there's a rule denying access, managers should still have access
+          // Even if there's a rule denying access, teamLeads should still have access
           const visibilityMap = new Map<string, boolean>();
 
           rules.forEach(rule => {
-            if (rule.role === 'manager') {
+            if (rule.role === 'team_lead') {
               visibilityMap.set(rule.componentKey, rule.allowed);
             }
           });
 
-          // Manager access check always returns true
+          // TeamLead access check always returns true
           const canAccessAsManager = (key: ComponentKey): boolean => {
             return true;
           };
@@ -295,7 +295,7 @@ describe('Access Control Properties', () => {
       );
     });
 
-    it('should differentiate manager access from agent access', () => {
+    it('should differentiate teamLead access from agent access', () => {
       fc.assert(
         fc.property(accessRulesArb, componentKeyArb, (rules, componentKey) => {
           const visibilityMap = new Map<string, boolean>();
@@ -319,7 +319,7 @@ describe('Access Control Properties', () => {
           const managerAccess = canAccessAsManager(componentKey);
           const agentAccess = canAccessAsAgent(componentKey);
 
-          // Manager should always have access
+          // TeamLead should always have access
           // Agent access depends on rules
           return managerAccess === true && (agentAccess === true || agentAccess === false);
         }),
@@ -331,7 +331,7 @@ describe('Access Control Properties', () => {
   /**
    * Feature: saleshub-crm, Property 4: Access config persistence round-trip
    *
-   * For any valid access configuration changes made by a manager, saving and then
+   * For any valid access configuration changes made by a teamLead, saving and then
    * retrieving the configuration must produce an equivalent configuration.
    *
    * Validates: Requirements 2.2
@@ -348,7 +348,7 @@ describe('Access Control Properties', () => {
 
     const accessRuleArb = fc.record({
       componentKey: componentKeyArb,
-      role: fc.constantFrom('manager' as const, 'agent' as const),
+      role: fc.constantFrom('team_lead' as const, 'agent' as const),
       allowed: fc.boolean(),
     });
 
@@ -374,7 +374,7 @@ describe('Access Control Properties', () => {
       fc.assert(
         fc.property(accessConfigArb, (config) => {
           // Create a map to track unique component-role pairs using a delimiter that won't conflict
-          const uniquePairs = new Map<string, { componentKey: ComponentKey; role: 'manager' | 'agent'; allowed: boolean }>();
+          const uniquePairs = new Map<string, { componentKey: ComponentKey; role: 'team_lead' | 'agent'; allowed: boolean }>();
 
           config.forEach(rule => {
             const key = `${rule.componentKey}::${rule.role}`;
@@ -384,7 +384,7 @@ describe('Access Control Properties', () => {
           // Verify all stored rules are valid
           return Array.from(uniquePairs.values()).every(rule => {
             const validComponentKeys: ComponentKey[] = ['dashboard', 'leads', 'history', 'user-management', 'field-management', 'settings'];
-            const validRoles = ['manager', 'agent'];
+            const validRoles = ['team_lead', 'agent'];
             return validComponentKeys.includes(rule.componentKey) &&
                    validRoles.includes(rule.role) &&
                    typeof rule.allowed === 'boolean';

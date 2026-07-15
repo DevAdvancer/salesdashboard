@@ -4,7 +4,7 @@
  * This test suite covers the complete authentication flows including:
  * - Login with valid credentials
  * - Login with invalid credentials
- * - Signup creates manager account
+ * - Signup creates teamLead account
  * - Session expiration handling
  *
  * Requirements: 1.2, 1.4
@@ -57,10 +57,9 @@ describe('Task 2.6: Authentication Flows', () => {
 
       const mockUserDoc = {
         $id: 'user-123',
-        name: 'Test Manager',
-        email: 'manager@test.com',
-        role: 'manager',
-        managerId: null,
+        name: 'Test TeamLead',
+        email: 'teamLead@test.com',
+        role: 'team_lead',
         teamLeadId: null,
         branchIds: [],
         branchId: null,
@@ -73,11 +72,11 @@ describe('Task 2.6: Authentication Flows', () => {
       mockDatabases.getDocument.mockResolvedValue(mockUserDoc as any);
 
       await act(async () => {
-        await result.current.login('manager@test.com', 'password123');
+        await result.current.login('teamLead@test.com', 'password123');
       });
 
       expect(mockAccount.createEmailPasswordSession).toHaveBeenCalledWith(
-        'manager@test.com',
+        'teamLead@test.com',
         'password123'
       );
       expect(result.current.user).toEqual(mockUserDoc);
@@ -97,8 +96,7 @@ describe('Task 2.6: Authentication Flows', () => {
         name: 'Test Agent',
         email: 'agent@test.com',
         role: 'agent',
-        managerId: 'manager-123',
-        teamLeadId: null,
+        teamLeadId: 'teamLead-123',
         branchIds: [],
         branchId: null,
         $createdAt: '2024-01-01T00:00:00.000Z',
@@ -189,8 +187,8 @@ describe('Task 2.6: Authentication Flows', () => {
     });
   });
 
-  describe('Signup creates manager account', () => {
-    it('should create manager account with role="manager" and managerId=null', async () => {
+  describe('Signup creates teamLead account', () => {
+    it('should create teamLead account with role="team_lead" and teamLeadId=null', async () => {
       const { result } = renderHook(() => useAuth(), { wrapper });
 
       await waitFor(() => {
@@ -200,15 +198,14 @@ describe('Task 2.6: Authentication Flows', () => {
       const mockAccountResponse = {
         $id: 'new-user-123',
         email: 'newmanager@test.com',
-        name: 'New Manager',
+        name: 'New TeamLead',
       };
 
       const mockUserDoc = {
         $id: 'new-user-123',
-        name: 'New Manager',
+        name: 'New TeamLead',
         email: 'newmanager@test.com',
-        role: 'manager',
-        managerId: null,
+        role: 'team_lead',
         teamLeadId: null,
         branchIds: [],
         branchId: null,
@@ -221,7 +218,7 @@ describe('Task 2.6: Authentication Flows', () => {
       mockAccount.createEmailPasswordSession.mockResolvedValue({} as any);
 
       await act(async () => {
-        await result.current.signup('New Manager', 'newmanager@test.com', 'password123');
+        await result.current.signup('New TeamLead', 'newmanager@test.com', 'password123');
       });
 
       // Verify account creation
@@ -229,19 +226,19 @@ describe('Task 2.6: Authentication Flows', () => {
         expect.any(String),
         'newmanager@test.com',
         'password123',
-        'New Manager'
+        'New TeamLead'
       );
 
-      // Verify user document creation with manager role
+      // Verify user document creation with teamLead role
       expect(mockDatabases.createDocument).toHaveBeenCalledWith(
         'test-db',
         'test-users-collection',
         'new-user-123',
         {
-          name: 'New Manager',
+          name: 'New TeamLead',
           email: 'newmanager@test.com',
-          role: 'manager',
-          managerId: null,
+          role: 'team_lead',
+          teamLeadId: null,
         }
       );
 
@@ -270,8 +267,8 @@ describe('Task 2.6: Authentication Flows', () => {
         $id: accountId,
         name: 'Test User',
         email: 'test@test.com',
-        role: 'manager',
-        managerId: null,
+        role: 'team_lead',
+        teamLeadId: null,
       } as any);
       mockAccount.createEmailPasswordSession.mockResolvedValue({} as any);
 
@@ -299,8 +296,8 @@ describe('Task 2.6: Authentication Flows', () => {
         $id: 'user-999',
         name: 'Test',
         email: 'test@test.com',
-        role: 'manager',
-        managerId: null,
+        role: 'team_lead',
+        teamLeadId: null,
       } as any);
 
       // First session creation fails with existing session error
@@ -349,8 +346,7 @@ describe('Task 2.6: Authentication Flows', () => {
         $id: 'user-123',
         name: 'Test User',
         email: 'test@test.com',
-        role: 'manager',
-        managerId: null,
+        role: 'team_lead',
         teamLeadId: null,
         branchIds: [],
         branchId: null,
@@ -390,8 +386,7 @@ describe('Task 2.6: Authentication Flows', () => {
         name: 'Test User',
         email: 'test@test.com',
         role: 'agent',
-        managerId: 'manager-123',
-        teamLeadId: null,
+        teamLeadId: 'teamLead-123',
         branchIds: [],
         branchId: null,
         $createdAt: '2024-01-01T00:00:00.000Z',
@@ -454,8 +449,7 @@ describe('Task 2.6: Authentication Flows', () => {
         $id: 'user-789',
         name: 'Returning User',
         email: 'returning@test.com',
-        role: 'manager',
-        managerId: null,
+        role: 'team_lead',
         teamLeadId: null,
         branchIds: [],
         branchId: null,
@@ -477,13 +471,12 @@ describe('Task 2.6: Authentication Flows', () => {
   });
 
   describe('Role-based helper properties', () => {
-    it('should set isManager=true for manager users', async () => {
+    it('should set isManager=true for teamLead users', async () => {
       const mockUserDoc = {
-        $id: 'manager-1',
-        name: 'Manager User',
-        email: 'manager@test.com',
-        role: 'manager' as const,
-        managerId: null,
+        $id: 'teamLead-1',
+        name: 'TeamLead User',
+        email: 'teamLead@test.com',
+        role: 'team_lead' as const,
         teamLeadId: null,
         branchIds: [],
         branchId: null,
@@ -491,7 +484,7 @@ describe('Task 2.6: Authentication Flows', () => {
         $updatedAt: '2024-01-01T00:00:00.000Z',
       };
 
-      mockAccount.get.mockResolvedValue({ $id: 'manager-1' } as any);
+      mockAccount.get.mockResolvedValue({ $id: 'teamLead-1' } as any);
       mockDatabases.getDocument.mockResolvedValue(mockUserDoc as any);
 
       const { result } = renderHook(() => useAuth(), { wrapper });
@@ -510,8 +503,7 @@ describe('Task 2.6: Authentication Flows', () => {
         name: 'Agent User',
         email: 'agent@test.com',
         role: 'agent' as const,
-        managerId: 'manager-123',
-        teamLeadId: null,
+        teamLeadId: 'teamLead-123',
         branchIds: [],
         branchId: null,
         $createdAt: '2024-01-01T00:00:00.000Z',

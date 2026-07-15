@@ -33,7 +33,7 @@ jest.mock('@/lib/services/lead-validator', () => ({
 }));
 
 describe('Lead Service', () => {
-  const mockManagerId = 'manager-123';
+  const mockManagerId = 'teamLead-123';
   const mockAgentId = 'agent-456';
   const mockLeadData: LeadData = {
     firstName: 'John',
@@ -46,14 +46,14 @@ describe('Lead Service', () => {
   // The test mock only stubs out the LEADS collection (see the module
   // mock at the top of the file). To avoid breaking the actor lookup
   // that runs before lead reads in createLead/closeLead/etc., we
-  // pre-mock getDocument to return a manager user doc.
+  // pre-mock getDocument to return a teamLead user doc.
   // Also, we stub createDocument for audit logs so closeLead/reopenLead
   // can create audit logs without stepping on the lead update mocks.
   const mockManagerDoc: any = {
     $id: mockManagerId,
-    name: 'Manager Test',
-    email: 'manager@example.com',
-    role: 'manager',
+    name: 'TeamLead Test',
+    email: 'teamLead@example.com',
+    role: 'team_lead',
     branchIds: ['branch-1'],
   };
 
@@ -61,7 +61,7 @@ describe('Lead Service', () => {
     $id: 'audit-123',
     action: 'LEAD_UPDATE',
     actorId: mockManagerId,
-    actorName: 'Manager',
+    actorName: 'TeamLead',
     targetId: 'lead-123',
     targetType: 'LEAD',
     metadata: JSON.stringify({ test: true }),
@@ -374,12 +374,12 @@ describe('Lead Service', () => {
       },
     ];
 
-    it('should list leads for manager (all owned leads)', async () => {
+    it('should list leads for teamLead (all owned leads)', async () => {
       (databases.listDocuments as jest.Mock).mockResolvedValue({
         documents: mockLeads,
       });
 
-      const result = await listLeads({}, mockManagerId, 'manager');
+      const result = await listLeads({}, mockManagerId, 'team_lead');
 
       expect(result).toEqual(mockLeads);
       expect(databases.listDocuments).toHaveBeenCalled();
@@ -402,7 +402,7 @@ describe('Lead Service', () => {
         documents: filteredLeads,
       });
 
-      const result = await listLeads({ status: 'New' }, mockManagerId, 'manager');
+      const result = await listLeads({ status: 'New' }, mockManagerId, 'team_lead');
 
       expect(result).toEqual(filteredLeads);
     });
@@ -412,7 +412,7 @@ describe('Lead Service', () => {
         documents: mockLeads,
       });
 
-      const result = await listLeads({ searchQuery: 'John' }, mockManagerId, 'manager');
+      const result = await listLeads({ searchQuery: 'John' }, mockManagerId, 'team_lead');
 
       expect(result).toHaveLength(1);
       expect(result[0].$id).toBe('lead-1');
@@ -429,7 +429,7 @@ describe('Lead Service', () => {
           dateTo: '2024-12-31',
         },
         mockManagerId,
-        'manager'
+        'team_lead'
       );
 
       expect(databases.listDocuments).toHaveBeenCalled();
@@ -440,7 +440,7 @@ describe('Lead Service', () => {
         message: 'Database error',
       });
 
-      await expect(listLeads({}, mockManagerId, 'manager')).rejects.toThrow('Database error');
+      await expect(listLeads({}, mockManagerId, 'team_lead')).rejects.toThrow('Database error');
     });
   });
 
@@ -468,7 +468,7 @@ describe('Lead Service', () => {
       (databases.getDocument as jest.Mock).mockResolvedValue(currentLead);
       (databases.updateDocument as jest.Mock).mockResolvedValue(closedLead);
 
-      const result = await closeLead(leadId, 'Won', mockManagerId, 'Manager', 'manager');
+      const result = await closeLead(leadId, 'Won', mockManagerId, 'TeamLead', 'team_lead');
 
       expect(result.isClosed).toBe(true);
       expect(result.closedAt).toBeTruthy();
@@ -509,7 +509,7 @@ describe('Lead Service', () => {
         isClosed: true,
       });
 
-      await closeLead(leadId, 'Closed', mockManagerId, 'Manager', 'manager');
+      await closeLead(leadId, 'Closed', mockManagerId, 'TeamLead', 'team_lead');
 
       const callArgs = (databases.updateDocument as jest.Mock).mock.calls[0];
       const permissions = callArgs[4];
@@ -555,7 +555,7 @@ describe('Lead Service', () => {
         message: 'Lead not found',
       });
 
-      await expect(closeLead('invalid-id', 'Closed', mockManagerId, 'Manager', 'manager')).rejects.toThrow('Lead not found');
+      await expect(closeLead('invalid-id', 'Closed', mockManagerId, 'TeamLead', 'team_lead')).rejects.toThrow('Lead not found');
     });
   });
 

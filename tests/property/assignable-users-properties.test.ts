@@ -5,7 +5,7 @@ import { User, UserRole } from '@/lib/types';
  * Feature: team-lead-role-hierarchy, Property 8: Assignable users filtering
  *
  * For any user with role and branchIds, getAssignableUsers SHALL return:
- * - Manager: only users with role team_lead or agent whose branchIds overlap
+ * - TeamLead: only users with role team_lead or agent whose branchIds overlap
  * - Team_Lead: only users with role agent whose branchIds overlap
  * - Agent: an empty array
  *
@@ -25,7 +25,7 @@ function filterAssignableUsers(
   if (creatorRole === 'agent' || creatorRole === 'lead_generation' || !creatorBranchIds.length) return [];
 
   const allowedRoles: UserRole[] =
-    creatorRole === 'manager' ? ['team_lead', 'agent'] :
+    creatorRole === 'team_lead' ? ['team_lead', 'agent'] :
     creatorRole === 'team_lead' ? ['agent'] :
     [];
 
@@ -43,15 +43,15 @@ const userArb = (branchPool: string[]) =>
     $id: fc.uuid(),
     name: fc.string({ minLength: 1, maxLength: 64 }),
     email: fc.emailAddress(),
-    role: fc.constantFrom<UserRole>('admin', 'manager', 'team_lead', 'agent', 'lead_generation'),
-    managerId: fc.option(fc.uuid(), { nil: null }),
+    role: fc.constantFrom<UserRole>('admin', 'team_lead', 'team_lead', 'agent', 'lead_generation'),
+    teamLeadId: fc.option(fc.uuid(), { nil: null }),
     teamLeadId: fc.option(fc.uuid(), { nil: null }),
     branchIds: fc.subarray(branchPool, { minLength: 1 }),
   });
 
 describe('Assignable Users Filtering Properties', () => {
   describe('Property 8: Assignable users filtering', () => {
-    it('manager should see team_leads and agents with overlapping branches', () => {
+    it('teamLead should see team_leads and agents with overlapping branches', () => {
       fc.assert(
         fc.property(
           fc.uniqueArray(branchIdArb, { minLength: 2, maxLength: 6 }).chain((pool) =>
@@ -61,7 +61,7 @@ describe('Assignable Users Filtering Properties', () => {
             })
           ),
           ({ creatorBranchIds, users }) => {
-            const result = filterAssignableUsers('manager', creatorBranchIds, users);
+            const result = filterAssignableUsers('team_lead', creatorBranchIds, users);
 
             // Every returned user must be team_lead or agent
             for (const u of result) {

@@ -2,7 +2,7 @@
  * Integration Test: Access Control Flow
  *
  * Tests the complete access control flow:
- * manager restricts component → agent cannot access
+ * teamLead restricts component → agent cannot access
  *
  * Requirements: 2.1-2.6, 10.8
  */
@@ -28,17 +28,17 @@ type ComponentKey = 'dashboard' | 'leads' | 'history' | 'user-management' | 'fie
 
 interface AccessRule {
   componentKey: ComponentKey;
-  role: 'manager' | 'agent';
+  role: 'team_lead' | 'agent';
   allowed: boolean;
 }
 
 function canAccess(
   componentKey: ComponentKey,
-  userRole: 'manager' | 'agent',
+  userRole: 'team_lead' | 'agent',
   rules: Map<string, boolean>
 ): boolean {
   // Managers always have full access
-  if (userRole === 'manager') {
+  if (userRole === 'team_lead') {
     return true;
   }
 
@@ -63,7 +63,7 @@ function buildRulesMap(rules: AccessRule[]): Map<string, boolean> {
 }
 
 function getVisibleNavItems(
-  userRole: 'manager' | 'agent',
+  userRole: 'team_lead' | 'agent',
   rules: Map<string, boolean>
 ): ComponentKey[] {
   const allComponents: ComponentKey[] = [
@@ -105,11 +105,11 @@ describe('Integration: Access Control Flow', () => {
     expect(agentNav).not.toContain('field-management');
     expect(agentNav).not.toContain('settings');
 
-    // Step 3: Manager always sees all components
-    const managerNav = getVisibleNavItems('manager', rulesMap);
+    // Step 3: TeamLead always sees all components
+    const managerNav = getVisibleNavItems('team_lead', rulesMap);
     expect(managerNav).toHaveLength(6);
 
-    // Step 4: Manager grants agent access to history
+    // Step 4: TeamLead grants agent access to history
     const updatedRules: AccessRule[] = [
       ...defaultRules.filter((r) => r.componentKey !== 'history'),
       { componentKey: 'history', role: 'agent', allowed: true },
@@ -122,7 +122,7 @@ describe('Integration: Access Control Flow', () => {
     expect(agentNav).toContain('history');
     expect(agentNav).toHaveLength(3); // dashboard, leads, history
 
-    // Step 6: Manager revokes agent access to leads
+    // Step 6: TeamLead revokes agent access to leads
     const restrictedRules: AccessRule[] = [
       { componentKey: 'dashboard', role: 'agent', allowed: true },
       { componentKey: 'leads', role: 'agent', allowed: false },
@@ -149,14 +149,14 @@ describe('Integration: Access Control Flow', () => {
     expect(canAccess('leads', 'agent', emptyRules)).toBe(false);
     expect(canAccess('history', 'agent', emptyRules)).toBe(false);
 
-    // Manager always has access
-    expect(canAccess('dashboard', 'manager', emptyRules)).toBe(true);
-    expect(canAccess('leads', 'manager', emptyRules)).toBe(true);
-    expect(canAccess('history', 'manager', emptyRules)).toBe(true);
+    // TeamLead always has access
+    expect(canAccess('dashboard', 'team_lead', emptyRules)).toBe(true);
+    expect(canAccess('leads', 'team_lead', emptyRules)).toBe(true);
+    expect(canAccess('history', 'team_lead', emptyRules)).toBe(true);
   });
 
   it('should persist access config changes via database', async () => {
-    // Simulate manager toggling agent access to history
+    // Simulate teamLead toggling agent access to history
     const existingRule = {
       $id: 'rule-history-agent',
       componentKey: 'history',
@@ -164,7 +164,7 @@ describe('Integration: Access Control Flow', () => {
       allowed: false,
     };
 
-    // Manager toggles to allowed=true
+    // TeamLead toggles to allowed=true
     (databases.updateDocument as jest.Mock).mockResolvedValue({
       ...existingRule,
       allowed: true,
@@ -211,19 +211,19 @@ describe('Integration: Access Control Flow', () => {
     expect(createdDoc.allowed).toBe(true);
   });
 
-  it('should handle manager access override regardless of rules', () => {
-    // Even if rules explicitly deny manager access, manager should still have access
+  it('should handle teamLead access override regardless of rules', () => {
+    // Even if rules explicitly deny teamLead access, teamLead should still have access
     const denyManagerRules: AccessRule[] = [
-      { componentKey: 'dashboard', role: 'manager', allowed: false },
-      { componentKey: 'leads', role: 'manager', allowed: false },
+      { componentKey: 'dashboard', role: 'team_lead', allowed: false },
+      { componentKey: 'leads', role: 'team_lead', allowed: false },
     ];
 
     const rulesMap = buildRulesMap(denyManagerRules);
 
-    // Manager always has access (the canAccess function returns true for managers before checking rules)
-    expect(canAccess('dashboard', 'manager', rulesMap)).toBe(true);
-    expect(canAccess('leads', 'manager', rulesMap)).toBe(true);
-    expect(canAccess('history', 'manager', rulesMap)).toBe(true);
+    // TeamLead always has access (the canAccess function returns true for teamLeads before checking rules)
+    expect(canAccess('dashboard', 'team_lead', rulesMap)).toBe(true);
+    expect(canAccess('leads', 'team_lead', rulesMap)).toBe(true);
+    expect(canAccess('history', 'team_lead', rulesMap)).toBe(true);
   });
 
   it('should correctly filter navigation items based on access rules', () => {
@@ -239,12 +239,12 @@ describe('Integration: Access Control Flow', () => {
     const rulesMap = buildRulesMap(rules);
 
     const agentItems = getVisibleNavItems('agent', rulesMap);
-    const managerItems = getVisibleNavItems('manager', rulesMap);
+    const managerItems = getVisibleNavItems('team_lead', rulesMap);
 
     // Agent sees only allowed components
     expect(agentItems).toEqual(['dashboard', 'leads']);
 
-    // Manager sees all components
+    // TeamLead sees all components
     expect(managerItems).toEqual([
       'dashboard',
       'leads',

@@ -3,7 +3,7 @@ import fc from 'fast-check';
 /**
  * Feature: team-lead-role-hierarchy, Property 5: Branch subset validation on user creation
  *
- * For any creator (Manager or Team_Lead) with branchIds B_creator, and any set of branch IDs
+ * For any creator (TeamLead or Team_Lead) with branchIds B_creator, and any set of branch IDs
  * B_target to assign to a new subordinate: if B_target ⊆ B_creator, the creation SHALL succeed
  * and the new user's branchIds SHALL equal B_target; if B_target ⊄ B_creator, the creation
  * SHALL be rejected with an error.
@@ -93,7 +93,7 @@ describe('Branch Subset Validation Properties', () => {
       );
     });
 
-    it('should work symmetrically for manager→team_lead and team_lead→agent', () => {
+    it('should work symmetrically for teamLead→team_lead and team_lead→agent', () => {
       fc.assert(
         fc.property(
           fc.uniqueArray(branchIdArb, { minLength: 2, maxLength: 8 }),

@@ -98,7 +98,7 @@ describe('lead server action authorization', () => {
         'agent-1',
         'agent-2',
         'leadgen-1',
-        'manager-1',
+        'teamLead-1',
         'monitor-1',
         'operations-1',
         'sales-owner',
@@ -499,7 +499,7 @@ describe('lead server action authorization', () => {
     expect(mockUpdateDocument).not.toHaveBeenCalled();
   });
 
-  it('rejects reopen attempts from non-manager users before updating with the admin client', async () => {
+  it('rejects reopen attempts from non-teamLead users before updating with the admin client', async () => {
     mockGetDocument.mockResolvedValueOnce({
       $id: 'agent-1',
       email: 'agent@example.com',
@@ -545,16 +545,15 @@ describe('lead server action authorization', () => {
     expect(mockUpdateDocument).toHaveBeenCalled();
   });
 
-  it('rejects manager lead assignment to agents outside their branch scope', async () => {
+  it('rejects teamLead lead assignment to agents outside their branch scope', async () => {
     mockGetDocument
       .mockResolvedValueOnce({
-        $id: 'manager-1',
-        email: 'manager@example.com',
-        role: 'manager',
+        $id: 'teamLead-1',
+        email: 'teamLead@example.com',
+        role: 'team_lead',
         branchIds: ['branch-1'],
-        managerId: null,
-        managerIds: [],
         teamLeadId: null,
+        teamLeadIds: [],
       })
       .mockResolvedValueOnce({
         $id: 'lead-1',
@@ -571,14 +570,13 @@ describe('lead server action authorization', () => {
         email: 'agent2@example.com',
         role: 'agent',
         branchIds: ['branch-2'],
-        managerId: 'manager-2',
-        managerIds: ['manager-2'],
-        teamLeadId: null,
+        teamLeadId: 'teamLead-2',
+        teamLeadIds: ['teamLead-2'],
       });
 
     const { assignLeadAction } = await import('@/lib/actions/lead-actions');
 
-    await expect(assignLeadAction('lead-1', 'agent-2', 'manager-1', 'Manager')).rejects.toThrow('Permission denied');
+    await expect(assignLeadAction('lead-1', 'agent-2', 'teamLead-1', 'TeamLead')).rejects.toThrow('Permission denied');
     expect(mockUpdateDocument).not.toHaveBeenCalled();
   });
 
@@ -589,9 +587,8 @@ describe('lead server action authorization', () => {
         email: 'tl@example.com',
         role: 'team_lead',
         branchIds: ['branch-1'],
-        managerId: 'manager-1',
-        managerIds: ['manager-1'],
-        teamLeadId: null,
+        teamLeadId: 'teamLead-1',
+        teamLeadIds: ['teamLead-1'],
       }],
       ['lead-1', {
         $id: 'lead-1',
@@ -608,27 +605,24 @@ describe('lead server action authorization', () => {
         email: 'agent@example.com',
         role: 'agent',
         branchIds: ['branch-1'],
-        managerId: 'manager-1',
-        managerIds: ['manager-1'],
-        teamLeadId: 'tl-1',
+        teamLeadId: 'teamLead-1',
+        teamLeadIds: ['teamLead-1'],
       }],
       ['leadgen-1', {
         $id: 'leadgen-1',
         email: 'leadgen@example.com',
         role: 'lead_generation',
         branchIds: ['branch-1'],
-        managerId: 'manager-1',
-        managerIds: ['manager-1'],
-        teamLeadId: 'tl-1',
+        teamLeadId: 'teamLead-1',
+        teamLeadIds: ['teamLead-1'],
       }],
-      ['manager-1', {
-        $id: 'manager-1',
-        email: 'manager@example.com',
-        role: 'manager',
+      ['teamLead-1', {
+        $id: 'teamLead-1',
+        email: 'teamLead@example.com',
+        role: 'team_lead',
         branchIds: ['branch-1'],
-        managerId: null,
-        managerIds: [],
         teamLeadId: null,
+        teamLeadIds: [],
       }],
     ]);
 
@@ -669,9 +663,8 @@ describe('lead server action authorization', () => {
         email: 'owner@example.com',
         role: 'agent',
         branchIds: ['branch-1'],
-        managerId: null,
-        managerIds: [],
         teamLeadId: null,
+        teamLeadIds: [],
       }],
       ['lead-1', {
         $id: 'lead-1',
@@ -688,9 +681,8 @@ describe('lead server action authorization', () => {
         email: 'agent2@example.com',
         role: 'agent',
         branchIds: ['branch-9'],
-        managerId: null,
-        managerIds: [],
-        teamLeadId: 'tl-9',
+        teamLeadId: null,
+        teamLeadIds: [],
         isActive: true,
       }],
     ]);
@@ -708,7 +700,7 @@ describe('lead server action authorization', () => {
     const { assignLeadAction } = await import('@/lib/actions/lead-actions');
 
     // Agents cannot assign leads, even leads they own. The assignment workflow is
-    // controlled by managers, team leads, lead generation, and admins.
+    // controlled by teamLeads, team leads, lead generation, and admins.
     await expect(assignLeadAction('lead-1', 'agent-2', 'owner-1', 'Owner')).rejects.toThrow(
       'Permission denied'
     );
@@ -721,9 +713,8 @@ describe('lead server action authorization', () => {
         email: 'leadgen@example.com',
         role: 'lead_generation',
         branchIds: ['branch-1'],
-        managerId: null,
-        managerIds: [],
-        teamLeadId: 'tl-1',
+        teamLeadId: null,
+        teamLeadIds: [],
       }],
       ['lead-1', {
         $id: 'lead-1',
@@ -740,9 +731,8 @@ describe('lead server action authorization', () => {
         email: 'tl@example.com',
         role: 'team_lead',
         branchIds: ['branch-1'],
-        managerId: null,
-        managerIds: [],
         teamLeadId: null,
+        teamLeadIds: [],
         isActive: true,
       }],
     ]);
@@ -774,9 +764,8 @@ describe('lead server action authorization', () => {
         email: 'leadgen@example.com',
         role: 'lead_generation',
         branchIds: ['branch-1'],
-        managerId: null,
-        managerIds: [],
-        teamLeadId: 'tl-1',
+        teamLeadId: null,
+        teamLeadIds: [],
       }],
       ['lead-1', {
         $id: 'lead-1',
@@ -793,9 +782,8 @@ describe('lead server action authorization', () => {
         email: 'agent2@example.com',
         role: 'agent',
         branchIds: ['branch-1'],
-        managerId: null,
-        managerIds: [],
-        teamLeadId: 'tl-1',
+        teamLeadId: null,
+        teamLeadIds: [],
         isActive: true,
       }],
     ]);
@@ -821,9 +809,8 @@ describe('lead server action authorization', () => {
         email: 'monitor@example.com',
         role: 'monitor',
         branchIds: [],
-        managerId: null,
-        managerIds: [],
         teamLeadId: null,
+        teamLeadIds: [],
       }],
       ['lead-1', {
         $id: 'lead-1',
@@ -840,9 +827,8 @@ describe('lead server action authorization', () => {
         email: 'agent2@example.com',
         role: 'agent',
         branchIds: ['branch-9'],
-        managerId: null,
-        managerIds: [],
-        teamLeadId: 'tl-9',
+        teamLeadId: null,
+        teamLeadIds: [],
         isActive: true,
       }],
     ]);
@@ -860,7 +846,7 @@ describe('lead server action authorization', () => {
     const { assignLeadAction } = await import('@/lib/actions/lead-actions');
 
     // Monitors cannot assign leads (per product decision to restrict
-    // assignment to managers, team leads, lead generation, and admins).
+    // assignment to teamLeads, team leads, lead generation, and admins).
     await expect(assignLeadAction('lead-1', 'agent-2', 'monitor-1', 'Monitor')).rejects.toThrow(
       'Permission denied'
     );
@@ -873,9 +859,8 @@ describe('lead server action authorization', () => {
         email: 'operations@example.com',
         role: 'operations',
         branchIds: [],
-        managerId: null,
-        managerIds: [],
         teamLeadId: null,
+        teamLeadIds: [],
       }],
       ['lead-1', {
         $id: 'lead-1',
@@ -892,9 +877,8 @@ describe('lead server action authorization', () => {
         email: 'agent2@example.com',
         role: 'agent',
         branchIds: ['branch-9'],
-        managerId: null,
-        managerIds: [],
-        teamLeadId: 'tl-9',
+        teamLeadId: null,
+        teamLeadIds: [],
         isActive: true,
       }],
     ]);
@@ -916,13 +900,12 @@ describe('lead server action authorization', () => {
   it('blocks duplicate lead edits and notifies admins and team leads only', async () => {
     mockGetDocument
       .mockResolvedValueOnce({
-        $id: 'manager-1',
-        email: 'manager@example.com',
-        role: 'manager',
+        $id: 'teamLead-1',
+        email: 'teamLead@example.com',
+        role: 'team_lead',
         branchIds: ['branch-1'],
-        managerId: null,
-        managerIds: [],
         teamLeadId: null,
+        teamLeadIds: [],
       })
       .mockResolvedValueOnce({
         $id: 'lead-1',
@@ -932,7 +915,7 @@ describe('lead server action authorization', () => {
           phone: '(555) 111-2222',
           linkedinProfileUrl: 'https://linkedin.com/in/current',
         }),
-        ownerId: 'manager-1',
+        ownerId: 'teamLead-1',
         assignedToId: 'agent-1',
         branchId: 'branch-1',
         isClosed: false,
@@ -969,7 +952,7 @@ describe('lead server action authorization', () => {
     const { createNotificationsForRecipients } = await import('@/lib/server/notifications');
 
     await expect(
-      updateLeadAction('lead-1', { phone: '+1 (555) 111-2222' }, 'manager-1', 'Manager')
+      updateLeadAction('lead-1', { phone: '+1 (555) 111-2222' }, 'teamLead-1', 'TeamLead')
     ).rejects.toThrow('Duplicate phone found in lead lead-2');
 
     expect(mockUpdateDocument).not.toHaveBeenCalled();
@@ -988,13 +971,12 @@ describe('lead server action authorization', () => {
   it('allows retrying a duplicate Linkedin URL when the existing lead is not interested', async () => {
     mockGetDocument
       .mockResolvedValueOnce({
-        $id: 'manager-1',
-        email: 'manager@example.com',
-        role: 'manager',
+        $id: 'teamLead-1',
+        email: 'teamLead@example.com',
+        role: 'team_lead',
         branchIds: ['branch-1'],
-        managerId: null,
-        managerIds: [],
         teamLeadId: null,
+        teamLeadIds: [],
       })
       .mockResolvedValueOnce({
         $id: 'lead-1',
@@ -1004,7 +986,7 @@ describe('lead server action authorization', () => {
           phone: '(555) 111-2222',
           linkedinProfileUrl: 'https://linkedin.com/in/current',
         }),
-        ownerId: 'manager-1',
+        ownerId: 'teamLead-1',
         assignedToId: 'agent-1',
         branchId: 'branch-1',
         isClosed: false,
@@ -1039,8 +1021,8 @@ describe('lead server action authorization', () => {
       updateLeadAction(
         'lead-1',
         { linkedinProfileUrl: 'https://linkedin.com/in/existing' },
-        'manager-1',
-        'Manager',
+        'teamLead-1',
+        'TeamLead',
       )
     ).resolves.toBeTruthy();
 
@@ -1058,25 +1040,22 @@ describe('lead server action authorization', () => {
             name: 'Agent Two',
             role: 'agent',
             branchIds: ['branch-1'],
-            managerId: null,
-            managerIds: [],
-            teamLeadId: 'tl-1',
+            teamLeadId: null,
+            teamLeadIds: [],
           });
         case 'old-owner':
           return Promise.resolve({
             $id: 'old-owner',
             name: 'Old Owner',
-            managerId: null,
-            managerIds: [],
             teamLeadId: null,
+            teamLeadIds: [],
           });
         case 'old-agent':
           return Promise.resolve({
             $id: 'old-agent',
             name: 'Old Agent',
-            managerId: null,
-            managerIds: [],
-            teamLeadId: 'tl-1',
+            teamLeadId: null,
+            teamLeadIds: [],
           });
         case 'lead-dup':
           return Promise.resolve({
@@ -1100,17 +1079,15 @@ describe('lead server action authorization', () => {
           return Promise.resolve({
             $id: 'tl-1',
             name: 'Team Lead',
-            managerId: null,
-            managerIds: [],
             teamLeadId: null,
+            teamLeadIds: [],
           });
         default:
           return Promise.resolve({
             $id: documentId,
             name: documentId,
-            managerId: null,
-            managerIds: [],
             teamLeadId: null,
+            teamLeadIds: [],
           });
       }
     });
@@ -1191,13 +1168,12 @@ describe('lead server action authorization', () => {
   it('rejects blank required lead fields before updating', async () => {
     mockGetDocument
       .mockResolvedValueOnce({
-        $id: 'manager-1',
-        email: 'manager@example.com',
-        role: 'manager',
+        $id: 'teamLead-1',
+        email: 'teamLead@example.com',
+        role: 'team_lead',
         branchIds: ['branch-1'],
-        managerId: null,
-        managerIds: [],
         teamLeadId: null,
+        teamLeadIds: [],
       })
       .mockResolvedValueOnce({
         $id: 'lead-1',
@@ -1208,7 +1184,7 @@ describe('lead server action authorization', () => {
           phone: '5551112222',
           status: 'Interested',
         }),
-        ownerId: 'manager-1',
+        ownerId: 'teamLead-1',
         assignedToId: 'agent-1',
         branchId: 'branch-1',
         isClosed: false,
@@ -1221,7 +1197,7 @@ describe('lead server action authorization', () => {
     const { updateLeadAction } = await import('@/app/actions/lead');
 
     await expect(
-      updateLeadAction('lead-1', { firstName: '   ' }, 'manager-1', 'Manager')
+      updateLeadAction('lead-1', { firstName: '   ' }, 'teamLead-1', 'TeamLead')
     ).rejects.toThrow('First Name is required');
 
     expect(mockUpdateDocument).not.toHaveBeenCalled();
@@ -1229,9 +1205,9 @@ describe('lead server action authorization', () => {
 
   it('rejects blank required lead fields before creating', async () => {
     mockGetDocument.mockResolvedValueOnce({
-      $id: 'manager-1',
-      email: 'manager@example.com',
-      role: 'manager',
+      $id: 'teamLead-1',
+      email: 'teamLead@example.com',
+      role: 'team_lead',
       teamLeadId: null,
     });
 
@@ -1239,7 +1215,7 @@ describe('lead server action authorization', () => {
 
     await expect(
       createLeadAction(
-        'manager-1',
+        'teamLead-1',
         {
           data: {
             firstName: '',
@@ -1249,8 +1225,8 @@ describe('lead server action authorization', () => {
           },
           status: 'Interested',
         },
-        'manager-1',
-        'Manager',
+        'teamLead-1',
+        'TeamLead',
       )
     ).rejects.toThrow('First Name is required');
 
@@ -1261,12 +1237,11 @@ describe('lead server action authorization', () => {
   it('moves backed out leads to the unassigned owner and clears assignedToId', async () => {
     mockGetDocument
       .mockResolvedValueOnce({
-        $id: 'manager-1',
-        email: 'manager@example.com',
-        role: 'manager',
-        managerId: null,
-        managerIds: [],
+        $id: 'teamLead-1',
+        email: 'teamLead@example.com',
+        role: 'team_lead',
         teamLeadId: null,
+        teamLeadIds: [],
         branchIds: ['branch-1'],
       })
       .mockResolvedValueOnce({
@@ -1285,9 +1260,8 @@ describe('lead server action authorization', () => {
       })
       .mockResolvedValueOnce({
         $id: 'unassigned-owner',
-        managerId: null,
-        managerIds: [],
         teamLeadId: null,
+        teamLeadIds: [],
       });
 
     mockUpdateDocument.mockResolvedValueOnce({
@@ -1300,7 +1274,7 @@ describe('lead server action authorization', () => {
 
     const { backoutLeadAction } = await import('@/lib/actions/lead-actions');
 
-    await expect(backoutLeadAction('lead-1', 'manager-1', 'Manager')).resolves.toMatchObject({
+    await expect(backoutLeadAction('lead-1', 'teamLead-1', 'TeamLead')).resolves.toMatchObject({
       success: true,
       lead: expect.objectContaining({
         ownerId: 'unassigned-owner',
@@ -1324,12 +1298,11 @@ describe('lead server action authorization', () => {
   it('moves not interested leads to the unassigned owner and clears assignedToId', async () => {
     mockGetDocument
       .mockResolvedValueOnce({
-        $id: 'manager-1',
-        email: 'manager@example.com',
-        role: 'manager',
-        managerId: null,
-        managerIds: [],
+        $id: 'teamLead-1',
+        email: 'teamLead@example.com',
+        role: 'team_lead',
         teamLeadId: null,
+        teamLeadIds: [],
         branchIds: ['branch-1'],
       })
       .mockResolvedValueOnce({
@@ -1349,9 +1322,8 @@ describe('lead server action authorization', () => {
       })
       .mockResolvedValueOnce({
         $id: 'unassigned-owner',
-        managerId: null,
-        managerIds: [],
         teamLeadId: null,
+        teamLeadIds: [],
       })
       .mockResolvedValueOnce({
         $id: 'linkedin-request-1',
@@ -1376,7 +1348,7 @@ describe('lead server action authorization', () => {
 
     const { notInterestedLeadAction } = await import('@/lib/actions/lead-actions');
 
-    await expect(notInterestedLeadAction('lead-1', 'manager-1', 'Manager')).resolves.toMatchObject({
+    await expect(notInterestedLeadAction('lead-1', 'teamLead-1', 'TeamLead')).resolves.toMatchObject({
       success: true,
       lead: expect.objectContaining({
         ownerId: 'unassigned-owner',
