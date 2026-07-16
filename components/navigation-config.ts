@@ -70,6 +70,7 @@ export const appIcons = {
   requestCalls: PhoneCall,
   callRequests: PhoneCall,
   resumeProfiles: FileText,
+  resumeMarketing: TrendingUp,
 } satisfies Record<string, AppIcon>;
 
 export const NAV_ITEMS: NavItem[] = [
@@ -97,6 +98,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'resume-dashboard', label: 'Resume Dashboard', href: '/resume-dashboard', icon: appIcons.resumeDashboard },
   { key: 'call-requests', label: 'Calls', href: '/call-requests', icon: appIcons.callRequests },
   { key: 'resume-profiles', label: 'Resume Profiles', href: '/resume', icon: appIcons.resumeProfiles },
+  { key: 'resume-marketing', label: 'Marketing', href: '/resume-marketing', icon: appIcons.resumeMarketing },
   { key: 'resume-hierarchy', label: 'Resume Hierarchy', href: '/resume-hierarchy', icon: appIcons.resumeHierarchy },
   { key: 'mock', label: 'Mock Interview', href: '/mock', icon: appIcons.mock },
   { key: 'assessment-support', label: 'Assessment Support', href: '/assessment-support', icon: appIcons.assessmentSupport },

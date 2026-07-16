@@ -40,6 +40,10 @@ export const COMPONENT_ACCESS: RoleAccessMap = {
   // and the leadership roles). Sales-team members are blocked at that gate.
   'resume-dashboard': [],
   'resume-profiles': [],
+  // Same gating as resume-profiles — opened only by the department
+  // short-circuit in canAccess. The Resume Marketing page lists profiles
+  // that have been promoted (movedToMarketing === true), scoped by assignee.
+  'resume-marketing': [],
   // Same gating as resume-dashboard — opened only by the department
   // short-circuit in canAccess, never by role eligibility alone.
   'resume-chat': [],

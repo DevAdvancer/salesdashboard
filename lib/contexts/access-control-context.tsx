@@ -39,6 +39,7 @@ export type ComponentKey =
   | 'followups-payments'
   | 'resume-dashboard'
   | 'resume-profiles'
+  | 'resume-marketing'
   | 'resume-chat'
   | 'resume-hierarchy'
   | 'request-calls'
@@ -157,7 +158,11 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
     // dashboard. Sales-team members are blocked here regardless of role
     // eligibility, and the empty `COMPONENT_ACCESS` entry for this key
     // means no role-only path opens it.
-    if (componentKey === 'resume-dashboard' || componentKey === 'resume-profiles') {
+    if (
+      componentKey === 'resume-dashboard' ||
+      componentKey === 'resume-profiles' ||
+      componentKey === 'resume-marketing'
+    ) {
       if (user.department === 'resume') return true;
       if (
         user.role === 'admin' ||

@@ -4,9 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  FileText,
-  Filter,
-  Plus,
+  TrendingUp,
   RefreshCw,
   Search,
   UserCheck,
@@ -15,68 +13,31 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { TableSkeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/lib/contexts/auth-context';
-import {
-  RESUME_PROFILE_STAGES,
-  type CallRequest,
-  type ResumeProfile,
-} from '@/lib/types';
-import {
-  updateResumeProfileAction,
-  listResumeProfilesAction,
-  getResumeProfileOptionsAction,
-} from '@/app/actions/resume-profiles';
+import { listMarketingProfilesAction } from '@/app/actions/resume-profiles';
+import type { ResumeProfile } from '@/lib/types';
 
-interface ResumeProfilesClientProps {
+interface ResumeMarketingClientProps {
   initialProfiles: (ResumeProfile & { $id: string })[];
-  initialOptions: {
-    callRequests: (CallRequest & { $id: string })[];
-    assignableUsers: { $id: string; name: string; email: string }[];
-  };
 }
 
-const STAGE_BADGE: Record<string, string> = {
-  '1. Draft': 'bg-secondary text-secondary-foreground border border-border',
-  '2. Sent': 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800',
-  '3. Modification /Approval (candidate/client)':
-    'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
-  '4. Marketing':
-    'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
-  '5. Doc Missing (Not calculated in the timeline)':
-    'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border border-red-200 dark:border-red-800',
-};
-
-export function ResumeProfilesClient({
-  initialProfiles,
-  initialOptions,
-}: ResumeProfilesClientProps) {
+export function ResumeMarketingClient({ initialProfiles }: ResumeMarketingClientProps) {
   const router = useRouter();
   const { user, serverSessionReady } = useAuth();
   const [profiles, setProfiles] = useState<(ResumeProfile & { $id: string })[]>(initialProfiles);
-  const [options, setOptions] = useState(initialOptions);
   const [searchQuery, setSearchQuery] = useState('');
-  const [stageFilter, setStageFilter] = useState<string>('all');
   const [assignedFilter, setAssignedFilter] = useState<string>('all');
-  const [busyId, setBusyId] = useState<string | null>(null);
 
-  // The server component may render before the crm_appwrite_jwt cookie is
-  // written (right after login), so its initial fetch can come back empty with
-  // a "No session" console error. Re-fetch client-side once the session is
-  // ready to fill in (or correct) the initial data. See the serverSessionReady
-  // JWT-race pattern used by /linkedin-requests.
+  // Re-fetch client-side once the session is ready — the server component can
+  // render before the crm_appwrite_jwt cookie is written. See the
+  // serverSessionReady JWT-race pattern used by /linkedin-requests.
   useEffect(() => {
     if (!user || !serverSessionReady) return;
     let cancelled = false;
     void (async () => {
       try {
-        const [nextProfiles, nextOptions] = await Promise.all([
-          listResumeProfilesAction(),
-          getResumeProfileOptionsAction(),
-        ]);
-        if (cancelled) return;
-        setProfiles(nextProfiles);
-        setOptions(nextOptions);
+        const next = await listMarketingProfilesAction();
+        if (!cancelled) setProfiles(next);
       } catch {
         // Keep whatever the server component managed to render.
       }
@@ -86,98 +47,60 @@ export function ResumeProfilesClient({
     };
   }, [user, serverSessionReady]);
 
-  const isLeadership =
-    user?.role === 'admin' ||
-    user?.role === 'developer' ||
-    user?.role === 'monitor' ||
-    user?.role === 'operations';
-  const canExplicitlyCreate = user?.role === 'team_lead' || isLeadership;
+  // Assignee options are derived from the profiles on the page — the Marketing
+  // view is read-only, so there's no need to fetch the full resume roster.
+  const assigneeOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    profiles.forEach((p) => {
+      if (p.assignedToId && p.assignedToName) {
+        seen.set(p.assignedToId, p.assignedToName);
+      }
+    });
+    return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
+  }, [profiles]);
 
-  // Top filter bar calculation
   const filteredProfiles = useMemo(() => {
     return profiles.filter((p) => {
-      // Stage filter
-      if (stageFilter !== 'all' && p.stage !== stageFilter) {
-        return false;
-      }
-      // Assigned filter
       if (assignedFilter !== 'all') {
         if (assignedFilter === 'unassigned' && p.assignedToId) return false;
         if (assignedFilter !== 'unassigned' && p.assignedToId !== assignedFilter) return false;
       }
-      // Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const nameMatch = p.candidateName?.toLowerCase().includes(q);
-        const techMatch = p.technology?.toLowerCase().includes(q);
-        const arrivalMatch = p.usaArrival?.toLowerCase().includes(q);
-        return nameMatch || techMatch || arrivalMatch;
+        return (
+          p.candidateName?.toLowerCase().includes(q) ||
+          p.technology?.toLowerCase().includes(q) ||
+          p.usaArrival?.toLowerCase().includes(q)
+        );
       }
       return true;
     });
-  }, [profiles, stageFilter, assignedFilter, searchQuery]);
-
-  const handleQuickStageChange = async (profileId: string, newStage: string) => {
-    setBusyId(profileId);
-    try {
-      const updated = await updateResumeProfileAction({
-        $id: profileId,
-        stage: newStage,
-      });
-      setProfiles((prev) =>
-        prev.map((p) => (p.$id === profileId ? { ...p, ...updated } : p))
-      );
-    } catch (err: any) {
-      alert(err?.message || 'Failed to update stage');
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const formatStageLabel = (stage: string) => {
-    if (stage.startsWith('3.')) return '3. Mod / Approval';
-    if (stage.startsWith('5.')) return '5. Doc Missing';
-    return stage;
-  };
+  }, [profiles, assignedFilter, searchQuery]);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <FileText className="h-6 w-6 text-primary" />
-            Resume Profiles
+            <TrendingUp className="h-6 w-6 text-primary" />
+            Marketing
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Track resume stages, work authorization details, and timeline SLAs.
+            Resume profiles that have been moved to Marketing.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => router.refresh()}
-            className="gap-1.5"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Refresh
-          </Button>
-          {canExplicitlyCreate && (
-            <Link href="/resume/new">
-              <Button
-                size="sm"
-                className="gap-1.5 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
-              >
-                <Plus className="h-4 w-4" />
-                Create Profile
-              </Button>
-            </Link>
-          )}
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => router.refresh()}
+          className="gap-1.5"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Refresh
+        </Button>
       </div>
 
-      {/* Top Filters Bar */}
       <Card className="p-4 bg-card/60 backdrop-blur border border-border shadow-sm">
         <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
           <div className="relative flex-1 w-full md:max-w-xs">
@@ -193,23 +116,6 @@ export function ResumeProfilesClient({
 
           <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
             <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-              <Filter className="h-3.5 w-3.5" />
-              Stage:
-            </div>
-            <select
-              value={stageFilter}
-              onChange={(e) => setStageFilter(e.target.value)}
-              className="rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              <option value="all">All Stages ({profiles.length})</option>
-              {RESUME_PROFILE_STAGES.map((st) => (
-                <option key={st} value={st}>
-                  {formatStageLabel(st)} ({profiles.filter((p) => p.stage === st).length})
-                </option>
-              ))}
-            </select>
-
-            <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground ml-2">
               <UserCheck className="h-3.5 w-3.5" />
               Assigned:
             </div>
@@ -220,8 +126,8 @@ export function ResumeProfilesClient({
             >
               <option value="all">All Assignees</option>
               <option value="unassigned">Unassigned</option>
-              {options.assignableUsers.map((u) => (
-                <option key={u.$id} value={u.$id}>
+              {assigneeOptions.map((u) => (
+                <option key={u.id} value={u.id}>
                   {u.name}
                 </option>
               ))}
@@ -230,37 +136,31 @@ export function ResumeProfilesClient({
         </div>
       </Card>
 
-      {/* Profiles Table */}
       <Card className="overflow-hidden border border-border shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-sm">
             <thead>
               <tr className="border-b bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 <th className="px-4 py-3">Candidate</th>
-                <th className="px-4 py-3">Stage</th>
                 <th className="px-4 py-3">Technology</th>
                 <th className="px-4 py-3">USA Arrival</th>
                 <th className="px-4 py-3">Visa Status</th>
                 <th className="px-4 py-3">Assigned To</th>
-                <th className="px-4 py-3">Stage Updated</th>
+                <th className="px-4 py-3">Moved To Marketing</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {filteredProfiles.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground text-sm">
+                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground text-sm">
                     {profiles.length === 0
-                      ? 'No resume profiles found. Click "Create Profile" to get started.'
+                      ? 'No profiles have been moved to Marketing yet.'
                       : 'No profiles match the selected filters.'}
                   </td>
                 </tr>
               ) : (
                 filteredProfiles.map((p) => {
-                  const badgeClass =
-                    STAGE_BADGE[p.stage] ?? 'bg-secondary text-secondary-foreground border border-border';
-                  const isBusy = busyId === p.$id;
-
                   const hasCpt = p.cpt?.toUpperCase() === 'YES';
                   const hasOpt = p.opt?.toUpperCase() === 'YES';
                   const hasStem = p.stemOpt?.toUpperCase() === 'YES';
@@ -275,24 +175,6 @@ export function ResumeProfilesClient({
                           {p.candidateName}
                           <ExternalLink className="h-3.5 w-3.5 opacity-70" />
                         </Link>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <select
-                          disabled={isBusy}
-                          value={p.stage}
-                          onChange={(e) => handleQuickStageChange(p.$id, e.target.value)}
-                          className={`rounded-full px-2.5 py-1 text-xs font-semibold focus:outline-none cursor-pointer border ${badgeClass}`}
-                        >
-                          {RESUME_PROFILE_STAGES.map((st) => (
-                            <option
-                              key={st}
-                              value={st}
-                              className="bg-background text-foreground text-xs"
-                            >
-                              {formatStageLabel(st)}
-                            </option>
-                          ))}
-                        </select>
                       </td>
                       <td className="px-4 py-3.5 text-muted-foreground">
                         {p.technology || '—'}
@@ -330,17 +212,14 @@ export function ResumeProfilesClient({
                       <td className="px-4 py-3.5 text-xs text-muted-foreground">
                         <div className="flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5 opacity-70" />
-                          {p.stageUpdatedAt
-                            ? new Date(p.stageUpdatedAt).toLocaleDateString([], {
+                          {p.marketingMovedAt
+                            ? new Date(p.marketingMovedAt).toLocaleDateString([], {
                                 month: 'short',
                                 day: 'numeric',
                                 hour: '2-digit',
                                 minute: '2-digit',
                               })
-                            : new Date(p.createdAt).toLocaleDateString([], {
-                                month: 'short',
-                                day: 'numeric',
-                              })}
+                            : '—'}
                         </div>
                       </td>
                       <td className="px-4 py-3.5 text-right">
@@ -358,7 +237,6 @@ export function ResumeProfilesClient({
           </table>
         </div>
       </Card>
-
     </div>
   );
 }

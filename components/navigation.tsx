@@ -93,7 +93,7 @@ export function Navigation({
   const technicalItemKeys = new Set(["mock", "interview-support", "assessment-support"]);
   const linkedinItemKeys = new Set(["linkedin-requests", "linkedin-account-management", "linkedin-reports"]);
   const paymentsItemKeys = new Set(["payments-report", "target-report", "technical-payments", "followups-payments"]);
-  const resumeItemKeys = new Set(["resume-dashboard", "resume-profiles", "call-requests", "resume-hierarchy"]);
+  const resumeItemKeys = new Set(["resume-dashboard", "resume-profiles", "resume-marketing", "call-requests", "resume-hierarchy"]);
 
   // Resume-team members get a slim sidebar: the Resume Dashboard, the
   // Resume Team chat, and (for the resume team lead) User Management so
@@ -319,6 +319,8 @@ export function Navigation({
       itemsForUser.find((item) => item.key === "resume-dashboard") ?? null;
     const resumeProfilesItem =
       itemsForUser.find((item) => item.key === "resume-profiles") ?? null;
+    const resumeMarketingItem =
+      itemsForUser.find((item) => item.key === "resume-marketing") ?? null;
     const resumeHierarchyItem =
       itemsForUser.find((item) => item.key === "resume-hierarchy") ?? null;
     const resumeCallsItem =
@@ -326,13 +328,14 @@ export function Navigation({
     const resumeUserMgmtItem =
       itemsForUser.find((item) => item.key === "user-management") ?? null;
 
-    if (resumeDashboardItem || resumeProfilesItem || resumeCallsItem) {
+    if (resumeDashboardItem || resumeProfilesItem || resumeCallsItem || resumeMarketingItem) {
       renderedItems.push(
         <div key="section-resume-workspace">
           {renderSectionHeader("Resume Workspace")}
           {resumeDashboardItem && renderNavButton(resumeDashboardItem)}
           {resumeCallsItem && renderNavButton(resumeCallsItem)}
           {resumeProfilesItem && renderNavButton(resumeProfilesItem)}
+          {resumeMarketingItem && renderNavButton(resumeMarketingItem)}
         </div>
       );
     }

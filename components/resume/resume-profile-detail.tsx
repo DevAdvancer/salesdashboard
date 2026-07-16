@@ -5,16 +5,15 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
-  Calendar,
   CheckCircle2,
   Clock,
-  FileText,
   Save,
   User,
   ShieldCheck,
   Briefcase,
   AlertCircle,
   ExternalLink,
+  TrendingUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -24,7 +23,17 @@ import {
   type ResumeProfile,
   type ResumeProfileStage,
 } from '@/lib/types';
-import { updateResumeProfileAction, type UpdateResumeProfileInput } from '@/app/actions/resume-profiles';
+import {
+  updateResumeProfileAction,
+  moveResumeProfileToMarketingAction,
+  type UpdateResumeProfileInput,
+} from '@/app/actions/resume-profiles';
+import { EmployerExperienceFields } from '@/components/resume/employer-experience-fields';
+import {
+  type EmployerEntry,
+  parseExperience,
+  serializeExperience,
+} from '@/lib/utils/resume-experience';
 
 interface ResumeProfileDetailProps {
   initialProfile: ResumeProfile & { $id: string };
@@ -59,7 +68,9 @@ export function ResumeProfileDetail({
   const [stemOpt, setStemOpt] = useState(profile.stemOpt || 'NO');
   const [stemOptDetails, setStemOptDetails] = useState(profile.stemOptDetails || '');
 
-  const [indiaExperience, setIndiaExperience] = useState(profile.indiaExperience || '');
+  const parsedExperience = parseExperience(profile.indiaExperience);
+  const [experience, setExperience] = useState<EmployerEntry[]>(parsedExperience.entries);
+  const [experienceLegacyText] = useState(parsedExperience.legacyText);
   const [missingDocs, setMissingDocs] = useState(profile.missingDocs || '');
   const [resumeTimeline, setResumeTimeline] = useState(profile.resumeTimeline || '');
   const [remarks, setRemarks] = useState(profile.remarks || '');
@@ -69,8 +80,32 @@ export function ResumeProfileDetail({
   const [assignedToId, setAssignedToId] = useState(profile.assignedToId || '');
 
   const [saving, setSaving] = useState(false);
+  const [movingToMarketing, setMovingToMarketing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // The profile lands on the Marketing page once this flag flips. The button
+  // that sets it is only enabled at the '4. Marketing' stage, mirroring how a
+  // lead surfaces on the Client page only after it's closed.
+  const movedToMarketing = profile.movedToMarketing === true;
+  const canMoveToMarketing = stage === '4. Marketing' && !movedToMarketing;
+
+  const handleMoveToMarketing = async () => {
+    setMovingToMarketing(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    try {
+      const updated = await moveResumeProfileToMarketingAction(profile.$id);
+      setProfile(updated);
+      setSuccessMsg('Profile moved to Marketing.');
+      setTimeout(() => setSuccessMsg(null), 3500);
+      router.refresh();
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to move profile to marketing');
+    } finally {
+      setMovingToMarketing(false);
+    }
+  };
 
   const handleSave = async (eOrStage?: React.FormEvent | ResumeProfileStage) => {
     if (eOrStage && typeof eOrStage === 'object' && 'preventDefault' in eOrStage) {
@@ -97,7 +132,7 @@ export function ResumeProfileDetail({
         optDetails: opt === 'YES' ? optDetails.trim() || null : null,
         stemOpt,
         stemOptDetails: stemOpt === 'YES' ? stemOptDetails.trim() || null : null,
-        indiaExperience: indiaExperience.trim() || null,
+        indiaExperience: serializeExperience(experience),
         missingDocs: missingDocs.trim() || null,
         resumeTimeline: resumeTimeline.trim() || null,
         remarks: remarks.trim() || null,
@@ -195,6 +230,28 @@ export function ResumeProfileDetail({
             <Save className="h-4 w-4" />
             {saving ? 'Saving...' : 'Save Changes'}
           </Button>
+
+          {movedToMarketing ? (
+            <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-100 dark:bg-emerald-900/40 px-3 py-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+              <TrendingUp className="h-4 w-4" />
+              In Marketing
+            </span>
+          ) : (
+            <Button
+              onClick={handleMoveToMarketing}
+              disabled={!canMoveToMarketing || movingToMarketing || saving}
+              variant="outline"
+              title={
+                canMoveToMarketing
+                  ? 'Move this profile to the Marketing page'
+                  : 'Available once the profile reaches the "4. Marketing" stage'
+              }
+              className="gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <TrendingUp className="h-4 w-4" />
+              {movingToMarketing ? 'Moving...' : 'Move to Marketing'}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -403,18 +460,11 @@ export function ResumeProfileDetail({
               Prior Experience & Documentation Checklist
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-foreground mb-1">
-                India Experience (List All Employers with Start and End Date Confirm it from Offer Letter and Relieving Letter)
-              </label>
-              <textarea
-                rows={4}
-                value={indiaExperience}
-                onChange={(e) => setIndiaExperience(e.target.value)}
-                placeholder="List companies, roles, and verified offer/relieving letter dates..."
-                className="w-full rounded-md border border-input bg-background p-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
+            <EmployerExperienceFields
+              entries={experience}
+              onChange={setExperience}
+              legacyText={experienceLegacyText}
+            />
 
             <div>
               <label className="block text-xs font-semibold text-foreground mb-1">

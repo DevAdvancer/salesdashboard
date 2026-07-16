@@ -94,6 +94,11 @@ async function setup() {
     { key: 'stageUpdatedAt', type: 'datetime', required: false },
     { key: 'lastAlertStage', type: 'string', required: false, size: 255 },
     { key: 'lastAlertAt', type: 'datetime', required: false },
+    // Marketing promotion — analogous to a lead's `isClosed`. Set true by the
+    // "Move to Marketing" action once a profile reaches the '4. Marketing'
+    // stage; the Resume Marketing page lists only rows where this is true.
+    { key: 'movedToMarketing', type: 'boolean', required: false, default: false },
+    { key: 'marketingMovedAt', type: 'datetime', required: false },
   ];
 
   for (const attr of attributes) {
@@ -120,6 +125,14 @@ async function setup() {
             attr.required || false,
             attr.default as string
           );
+        } else if (attr.type === 'boolean') {
+          await databases.createBooleanAttribute(
+            DATABASE_ID,
+            collectionId,
+            attr.key,
+            attr.required || false,
+            attr.default as boolean
+          );
         }
         await new Promise((resolve) => setTimeout(resolve, 800));
       } else {
@@ -138,6 +151,9 @@ async function setup() {
     { key: 'assigned_to_idx', attributes: ['assignedToId'] },
     { key: 'call_req_idx', attributes: ['callRequestId'] },
     { key: 'stage_updated_idx', attributes: ['stageUpdatedAt'] },
+    // Scoped Marketing page query: filter by movedToMarketing, then narrow
+    // to the current agent via assignedToId.
+    { key: 'marketing_idx', attributes: ['movedToMarketing', 'assignedToId'] },
   ];
 
   for (const idx of indexes) {

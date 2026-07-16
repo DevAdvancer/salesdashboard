@@ -423,3 +423,120 @@ export async function deleteResumeProfileAction(id: string): Promise<void> {
 
   revalidatePath('/resume');
 }
+
+/**
+ * Promote a Resume Profile to the Marketing page.
+ *
+ * Mirrors how closing a lead surfaces it on the Client page: no new record is
+ * created, we just flip a flag (`movedToMarketing`) that the Marketing view
+ * filters on. The button that calls this is disabled in the UI until the
+ * profile reaches the '4. Marketing' stage; we re-check that here so the guard
+ * cannot be bypassed. Idempotent — moving an already-moved profile is a no-op.
+ */
+export async function moveResumeProfileToMarketingAction(id: string): Promise<ResumeProfileDocument> {
+  const actor = await getAuthenticatedUserDoc();
+  if (!actor || !isResumeSide(actor)) {
+    throw new Error('Not authorized to move resume profiles to marketing');
+  }
+
+  const { databases } = await createAdminClient();
+  const existing = await databases.getDocument(DATABASE_ID, COLLECTIONS.RESUME_PROFILES, id);
+
+  if (existing.movedToMarketing) {
+    return existing as unknown as ResumeProfileDocument;
+  }
+
+  if (existing.stage !== '4. Marketing') {
+    throw new Error('A profile can only be moved to marketing from the "4. Marketing" stage.');
+  }
+
+  const now = new Date().toISOString();
+  const updated = await databases.updateDocument(
+    DATABASE_ID,
+    COLLECTIONS.RESUME_PROFILES,
+    id,
+    {
+      movedToMarketing: true,
+      marketingMovedAt: now,
+      updatedAt: now,
+    },
+  );
+
+  await logAuditAction(databases, {
+    action: 'resume_profile.moved_to_marketing',
+    actorId: actor.$id,
+    actorName: actor.name,
+    targetId: id,
+    metadata: { candidateName: existing.candidateName },
+  });
+
+  const recipientIds = new Set<string>();
+  if (existing.assignedToId && existing.assignedToId !== actor.$id) {
+    recipientIds.add(existing.assignedToId as string);
+  }
+  const tlIds = await getResumeTeamLeadIds(databases);
+  tlIds.forEach((tlId) => {
+    if (tlId !== actor.$id) recipientIds.add(tlId);
+  });
+
+  if (recipientIds.size > 0) {
+    await createNotificationsForRecipients(
+      databases,
+      Array.from(recipientIds),
+      {
+        title: 'Resume Profile Moved to Marketing',
+        body: `${actor.name} moved ${existing.candidateName} to Marketing.`,
+        targetId: id,
+        targetType: 'resume_profile',
+        type: 'resume_moved_to_marketing',
+      }
+    );
+  }
+
+  revalidatePath('/resume');
+  revalidatePath(`/resume/${id}`);
+  revalidatePath('/resume-marketing');
+  return updated as unknown as ResumeProfileDocument;
+}
+
+/**
+ * List Resume Profiles that have been moved to Marketing.
+ *
+ * Same scoping as listResumeProfilesAction: resume agents see only profiles
+ * assigned to them; resume TLs and leadership see all. Only rows where
+ * `movedToMarketing` is true are returned.
+ */
+export async function listMarketingProfilesAction(): Promise<ResumeProfileDocument[]> {
+  try {
+    const actor = await getAuthenticatedUserDoc();
+    if (!actor || !isResumeSide(actor)) {
+      return [];
+    }
+
+    const { databases } = await createAdminClient();
+    const dept = (actor as unknown as { department?: string }).department;
+    const queries: string[] = [Query.equal('movedToMarketing', true)];
+
+    if (actor.role === 'agent' && dept === 'resume') {
+      queries.push(Query.equal('assignedToId', actor.$id));
+    }
+
+    const docs = await listAllDocuments<ResumeProfileDocument>({
+      databases,
+      databaseId: DATABASE_ID,
+      collectionId: COLLECTIONS.RESUME_PROFILES,
+      queries,
+      pageLimit: 100,
+      maxPages: 50,
+    });
+
+    return [...docs].sort(
+      (a, b) =>
+        new Date(b.marketingMovedAt || b.updatedAt || (b as any).$createdAt || 0).getTime() -
+        new Date(a.marketingMovedAt || a.updatedAt || (a as any).$createdAt || 0).getTime(),
+    );
+  } catch (error) {
+    console.error('listMarketingProfilesAction error:', error);
+    return [];
+  }
+}

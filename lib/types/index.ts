@@ -273,6 +273,9 @@ export interface ResumeProfile {
   stageUpdatedAt?: string | null;
   lastAlertStage?: string | null;
   lastAlertAt?: string | null;
+  /** True once promoted to the Marketing page (analogous to a lead's isClosed). */
+  movedToMarketing?: boolean | null;
+  marketingMovedAt?: string | null;
   $createdAt?: string;
   $updatedAt?: string;
 }
@@ -377,6 +380,7 @@ export type ComponentKey =
   | 'target-report'
   | 'resume-dashboard'
   | 'resume-profiles'
+  | 'resume-marketing'
   | 'resume-chat'
   | 'resume-hierarchy'
   | 'technical-payments'
