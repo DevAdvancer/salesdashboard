@@ -858,9 +858,13 @@ export async function listAllPaymentInsightsAction(
 
     const leadMeta = leadDataMap.get(leadId);
 
-    // Apply date range filter if dates are provided
+    // Apply date range filter if dates are provided.
+    // Fall back to the payment record's createdAt when the lead has no
+    // closedAt — otherwise records without a closing date are silently
+    // dropped and never appear in the dashboard.
     if (normalizedFrom || normalizedTo) {
-      const closedDate = toComparableIsoDate(leadMeta?.closedAt);
+      const closedDate = toComparableIsoDate(leadMeta?.closedAt)
+        || toComparableIsoDate(typeof doc.$createdAt === "string" ? doc.$createdAt : null);
       if (normalizedFrom && (!closedDate || closedDate < normalizedFrom)) {
         continue;
       }
@@ -1244,7 +1248,11 @@ export async function listPaymentsReportAction(
     const updates = parseJsonOr<ClientPaymentUpdate[]>(doc.updates ?? doc.updatesJson, []);
     const head = updates[0] ?? null;
     const closedAt = leadClosedAtMap.get(leadId) ?? null;
-    const closedDate = toComparableIsoDate(closedAt);
+    // Fall back to the payment record's createdAt when the lead has no
+    // closedAt — otherwise records without a closing date are silently
+    // dropped and never appear in the report.
+    const closedDate = toComparableIsoDate(closedAt)
+      || toComparableIsoDate(typeof doc.$createdAt === "string" ? doc.$createdAt : null);
 
     if (normalizedFrom && (!closedDate || closedDate < normalizedFrom)) {
       continue;

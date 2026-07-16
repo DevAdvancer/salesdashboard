@@ -3,8 +3,12 @@
 import { useEffect, useState, useMemo, useRef, memo, useCallback } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { listLeadsForExport } from "@/lib/services/lead-action-service";
+import { useQueryClient } from "@tanstack/react-query";
+import { listLeadsForExport, clearLeadReadCache } from "@/lib/services/lead-action-service";
 import { useLeadsQuery } from "@/lib/queries/leads/use-leads-query";
+import { useRealtimeCollection } from "@/lib/hooks/use-realtime-collection";
+import { queryKeys } from "@/lib/queries/keys";
+import { COLLECTIONS } from "@/lib/constants/appwrite";
 import { getUsersByIds } from "@/lib/services/user-service";
 import { MONITOR_ONLY_STATUSES } from "@/lib/utils/lead-status-workflow";
 import {
@@ -428,6 +432,16 @@ function LeadsContent() {
     filters: normalizedFilters,
     page: currentPage,
     pageSize: ITEMS_PER_PAGE,
+  });
+
+  // Live updates: when any lead changes anywhere (created, edited, assigned,
+  // closed by another user), drop our cached lead reads and invalidate every
+  // leads query so the visible list refetches. This is what makes an add by
+  // one user show up on everyone else's screen without a manual refresh.
+  const queryClient = useQueryClient();
+  useRealtimeCollection(COLLECTIONS.LEADS, () => {
+    clearLeadReadCache();
+    queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
   });
 
   // Dropdown data — agents, branches, status options — read through

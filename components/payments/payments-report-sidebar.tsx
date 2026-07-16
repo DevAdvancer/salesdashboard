@@ -35,31 +35,19 @@ export function PaymentsReportSidebar({ rows }: PaymentsReportSidebarProps) {
       else if (r.status === "partially_paid") partiallyPaid++;
       else notPaid++;
 
-      // Compute the amount collected for this record. The priority is:
-      // 1) the running total of all update `amount` values (when present);
-      // 2) the last update's `amount` (legacy records);
-      // 3) the planned `upfrontAmount` from the payment plan (when the
-      //    record exists but no actual amount has been logged yet — every
-      //    record in the report has an upfront plan, so the sidebar/card
-      //    "Upfront (collected)" always reflects the full upfront value).
-      let rowPaid = 0;
-      let rowPaidCount = 0;
-      if (typeof r.totalPaid === "number" && Number.isFinite(r.totalPaid)) {
-        rowPaid = r.totalPaid;
-        rowPaidCount = r.paidUpdateCount;
-      } else if (r.lastUpdate?.amount != null) {
-        rowPaid = r.lastUpdate.amount;
-        rowPaidCount = 1;
-      } else if (
+      // "Paid" is derived from the planned `upfrontAmount` on the payment
+      // plan, not from the running sum of update `amount` values. The update
+      // history is unreliable after a payment is edited (entries get
+      // re-summed / double-counted), which inflated the total to values like
+      // 25499.99. The upfront amount is set once at plan creation and is the
+      // stable source of truth for collected revenue.
+      const rowUpfront =
         typeof r.paymentPlan?.upfrontAmount === "number" &&
-        Number.isFinite(r.paymentPlan.upfrontAmount) &&
-        r.paymentPlan.upfrontAmount > 0
-      ) {
-        rowPaid = r.paymentPlan.upfrontAmount;
-        rowPaidCount = 1;
-      }
-      amountPaid += rowPaid;
-      amountPaidCount += rowPaidCount;
+        Number.isFinite(r.paymentPlan.upfrontAmount)
+          ? r.paymentPlan.upfrontAmount
+          : 0;
+      amountPaid += rowUpfront;
+      if (rowUpfront > 0) amountPaidCount += 1;
       totalAmount += r.leadAmount;
 
       const lastAt = r.lastUpdate?.createdAt ?? r.createdAt;
@@ -131,9 +119,9 @@ export function PaymentsReportSidebar({ rows }: PaymentsReportSidebarProps) {
             icon={<CheckCircle2 className="h-4 w-4" />}
             label="Upfront (collected)"
             value={currency.format(stats.amountPaid)}
-            sub={`${stats.amountPaidCount} update${
-              stats.amountPaidCount === 1 ? "" : "s"
-            } with an amount`}
+            sub={`${stats.amountPaidCount} of ${stats.total} record${
+              stats.total === 1 ? "" : "s"
+            }`}
           />
           <SidebarStat
             icon={<CheckCircle2 className="h-4 w-4" />}

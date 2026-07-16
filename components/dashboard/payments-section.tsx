@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import dynamic from "next/dynamic";
 import {
   Card,
   CardContent,
@@ -14,14 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { PaymentInsightRecord } from "@/app/actions/client-payments";
 import type { PaymentStatus } from "@/lib/types";
+import { isClientExcludedStatus } from "@/lib/utils/client-history";
 
-const FinancialInsightsChart = dynamic(
-  () =>
-    import("@/components/dashboard/financial-insights-chart").then(
-      (m) => m.FinancialInsightsChart,
-    ),
-  { loading: () => <Skeleton className="h-[300px] w-full" />, ssr: false },
-);
+
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -29,6 +23,17 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 0,
   maximumFractionDigits: 2,
 });
+
+/**
+ * Every payment amount in this system is entered in whole dollars. When a
+ * stray record carries a fractional value (e.g. a contract amount stored as
+ * 23999.99 instead of 24000), it drags the company Total off by cents and
+ * shows up as "$23,999.99". Round each amount to the nearest dollar as it is
+ * summed so one bad record can't corrupt the aggregate.
+ */
+function toWholeDollars(value: number): number {
+  return Math.round(Number.isFinite(value) ? value : 0);
+}
 
 const STATUS_FILTERS: { value: "all" | PaymentStatus; label: string }[] = [
   { value: "all", label: "All" },
@@ -91,59 +96,7 @@ interface CompanyRow {
   count: number;
 }
 
-function toMonthKey(iso: string): {
-  key: string;
-  monthStart: number;
-  sortKey: string;
-} {
-  const d = new Date(iso);
-  const key = d.toLocaleString("en-US", { month: "short", year: "numeric" });
-  const monthStart = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
-  const sortKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  return { key, monthStart, sortKey };
-}
 
-export function buildMonthlyPaymentsChartData(
-  records: Array<
-    Pick<PaymentInsightRecord, "paidMonthlyAmounts" | "followupsMonthlyAmounts">
-  >,
-): Array<{ name: string; Total: number; Net: number }> {
-  const map = new Map<
-    string,
-    { total: number; monthStart: number; sortKey: string }
-  >();
-
-  for (const record of records) {
-    // Sum all actual payments by the month they were received, not the month
-    // the lead closed. This ensures revenue is attributed to the correct month.
-    for (const [monthKey, amount] of Object.entries(
-      record.paidMonthlyAmounts,
-    ) as Array<[string, number]>) {
-      if (!amount) continue;
-      const { monthStart, sortKey } = toMonthKey(monthKey);
-      const ex = map.get(monthKey) ?? { total: 0, monthStart, sortKey };
-      ex.total += amount;
-      map.set(monthKey, ex);
-    }
-
-    // Followup payments are attributed to the explicit followup payment date,
-    // so they also contribute to the month they were actually received.
-    for (const [monthKey, amount] of Object.entries(
-      record.followupsMonthlyAmounts || {},
-    ) as Array<[string, number]>) {
-      if (!amount) continue;
-      const { monthStart, sortKey } = toMonthKey(monthKey);
-      const ex = map.get(monthKey) ?? { total: 0, monthStart, sortKey };
-      ex.total += amount;
-      map.set(monthKey, ex);
-    }
-  }
-
-  return Array.from(map.entries())
-    .sort((a, b) => a[1].sortKey.localeCompare(b[1].sortKey))
-    .slice(-12)
-    .map(([name, d]) => ({ name, Total: d.total, Net: 0 }));
-}
 
 function toComparableIsoDate(value: string | null | undefined): string | null {
   if (typeof value !== "string") return null;
@@ -209,12 +162,7 @@ export function PaymentsSection({
     return recordsToFilter.filter((r) => r.status === statusFilter);
   }, [companyFiltered, statusFilter, dateFilter]);
 
-  // Per-month chart data is also scoped to the company filter (status filter
-  // intentionally does not affect it — the chart shows total received,
-  // grouped by the client closing month instead of payment entry date.
-  const monthlyChartData = useMemo(() => {
-    return buildMonthlyPaymentsChartData(companyFiltered);
-  }, [companyFiltered]);
+
 
   // Group by company — all time
   const companyRows = useMemo<CompanyRow[]>(() => {
@@ -241,8 +189,23 @@ export function PaymentsSection({
         continue;
       }
 
-      const leadAmount = r.leadAmount ?? 0;
-      const upfront = r.upfrontAmount ?? 0;
+      // Exclude records whose lead was marked backout or not-interested —
+      // those aren't genuine clients and their amounts shouldn't inflate the
+      // company totals. Note: we no longer require `isClosed === true` here
+      // because a record in the client_payments collection is by definition a
+      // real client engagement, even if the lead's isClosed flag wasn't set.
+      if (isClientExcludedStatus(r.leadStatus)) {
+        map.set(key, ex);
+        continue;
+      }
+
+      // Every legitimate amount in this system is whole-dollar. A stray
+      // record carrying cents (e.g. a leadAmount of 23999.99) would drag the
+      // aggregate off a clean total and show a spurious ".99". Round each
+      // amount to the nearest dollar as it is summed so one fractional record
+      // can't corrupt the company total.
+      const leadAmount = Math.round(r.leadAmount ?? 0);
+      const upfront = Math.round(r.upfrontAmount ?? 0);
       // Remaining = contract total - upfront - followup collections.
       const remaining = Math.max(0, leadAmount - upfront - followupsCollected);
       ex.total += leadAmount;
@@ -446,106 +409,10 @@ export function PaymentsSection({
           )}
         </div>
 
-        {/* Per-month chart */}
-        <div>
-          <h4 className="mb-3 text-sm font-semibold">
-            Per-month received (last 12 months)
-          </h4>
-          <p className="mb-2 text-xs text-muted-foreground">
-            Revenue grouped by the month each payment was actually received.
-          </p>
-          {isLoading ? (
-            <Skeleton className="h-[300px] w-full" />
-          ) : (
-            <FinancialInsightsChart data={monthlyChartData} />
-          )}
-        </div>
 
-        {/* Payments by Person Table */}
-        <div>
-          <h4 className="mb-3 text-sm font-semibold">Payments by Person</h4>
-          <p className="mb-2 text-xs text-muted-foreground">
-            Shows open pending amounts by company.
-          </p>
-          {(() => {
-            const pendingRows = filteredRecords.filter(
-              (record) =>
-                !record.isFollowupOnly &&
-                record.pendingTotal &&
-                record.pendingTotal > 0,
-            );
 
-            if (pendingRows.length === 0) {
-              return (
-                <div className="flex h-24 items-center justify-center rounded-md border border-dashed border-[var(--hairline)] text-sm text-[var(--mute)]">
-                  No pending payments to display
-                </div>
-              );
-            }
 
-            return (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-[var(--hairline)] text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <th className="py-2 pr-4 font-medium">Name</th>
-                      <th className="py-2 px-4 font-medium">Type</th>
-                      <th className="py-2 px-4 font-medium">Company</th>
-                      <th className="py-2 px-4 font-medium">Candidate</th>
-                      <th className="py-2 px-4 font-medium">Date</th>
-                      <th className="py-2 px-4 font-medium">Remark</th>
-                      <th className="py-2 pl-4 font-medium text-right">
-                        Amount
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
 
-                    {/* Pending amounts per person */}
-                    {pendingRows.map((record) => (
-                      <tr
-                        key={`pending-${record.leadId}`}
-                        className="border-b border-[var(--hairline-soft)]">
-                        <td className="py-2 pr-4 font-medium">—</td>
-                        <td className="py-2 px-4">
-                          <Badge
-                            variant="outline"
-                            className="bg-orange-100 text-orange-800">
-                            Pending
-                          </Badge>
-                        </td>
-                        <td className="py-2 px-4">{record.company}</td>
-                        <td className="py-2 px-4 text-muted-foreground">
-                          {record.latestPendingMonth
-                            ? formatMonthYear(record.latestPendingMonth)
-                            : "—"}
-                        </td>
-                        <td className="py-2 px-4 text-muted-foreground">—</td>
-                        <td className="py-2 px-4 text-muted-foreground">
-                          {record.paidMonthlyAmounts
-                            ? (
-                                Object.entries(
-                                  record.paidMonthlyAmounts,
-                                ) as Array<[string, number]>
-                              )
-                                .map(
-                                  ([month, amt]) =>
-                                    `${formatMonthYear(month)}: ${currencyFormatter.format(amt)}`,
-                                )
-                                .join(", ")
-                            : "—"}
-                        </td>
-                        <td className="py-2 pl-4 text-right font-mono font-medium text-amber-700">
-                          {currencyFormatter.format(record.pendingTotal ?? 0)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            );
-          })()}
-        </div>
 
         {/* Status mix badges */}
         {!isLoading && records.length > 0 && (

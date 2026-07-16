@@ -2,6 +2,7 @@
 
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useAccess, ComponentKey } from "@/lib/contexts/access-control-context";
+import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import {
   Bell,
@@ -143,19 +144,18 @@ export function Navigation({
       pathname === item.href ||
       (pathname?.startsWith(item.href) && pathname.charAt(item.href.length) === "/");
     return (
-      <button
+      <Link
         key={item.key}
         id={`nav-${item.key}`}
-        onClick={() => {
-          router.push(item.href);
-          setMobileMenuOpen(false);
-        }}
+        href={item.href}
+        prefetch
+        onClick={() => setMobileMenuOpen(false)}
         className={`nav-item${isActive ? " active" : ""}`}
         title={item.label}
       >
         <Icon size={16} />
         <span className={isCollapsed ? "lg:sr-only" : ""}>{item.label}</span>
-      </button>
+      </Link>
     );
   };
 
@@ -221,20 +221,19 @@ export function Navigation({
                 pathname === item.href ||
                 (pathname?.startsWith(item.href) && pathname.charAt(item.href.length) === "/");
               return (
-                <button
+                <Link
                   key={item.key}
                   id={`nav-${item.key}`}
-                  onClick={() => {
-                    router.push(item.href);
-                    setMobileMenuOpen(false);
-                  }}
+                  href={item.href}
+                  prefetch
+                  onClick={() => setMobileMenuOpen(false)}
                   className={`nav-item${isActive ? " active" : ""}`}
                   title={item.label}
                   style={{ paddingLeft: isCollapsed ? undefined : "1.25rem" }}
                 >
                   <ItemIcon size={16} />
                   <span className={isCollapsed ? "lg:sr-only" : ""}>{item.label}</span>
-                </button>
+                </Link>
               );
             })}
           </div>
@@ -286,20 +285,19 @@ export function Navigation({
               pathname === item.href ||
               (pathname?.startsWith(item.href) && pathname.charAt(item.href.length) === "/");
             return (
-              <button
+              <Link
                 key={item.key}
                 id={`nav-${item.key}`}
-                onClick={() => {
-                  router.push(item.href);
-                  setMobileMenuOpen(false);
-                }}
+                href={item.href}
+                prefetch
+                onClick={() => setMobileMenuOpen(false)}
                 className={`nav-item${isActive ? " active" : ""}`}
                 title={item.label}
                 style={{ paddingLeft: isCollapsed ? undefined : "1.25rem" }}
               >
                 <ItemIcon size={16} />
                 <span className={isCollapsed ? "lg:sr-only" : ""}>{item.label}</span>
-              </button>
+              </Link>
             );
           })}
         </div>

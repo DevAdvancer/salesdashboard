@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ProtectedRoute } from "@/components/protected-route";
-import { listLeads } from "@/lib/services/lead-action-service";
+import { listLeads, clearLeadReadCache } from "@/lib/services/lead-action-service";
 import type { User } from "@/lib/types";
 import { AttendanceSelfToggle } from "@/components/attendance-self-toggle";
 import { DashboardDateRange } from "@/components/dashboard/dashboard-date-range";
@@ -35,6 +35,8 @@ import {
   type KpiRow,
 } from "@/lib/utils/dashboard-kpi";
 import { workingDaysInRange as countWorkingDaysInRange } from "@/lib/utils/holiday-calendar";
+import { useRealtimeCollection } from "@/lib/hooks/use-realtime-collection";
+import { COLLECTIONS } from "@/lib/constants/appwrite";
 import type { ReferralSplit } from "@/lib/utils/dashboard-referral";
 import type { PaymentInsightRecord } from "@/app/actions/client-payments";
 import { listTechnicalPaymentsAction } from "@/app/actions/technical-payments";
@@ -197,6 +199,16 @@ function MainDashboard({
   const [handoffSummaries, setHandoffSummaries] = useState<TeamLeadAssignmentSummary[] | null>(null);
   const [handoffLoading, setHandoffLoading] = useState(isAdminLike);
 
+  // Live updates: when any lead changes anywhere (created, edited, closed by
+  // another user), bump this nonce so every fetch effect below re-runs with
+  // fresh data. The subscription clears the TTL cache first so the refetch
+  // hits the server, not the stale client-read cache. This is what makes an
+  // add by one user reflect on everyone else's dashboard without a refresh.
+  const [liveRefreshNonce, setLiveRefreshNonce] = useState(0);
+  useRealtimeCollection(COLLECTIONS.LEADS, () => {
+    clearDashboardDataCache();
+    setLiveRefreshNonce((n) => n + 1);
+  });
 
   // ── Fetch top metrics when range changes ──────────────────────────────
   useEffect(() => {
@@ -239,7 +251,7 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, dateRange]);
+  }, [user, dateRange, liveRefreshNonce]);
 
   // ── Fetch KPI rows when range changes ─────────────────────────────────
   useEffect(() => {
@@ -274,7 +286,7 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, dateRange]);
+  }, [user, dateRange, liveRefreshNonce]);
 
   // ── Fetch LinkedIn KPI rows when range changes ─────────────────────────
   useEffect(() => {
@@ -309,7 +321,7 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, dateRange]);
+  }, [user, dateRange, liveRefreshNonce]);
 
   // ── Fetch holiday calendar (all dashboard viewers use this to disable
   // holiday selection and to exclude weekday holidays from KPI targets) ──
@@ -372,7 +384,7 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, isAdminLike, dateRange]);
+  }, [user, isAdminLike, dateRange, liveRefreshNonce]);
 
   // ── Fetch technical payments total for dashboard (all accessible technical payments in date range) ──
   useEffect(() => {
@@ -409,7 +421,7 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, isAdminLike, dateRange]);
+  }, [user, isAdminLike, dateRange, liveRefreshNonce]);
 
   // ── Fetch referral split (admin-like only, current month by closedAt) ───
   useEffect(() => {
@@ -447,7 +459,7 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, isAdminLike, dateRange]);
+  }, [user, isAdminLike, dateRange, liveRefreshNonce]);
 
   // ── Fetch LG handoff summaries (admin-like only) ──────────────────────
   useEffect(() => {
@@ -477,7 +489,7 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, isAdminLike]);
+  }, [user, isAdminLike, liveRefreshNonce]);
 
   // KPI section mode + target derived from range
   const kpiMode = (dateRange && isSingleDay(dateRange)) ? "daily" : "monthly";
@@ -580,6 +592,111 @@ function MainDashboard({
     );
   }
 
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold">Dashboard</h1>
+          <p className="text-muted-foreground mt-1">
+            Welcome back, {user.name}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <DashboardDateRange
+            value={dateRange!}
+            onChange={handleDateRangeChange}
+            disabledDates={holidayDateKeys}
+            disableHolidaySelection
+          />
+          <AttendanceSelfToggle />
+        </div>
+      </div>
+
+      {/* Top metrics row — respects the date range */}
+      <TopMetricsRow
+        metrics={topMetrics}
+        isLoading={topMetricsLoading}
+        visibilityLabel={visibilityLabel}
+      />
+
+      {/* KPI — daily/monthly lead target per member */}
+      <KpiLeadTargetSection
+        rows={kpiRows}
+        isLoading={kpiLoading}
+        mode={kpiMode}
+        target={kpiTarget}
+        scopeLabel={scopeLabel}
+        rangeLabel={dateRange ? rangeLabel(dateRange) : ""}
+      />
+
+      {/* LinkedIn daily/monthly Connection limit KPI */}
+      {(isAdminLike || isTeamLead) && (
+        <KpiLinkedinConnectionSection
+          rows={linkedinKpiRows}
+          isLoading={linkedinKpiLoading}
+          mode={kpiMode}
+          rangeLabel={dateRange ? rangeLabel(dateRange) : ""}
+        />
+      )}
+
+      {/* Referral split — admin-only, filtered by date range */}
+      {isAdminLike && (
+        <ReferralSection
+          data={referralData}
+          isLoading={referralLoading}
+          rangeLabel={dateRange ? rangeLabel(dateRange) : ""}
+        />
+      )}
+
+      {/* LG → TL Handoff counts — admin-only */}
+      {isAdminLike && (
+        <LgHandoffSection
+          summaries={handoffSummaries}
+          isLoading={handoffLoading}
+        />
+      )}
+
+      {/* Payments — admin-only, all-time + per-month */}
+      {isAdminLike && (
+        <PaymentsSection
+          records={paymentRecords}
+          isLoading={paymentLoading}
+          rangeLabel={dateRange ? rangeLabel(dateRange) : ""}
+          dateFilter={dateRange!}
+          technicalPaymentsTotal={technicalPaymentsTotal}
+        />
+      )}
+
+      {/* Quick actions footer — kept minimal */}
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <Button variant="outline" onClick={() => router.push("/leads")}>
+          View Leads
+        </Button>
+        {isTeamLead && (
+          <Button
+            variant="outline"
+            onClick={() => router.push("/linkedin-requests")}>
+            LinkedIn Requests
+          </Button>
+        )}
+        {(isAdminLike || isTeamLead) && (
+          <Button variant="outline" onClick={() => router.push("/users")}>
+            {isAdminLike && !isMonitor && !isOperations
+              ? "Manage Users"
+              : "View Users"}
+          </Button>
+        )}
+        {isAdmin && (
+          <Button
+            variant="outline"
+            onClick={() => router.push("/payments-report")}>
+            Payments Report
+          </Button>
+        )}
+      </div>
+
+      {isAdmin && (
         <HolidayCalendarSection
           currentUserId={user.$id}
           holidays={holidayCalendar}
@@ -608,6 +725,13 @@ function LeadGenerationDashboardContent() {
     unassigned: 0,
     teamAssignments: [],
     loading: true,
+  });
+
+  // Live updates: refresh the lead-gen stats when any lead changes anywhere.
+  const [lgRefreshNonce, setLgRefreshNonce] = useState(0);
+  useRealtimeCollection(COLLECTIONS.LEADS, () => {
+    clearLeadReadCache();
+    setLgRefreshNonce((n) => n + 1);
   });
 
   useEffect(() => {
@@ -698,7 +822,7 @@ function LeadGenerationDashboardContent() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, lgRefreshNonce]);
 
   if (!user) {
     return (

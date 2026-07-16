@@ -125,31 +125,19 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
     let amountPaidCount = 0;
     let totalAmount = 0;
     for (const r of filtered) {
-      // Compute the amount collected for this record. Priority:
-      // 1) the running total of all update `amount` values;
-      // 2) the last update's `amount` (legacy records);
-      // 3) the planned `upfrontAmount` from the payment plan (covers
-      //    records that have a plan but no amount logged yet — every
-      //    record in the report has an upfront plan, so the card
-      //    "Upfront (collected)" always reflects the full upfront value).
-      let rowPaid = 0;
-      let rowPaidCount = 0;
-      if (typeof r.totalPaid === "number" && Number.isFinite(r.totalPaid)) {
-        rowPaid = r.totalPaid;
-        rowPaidCount = r.paidUpdateCount;
-      } else if (r.lastUpdate?.amount != null) {
-        rowPaid = r.lastUpdate.amount;
-        rowPaidCount = 1;
-      } else if (
+      // "Paid" is derived from the planned `upfrontAmount` on the payment
+      // plan, not from the running sum of update `amount` values. The update
+      // history is unreliable after a payment is edited (entries get
+      // re-summed / double-counted), which inflated the total to values like
+      // 25499.99. The upfront amount is set once at plan creation and is the
+      // stable source of truth for collected revenue.
+      const rowUpfront =
         typeof r.paymentPlan?.upfrontAmount === "number" &&
-        Number.isFinite(r.paymentPlan.upfrontAmount) &&
-        r.paymentPlan.upfrontAmount > 0
-      ) {
-        rowPaid = r.paymentPlan.upfrontAmount;
-        rowPaidCount = 1;
-      }
-      amountPaid += rowPaid;
-      amountPaidCount += rowPaidCount;
+        Number.isFinite(r.paymentPlan.upfrontAmount)
+          ? r.paymentPlan.upfrontAmount
+          : 0;
+      amountPaid += rowUpfront;
+      if (rowUpfront > 0) amountPaidCount += 1;
       totalAmount += r.leadAmount;
     }
     return {
@@ -260,8 +248,8 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
                     {currency.format(summary.amountPaid)}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Across {summary.amountPaidCount} update
-                    {summary.amountPaidCount === 1 ? "" : "s"}
+                    Across {summary.amountPaidCount} of {summary.count} record
+                    {summary.count === 1 ? "" : "s"}
                   </p>
                 </CardContent>
               </Card>
@@ -335,9 +323,7 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
                           {currency.format(row.paymentPlan.upfrontAmount)}
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          {typeof row.totalPaid === "number"
-                            ? currency.format(row.totalPaid)
-                            : "—"}
+                          {currency.format(row.paymentPlan.upfrontAmount ?? 0)}
                         </TableCell>
                         <TableCell>
                           <Badge variant={statusBadgeVariant(row.status)}>
