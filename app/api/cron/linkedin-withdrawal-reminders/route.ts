@@ -86,6 +86,7 @@ async function autoWithdrawLinkedinRequest(
   databases: Awaited<ReturnType<typeof createAdminClient>>['databases'],
   request: LinkedinRequest,
   nowIso: string,
+  adminRecipientIds: string[],
 ) {
   const isAcceptedWithoutLead =
     request.status === 'accepted' && !request.leadId;
@@ -117,6 +118,18 @@ async function autoWithdrawLinkedinRequest(
   await createGeneralChatMessage(
     databases,
     `Linkedin URL available again: ${request.targetUrl} (${request.company}) was auto-withdrawn. Reason: ${reason}`,
+  );
+
+  await createNotificationsForRecipients(
+    databases,
+    [request.agentId, request.teamLeadId, ...adminRecipientIds],
+    {
+      type: 'linkedin_auto_withdrawn',
+      title: 'Linkedin Auto-Withdrawn',
+      body: `Linkedin request for ${request.company} was auto-withdrawn. Reason: ${reason}`,
+      targetId: request.$id,
+      targetType: 'LINKEDIN_REQUEST',
+    }
   );
 }
 
@@ -152,7 +165,7 @@ export async function GET(request: NextRequest) {
 
     evaluated += 1;
     if (shouldAutoWithdrawLinkedinRequest({ request: requestDoc, now })) {
-      await autoWithdrawLinkedinRequest(databases, requestDoc, nowIso);
+      await autoWithdrawLinkedinRequest(databases, requestDoc, nowIso, adminRecipientIds);
       autoWithdrawn += 1;
       continue;
     }

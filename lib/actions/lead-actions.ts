@@ -653,6 +653,36 @@ export async function backoutLeadAction(
     });
   } catch {}
 
+  try {
+    const leadDataObj = JSON.parse(currentLead.data || "{}");
+    const clientName = `${leadDataObj.firstName || ""} ${leadDataObj.lastName || ""}`.trim() || "A lead";
+    
+    // Broadcast to General Chat
+    await databases.createDocument(DATABASE_ID, COLLECTIONS.CHAT_MESSAGES, ID.unique(), {
+      channel: 'general',
+      body: `📉 ${actorName} marked lead **${clientName}** as Backed Out.`,
+      createdById: 'system',
+      createdByName: 'System',
+      createdAt: nowIso,
+    });
+
+    // Notify involved parties
+    const recipients = Array.from(new Set([currentLead.ownerId, currentLead.assignedToId, actorDoc.teamLeadId].filter(Boolean) as string[]));
+    const otherRecipients = recipients.filter(id => id !== actorId);
+    
+    if (otherRecipients.length > 0) {
+      await createNotificationsForRecipients(databases, otherRecipients, {
+        type: 'lead_backed_out',
+        title: 'Lead Backed Out',
+        body: `${actorName} marked ${clientName} as Backed Out.`,
+        targetId: leadId,
+        targetType: 'LEAD',
+      });
+    }
+  } catch (err) {
+    console.error("Failed to send chat/notifications for Backout event:", err);
+  }
+
   return { success: true, lead: updated as unknown as Lead };
 }
 
@@ -774,6 +804,36 @@ export async function notInterestedLeadAction(
       performedAt: nowIso,
     });
   } catch {}
+
+  try {
+    const leadDataObj = JSON.parse(currentLead.data || "{}");
+    const clientName = `${leadDataObj.firstName || ""} ${leadDataObj.lastName || ""}`.trim() || "A lead";
+    
+    // Broadcast to General Chat
+    await databases.createDocument(DATABASE_ID, COLLECTIONS.CHAT_MESSAGES, ID.unique(), {
+      channel: 'general',
+      body: `❌ ${actorName} marked lead **${clientName}** as Not Interested.`,
+      createdById: 'system',
+      createdByName: 'System',
+      createdAt: nowIso,
+    });
+
+    // Notify involved parties
+    const recipients = Array.from(new Set([currentLead.ownerId, currentLead.assignedToId, actorDoc.teamLeadId].filter(Boolean) as string[]));
+    const otherRecipients = recipients.filter(id => id !== actorId);
+    
+    if (otherRecipients.length > 0) {
+      await createNotificationsForRecipients(databases, otherRecipients, {
+        type: 'lead_not_interested',
+        title: 'Lead Not Interested',
+        body: `${actorName} marked ${clientName} as Not Interested.`,
+        targetId: leadId,
+        targetType: 'LEAD',
+      });
+    }
+  } catch (err) {
+    console.error("Failed to send chat/notifications for Not Interested event:", err);
+  }
 
   return { success: true, lead: updated as unknown as Lead };
 }
