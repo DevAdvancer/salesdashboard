@@ -42,8 +42,33 @@ export function useLeadsQuery({
       page,
       pageSize
     ),
-    queryFn: () =>
-      listLeadsAction(filters, userId, role, branchIds, { page, pageSize }),
+    queryFn: async ({ signal }) => {
+      const response = await fetch('/api/leads/list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filters,
+          userId,
+          role,
+          branchIds,
+          options: { page, pageSize }
+        }),
+        signal
+      });
+
+      if (!response.ok) {
+        let errorMessage = "Failed to fetch leads";
+        try {
+          const errorData = await response.json();
+          if (errorData.error) errorMessage = errorData.error;
+        } catch (e) {
+          // ignore parsing error if it's not JSON
+        }
+        throw new Error(errorMessage);
+      }
+
+      return response.json();
+    },
     enabled: Boolean(userId),
     placeholderData: keepPreviousData,
   });
