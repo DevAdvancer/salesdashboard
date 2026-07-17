@@ -319,6 +319,8 @@ export interface LeadListFilters {
   closedAtTo?: string;
   searchQuery?: string;
   isClosed?: boolean;
+  /** When true, restrict to leads owned by OR assigned to the requesting user. */
+  mine?: boolean;
 }
 
 // Form configuration types
@@ -386,7 +388,8 @@ export type ComponentKey =
   | 'technical-payments'
   | 'followups-payments'
   | 'request-calls'
-  | 'call-requests';
+  | 'call-requests'
+  | 'assigned-report';
 
 export interface AccessRule {
   $id?: string;

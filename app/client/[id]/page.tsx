@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter, useParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queries/keys";
 import { getLead } from "@/lib/services/lead-service";
 import { reopenLead } from "@/lib/services/lead-action-service";
 import { getUserByIdOrNull } from "@/lib/services/user-service";
@@ -96,6 +98,7 @@ function HistoryDetailContent() {
   } = useAuth();
   const router = useRouter();
   const params = useParams();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const leadId = params.id as string;
 
@@ -753,6 +756,7 @@ function HistoryDetailContent() {
       setPaymentRecord(updated);
       setClientIntakeValues(updated.personalDetails ?? {});
       toast({ title: "Success", description: "Client details saved." });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
     } catch (err: unknown) {
       console.error("Error saving client intake:", err);
       toast({
@@ -827,6 +831,7 @@ function HistoryDetailContent() {
       setPendingAmount("");
       setPaymentNote("");
       toast({ title: "Success", description: "Payment update saved." });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
     } catch (err: unknown) {
       console.error("Error saving payment update:", err);
       toast({

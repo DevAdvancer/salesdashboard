@@ -1,6 +1,6 @@
 "use client";
 
-import { getAssessmentAttempts } from "@/app/actions/assessment";
+import { countAssessmentEmailsSentInRange } from "@/app/actions/assessment";
 import { listHolidayCalendarAction } from "@/app/actions/holiday-calendar";
 import {
   listAllPaymentInsightsAction,
@@ -8,9 +8,9 @@ import {
   listLeadPaidAmountsAction,
   type PaymentInsightRecord,
 } from "@/app/actions/client-payments";
-import { getInterviewAttempts } from "@/app/actions/interview";
+import { countInterviewEmailsSentInRange } from "@/app/actions/interview";
 import { listLgHandoffsAction } from "@/app/actions/lg-handoffs";
-import { getMockAttempts } from "@/app/actions/mock";
+import { countMockEmailsSentInRange } from "@/app/actions/mock";
 import { listLeads } from "@/lib/services/lead-action-service";
 import { loadLeadTargetProgressAction } from "@/app/actions/lead";
 import { listBranches } from "@/lib/services/branch-service";
@@ -32,6 +32,7 @@ import {
   type ReferralSplit,
 } from "@/lib/utils/dashboard-referral";
 import { isVisibleClientLead } from "@/lib/utils/client-history";
+import { expandIsoDateToStart, expandIsoDateToEnd } from "@/lib/utils/iso-date-range";
 import { cacheClientRead, clearClientReadCache } from "@/lib/utils/client-read-cache";
 import type { Branch, Department, Lead, LgHandoff, User } from "@/lib/types";
 import type { HolidayCalendarEntry } from "@/lib/types";
@@ -137,11 +138,22 @@ export async function loadDashboardData(
   );
 }
 
+/**
+ * Support-email counts for the dashboard tiles ("Created Mocks / Interview /
+ * Assessment"). Counts each email SENT within [dateFromIso, dateToIso],
+ * scoped to the leads the caller can see. Unlike the leads/clients tiles —
+ * which count leads *created* in the range — a support email is counted by
+ * its own send date, so an email sent this month against a lead created last
+ * month still shows up. This is what makes the tile match the actual number
+ * of emails sent in the period.
+ */
 export async function loadDashboardAttemptCounts(
   userId: string,
   leadIds: string[],
+  dateFromIso: string,
+  dateToIso: string,
 ): Promise<DashboardAttemptCounts> {
-  if (leadIds.length === 0) {
+  if (leadIds.length === 0 || !dateFromIso || !dateToIso) {
     return {
       createdMocks: 0,
       createdInterviewSupport: 0,
@@ -151,30 +163,19 @@ export async function loadDashboardAttemptCounts(
 
   return cacheClientRead(
     `${DASHBOARD_DATA_SCOPE}:attemptCounts`,
-    [userId, [...leadIds].sort()],
+    [userId, [...leadIds].sort(), dateFromIso, dateToIso],
     async () => {
-      const [mockAttempts, interviewAttempts, assessmentAttempts] = await Promise.all([
-        getMockAttempts(userId, leadIds),
-        getInterviewAttempts(userId, leadIds),
-        getAssessmentAttempts(userId, leadIds),
-      ]);
-
-      const countCreatedRequests = (
-        attempts: { attemptCount?: number | string }[],
-      ) =>
-        attempts.reduce((total, attempt) => {
-          const count =
-            typeof attempt.attemptCount === "number"
-              ? attempt.attemptCount
-              : Number.parseInt(String(attempt.attemptCount ?? 0), 10);
-
-          return total + (Number.isFinite(count) ? count : 0);
-        }, 0);
+      const [createdMocks, createdInterviewSupport, createdAssessmentSupport] =
+        await Promise.all([
+          countMockEmailsSentInRange(userId, leadIds, dateFromIso, dateToIso),
+          countInterviewEmailsSentInRange(userId, leadIds, dateFromIso, dateToIso),
+          countAssessmentEmailsSentInRange(userId, leadIds, dateFromIso, dateToIso),
+        ]);
 
       return {
-        createdMocks: countCreatedRequests(mockAttempts),
-        createdInterviewSupport: countCreatedRequests(interviewAttempts),
-        createdAssessmentSupport: countCreatedRequests(assessmentAttempts),
+        createdMocks,
+        createdInterviewSupport,
+        createdAssessmentSupport,
       };
     },
     DASHBOARD_DATA_TTL_MS,
@@ -253,8 +254,13 @@ export async function loadDashboardTopMetrics(
     DASHBOARD_TOP_METRICS_SCOPE,
     [input.userId, input.role, branchIds, dateFrom ?? "", dateTo ?? ""],
     async () => {
-      // 1. Active + closed counts in the range.
-      const [active, closed] = await Promise.all([
+      // 1. Active (created in range) + closed (closed in range) counts. These
+      //    two tiles are date-of-lead based and stay unchanged.
+      // 2. All visible leads regardless of date — used to scope the support
+      //    email counts. A support email is counted by its own send date, so
+      //    an email sent in the range against an older lead must still be seen;
+      //    scoping only to in-range leads is what previously undercounted.
+      const [active, closed, allActive, allClosed] = await Promise.all([
         listLeads(
           { isClosed: false, dateFrom, dateTo },
           input.userId,
@@ -267,6 +273,18 @@ export async function loadDashboardTopMetrics(
           input.role,
           input.branchIds,
         ),
+        listLeads(
+          { isClosed: false },
+          input.userId,
+          input.role,
+          input.branchIds,
+        ),
+        listLeads(
+          { isClosed: true },
+          input.userId,
+          input.role,
+          input.branchIds,
+        ),
       ]);
       const closedInRange = filterClosedLeadsInDateRange(
         closed,
@@ -274,12 +292,20 @@ export async function loadDashboardTopMetrics(
         dateTo ?? "",
       ).filter(isVisibleClientLead);
 
-      // 2. Attempt counts against the visible lead IDs.
+      // Support-email counts run against every visible lead (all dates), then
+      // filter each email by its send timestamp against the range.
       const visibleLeadIds = Array.from(
-        new Set([...active, ...closedInRange].map((lead) => lead.$id)),
+        new Set([...allActive, ...allClosed].map((lead) => lead.$id)),
       );
+      const dateFromIso = expandIsoDateToStart(dateFrom ?? "");
+      const dateToIso = expandIsoDateToEnd(dateTo ?? "");
       const attempts = visibleLeadIds.length
-        ? await loadDashboardAttemptCounts(input.userId, visibleLeadIds)
+        ? await loadDashboardAttemptCounts(
+            input.userId,
+            visibleLeadIds,
+            dateFromIso,
+            dateToIso,
+          )
         : EMPTY_TOP_METRICS;
 
       return {

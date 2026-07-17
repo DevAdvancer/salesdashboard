@@ -453,6 +453,8 @@ function LeadDetailContent() {
           description: "Lead marked as Not Interested",
         });
         setIsEditing(false);
+        queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
+        queryClient.invalidateQueries({ queryKey: ['assigned-report'] });
         await loadLead();
         router.push("/leads");
         return;
@@ -464,6 +466,8 @@ function LeadDetailContent() {
           description: "Lead marked as Backout",
         });
         setIsEditing(false);
+        queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
+        queryClient.invalidateQueries({ queryKey: ['assigned-report'] });
         await loadLead();
         router.push("/leads");
         return;
@@ -479,6 +483,9 @@ function LeadDetailContent() {
           description: "Lead closed successfully",
         });
         setIsEditing(false);
+        queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
+        queryClient.invalidateQueries({ queryKey: ['assigned-report'] });
+        await loadLead();
         router.push("/leads");
         return;
       }
@@ -488,6 +495,8 @@ function LeadDetailContent() {
         description: "Lead updated successfully",
       });
       setIsEditing(false);
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
+      queryClient.invalidateQueries({ queryKey: ['assigned-report'] });
       await loadLead();
     } catch (err: unknown) {
       console.error("Error saving lead:", err);
@@ -564,6 +573,8 @@ function LeadDetailContent() {
           description: "Lead marked as Backout",
         });
         setShowCloseDialog(false);
+        queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
+        queryClient.invalidateQueries({ queryKey: ['assigned-report'] });
         router.push("/leads");
         return;
       }
@@ -680,11 +691,14 @@ function LeadDetailContent() {
             : `Congratulations ${user.name} for closing a lead!`,
         });
       } catch {}
+      clearLeadReadCache();
       toast({
         title: "Success",
         description: "Lead closed successfully",
       });
       setShowCloseDialog(false);
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
+      queryClient.invalidateQueries({ queryKey: ['assigned-report'] });
       router.push("/leads");
     } catch (err: unknown) {
       console.error("Error closing lead:", err);
@@ -709,6 +723,8 @@ function LeadDetailContent() {
         title: "Success",
         description: "Lead reopened successfully",
       });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
+      queryClient.invalidateQueries({ queryKey: ['assigned-report'] });
       await loadLead();
     } catch (err: unknown) {
       console.error("Error reopening lead:", err);
@@ -741,6 +757,8 @@ function LeadDetailContent() {
         title: "Success",
         description: "Lead assigned successfully",
       });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
+      queryClient.invalidateQueries({ queryKey: ['assigned-report'] });
       await loadLead();
     } catch (err: unknown) {
       console.error("Error assigning lead:", err);

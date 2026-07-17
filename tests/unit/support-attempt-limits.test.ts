@@ -22,8 +22,9 @@ jest.mock('node-appwrite', () => ({
   },
 }));
 
-const { reserveAssessmentAttempt } = require('@/app/actions/assessment');
-const { reserveInterviewAttempt } = require('@/app/actions/interview');
+const { reserveAssessmentAttempt, countAssessmentEmailsSentInRange } = require('@/app/actions/assessment');
+const { reserveInterviewAttempt, countInterviewEmailsSentInRange } = require('@/app/actions/interview');
+const { countMockEmailsSentInRange } = require('@/app/actions/mock');
 
 describe('support attempt limits', () => {
   beforeEach(() => {
@@ -104,5 +105,58 @@ describe('support attempt limits', () => {
       attemptCount: 3,
     });
     expect(mockDatabases.createDocument).toHaveBeenCalled();
+  });
+});
+
+describe('support emails sent in range', () => {
+  beforeEach(() => {
+    mockDatabases = {
+      getDocument: jest.fn(),
+      listDocuments: jest.fn(),
+      createDocument: jest.fn(),
+    };
+    jest.clearAllMocks();
+  });
+
+  // Two emails sent this month + two sent last month against the same leads.
+  // The dashboard tile asks for "this month" and must count all four sends
+  // whose lastAttemptAt lands inside the window — not just the two whose
+  // lead happened to be created in the window.
+  const buildDocs = () => [
+    { $id: 'a1', leadId: 'lead-1', userId: 'u1', attemptCount: '1', lastAttemptAt: '2026-07-02T10:00:00.000Z', sentSubjects: ['one'] },
+    { $id: 'a2', leadId: 'lead-1', userId: 'u2', attemptCount: '1', lastAttemptAt: '2026-07-05T10:00:00.000Z', sentSubjects: ['two'] },
+    { $id: 'a3', leadId: 'lead-2', userId: 'u1', attemptCount: '1', lastAttemptAt: '2026-07-09T10:00:00.000Z', sentSubjects: ['three'] },
+    { $id: 'a4', leadId: 'lead-2', userId: 'u2', attemptCount: '1', lastAttemptAt: '2026-06-28T10:00:00.000Z', sentSubjects: ['four'] },
+  ];
+
+  const RANGE_FROM = '2026-07-01T00:00:00.000Z';
+  const RANGE_TO = '2026-07-31T23:59:59.999Z';
+
+  it('counts interview emails by send date, not lead creation date', async () => {
+    mockDatabases.listDocuments.mockResolvedValueOnce({ documents: buildDocs() });
+    await expect(
+      countInterviewEmailsSentInRange('user-3', ['lead-1', 'lead-2'], RANGE_FROM, RANGE_TO)
+    ).resolves.toBe(3);
+  });
+
+  it('counts assessment emails by send date', async () => {
+    mockDatabases.listDocuments.mockResolvedValueOnce({ documents: buildDocs() });
+    await expect(
+      countAssessmentEmailsSentInRange('user-3', ['lead-1', 'lead-2'], RANGE_FROM, RANGE_TO)
+    ).resolves.toBe(3);
+  });
+
+  it('counts mock emails by send date', async () => {
+    mockDatabases.listDocuments.mockResolvedValueOnce({ documents: buildDocs() });
+    await expect(
+      countMockEmailsSentInRange('user-3', ['lead-1', 'lead-2'], RANGE_FROM, RANGE_TO)
+    ).resolves.toBe(3);
+  });
+
+  it('returns 0 when no lead IDs are provided', async () => {
+    await expect(
+      countInterviewEmailsSentInRange('user-3', [], RANGE_FROM, RANGE_TO)
+    ).resolves.toBe(0);
+    expect(mockDatabases.listDocuments).not.toHaveBeenCalled();
   });
 });

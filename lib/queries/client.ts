@@ -32,6 +32,7 @@ export function makeQueryClient(): QueryClient {
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
         refetchOnMount: false,
+        refetchInterval: 30 * 60 * 1000,
         retry: 1,
       },
       mutations: {

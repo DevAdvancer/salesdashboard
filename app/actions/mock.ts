@@ -200,6 +200,56 @@ export async function getMockAttempts(userId: string, leadIds: string[]) {
 }
 
 /**
+ * Count mock-request emails SENT within an inclusive ISO date range, scoped
+ * to a set of visible lead IDs. Counts each attempt document whose send
+ * timestamp (`lastAttemptAt`) falls inside [dateFromIso, dateToIso] so the
+ * dashboard reflects "requests sent in this period" regardless of when the
+ * underlying lead was created.
+ */
+export async function countMockEmailsSentInRange(
+    userId: string,
+    leadIds: string[],
+    dateFromIso: string,
+    dateToIso: string,
+): Promise<number> {
+    await assertAuthenticatedUserId(userId);
+    if (!leadIds.length || !dateFromIso || !dateToIso) return 0;
+
+    try {
+        const { databases } = await createAdminClient();
+
+        const CHUNK = 100;
+        const chunks: string[][] = [];
+        for (let i = 0; i < leadIds.length; i += CHUNK) {
+            chunks.push(leadIds.slice(i, i + CHUNK));
+        }
+
+        const batchResults = await Promise.all(
+            chunks.map((chunk) =>
+                databases.listDocuments(
+                    DATABASE_ID,
+                    MOCK_ATTEMPTS_COLLECTION_ID,
+                    [
+                        Query.equal('leadId', chunk),
+                        Query.limit(5000),
+                    ]
+                )
+            )
+        );
+
+        const documents = batchResults.flatMap((res) => res.documents as unknown as MockAttemptDocument[]);
+        return documents.reduce((total, doc) => {
+            const sentAt = doc.lastAttemptAt;
+            if (!sentAt || sentAt < dateFromIso || sentAt > dateToIso) return total;
+            return total + parseCount(doc.attemptCount);
+        }, 0);
+    } catch (error: unknown) {
+        console.error('Error counting mock emails sent in range:', error);
+        return 0;
+    }
+}
+
+/**
  * Reserve a new mock attempt before sending email.
  */
 export async function reserveMockAttempt(userId: string, leadId: string) {

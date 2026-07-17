@@ -30,6 +30,7 @@ import { ProtectedRoute } from "@/components/protected-route";
 import { canExportLeadsByEmail } from "@/lib/constants/lead-export-access";
 
 import { Download } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 
 /**
  * Persist the visible filter state in URL search params. Anything that
@@ -41,6 +42,8 @@ const FILTER_PARAM_KEYS = {
   q: "q",
   status: "status",
   assignedTo: "assignedTo",
+  owner: "owner",
+  mine: "mine",
   branch: "branch",
   from: "from",
   to: "to",
@@ -125,12 +128,16 @@ function LeadsContent() {
   const urlBranch = searchParams.get(FILTER_PARAM_KEYS.branch) ?? "";
   const urlFrom = searchParams.get(FILTER_PARAM_KEYS.from) ?? "";
   const urlTo = searchParams.get(FILTER_PARAM_KEYS.to) ?? "";
+  const urlOwner = searchParams.get(FILTER_PARAM_KEYS.owner) ?? "";
+  const urlMine = searchParams.get(FILTER_PARAM_KEYS.mine) ?? "";
   const urlTeam = searchParams.get(FILTER_PARAM_KEYS.team) ?? "";
 
   type FilterDrafts = {
     q: string;
     status: string;
     assignedTo: string;
+    owner: string;
+    mine: string;
     branch: string;
     from: string;
     to: string;
@@ -141,6 +148,8 @@ function LeadsContent() {
     q: urlSearch,
     status: urlStatus,
     assignedTo: urlAssignedTo,
+    owner: urlOwner,
+    mine: urlMine,
     branch: urlBranch,
     from: urlFrom,
     to: urlTo,
@@ -161,6 +170,8 @@ function LeadsContent() {
       q: urlSearch,
       status: urlStatus,
       assignedTo: urlAssignedTo,
+      owner: urlOwner,
+      mine: urlMine,
       branch: urlBranch,
       from: urlFrom,
       to: urlTo,
@@ -171,6 +182,8 @@ function LeadsContent() {
       current.q === next.q &&
       current.status === next.status &&
       current.assignedTo === next.assignedTo &&
+      current.owner === next.owner &&
+      current.mine === next.mine &&
       current.branch === next.branch &&
       current.from === next.from &&
       current.to === next.to &&
@@ -183,11 +196,13 @@ function LeadsContent() {
     // meant to react to URL changes only, and reading drafts in the
     // dependency list would cause infinite loops because the effect
     // also updates drafts.
-  }, [urlSearch, urlStatus, urlAssignedTo, urlBranch, urlFrom, urlTo, urlTeam]);
+  }, [urlSearch, urlStatus, urlAssignedTo, urlOwner, urlMine, urlBranch, urlFrom, urlTo, urlTeam]);
 
   const searchDraft = drafts.q;
   const statusDraft = drafts.status;
   const assignedToDraft = drafts.assignedTo;
+  const ownerDraft = drafts.owner;
+  const mineDraft = drafts.mine;
   const branchDraft = drafts.branch;
   const dateFromDraft = drafts.from;
   const dateToDraft = drafts.to;
@@ -203,14 +218,18 @@ function LeadsContent() {
     if (ADMIN_OPS_NO_DEFAULT.has(user.role)) return;
     // Team leads default to their own team
     if (user.role === "team_lead") {
-      setDrafts((prev) => ({ ...prev, team: user.$id }));
+      queueMicrotask(() => {
+        setDrafts((prev) => ({ ...prev, team: user.$id }));
+      });
     }
   }, [user, urlTeam]);
 
   // Reset assignedTo when team changes to avoid selecting an agent
   // that isn't in the newly selected team.
   useEffect(() => {
-    setDrafts((prev) => ({ ...prev, assignedTo: "" }));
+    queueMicrotask(() => {
+      setDrafts((prev) => ({ ...prev, assignedTo: "", owner: "" }));
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamDraft]);
 
@@ -218,6 +237,8 @@ function LeadsContent() {
   const searchQuery = urlSearch;
   const statusFilter = urlStatus;
   const assignedToFilter = urlAssignedTo;
+  const ownerFilter = urlOwner;
+  const mineFilter = urlMine;
   const branchFilter = urlBranch;
   const dateFromFilter = urlFrom;
   const dateToFilter = urlTo;
@@ -242,8 +263,10 @@ function LeadsContent() {
         next.dateTo = date.toISOString();
       }
     }
+    if (ownerFilter) next.ownerId = ownerFilter;
+    if (mineFilter === "true") next.mine = true;
     return next;
-  }, [searchQuery, statusFilter, assignedToFilter, branchFilter, dateFromFilter, dateToFilter]);
+  }, [searchQuery, statusFilter, assignedToFilter, ownerFilter, mineFilter, branchFilter, dateFromFilter, dateToFilter]);
 
   const canExportLeads = canExportLeadsByEmail(user?.email);
   const isLeadGeneration = user?.role === "lead_generation";
@@ -259,6 +282,8 @@ function LeadsContent() {
       q: string;
       status: string;
       assignedTo: string;
+      owner: string;
+      mine: string;
       branch: string;
       from: string;
       to: string;
@@ -268,6 +293,8 @@ function LeadsContent() {
       if (next.q) params.set(FILTER_PARAM_KEYS.q, next.q);
       if (next.status) params.set(FILTER_PARAM_KEYS.status, next.status);
       if (next.assignedTo) params.set(FILTER_PARAM_KEYS.assignedTo, next.assignedTo);
+      if (next.owner) params.set(FILTER_PARAM_KEYS.owner, next.owner);
+      if (next.mine) params.set(FILTER_PARAM_KEYS.mine, next.mine);
       if (next.branch) params.set(FILTER_PARAM_KEYS.branch, next.branch);
       if (next.from) params.set(FILTER_PARAM_KEYS.from, next.from);
       if (next.to) params.set(FILTER_PARAM_KEYS.to, next.to);
@@ -509,9 +536,11 @@ function LeadsContent() {
 
   // When a team is selected (for leadership roles), filter agents to
   // only those belonging to the selected team. If no team is selected,
-  // return all agents for the role.
+  // return all agents for the role. Non-leadership roles get a self-only
+  // list so they can use the Owner / Assigned To dropdowns.
   const agents: User[] = useMemo(() => {
-    if (!LEADERSHIP_ROLES.has(user?.role || "")) return [];
+    if (!user) return [];
+    if (!LEADERSHIP_ROLES.has(user.role)) return [user];
     if (!teamDraft) return agentsForCurrentRole;
     // Filter to agents whose teamLeadId matches the selected team
     return agentsByTeamLead.get(teamDraft) ?? [];
@@ -689,6 +718,8 @@ function LeadsContent() {
       q: searchDraft,
       status: statusDraft,
       assignedTo: assignedToDraft,
+      owner: ownerDraft,
+      mine: mineDraft,
       branch: branchDraft,
       from: dateFromDraft,
       to: dateToDraft,
@@ -704,6 +735,8 @@ function LeadsContent() {
       q: "",
       status: "",
       assignedTo: "",
+      owner: "",
+      mine: "",
       branch: "",
       from: "",
       to: "",
@@ -859,25 +892,41 @@ function LeadsContent() {
               </div>
             )}
 
-            {LEADERSHIP_ROLES.has(user?.role || "") && (
-              <div>
-                <Label htmlFor="assignedTo">Assigned To</Label>
-                <select
-                  id="assignedTo"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  value={assignedToDraft}
-                  onChange={(e) =>
-                    setDrafts((prev) => ({ ...prev, assignedTo: e.target.value }))
-                  }>
-                  <option value="">All Agents</option>
-                  {agents.map((agent) => (
-                    <option key={agent.$id} value={agent.$id}>
-                      {agent.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <div>
+              <Label htmlFor="ownerFilter">Owner</Label>
+              <select
+                id="ownerFilter"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                value={ownerDraft}
+                onChange={(e) =>
+                  setDrafts((prev) => ({ ...prev, owner: e.target.value }))
+                }>
+                <option value="">All Owners</option>
+                {agents.map((agent) => (
+                  <option key={agent.$id} value={agent.$id}>
+                    {agent.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <Label htmlFor="assignedTo">Assigned To</Label>
+              <select
+                id="assignedTo"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                value={assignedToDraft}
+                onChange={(e) =>
+                  setDrafts((prev) => ({ ...prev, assignedTo: e.target.value }))
+                }>
+                <option value="">All Agents</option>
+                {agents.map((agent) => (
+                  <option key={agent.$id} value={agent.$id}>
+                    {agent.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             <div>
               <Label htmlFor="branchFilter">Branch</Label>
@@ -910,6 +959,19 @@ function LeadsContent() {
                   }));
                 }}
               />
+            </div>
+
+            <div className="flex items-center gap-2 pt-6">
+              <Checkbox
+                id="myLeadsFilter"
+                checked={mineDraft === "true"}
+                onCheckedChange={(checked) =>
+                  setDrafts((prev) => ({ ...prev, mine: checked ? "true" : "" }))
+                }
+              />
+              <Label htmlFor="myLeadsFilter" className="cursor-pointer">
+                My Leads Only
+              </Label>
             </div>
           </div>
 

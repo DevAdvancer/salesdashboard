@@ -43,7 +43,8 @@ export type ComponentKey =
   | 'resume-chat'
   | 'resume-hierarchy'
   | 'request-calls'
-  | 'call-requests';
+  | 'call-requests'
+  | 'assigned-report';
 
 interface AccessControlContextType {
   canAccess: (componentKey: ComponentKey) => boolean;
@@ -78,6 +79,7 @@ const SALES_ONLY_COMPONENTS = new Set<ComponentKey>([
   // resume-team members never raise call requests. Leadership roles are
   // exempt from the block via canCrossDashboards.
   'request-calls',
+  'assigned-report',
 ]);
 
 function canCrossDashboards(role: NonNullable<ReturnType<typeof useAuth>['user']>['role']) {

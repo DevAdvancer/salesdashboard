@@ -61,6 +61,9 @@ export const COMPONENT_ACCESS: RoleAccessMap = {
   // .canAccess (resume team members + leadership). Sales-team members
   // are blocked at that gate.
   'call-requests': [],
+  // Assigned Report — leadership-only view of lead assignments per team,
+  // breaking down assignment source (admin vs lead gen vs self).
+  'assigned-report': ['admin', 'developer', 'monitor', 'operations'],
 };
 
 export function isRoleEligibleForComponent(

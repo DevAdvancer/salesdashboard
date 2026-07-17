@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queries/keys";
 import { createLead } from "@/lib/services/lead-action-service";
 import {
   findBackedOutLeadForLinkedinTargetUrlAction,
@@ -67,6 +69,7 @@ function NewLeadContent() {
 function LeadGenerationNewLeadContent() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
@@ -347,6 +350,9 @@ function LeadGenerationNewLeadContent() {
         title: "Success",
         description: "Lead generated successfully.",
       });
+
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
+      queryClient.invalidateQueries({ queryKey: ['assigned-report'] });
 
       router.push("/leads");
     } catch (err: unknown) {
@@ -664,6 +670,7 @@ function LeadGenerationNewLeadContent() {
 function LegacyNewLeadContent() {
   const { user, isAdmin, loading: authLoading } = useAuth();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const { toast } = useToast();
 
@@ -977,6 +984,9 @@ function LegacyNewLeadContent() {
         title: "Success",
         description: "Lead created successfully",
       });
+
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
+      queryClient.invalidateQueries({ queryKey: ['assigned-report'] });
 
       router.push("/leads");
     } catch (err: any) {

@@ -1449,6 +1449,19 @@ export async function listLeadsAction(
       }
     }
 
+    // Apply owner filter
+    if (filters.ownerId) {
+      queries.push(Query.equal('ownerId', filters.ownerId));
+    }
+
+    // Apply "my leads" filter — leads owned by OR assigned to the requesting user
+    if (filters.mine) {
+      queries.push(Query.or([
+        Query.equal('ownerId', userId),
+        Query.equal('assignedToId', userId),
+      ]));
+    }
+
     // Apply assigned agent filter
     if (filters.assignedToId) {
       queries.push(Query.equal('assignedToId', filters.assignedToId));
