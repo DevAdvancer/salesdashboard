@@ -444,6 +444,23 @@ async function listClientPaymentsUpdatedInRange(databases: any, range: WeeklyRep
   });
 }
 
+async function listFollowupPaymentsInRange(databases: any, range: WeeklyReportRange): Promise<any[]> {
+  const fromDate = range.from.substring(0, 10);
+  const toDate = range.to.substring(0, 10);
+  return listAllDocuments<any>({
+    databases,
+    databaseId: DATABASE_ID,
+    collectionId: COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS,
+    queries: [
+      Query.greaterThanEqual("date", fromDate),
+      Query.lessThanEqual("date", toDate),
+      Query.orderAsc("$id"),
+    ],
+    pageLimit: 100,
+    maxPages: 500,
+  });
+}
+
 async function listLeadsByIds(databases: any, leadIds: string[]): Promise<Map<string, LeadDocument>> {
   const map = new Map<string, LeadDocument>();
   if (!leadIds || leadIds.length === 0) return map;
@@ -486,12 +503,13 @@ export async function getWeeklyReportAction(input: {
   const scopedUsers = await listScopedUsers(databases, actor);
   const scopedUserIds = new Set(scopedUsers.map((user) => user.$id));
 
-  const [createdLeads, closedLeads, auditLogs, paymentRecords, notInterestedEvents] = await Promise.all([
+  const [createdLeads, closedLeads, auditLogs, paymentRecords, notInterestedEvents, followupRecords] = await Promise.all([
     listLeadsCreatedInRange(databases, range),
     listClosedLeadsInRange(databases, range),
     listAuditLogsInRange(databases, range),
     listClientPaymentsUpdatedInRange(databases, range),
     listNotInterestedEventsInRange(databases, range),
+    listFollowupPaymentsInRange(databases, range),
   ]);
 
   const metricsByUserId = new Map<string, WeeklyReportMetrics>();
@@ -582,6 +600,17 @@ export async function getWeeklyReportAction(input: {
     addMetrics(ensureMetrics(attributed), { upfront: upfrontAmount });
   });
 
+  followupRecords.forEach((record) => {
+    const createdById = record.createdById;
+    if (!createdById || !scopedUserIds.has(createdById)) return;
+    if (!record.leadId || record.leadId.startsWith("manual_followup:")) return;
+    
+    const amount = Number(record.amount) || 0;
+    if (amount > 0) {
+      addMetrics(ensureMetrics(createdById), { upfront: amount });
+    }
+  });
+
   // Technical payments: sum amounts attributed by userId within the date range.
   const techPayments = await getTechnicalPaymentsByLeadIdsAction(actor.$id, paymentLeadIds);
   for (const payment of techPayments) {
@@ -591,7 +620,7 @@ export async function getWeeklyReportAction(input: {
     if (createdAt < range.from || createdAt > range.to) continue;
     const amount = Number(payment.amount) || 0;
     if (amount > 0) {
-      addMetrics(ensureMetrics(userId), { technicalUpfront: amount });
+      addMetrics(ensureMetrics(userId), { technicalUpfront: amount, upfront: amount });
     }
   }
 

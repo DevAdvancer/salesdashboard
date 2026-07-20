@@ -161,10 +161,20 @@ export function buildTargetReport(input: {
    * notInterestedCount falls back to 0.
    */
   notInterestedByOwnerId?: Record<string, number>;
+  /**
+   * Optional. Sum of followup payments collected by each agent in the selected month.
+   */
+  followupsByAgentId?: Record<string, number>;
+  /**
+   * Optional. Sum of technical payments collected by each agent in the selected month.
+   */
+  technicalPaymentsByAgentId?: Record<string, number>;
 }): TargetReportResult {
   const { monthKey, targets, assignmentsByTargetId, leads, paymentsByLeadId, usersByAgentId } =
     input;
   const notInterestedByOwnerId = input.notInterestedByOwnerId ?? {};
+  const followupsByAgentId = input.followupsByAgentId ?? {};
+  const technicalPaymentsByAgentId = input.technicalPaymentsByAgentId ?? {};
 
   // Pre-aggregate paid amounts per (owner, lead) so we can later
   // break by agent.
@@ -221,7 +231,9 @@ export function buildTargetReport(input: {
       if (!usersByAgentId.has(agentId)) continue;
       resolvedAgentIds.add(agentId);
       const agent = usersByAgentId.get(agentId)!;
-      const achieved = paidByAgentId.get(agentId) ?? 0;
+      let achieved = paidByAgentId.get(agentId) ?? 0;
+      achieved += followupsByAgentId[agentId] ?? 0;
+      achieved += technicalPaymentsByAgentId[agentId] ?? 0;
       const assignment = assignmentsByAgent.get(agentId);
       const agentTarget = assignment?.amount ?? 0;
       teamTarget += agentTarget;

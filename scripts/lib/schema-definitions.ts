@@ -615,6 +615,8 @@ export const collectionSchemas: Record<string, CollectionSchema> = {
       { key: 'paymentRemark', type: 'string', required: false, size: 1000 },
       { key: 'status', type: 'string', required: false, size: 50, default: 'paid' },
       { key: 'createdAt', type: 'datetime', required: true },
+      { key: 'createdById', type: 'string', required: false, size: 255 },
+      { key: 'createdByName', type: 'string', required: false, size: 255 },
       { key: 'updatedAt', type: 'datetime', required: false },
       { key: 'updatedById', type: 'string', required: false, size: 255 },
       { key: 'updatedByName', type: 'string', required: false, size: 255 },

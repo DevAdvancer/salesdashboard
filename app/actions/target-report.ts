@@ -14,6 +14,7 @@ import {
 import type { ClientPaymentPlan, ClientPaymentUpdate, Lead, User } from "@/lib/types";
 import { getAgentsByTeamLead, getAssignableUsers, getUserByIdOrNull } from "@/lib/services/user-service";
 import { listMonthlyTargetsWithAssignmentsAction } from "@/app/actions/monthly-targets";
+import { getTechnicalPaymentTotalsByUserAction } from "@/app/actions/technical-payments";
 
 type LeadDoc = Record<string, unknown>;
 type UserDoc = Record<string, unknown>;
@@ -250,6 +251,44 @@ export async function getTargetReportAction(input: {
     }
   }
 
+  // 4c. Followup payments in the month window.
+  // We query all followup payments in this month, and if they have a createdById
+  // in our readableAgentIds and they are linked to an actual client lead (not a manual entry),
+  // we add their amount to that agent's followup total.
+  const followupsByAgentId: Record<string, number> = {};
+  for (let i = 0; i < readableAgentIds.length; i += CHUNK) {
+    const chunk = readableAgentIds.slice(i, i + CHUNK);
+    const docs = await listAllDocuments<Record<string, unknown>>({
+      databases,
+      databaseId: DATABASE_ID,
+      collectionId: COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS,
+      queries: [
+        Query.equal("createdById", chunk),
+        Query.greaterThanEqual("date", monthFromIso),
+        Query.lessThanEqual("date", monthToIso),
+        Query.limit(CHUNK),
+      ],
+      pageLimit: CHUNK,
+      maxPages: 50,
+    });
+    for (const doc of docs) {
+      const createdById = typeof doc.createdById === "string" ? doc.createdById : "";
+      const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
+      const amount = typeof doc.amount === "number" ? doc.amount : 0;
+      
+      if (!createdById || !leadId || leadId.startsWith("manual_followup:")) continue;
+      
+      followupsByAgentId[createdById] = (followupsByAgentId[createdById] ?? 0) + amount;
+    }
+  }
+
+  // 4d. Technical payments in the month window.
+  const technicalPaymentsByAgentId = await getTechnicalPaymentTotalsByUserAction({
+    actorId: actor.$id,
+    dateFrom: monthStartIso,
+    dateTo: monthEndIso,
+  });
+
   // 5. Build users map for the agent set so the report can show names.
   const usersByAgentId = new Map<string, User>();
   if (actor.role === "team_lead") {
@@ -314,6 +353,8 @@ export async function getTargetReportAction(input: {
     paymentsByLeadId,
     usersByAgentId,
     notInterestedByOwnerId,
+    followupsByAgentId,
+    technicalPaymentsByAgentId,
   });
 
   const { from, to } = monthBounds(input.monthKey);

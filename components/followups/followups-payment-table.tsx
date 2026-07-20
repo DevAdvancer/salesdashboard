@@ -40,7 +40,7 @@ export function FollowupsPaymentTable({
 
   if (payments.length === 0) {
     return (
-      <div className="flex h-32 items-center justify-center rounded-md border border-dashed border-[var(--hairline)] text-sm text-[var(--mute)]">
+      <div className="flex h-32 items-center justify-center rounded-md border border-dashed border-border text-sm text-muted-foreground">
         No followup payments recorded yet
       </div>
     );
@@ -81,7 +81,7 @@ export function FollowupsPaymentTable({
               <TableCell>
                 <Badge
                   variant="secondary"
-                  className="bg-emerald-100 text-emerald-800">
+                  className="bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-400">
                   Paid
                 </Badge>
               </TableCell>
@@ -99,7 +99,7 @@ export function FollowupsPaymentTable({
                         variant="ghost"
                         size="sm"
                         onClick={() => onDelete(payment)}
-                        className="text-red-600 hover:text-red-700">
+                        className="text-red-600 hover:text-red-700 dark:text-red-500 dark:hover:text-red-400">
                         Delete
                       </Button>
                     )}

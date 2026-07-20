@@ -279,6 +279,8 @@ function mapFollowupsDoc(doc: any): PreviousFollowupsPayment {
     remark: doc.paymentRemark || doc.remark || null,
     status: FOLLOWUPS_PAYMENT_STATUS,
     createdAt: doc.createdAt,
+    createdById: doc.createdById ?? null,
+    createdByName: doc.createdByName ?? null,
     updatedAt: doc.updatedAt ?? null,
     updatedById: doc.updatedById ?? null,
     updatedByName: doc.updatedByName ?? null,
@@ -320,6 +322,8 @@ export async function createPreviousFollowupsPaymentAction(input: {
     date: input.date,
     status: FOLLOWUPS_PAYMENT_STATUS,
     createdAt: new Date().toISOString(),
+    createdById: actor.$id,
+    createdByName: actor.name,
   };
 
   const paymentRemark = input.remark?.trim();
@@ -340,6 +344,7 @@ export async function createPreviousFollowupsPaymentAction(input: {
 export async function updatePreviousFollowupsPaymentAction(input: {
   actorId: string;
   paymentId: string;
+  leadId?: string | null;
   company?: FollowupsPaymentCompany | null;
   candidateName?: string | null;
   amount?: number | null;
@@ -378,6 +383,7 @@ export async function updatePreviousFollowupsPaymentAction(input: {
     updatedByName: actor.name,
   };
 
+  if (input.leadId !== undefined) payload.leadId = input.leadId?.trim() || makeManualLeadId();
   if (input.company !== undefined && input.company !== null) payload.company = normalizeCompany(input.company);
   if (input.candidateName !== undefined) payload.candidateName = (input.candidateName || '').trim();
   if (input.amount !== undefined) payload.amount = Math.floor(Number(input.amount) || 0);
@@ -422,6 +428,15 @@ export async function listPreviousFollowupsPaymentsAction(input: {
 
   const { databases } = await createAdminClient();
   const queries: string[] = [Query.orderDesc("createdAt")];
+
+  if (actor.role === "agent" || actor.role === "lead_generation") {
+    queries.push(Query.equal("createdById", actor.$id));
+  } else if (actor.role === "team_lead") {
+    const { getAgentsByTeamLead } = await import("@/lib/services/user-service");
+    const agents = await getAgentsByTeamLead(actor.$id, "sales");
+    const teamIds = [actor.$id, ...agents.map((a) => a.$id)];
+    queries.push(Query.equal("createdById", teamIds));
+  }
 
   if (input.leadId) {
     queries.unshift(Query.equal("leadId", input.leadId));

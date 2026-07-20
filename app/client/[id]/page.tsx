@@ -136,7 +136,6 @@ function HistoryDetailContent() {
     setClientIntakeInitializedForRecord,
   ] = useState<string | null>(null);
   const [editUpfrontAmount, setEditUpfrontAmount] = useState<string>("");
-  const [pendingAmount, setPendingAmount] = useState<string>("");
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -819,16 +818,11 @@ function HistoryDetailContent() {
         status: paymentStatus,
         note: note,
         amount: enteredAmount,
-        pendingAmount:
-          typeof pendingAmount === "string" && pendingAmount.trim() !== ""
-            ? Number(pendingAmount)
-            : null,
       });
       setPaymentRecord(updated);
       if (updated) {
         setEditUpfrontAmount(String(updated.paymentPlan.upfrontAmount));
       }
-      setPendingAmount("");
       setPaymentNote("");
       toast({ title: "Success", description: "Payment update saved." });
       queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
@@ -1198,46 +1192,7 @@ function HistoryDetailContent() {
                         />
                       </div>
                     </div>
-                    {/* Pending Amount — shown when partially_paid (staying partial)
-                        or when transitioning from partially_paid to fully_paid. */}
-                    {(paymentStatus === "partially_paid" ||
-                      (paymentStatus === "fully_paid" &&
-                        paymentRecord?.status === "partially_paid")) && (
-                      <div className="space-y-2">
-                        {paymentStatus === "fully_paid" &&
-                          paymentRecord?.status === "partially_paid" && (
-                            <p className="text-xs text-muted-foreground">
-                              This lead had a pending balance from a previous
-                              payment cycle. Enter the remaining amount to carry
-                              it into this month.
-                            </p>
-                          )}
-                        <Label htmlFor="pendingAmount">
-                          {paymentStatus === "fully_paid"
-                            ? "Remaining Balance (carried to current month)"
-                            : "Pending Amount"}
-                        </Label>
-                        <Input
-                          id="pendingAmount"
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={pendingAmount}
-                          onChange={(e) => setPendingAmount(e.target.value)}
-                          placeholder="Enter remaining balance"
-                          disabled={!canEditClientPayments || paymentSaving}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Remaining balance for this month. It will appear in
-                          the pending-amounts table under{" "}
-                          {new Date().toLocaleString("en-US", {
-                            month: "short",
-                            year: "numeric",
-                          })}
-                          .
-                        </p>
-                      </div>
-                    )}
+
                     <div className="space-y-1">
                       <div className="flex justify-end">
                         <Button

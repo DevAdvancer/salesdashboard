@@ -21,8 +21,9 @@ import {
   listPreviousFollowupsPaymentsAction,
   updatePreviousFollowupsPaymentAction,
 } from "@/app/actions/previous-followups-payments";
+import { addClientPaymentUpdateAction } from "@/app/actions/client-payments";
 import type { ComponentKey } from "@/lib/contexts/access-control-context";
-import type { PreviousFollowupsPayment } from "@/lib/types";
+import type { PreviousFollowupsPayment, PaymentStatus } from "@/lib/types";
 import { getCurrentEasternMonthKey } from "@/lib/utils/eastern-date";
 
 const FollowupsPaymentForm = dynamic(
@@ -47,7 +48,8 @@ export default function PreviousFollowupsPaymentsPage() {
   const { user, isAdmin, isTeamLead, isOperations, serverSessionReady } =
     useAuth();
   const { toast } = useToast();
-  const canMutate = isAdmin || isTeamLead;
+  const isAgentOrLeadGen = user?.role === "agent" || user?.role === "lead_generation";
+  const canMutate = isAdmin || isTeamLead || isAgentOrLeadGen;
 
   const [payments, setPayments] = useState<PreviousFollowupsPayment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -96,18 +98,20 @@ export default function PreviousFollowupsPaymentsPage() {
     setEditingPayment(null);
   };
 
-  // Only allow admin, team leads, and operations
-  if (!isAdmin && !isTeamLead && !isOperations) {
+  const allowedRoles = ["admin", "developer", "operations", "monitor", "team_lead", "agent", "lead_generation"];
+  const isAllowed = user?.role && allowedRoles.includes(user.role);
+
+  if (!isAllowed) {
     return (
       <ProtectedRoute componentKey={COMPONENT_KEY}>
         <div className="container mx-auto py-8">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold">
-                Previous Followups Payments
+                Followup Payments
               </h1>
               <p className="text-muted-foreground">
-                Access restricted to admin, team leads, and operations
+                You do not have permission to view this page.
               </p>
             </div>
           </div>
@@ -117,11 +121,14 @@ export default function PreviousFollowupsPaymentsPage() {
   }
 
   async function handleSave(payment: {
+    leadId?: string | null;
     company: PreviousFollowupsPayment["company"];
     candidateName: string;
     amount: number;
     date: string;
     remark?: string | null;
+    status?: PaymentStatus;
+    hasPaymentRecord?: boolean;
   }) {
     if (!user || !canMutate) {
       return;
@@ -133,6 +140,7 @@ export default function PreviousFollowupsPaymentsPage() {
         await updatePreviousFollowupsPaymentAction({
           actorId: user.$id,
           paymentId: editingPayment.$id,
+          leadId: payment.leadId,
           company: payment.company,
           candidateName: payment.candidateName,
           amount: payment.amount,
@@ -146,6 +154,7 @@ export default function PreviousFollowupsPaymentsPage() {
       } else {
         await createPreviousFollowupsPaymentAction({
           actorId: user.$id,
+          leadId: payment.leadId,
           company: payment.company,
           candidateName: payment.candidateName,
           amount: payment.amount,
@@ -157,6 +166,20 @@ export default function PreviousFollowupsPaymentsPage() {
           description:
             "The amount will be included in this month's followup payments.",
         });
+      }
+
+      if (payment.status && payment.hasPaymentRecord && payment.leadId) {
+        try {
+          await addClientPaymentUpdateAction({
+            actorId: user.$id,
+            leadId: payment.leadId,
+            status: payment.status,
+            note: payment.remark || "Followup payment added",
+            amount: payment.amount,
+          });
+        } catch (e) {
+          console.error("Failed to update client payment status", e);
+        }
       }
 
       closeDialog();
@@ -207,22 +230,29 @@ export default function PreviousFollowupsPaymentsPage() {
 
   return (
     <ProtectedRoute componentKey={COMPONENT_KEY}>
-      <div className="container mx-auto py-8">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-bold">Previous Followups Payments</h1>
-            <p className="text-muted-foreground">
-              Track manual followup payments
-            </p>
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto py-10 px-4 md:px-8">
+          
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+            <div className="space-y-1">
+              <h1 className="text-3xl font-extrabold tracking-tight">
+                Followup Payments
+              </h1>
+              <p className="text-muted-foreground text-sm">
+                Track manual and client-linked followup payments for your team
+              </p>
+            </div>
+            {canMutate ? (
+              <Button 
+                onClick={() => setShowForm(true)}
+                className="shadow-md transition-all active:scale-95"
+              >
+                Add Followup Payment
+              </Button>
+            ) : (
+              <Badge variant="secondary" className="px-3 py-1 text-sm">Read only</Badge>
+            )}
           </div>
-          {canMutate ? (
-            <Button onClick={() => setShowForm(true)}>
-              Add Followup Payment
-            </Button>
-          ) : (
-            <Badge variant="secondary">Read only</Badge>
-          )}
-        </div>
 
         <div className="grid gap-6 md:grid-cols-4">
           <Card>
@@ -248,7 +278,7 @@ export default function PreviousFollowupsPaymentsPage() {
               <CardTitle className="text-sm font-medium">Paid Amount</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-emerald-600">
+              <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-500">
                 {payments
                   .reduce((sum, p) => sum + p.amount, 0)
                   .toLocaleString()}
@@ -264,7 +294,7 @@ export default function PreviousFollowupsPaymentsPage() {
               <CardTitle className="text-sm font-medium">This Month</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-emerald-600">
+              <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-500">
                 {thisMonthPayments
                   .reduce((sum, p) => sum + p.amount, 0)
                   .toLocaleString()}
@@ -282,7 +312,7 @@ export default function PreviousFollowupsPaymentsPage() {
             <CardContent>
               <Badge
                 variant="secondary"
-                className="text-xs bg-emerald-100 text-emerald-800">
+                className="text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-400">
                 {payments.length} Paid
               </Badge>
             </CardContent>
@@ -339,6 +369,7 @@ export default function PreviousFollowupsPaymentsPage() {
             </Card>
           </div>
         )}
+      </div>
       </div>
     </ProtectedRoute>
   );

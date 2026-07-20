@@ -765,6 +765,8 @@ export interface PreviousFollowupsPayment {
   remark?: string | null;
   status: FollowupsPaymentStatus;
   createdAt: string;
+  createdById?: string | null;
+  createdByName?: string | null;
   updatedAt?: string | null;
   updatedById?: string | null;
   updatedByName?: string | null;
