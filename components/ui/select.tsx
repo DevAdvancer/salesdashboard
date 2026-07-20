@@ -13,6 +13,7 @@ interface SelectContextValue {
   onValueChange: (value: string) => void;
   open: boolean;
   setOpen: (open: boolean) => void;
+  disabled?: boolean;
 }
 
 const SelectContext = React.createContext<SelectContextValue | null>(null);
@@ -31,9 +32,10 @@ interface SelectProps {
   value: string;
   onValueChange: (value: string) => void;
   children: React.ReactNode;
+  disabled?: boolean;
 }
 
-export function Select({ value, onValueChange, children }: SelectProps) {
+export function Select({ value, onValueChange, children, disabled }: SelectProps) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
 
@@ -57,8 +59,8 @@ export function Select({ value, onValueChange, children }: SelectProps) {
   }, [open]);
 
   return (
-    <SelectContext.Provider value={{ value, onValueChange, open, setOpen }}>
-      <div ref={ref} className="relative">
+    <SelectContext.Provider value={{ value, onValueChange, open, setOpen, disabled }}>
+      <div className="relative" ref={ref}>
         {children}
       </div>
     </SelectContext.Provider>
@@ -73,17 +75,22 @@ interface SelectTriggerProps {
   className?: string;
   children: React.ReactNode;
   id?: string;
+  disabled?: boolean;
 }
 
-export function SelectTrigger({ className, children, id }: SelectTriggerProps) {
-  const { open, setOpen } = useSelectContext();
+export function SelectTrigger({ className, children, id, disabled }: SelectTriggerProps) {
+  const { open, setOpen, disabled: contextDisabled } = useSelectContext();
+  const isDisabled = disabled || contextDisabled;
   return (
     <button
       id={id}
       type="button"
       aria-haspopup="listbox"
       aria-expanded={open}
-      onClick={() => setOpen(!open)}
+      onClick={() => {
+        if (!isDisabled) setOpen(!open);
+      }}
+      disabled={isDisabled}
       className={cn(
         "flex items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
