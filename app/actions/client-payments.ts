@@ -865,10 +865,38 @@ export async function listAllPaymentInsightsAction(
     if (normalizedFrom || normalizedTo) {
       const closedDate = toComparableIsoDate(leadMeta?.closedAt)
         || toComparableIsoDate(typeof doc.$createdAt === "string" ? doc.$createdAt : null);
+      
+      let outOfRange = false;
       if (normalizedFrom && (!closedDate || closedDate < normalizedFrom)) {
-        continue;
+        outOfRange = true;
       }
       if (normalizedTo && (!closedDate || closedDate > normalizedTo)) {
+        outOfRange = true;
+      }
+
+      if (outOfRange) {
+        // The lead closed outside the filter range. However, it might have
+        // followup payments collected inside the range. We extract those and
+        // yield them as standalone followups so the revenue still appears in
+        // the pending column (without inflating the upfront/total contract values).
+        const followups = followupsDetailsMap.get(leadId) || [];
+        for (const f of followups) {
+          if (normalizedFrom && f.date && f.date < normalizedFrom) continue;
+          if (normalizedTo && f.date && f.date > normalizedTo) continue;
+
+          standaloneFollowups.push({
+            leadId,
+            company: f.company || leadMeta?.company || "Unknown",
+            candidateName: f.candidateName,
+            amount: f.amount,
+            date: f.date,
+            remark: f.remark,
+            status: f.status,
+            createdAt: f.date
+              ? `${f.date}T00:00:00.000Z`
+              : (typeof doc.$createdAt === "string" ? doc.$createdAt : new Date().toISOString()),
+          });
+        }
         continue;
       }
     }
