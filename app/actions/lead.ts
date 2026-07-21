@@ -8,7 +8,7 @@ import { Query, ID, Permission, Role } from "node-appwrite";
 import { COLLECTIONS } from "@/lib/constants/appwrite";
 import { getSpecialBranchLeadAccess } from '@/lib/constants/special-lead-access';
 import { logAction } from "@/lib/services/audit-service";
-import { assertAuthenticatedUserId } from "@/lib/server/current-user";
+import { assertAuthenticatedUserId, getAuthenticatedAccount } from "@/lib/server/current-user";
 import { notifyDuplicateLeadUpdateAttemptAction } from "@/app/actions/lead-duplicates";
 import { normalizeLinkedinProfileUrl } from "@/lib/utils/linkedin";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
@@ -224,7 +224,7 @@ export async function validateLeadUniquenessAction(
     data: LeadData,
     excludeLeadId?: string
 ) {
-    const user = await getAuthenticatedUser();
+    const user = await getAuthenticatedAccount();
     if (!user) throw new Error("Unauthorized");
     return validateLeadUniqueness(data, excludeLeadId);
 }
