@@ -281,9 +281,6 @@ async function enrichDuplicateResult(
     };
 }
 
-return { isValid: true };
-}
-
 function parseLeadDataSafely(data: string): LeadData {
     try {
         return JSON.parse(data) as LeadData;
