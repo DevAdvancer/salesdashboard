@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   FileText,
   Filter,
@@ -27,13 +27,15 @@ import {
   listResumeProfilesAction,
   getResumeProfileOptionsAction,
 } from '@/app/actions/resume-profiles';
+import { useRealtimeCollection } from "@/lib/hooks/use-realtime-collection";
+import { COLLECTIONS } from "@/lib/appwrite";
 
 interface ResumeProfilesClientProps {
-  initialProfiles: (ResumeProfile & { $id: string })[];
+  initialData: { documents: (ResumeProfile & { $id: string })[]; total: number };
   initialOptions: {
-    callRequests: (CallRequest & { $id: string })[];
     assignableUsers: { $id: string; name: string; email: string }[];
   };
+  currentPage: number;
 }
 
 const STAGE_BADGE: Record<string, string> = {
@@ -48,43 +50,43 @@ const STAGE_BADGE: Record<string, string> = {
 };
 
 export function ResumeProfilesClient({
-  initialProfiles,
+  initialData,
   initialOptions,
+  currentPage,
 }: ResumeProfilesClientProps) {
   const router = useRouter();
-  const { user, serverSessionReady } = useAuth();
-  const [profiles, setProfiles] = useState<(ResumeProfile & { $id: string })[]>(initialProfiles);
-  const [options, setOptions] = useState(initialOptions);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [stageFilter, setStageFilter] = useState<string>('all');
-  const [assignedFilter, setAssignedFilter] = useState<string>('all');
+  const searchParams = useSearchParams();
+  const { user } = useAuth();
+  
+  const [profiles, setProfiles] = useState<(ResumeProfile & { $id: string })[]>(initialData.documents);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  // The server component may render before the crm_appwrite_jwt cookie is
-  // written (right after login), so its initial fetch can come back empty with
-  // a "No session" console error. Re-fetch client-side once the session is
-  // ready to fill in (or correct) the initial data. See the serverSessionReady
-  // JWT-race pattern used by /linkedin-requests.
+  // Sync state when props change from server component
   useEffect(() => {
-    if (!user || !serverSessionReady) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const [nextProfiles, nextOptions] = await Promise.all([
-          listResumeProfilesAction(),
-          getResumeProfileOptionsAction(),
-        ]);
-        if (cancelled) return;
-        setProfiles(nextProfiles);
-        setOptions(nextOptions);
-      } catch {
-        // Keep whatever the server component managed to render.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user, serverSessionReady]);
+    setProfiles(initialData.documents);
+  }, [initialData.documents]);
+
+  useRealtimeCollection(COLLECTIONS.RESUME_PROFILES, () => {
+    router.refresh();
+  });
+
+  const updateSearchParam = (key: string, value: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value && value !== 'all') {
+      params.set(key, value);
+    } else {
+      params.delete(key);
+    }
+    // reset page to 1 when filters change
+    if (key !== 'page') {
+      params.set('page', '1');
+    }
+    router.push(`?${params.toString()}`);
+  };
+
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
+  const stageFilter = searchParams.get('stage') || 'all';
+  const assignedFilter = searchParams.get('assignedToId') || 'all';
 
   const isLeadership =
     user?.role === 'admin' ||
@@ -92,30 +94,6 @@ export function ResumeProfilesClient({
     user?.role === 'monitor' ||
     user?.role === 'operations';
   const canExplicitlyCreate = user?.role === 'team_lead' || isLeadership;
-
-  // Top filter bar calculation
-  const filteredProfiles = useMemo(() => {
-    return profiles.filter((p) => {
-      // Stage filter
-      if (stageFilter !== 'all' && p.stage !== stageFilter) {
-        return false;
-      }
-      // Assigned filter
-      if (assignedFilter !== 'all') {
-        if (assignedFilter === 'unassigned' && p.assignedToId) return false;
-        if (assignedFilter !== 'unassigned' && p.assignedToId !== assignedFilter) return false;
-      }
-      // Search query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const nameMatch = p.candidateName?.toLowerCase().includes(q);
-        const techMatch = p.technology?.toLowerCase().includes(q);
-        const arrivalMatch = p.usaArrival?.toLowerCase().includes(q);
-        return nameMatch || techMatch || arrivalMatch;
-      }
-      return true;
-    });
-  }, [profiles, stageFilter, assignedFilter, searchQuery]);
 
   const handleQuickStageChange = async (profileId: string, newStage: string) => {
     setBusyId(profileId);
@@ -184,9 +162,14 @@ export function ResumeProfilesClient({
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Search candidate, tech, USA arrival..."
+              placeholder="Search candidate (press Enter)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  updateSearchParam('search', searchQuery);
+                }
+              }}
               className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
@@ -198,34 +181,37 @@ export function ResumeProfilesClient({
             </div>
             <select
               value={stageFilter}
-              onChange={(e) => setStageFilter(e.target.value)}
-              className="rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary"
+              onChange={(e) => updateSearchParam('stage', e.target.value)}
+              className="rounded-md border border-input bg-background pl-3 pr-8 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary"
             >
-              <option value="all">All Stages ({profiles.length})</option>
+              <option value="all">All Stages</option>
               {RESUME_PROFILE_STAGES.map((st) => (
                 <option key={st} value={st}>
-                  {formatStageLabel(st)} ({profiles.filter((p) => p.stage === st).length})
+                  {formatStageLabel(st)}
                 </option>
               ))}
             </select>
 
-            <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground ml-2">
-              <UserCheck className="h-3.5 w-3.5" />
-              Assigned:
-            </div>
-            <select
-              value={assignedFilter}
-              onChange={(e) => setAssignedFilter(e.target.value)}
-              className="rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              <option value="all">All Assignees</option>
-              <option value="unassigned">Unassigned</option>
-              {options.assignableUsers.map((u) => (
-                <option key={u.$id} value={u.$id}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
+            {user?.role !== 'agent' && (
+              <>
+                <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground ml-2">
+                  <UserCheck className="h-3.5 w-3.5" />
+                  Assigned:
+                </div>
+                <select
+                  value={assignedFilter}
+                  onChange={(e) => updateSearchParam('assignedToId', e.target.value)}
+                  className="rounded-md border border-input bg-background pl-3 pr-8 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="all">All Assignees</option>
+                  {initialOptions.assignableUsers.map((u) => (
+                    <option key={u.$id} value={u.$id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
           </div>
         </div>
       </Card>
@@ -241,22 +227,22 @@ export function ResumeProfilesClient({
                 <th className="px-4 py-3">Technology</th>
                 <th className="px-4 py-3">USA Arrival</th>
                 <th className="px-4 py-3">Visa Status</th>
-                <th className="px-4 py-3">Assigned To</th>
+                {user?.role !== 'agent' && <th className="px-4 py-3">Assigned To</th>}
                 <th className="px-4 py-3">Stage Updated</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filteredProfiles.length === 0 ? (
+              {profiles.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground text-sm">
-                    {profiles.length === 0
+                    {initialData.total === 0
                       ? 'No resume profiles found. Click "Create Profile" to get started.'
                       : 'No profiles match the selected filters.'}
                   </td>
                 </tr>
               ) : (
-                filteredProfiles.map((p) => {
+                profiles.map((p) => {
                   const badgeClass =
                     STAGE_BADGE[p.stage] ?? 'bg-secondary text-secondary-foreground border border-border';
                   const isBusy = busyId === p.$id;
@@ -322,11 +308,13 @@ export function ResumeProfilesClient({
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3.5 text-sm text-foreground">
-                        {p.assignedToName || (
-                          <span className="text-xs italic text-muted-foreground">Unassigned</span>
-                        )}
-                      </td>
+                      {user?.role !== 'agent' && (
+                        <td className="px-4 py-3.5 text-sm text-foreground">
+                          {p.assignedToName || (
+                            <span className="text-xs italic text-muted-foreground">Unassigned</span>
+                          )}
+                        </td>
+                      )}
                       <td className="px-4 py-3.5 text-xs text-muted-foreground">
                         <div className="flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5 opacity-70" />
@@ -357,6 +345,33 @@ export function ResumeProfilesClient({
             </tbody>
           </table>
         </div>
+        
+        {/* Pagination Footer */}
+        {initialData.total > 0 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/20">
+            <span className="text-sm text-muted-foreground">
+              Showing {profiles.length} of {initialData.total} profiles
+            </span>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                disabled={currentPage <= 1}
+                onClick={() => updateSearchParam('page', String(currentPage - 1))}
+              >
+                Previous
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                disabled={currentPage >= Math.ceil(initialData.total / 50)}
+                onClick={() => updateSearchParam('page', String(currentPage + 1))}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
     </div>

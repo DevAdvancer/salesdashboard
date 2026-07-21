@@ -49,6 +49,8 @@ const RESUME_UNIVERSAL_ITEM_KEYS = new Set([
   "resume-chat",
   "resume-hierarchy",
   "user-management",
+  "resume-audit-logs",
+  "settings",
 ]);
 
 interface NavigationProps {
@@ -93,7 +95,7 @@ export function Navigation({
   const technicalItemKeys = new Set(["mock", "interview-support", "assessment-support"]);
   const linkedinItemKeys = new Set(["linkedin-requests", "linkedin-account-management", "linkedin-reports"]);
   const paymentsItemKeys = new Set(["payments-report", "target-report", "technical-payments", "followups-payments"]);
-  const resumeItemKeys = new Set(["resume-dashboard", "resume-profiles", "resume-marketing", "call-requests", "resume-hierarchy"]);
+  const resumeItemKeys = new Set(["resume-dashboard", "resume-profiles", "resume-marketing", "call-requests", "resume-hierarchy", "resume-audit-logs"]);
 
   // Resume-team members get a slim sidebar: the Resume Dashboard, the
   // Resume Team chat, and (for the resume team lead) User Management so
@@ -327,6 +329,10 @@ export function Navigation({
       itemsForUser.find((item) => item.key === "call-requests") ?? null;
     const resumeUserMgmtItem =
       itemsForUser.find((item) => item.key === "user-management") ?? null;
+    const resumeAuditLogsItem =
+      itemsForUser.find((item) => item.key === "resume-audit-logs") ?? null;
+    const settingsItem =
+      itemsForUser.find((item) => item.key === "settings") ?? null;
 
     if (resumeDashboardItem || resumeProfilesItem || resumeCallsItem || resumeMarketingItem) {
       renderedItems.push(
@@ -356,11 +362,18 @@ export function Navigation({
       </div>
     );
 
-    if (resumeUserMgmtItem) {
+    let resumeManagementTitle = "System Tools";
+    if (user.role === "admin" || user.role === "developer" || user.role === "operations" || user.role === "monitor") {
+      resumeManagementTitle = "Management";
+    }
+
+    if (resumeUserMgmtItem || resumeAuditLogsItem || settingsItem) {
       renderedItems.push(
         <div key="section-resume-management">
-          {renderSectionHeader("Management")}
-          {renderNavButton(resumeUserMgmtItem)}
+          {renderSectionHeader(resumeManagementTitle)}
+          {resumeUserMgmtItem && renderNavButton(resumeUserMgmtItem)}
+          {resumeAuditLogsItem && renderNavButton(resumeAuditLogsItem)}
+          {settingsItem && renderNavButton(settingsItem)}
         </div>
       );
     }

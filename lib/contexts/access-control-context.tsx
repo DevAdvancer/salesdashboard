@@ -44,7 +44,8 @@ export type ComponentKey =
   | 'resume-hierarchy'
   | 'request-calls'
   | 'call-requests'
-  | 'assigned-report';
+  | 'assigned-report'
+  | 'resume-audit-logs';
 
 interface AccessControlContextType {
   canAccess: (componentKey: ComponentKey) => boolean;
@@ -163,8 +164,21 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
     if (
       componentKey === 'resume-dashboard' ||
       componentKey === 'resume-profiles' ||
-      componentKey === 'resume-marketing'
+      componentKey === 'resume-marketing' ||
+      componentKey === 'resume-audit-logs'
     ) {
+      // For audit logs, only leadership or admins should see it.
+      if (componentKey === 'resume-audit-logs') {
+        if (
+          user.role === 'admin' ||
+          user.role === 'developer' ||
+          user.role === 'monitor' ||
+          user.role === 'operations'
+        ) {
+          return true;
+        }
+        return false;
+      }
       if (user.department === 'resume') return true;
       if (
         user.role === 'admin' ||
@@ -197,7 +211,7 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
     // page is a Resume-team-only view; it never renders Sales-team
     // members even if a Sales TL shares the same $id in their data.
     if (componentKey === 'resume-hierarchy') {
-      if (user.department === 'resume') return true;
+      if (user.department === 'resume' && user.role !== 'agent' && user.role !== 'lead_generation') return true;
       if (
         user.role === 'admin' ||
         user.role === 'developer' ||

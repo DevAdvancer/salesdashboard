@@ -987,7 +987,7 @@ function LeadDetailContent() {
         return (
           <textarea
             id={field.key}
-            className="w-full min-h-[100px] px-3 py-2 rounded-md border border-input bg-background text-foreground"
+            className="w-full min-h-[100px] pl-3 pr-8 py-2 rounded-md border border-input bg-background text-foreground"
             value={value}
             onChange={(e) =>
               setValues((prev) => ({ ...prev, [field.key]: e.target.value }))
@@ -1003,7 +1003,7 @@ function LeadDetailContent() {
         return (
           <select
             id={field.key}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             value={value}
             onChange={(e) => {
               const val = e.target.value;
@@ -1472,11 +1472,10 @@ function LeadDetailContent() {
                   </Label>
                   <select
                     id="assignedTo"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     value={lead.assignedToId || ""}
                     onChange={(e) => handleAssignAgent(e.target.value)}
                     disabled={lead.isClosed || isAssigning}>
-                    <option value="">Unassigned</option>
                     {assignableAgents.map((agent) => (
                       <option key={agent.$id} value={agent.$id}>
                         {agent.name}
@@ -1650,7 +1649,7 @@ function LeadDetailContent() {
                       <Label htmlFor="closeStatus">Final Status</Label>
                       <select
                         id="closeStatus"
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         value={closeStatus}
                         onChange={(e) => setCloseStatus(e.target.value)}>
                         {isLinkedinRequestLead(leadData) ? (
@@ -1674,7 +1673,7 @@ function LeadDetailContent() {
                       </Label>
                       <select
                         id="initialPaymentStatus"
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         value={
                           initialPaymentStatus ||
                           (Number(paymentPlanValues.upfrontAmount) > 0

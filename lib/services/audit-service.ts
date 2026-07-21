@@ -61,7 +61,7 @@ export async function logAction(input: CreateAuditLogInput): Promise<AuditLog> {
  */
 export async function getAuditLogs(
   filters?: {
-    actorId?: string;
+    actorId?: string | string[];
     targetType?: string;
     targetId?: string;
     actions?: string[];

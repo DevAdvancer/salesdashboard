@@ -1,3 +1,4 @@
+import React, { Suspense } from "react";
 import type { Metadata } from "next";
 import { Bebas_Neue, Inter } from "next/font/google";
 import "./globals.css";
@@ -9,6 +10,7 @@ import { AppLayout } from "@/components/app-layout";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { QueryProvider } from "@/app/providers/query-provider";
 import { NotificationProvider } from "@/lib/providers/notification-provider";
+import { GlobalLoader } from "@/components/loader/GlobalLoader";
 
 const bebasNeue = Bebas_Neue({
   variable: "--font-bebas",
@@ -59,6 +61,9 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${bebasNeue.variable} antialiased`}
       >
+        <Suspense fallback={null}>
+          <GlobalLoader />
+        </Suspense>
         <AzureMsalProvider>
           <ErrorBoundary>
             <AuthProvider>

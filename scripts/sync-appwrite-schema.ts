@@ -228,7 +228,7 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       {
         key: 'status',
         type: 'enum',
-        required: true,
+        required: false,
         default: 'active',
         values: ['active', 'reopened'],
       },
@@ -331,7 +331,7 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       {
         key: 'status',
         type: 'enum',
-        required: true,
+        required: false,
         default: 'not_called',
         values: ['not_called', 'pending_documents', 'call_done'],
       },

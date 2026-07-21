@@ -115,23 +115,26 @@ export function ResumeMarketingClient({ initialProfiles }: ResumeMarketingClient
           </div>
 
           <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-            <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-              <UserCheck className="h-3.5 w-3.5" />
-              Assigned:
-            </div>
-            <select
-              value={assignedFilter}
-              onChange={(e) => setAssignedFilter(e.target.value)}
-              className="rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              <option value="all">All Assignees</option>
-              <option value="unassigned">Unassigned</option>
-              {assigneeOptions.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
+            {user?.role !== 'agent' && (
+              <>
+                <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <UserCheck className="h-3.5 w-3.5" />
+                  Assigned:
+                </div>
+                <select
+                  value={assignedFilter}
+                  onChange={(e) => setAssignedFilter(e.target.value)}
+                  className="rounded-md border border-input bg-background pl-3 pr-8 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="all">All Assignees</option>
+                  {assigneeOptions.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
           </div>
         </div>
       </Card>
@@ -145,7 +148,7 @@ export function ResumeMarketingClient({ initialProfiles }: ResumeMarketingClient
                 <th className="px-4 py-3">Technology</th>
                 <th className="px-4 py-3">USA Arrival</th>
                 <th className="px-4 py-3">Visa Status</th>
-                <th className="px-4 py-3">Assigned To</th>
+                {user?.role !== 'agent' && <th className="px-4 py-3">Assigned To</th>}
                 <th className="px-4 py-3">Moved To Marketing</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
@@ -204,11 +207,13 @@ export function ResumeMarketingClient({ initialProfiles }: ResumeMarketingClient
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3.5 text-sm text-foreground">
-                        {p.assignedToName || (
-                          <span className="text-xs italic text-muted-foreground">Unassigned</span>
-                        )}
-                      </td>
+                      {user?.role !== 'agent' && (
+                        <td className="px-4 py-3.5 text-sm text-foreground">
+                          {p.assignedToName || (
+                            <span className="text-xs italic text-muted-foreground">Unassigned</span>
+                          )}
+                        </td>
+                      )}
                       <td className="px-4 py-3.5 text-xs text-muted-foreground">
                         <div className="flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5 opacity-70" />

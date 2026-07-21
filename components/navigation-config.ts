@@ -109,4 +109,5 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'audit-logs', label: 'Audit Logs', href: '/audit-logs', icon: appIcons.auditLogs },
   { key: 'settings', label: 'Settings', href: '/settings', icon: appIcons.settings },
   { key: 'assigned-report', label: 'Assigned Report', href: '/assigned-report', icon: appIcons.assignedReport },
+  { key: 'resume-audit-logs', label: 'Audit Logs', href: '/resume-dashboard/audit-logs', icon: appIcons.auditLogs },
 ];

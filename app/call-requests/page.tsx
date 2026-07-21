@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
+import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Card } from "@/components/ui/card";
@@ -19,9 +20,12 @@ import {
   getCallRequestOptionsAction,
   listCallRequestsAction,
   updateCallRequestStatusAction,
+  createProfileFromCallRequestAction,
   type CallRequestUserOption,
 } from "@/app/actions/call-requests";
 import { CallRequestChat } from "@/components/call-request-chat";
+import { useRealtimeCollection } from "@/lib/hooks/use-realtime-collection";
+import { COLLECTIONS } from "@/lib/appwrite";
 
 const STATUS_LABELS: Record<CallRequestStatus, string> = {
   not_called: "Not called",
@@ -47,6 +51,7 @@ function parse<T>(raw: string | null | undefined): T[] {
 
 function CallsContent() {
   const { user } = useAuth();
+  const router = useRouter();
   const [requests, setRequests] = useState<CallRequest[]>([]);
   const [options, setOptions] = useState<CallRequestUserOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,6 +91,10 @@ function CallsContent() {
     void load();
   }, [load]);
 
+  useRealtimeCollection(COLLECTIONS.CALL_REQUESTS, () => {
+    void load();
+  });
+
   const changeStatus = async (requestId: string, status: CallRequestStatus) => {
     try {
       setBusyId(requestId);
@@ -109,6 +118,10 @@ function CallsContent() {
     } finally {
       setBusyId(null);
     }
+  };
+
+  const createProfile = async (requestId: string) => {
+    router.push(`/resume/new?callRequestId=${requestId}`);
   };
 
   return (
@@ -146,7 +159,7 @@ function CallsContent() {
                   <th className="text-left p-3 font-semibold">Requested By</th>
                   <th className="text-left p-3 font-semibold">Status</th>
                   <th className="text-left p-3 font-semibold">Assigned To</th>
-                  <th className="text-left p-3 font-semibold">Chat</th>
+                  <th className="text-left p-3 font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -204,7 +217,6 @@ function CallsContent() {
                                 disabled={rowBusy}
                                 onChange={(e) => assign(r.$id, e.target.value)}
                               >
-                                <option value="">Unassigned</option>
                                 {options.map((o) => (
                                   <option key={o.$id} value={o.$id}>
                                     {o.name}
@@ -218,14 +230,36 @@ function CallsContent() {
                             )}
                           </td>
                           <td className="p-3">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setOpenChatId(open ? null : r.$id)}
-                            >
-                              {open ? "Hide" : `Chat${chat.length ? ` (${chat.length})` : ""}`}
-                            </Button>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={rowBusy}
+                                onClick={() => setOpenChatId(open ? null : r.$id)}
+                              >
+                                {open ? "Hide" : `Chat${chat.length ? ` (${chat.length})` : ""}`}
+                              </Button>
+                              
+                              {r.resumeProfileId ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() => router.push(`/resume-dashboard/profile/${r.resumeProfileId}`)}
+                                >
+                                  Open Profile
+                                </Button>
+                              ) : r.status !== "call_done" ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  disabled={rowBusy}
+                                  onClick={() => createProfile(r.$id)}
+                                >
+                                  {rowBusy ? "Creating..." : "Create Profile"}
+                                </Button>
+                              ) : null}
+                            </div>
                           </td>
                         </tr>
                         {open && (

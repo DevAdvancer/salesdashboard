@@ -3,11 +3,8 @@
 import { QueryClientProvider, useIsFetching, useIsMutating } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { getQueryClient } from "@/lib/queries/client";
-import NProgress from "nprogress";
-import "nprogress/nprogress.css";
+import { startLoaderSimulation, finishLoaderSimulation } from "@/utils/loader";
 import { useEffect } from "react";
-
-NProgress.configure({ showSpinner: false });
 
 function GlobalFetchingIndicator() {
   const isFetching = useIsFetching();
@@ -15,9 +12,9 @@ function GlobalFetchingIndicator() {
 
   useEffect(() => {
     if (isFetching > 0 || isMutating > 0) {
-      NProgress.start();
+      startLoaderSimulation();
     } else {
-      NProgress.done();
+      finishLoaderSimulation();
     }
   }, [isFetching, isMutating]);
 

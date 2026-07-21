@@ -487,9 +487,7 @@ function UserManagementContent() {
         role,
         teamLeadId:
           role === "agent" || role === "lead_generation"
-            ? isEditingResumeUser
-              ? null
-              : selectedTeamLeadId
+            ? selectedTeamLeadId || null
             : null,
         branchIds: selectedBranchIds,
         email: emailChanged ? trimmedEmail : undefined,
@@ -672,7 +670,7 @@ function UserManagementContent() {
                     ? "operations"
                   : "agent",
             teamLeadId:
-              createRole === "monitor" || createRole === "operations" || isResumeTarget
+              createRole === "monitor" || createRole === "operations"
                 ? undefined
                 : selectedTeamLeadId || undefined,
             branchIds: selectedBranchIds,
@@ -1196,31 +1194,14 @@ function UserManagementContent() {
                     createRole === "lead_generation") &&
                   activeDashboard === "sales" && (
                     <div>
-                      <Label htmlFor="create-department">Department</Label>
-                      <div className="mt-1 grid grid-cols-2 gap-1 rounded-md border border-input p-1 bg-muted/30">
-                        {(["sales", "resume"] as Department[]).map((d) => {
-                          const selected = createDepartment === d;
-                          const label = d === "sales" ? "Sales" : "Resume";
-                          return (
-                            <button
-                              key={d}
-                              type="button"
-                              role="radio"
-                              aria-checked={selected}
-                              onClick={() => setCreateDepartment(d)}
-                              className={`h-9 rounded text-sm font-medium transition-colors ${
-                                selected
-                                  ? "bg-background shadow-sm text-foreground"
-                                  : "text-muted-foreground hover:text-foreground"
-                              }`}>
-                              {label}
-                            </button>
-                          );
-                        })}
+                      <Label>Department</Label>
+                      <div className="mt-1 inline-flex h-9 items-center rounded-md border border-input bg-muted/30 px-3 text-sm font-medium">
+                        Sales team
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Sales users land on the main dashboard; Resume users
-                        land on the Resume team dashboard.
+                        New users created from the Sales view are added to
+                        the Sales team. Switch to the Resume dashboard to
+                        add Resume-team members.
                       </p>
                     </div>
                   )}
@@ -1255,7 +1236,7 @@ function UserManagementContent() {
                       <div className="mt-1">
                         <select
                           id="create-team-lead"
-                          className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          className="w-full h-10 pl-3 pr-8 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                           value={selectedTeamLeadId || ""}
                           onChange={(e) =>
                             setSelectedTeamLeadId(e.target.value || null)
@@ -1355,19 +1336,21 @@ function UserManagementContent() {
                         Agent
                       </Button>
                     )}
-                    {canCreateLeadGeneration && (
-                      <Button
-                        type="button"
-                        variant={
-                          createRole === "lead_generation"
-                            ? "default"
-                            : "outline"
-                        }
-                        onClick={() => setCreateRole("lead_generation")}
-                        size="sm">
-                        Lead Gen
-                      </Button>
-                    )}
+                    {canCreateLeadGeneration &&
+                      activeDashboard !== "resume" &&
+                      createDepartment !== "resume" && (
+                        <Button
+                          type="button"
+                          variant={
+                            createRole === "lead_generation"
+                              ? "default"
+                              : "outline"
+                          }
+                          onClick={() => setCreateRole("lead_generation")}
+                          size="sm">
+                          Lead Gen
+                        </Button>
+                      )}
                     {canCreateMonitor && (
                       <Button
                         type="button"
@@ -1434,7 +1417,7 @@ function UserManagementContent() {
                   <div>
                     <Label>Role</Label>
                     <select
-                      className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                      className="w-full h-10 pl-3 pr-8 rounded-md border border-input bg-background"
                       value={editRole || ""}
                       onChange={(e) => setEditRole(e.target.value as UserRole)}
                     >
@@ -1444,7 +1427,9 @@ function UserManagementContent() {
                       {(isAdmin || isDeveloper) && <option value="operations">Operations</option>}
                       <option value="team_lead">Team Lead</option>
                       <option value="agent">Agent</option>
-                      <option value="lead_generation">Lead Generation</option>
+                      {editDepartment !== "resume" && (
+                        <option value="lead_generation">Lead Generation</option>
+                      )}
                     </select>
                   </div>
                 )}
@@ -1480,7 +1465,7 @@ function UserManagementContent() {
                       <Label htmlFor="edit-department">Department</Label>
                       <select
                         id="edit-department"
-                        className="mt-1 w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        className="mt-1 w-full h-10 pl-3 pr-8 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         value={editDepartment}
                         onChange={(e) =>
                           setEditDepartment(e.target.value as Department)
@@ -1506,7 +1491,7 @@ function UserManagementContent() {
                       <div className="mt-1">
                         <select
                           id="edit-team-lead"
-                          className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          className="w-full h-10 pl-3 pr-8 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                           value={selectedTeamLeadId || ""}
                           onChange={(e) =>
                             setSelectedTeamLeadId(e.target.value || null)

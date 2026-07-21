@@ -227,6 +227,7 @@ export interface CallRequest {
   updatedAt?: string | null;
   $createdAt?: string;
   $updatedAt?: string;
+  resumeProfileId?: string | null;
 }
 
 export type ResumeProfileStage =
@@ -389,7 +390,8 @@ export type ComponentKey =
   | 'followups-payments'
   | 'request-calls'
   | 'call-requests'
-  | 'assigned-report';
+  | 'assigned-report'
+  | 'resume-audit-logs';
 
 export interface AccessRule {
   $id?: string;

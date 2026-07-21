@@ -276,7 +276,7 @@ function HistoryDetailContent() {
       return (
         <select
           id={field.key}
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           value={value}
           onChange={(e) => onChange(field.key, e.target.value)}
           disabled={disabled}>
@@ -635,7 +635,7 @@ function HistoryDetailContent() {
       return (
         <select
           id={field.key}
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           value={value}
           onChange={(e) => handleClientIntakeChange(field.key, e.target.value)}
           disabled={isDisabled}>
@@ -1169,7 +1169,7 @@ function HistoryDetailContent() {
                         <Label htmlFor="paymentStatus">Update Status</Label>
                         <select
                           id="paymentStatus"
-                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                           value={paymentStatus}
                           onChange={(e) =>
                             setPaymentStatus(e.target.value as PaymentStatus)

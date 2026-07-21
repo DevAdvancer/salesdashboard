@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
   UserPlus,
@@ -49,13 +49,14 @@ export function ResumeProfileCreateForm({
   initialAssignableUsers,
 }: ResumeProfileCreateFormProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, serverSessionReady } = useAuth();
 
   const [callRequests, setCallRequests] = useState(initialCallRequests);
   const [assignableUsers, setAssignableUsers] = useState(initialAssignableUsers);
 
   const [mode, setMode] = useState<'from_call' | 'manual'>('from_call');
-  const [selectedCallId, setSelectedCallId] = useState('');
+  const [selectedCallId, setSelectedCallId] = useState(searchParams.get('callRequestId') || '');
   const [candidateName, setCandidateName] = useState('');
   const [technology, setTechnology] = useState('');
   const [usaArrival, setUsaArrival] = useState('');

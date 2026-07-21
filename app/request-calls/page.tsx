@@ -12,6 +12,8 @@ import { useAuth } from "@/lib/contexts/auth-context";
 import { useLeadsForExportQuery } from "@/lib/queries/leads/use-leads-for-export-query";
 import { isVisibleClientLead } from "@/lib/utils/client-history";
 import { REQUIRED_DOCUMENTS } from "@/lib/constants/call-request-documents";
+import { useRealtimeCollection } from "@/lib/hooks/use-realtime-collection";
+import { COLLECTIONS } from "@/lib/appwrite";
 import type {
   CallRequest,
   CallRequestChatMessage,
@@ -99,6 +101,10 @@ function RequestCallsContent() {
   useEffect(() => {
     void loadMyRequests();
   }, [loadMyRequests]);
+
+  useRealtimeCollection(COLLECTIONS.CALL_REQUESTS, () => {
+    void loadMyRequests();
+  });
 
   const openDialog = (lead: Lead) => {
     setDialogLead(lead);

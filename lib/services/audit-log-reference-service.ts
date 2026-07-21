@@ -11,6 +11,7 @@ export interface AuditLogReferenceUser {
   $id: string;
   name: string;
   email: string;
+  department: string;
 }
 
 export interface AuditLogReferences {
@@ -68,13 +69,14 @@ export async function loadAuditLogReferences(): Promise<AuditLogReferences> {
 
       const userList: AuditLogReferenceUser[] = [];
       users.documents.forEach((doc) => {
-        const userDoc = doc as { $id: string; name?: unknown; email?: unknown };
+        const userDoc = doc as { $id: string; name?: unknown; email?: unknown; department?: unknown };
         const name = getString(userDoc.name, getString(userDoc.email, userDoc.$id));
         map.set(userDoc.$id, name);
         userList.push({
           $id: userDoc.$id,
           name,
           email: getString(userDoc.email, ""),
+          department: getString(userDoc.department, "sales"),
         });
       });
 

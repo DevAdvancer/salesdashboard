@@ -170,7 +170,7 @@ function AttendanceReportContent() {
                 <Label htmlFor="report-team-lead">Filter by Team</Label>
                 <select
                   id="report-team-lead"
-                  className="mt-1 w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="mt-1 w-full h-10 pl-3 pr-8 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   value={selectedTeamLeadId}
                   onChange={(e) => setSelectedTeamLeadId(e.target.value)}
                 >

@@ -263,7 +263,7 @@ export function PaymentsSection({
               onChange={(e) =>
                 setCompanyFilter(e.target.value as CompanyFilter)
               }
-              className="h-8 rounded-full border border-[var(--hairline)] bg-[var(--soft-cloud)] px-3 pr-7 text-xs font-medium leading-none transition-colors hover:border-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ink)]/20"
+              className="h-8 rounded-full border border-[var(--hairline)] bg-[var(--soft-cloud)] pl-3 pr-8 pr-7 text-xs font-medium leading-none transition-colors hover:border-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ink)]/20"
               aria-label="Filter by company">
               <option value="all">All companies</option>
               {KNOWN_COMPANIES.map((c) => (

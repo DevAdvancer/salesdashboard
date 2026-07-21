@@ -482,7 +482,7 @@ function HistoryContent() {
             <Label htmlFor="clientPaymentFilter">Payment</Label>
             <select
               id="clientPaymentFilter"
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+              className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground"
               value={paymentFilter}
               onChange={(event) => {
                 setPaymentFilter(
@@ -533,7 +533,7 @@ function HistoryContent() {
               <Label htmlFor="clientAgentFilter">Agent</Label>
               <select
                 id="clientAgentFilter"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground"
                 value={filters.agentId ?? ""}
                 onChange={(event) => {
                   setFilters((prev) => ({
@@ -556,7 +556,7 @@ function HistoryContent() {
               <Label htmlFor="clientTeamFilter">Team</Label>
               <select
                 id="clientTeamFilter"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground"
                 value={teamLeadId ?? ""}
                 onChange={(event) => {
                   setTeamLeadId(event.target.value);
@@ -576,7 +576,7 @@ function HistoryContent() {
               <Label htmlFor="clientBranchFilter">Branch</Label>
               <select
                 id="clientBranchFilter"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground"
                 value={filters.branchId ?? ""}
                 onChange={(event) => {
                   setFilters((prev) => ({

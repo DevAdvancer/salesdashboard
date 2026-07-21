@@ -199,7 +199,7 @@ export async function createCallRequestAction(input: {
 
     revalidatePath('/call-requests');
     revalidatePath('/request-calls');
-    return doc as unknown as CallRequest;
+    return JSON.parse(JSON.stringify(doc)) as CallRequest;
   } catch (error) {
     throw new Error(getAppwriteErrorMessage(error));
   }
@@ -417,51 +417,7 @@ export async function updateCallRequestStatusAction(input: {
         targetType: 'call_request',
       });
 
-      // When marked "Call done", automatically initialize a Resume Profile if one does not exist yet
-      if (input.status === 'call_done') {
-        try {
-          const existingProfiles = await databases.listDocuments(
-            DATABASE_ID,
-            COLLECTIONS.RESUME_PROFILES,
-            [Query.equal('callRequestId', request.$id), Query.limit(1)]
-          );
-          if (existingProfiles.total === 0) {
-            const now = new Date().toISOString();
-            const createdProfile = await databases.createDocument(
-              DATABASE_ID,
-              COLLECTIONS.RESUME_PROFILES,
-              ID.unique(),
-              {
-                callRequestId: request.$id,
-                leadId: request.leadId ?? null,
-                candidateName: request.clientName,
-                stage: '1. Draft',
-                assignedToId: request.assignedToId ?? actor.$id,
-                assignedToName: request.assignedToName ?? actor.name,
-                createdBy: actor.$id,
-                createdByName: actor.name,
-                createdAt: now,
-                stageUpdatedAt: now,
-              }
-            );
 
-            // Notify Resume Team / Assignee that candidate has been moved to Resume Profiles
-            const recipients = [
-              request.assignedToId ?? actor.$id,
-              ...resumeTeamLeadIds,
-            ];
-            await createNotificationsForRecipients(databases, recipients, {
-              type: 'resume_profile_created',
-              title: 'Sent to Resume Profiles',
-              body: `${request.clientName} call completed and moved to Resume Profiles page (Stage: 1. Draft).`,
-              targetType: 'resume_profile',
-              targetId: createdProfile.$id,
-            });
-          }
-        } catch (err: any) {
-          console.error('Error auto-creating resume profile from call_done:', err);
-        }
-      }
     }
 
     revalidatePath('/call-requests');
@@ -546,4 +502,73 @@ export async function postCallRequestMessageAction(input: {
   } catch (error) {
     throw new Error(getAppwriteErrorMessage(error));
   }
+}
+
+export async function createProfileFromCallRequestAction(requestId: string) {
+  const actor = await getAuthenticatedUserDoc();
+  if (!canManageCallRequests(actor)) {
+    throw new Error('Only the Resume team can create a profile from call requests.');
+  }
+
+  const { databases } = await createAdminClient();
+  const request = await getCallRequestDocument(databases, requestId);
+
+  const existingProfiles = await databases.listDocuments(
+    DATABASE_ID,
+    COLLECTIONS.RESUME_PROFILES,
+    [Query.equal('callRequestId', request.$id), Query.limit(1)]
+  );
+  
+  if (existingProfiles.total > 0) {
+    throw new Error('A Resume Profile has already been created for this call request.');
+  }
+
+  const now = new Date().toISOString();
+  const createdProfile = await databases.createDocument(
+    DATABASE_ID,
+    COLLECTIONS.RESUME_PROFILES,
+    ID.unique(),
+    {
+      callRequestId: request.$id,
+      leadId: request.leadId ?? null,
+      candidateName: request.clientName,
+      stage: '1. Draft',
+      assignedToId: request.assignedToId ?? actor.$id,
+      assignedToName: request.assignedToName ?? actor.name,
+      createdBy: actor.$id,
+      createdByName: actor.name,
+      createdAt: now,
+      stageUpdatedAt: now,
+    }
+  );
+
+  const resumeTeamLeadIds = await getResumeTeamLeadIds(databases);
+  const recipients = [
+    request.assignedToId ?? actor.$id,
+    ...resumeTeamLeadIds,
+  ];
+  await createNotificationsForRecipients(databases, recipients, {
+    type: 'resume_profile_created',
+    title: 'Sent to Resume Profiles',
+    body: `${request.clientName} call completed and moved to Resume Profiles page (Stage: 1. Draft).`,
+    targetType: 'resume_profile',
+    targetId: createdProfile.$id,
+  });
+
+  await databases.updateDocument(
+    DATABASE_ID,
+    COLLECTIONS.CALL_REQUESTS,
+    request.$id,
+    {
+      status: 'call_done',
+      resumeProfileId: createdProfile.$id,
+      updatedAt: new Date().toISOString(),
+    }
+  );
+
+  revalidatePath('/call-requests');
+  revalidatePath('/request-calls');
+  revalidatePath('/resume');
+  
+  return JSON.parse(JSON.stringify(createdProfile));
 }

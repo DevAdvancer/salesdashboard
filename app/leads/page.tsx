@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useRef, memo, useCallback } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listLeadsForExport, clearLeadReadCache } from "@/lib/services/lead-action-service";
 import { useLeadsQuery } from "@/lib/queries/leads/use-leads-query";
 import { useRealtimeCollection } from "@/lib/hooks/use-realtime-collection";
@@ -856,7 +856,7 @@ function LeadsContent() {
               <Label htmlFor="status">Status</Label>
               <select
                 id="status"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 value={statusDraft}
                 onChange={(e) =>
                   setDrafts((prev) => ({ ...prev, status: e.target.value }))
@@ -875,7 +875,7 @@ function LeadsContent() {
                 <Label htmlFor="teamFilter">Team</Label>
                 <select
                   id="teamFilter"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   value={teamDraft}
                   onChange={(e) =>
                     setDrafts((prev) => ({ ...prev, team: e.target.value }))
@@ -896,7 +896,7 @@ function LeadsContent() {
               <Label htmlFor="ownerFilter">Owner</Label>
               <select
                 id="ownerFilter"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 value={ownerDraft}
                 onChange={(e) =>
                   setDrafts((prev) => ({ ...prev, owner: e.target.value }))
@@ -914,7 +914,7 @@ function LeadsContent() {
               <Label htmlFor="assignedTo">Assigned To</Label>
               <select
                 id="assignedTo"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 value={assignedToDraft}
                 onChange={(e) =>
                   setDrafts((prev) => ({ ...prev, assignedTo: e.target.value }))
@@ -932,7 +932,7 @@ function LeadsContent() {
               <Label htmlFor="branchFilter">Branch</Label>
               <select
                 id="branchFilter"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 value={branchDraft}
                 onChange={(e) =>
                   setDrafts((prev) => ({ ...prev, branch: e.target.value }))

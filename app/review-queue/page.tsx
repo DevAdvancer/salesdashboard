@@ -190,7 +190,7 @@ function ReviewQueueContent() {
             <div className="grid gap-4 md:grid-cols-3">
               <div>
                 <Label htmlFor="type">Type</Label>
-                <select id="type" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground" value={type} onChange={(e) => setType(e.target.value)}>
+                <select id="type" className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground" value={type} onChange={(e) => setType(e.target.value)}>
                   <option value="lead_reopen">Lead Reopen</option>
                   <option value="high_value_reassignment">High Value Reassignment</option>
                   <option value="duplicate_warning">Duplicate Warning</option>
@@ -330,7 +330,7 @@ function ReviewQueueSkeleton() {
 
 function InputLikeSelect({ value, onChange }: { value: ReviewTargetType; onChange: (value: ReviewTargetType) => void }) {
   return (
-    <select id="targetType" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground" value={value} onChange={(e) => onChange(e.target.value as ReviewTargetType)}>
+    <select id="targetType" className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground" value={value} onChange={(e) => onChange(e.target.value as ReviewTargetType)}>
       <option value="LEAD">Lead</option>
       <option value="CLIENT">Client</option>
       <option value="USER">User</option>

@@ -99,7 +99,7 @@ export function LeadFollowUpCard({ lead, user, disabled = false, onUpdated }: Le
             <Label htmlFor="nextAction">Next Action</Label>
             <select
               id="nextAction"
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+              className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground"
               value={nextAction}
               onChange={(event) => setNextAction(event.target.value)}
               disabled={disabled || saving}
@@ -119,7 +119,7 @@ export function LeadFollowUpCard({ lead, user, disabled = false, onUpdated }: Le
             </Label>
             <select
               id="followUpStatus"
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+              className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground"
               value={followUpStatus}
               onChange={(event) => setFollowUpStatus(event.target.value)}
               disabled={disabled || saving}

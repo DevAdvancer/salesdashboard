@@ -43,6 +43,7 @@ import { listTechnicalPaymentsAction } from "@/app/actions/technical-payments";
 import type { TeamLeadAssignmentSummary } from "@/lib/utils/dashboard-insights";
 import { getTodayEst, getMonthStartEst, getMonthEndEst } from "@/lib/utils/est-date";
 import type { HolidayCalendarEntry } from "@/lib/types";
+import { startLoaderSimulation, finishLoaderSimulation } from "@/utils/loader";
 
 type LeadGenerationTeamAssignmentStat = {
   teamLeadId: string;
@@ -209,6 +210,27 @@ function MainDashboard({
     clearDashboardDataCache();
     setLiveRefreshNonce((n) => n + 1);
   });
+
+  const isDashboardLoading =
+    topMetricsLoading ||
+    kpiLoading ||
+    linkedinKpiLoading ||
+    holidayLoading ||
+    paymentLoading ||
+    referralLoading ||
+    handoffLoading;
+
+  useEffect(() => {
+    // Only trigger the overlay loader if we actually have a user, preventing it
+    // from running continuously if auth isn't fully resolved yet.
+    if (!user) return;
+    
+    if (isDashboardLoading) {
+      startLoaderSimulation({ overlay: true });
+    } else {
+      finishLoaderSimulation();
+    }
+  }, [isDashboardLoading, user]);
 
   // ── Fetch top metrics when range changes ──────────────────────────────
   useEffect(() => {

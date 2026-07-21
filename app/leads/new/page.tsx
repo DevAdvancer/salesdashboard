@@ -613,7 +613,7 @@ function LeadGenerationNewLeadContent() {
                   type="file"
                   accept=".pdf,.doc,.docx"
                   disabled={isUploadingResume || isSaving}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
@@ -1108,7 +1108,7 @@ function LegacyNewLeadContent() {
               <Label htmlFor="branch">Branch</Label>
               <select
                 id="branch"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 mt-2"
+                className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 mt-2"
                 value={selectedBranch}
                 onChange={(e) => setSelectedBranch(e.target.value)}>
                 <option value="">No branch</option>

@@ -9,6 +9,7 @@ import {
   checkAndNotifyAdminAttendanceEscalationsAction,
   markAttendancePresenceAction,
 } from '@/app/actions/attendance';
+import { LoaderOverlay } from '@/components/loader/LoaderOverlay';
 
 const PUBLIC_ROUTES = ['/login', '/referral'];
 const ADMIN_ATTENDANCE_PING_COOLDOWN_MS = 30 * 60 * 1000;
@@ -146,12 +147,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         onCollapsedChange={setIsSidebarCollapsed}
       />
       <main
-        className={`flex-1 p-4 pt-16 transition-[margin] duration-300 sm:p-6 sm:pt-16 lg:p-8 lg:pt-8 ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}
+        className={`relative flex-1 p-4 pt-16 transition-[margin] duration-300 sm:p-6 sm:pt-16 lg:p-8 lg:pt-8 ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}
         style={{ minWidth: 0 }}
       >
+        <LoaderOverlay />
         {children}
       </main>
-      <WhatsNewModal />
     </div>
   );
 }

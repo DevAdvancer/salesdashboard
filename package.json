@@ -47,10 +47,10 @@
     "dotenv": "^17.3.1",
     "driver.js": "^1.4.0",
     "fast-check": "^4.5.3",
+    "framer-motion": "^12.42.2",
     "lucide-react": "^0.563.0",
     "next": "16.2.6",
     "node-appwrite": "^14.1.0",
-    "nprogress": "^0.2.0",
     "radix-ui": "^1.4.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -58,7 +58,8 @@
     "recharts": "^3.7.0",
     "resend": "^6.16.0",
     "tailwind-merge": "^3.5.0",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.1",

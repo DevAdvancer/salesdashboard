@@ -98,16 +98,60 @@ export async function getResumeProfileOptionsAction() {
   }
 }
 
+export async function getResumeAssignableUsersAction() {
+  try {
+    const actor = await getAuthenticatedUserDoc();
+    if (!actor || !isResumeSide(actor)) {
+      return { assignableUsers: [] };
+    }
+
+    const { databases } = await createAdminClient();
+
+    const users = await listAllDocuments<User>({
+      databases,
+      databaseId: DATABASE_ID,
+      collectionId: COLLECTIONS.USERS,
+      queries: [Query.equal('isActive', true)],
+      pageLimit: 100,
+      maxPages: 10,
+    }).catch(() => [] as User[]);
+
+    const assignableUsers = users
+      .filter((u) => (u as unknown as { department?: string }).department === 'resume')
+      .filter((u) => u.role === 'agent' || u.role === 'team_lead')
+      .map((u) => ({
+        $id: u.$id,
+        name: u.name,
+        email: u.email,
+      }));
+
+    return { assignableUsers };
+  } catch (error) {
+    console.error('getResumeAssignableUsersAction error:', error);
+    return { assignableUsers: [] };
+  }
+}
+
 /**
  * List all Resume Profiles visible to the current actor.
  * - Resume agents only see profiles assigned to them.
  * - Resume TLs, admins, developers, monitors, operations see all profiles.
  */
-export async function listResumeProfilesAction(): Promise<ResumeProfileDocument[]> {
+export interface ListResumeProfilesOptions {
+  search?: string;
+  stage?: string;
+  assignedToId?: string;
+  page?: number;
+  limit?: number;
+}
+
+export async function listResumeProfilesAction(
+  options: ListResumeProfilesOptions = {}
+): Promise<{ documents: ResumeProfileDocument[]; total: number }> {
   try {
     const actor = await getAuthenticatedUserDoc();
     if (!actor || !isResumeSide(actor)) {
-      return [];
+      return { documents: [], total: 0 };
     }
 
     const { databases } = await createAdminClient();
@@ -116,27 +160,43 @@ export async function listResumeProfilesAction(): Promise<ResumeProfileDocument[
 
     if (actor.role === 'agent' && dept === 'resume') {
       queries.push(Query.equal('assignedToId', actor.$id));
-    } else {
-      queries.push(Query.orderDesc('stageUpdatedAt'));
+    } else if (options.assignedToId && options.assignedToId !== 'all') {
+      if (options.assignedToId === 'unassigned') {
+        queries.push(Query.isNull('assignedToId'));
+      } else {
+        queries.push(Query.equal('assignedToId', options.assignedToId));
+      }
     }
 
-    const docs = await listAllDocuments<ResumeProfileDocument>({
-      databases,
-      databaseId: DATABASE_ID,
-      collectionId: COLLECTIONS.RESUME_PROFILES,
-      queries,
-      pageLimit: 100,
-      maxPages: 50,
-    });
+    if (options.stage && options.stage !== 'all') {
+      queries.push(Query.equal('stage', options.stage));
+    }
 
-    return [...docs].sort(
-      (a, b) =>
-        new Date(b.stageUpdatedAt || b.createdAt || (b as any).$createdAt || 0).getTime() -
-        new Date(a.stageUpdatedAt || a.createdAt || (a as any).$createdAt || 0).getTime(),
+    if (options.search) {
+      // Basic fallback since multiple contains or fulltext might be restricted without indexes
+      queries.push(Query.contains('candidateName', options.search));
+    }
+
+    queries.push(Query.orderDesc('stageUpdatedAt'));
+
+    const limit = options.limit || 50;
+    const page = options.page || 1;
+    queries.push(Query.limit(limit));
+    queries.push(Query.offset((page - 1) * limit));
+
+    const response = await databases.listDocuments(
+      DATABASE_ID,
+      COLLECTIONS.RESUME_PROFILES,
+      queries
     );
+
+    return {
+      documents: (response.documents as unknown as ResumeProfileDocument[]),
+      total: response.total,
+    };
   } catch (error) {
     console.error('listResumeProfilesAction error:', error);
-    return [];
+    return { documents: [], total: 0 };
   }
 }
 

@@ -177,9 +177,6 @@ export function ResumeProfileDetail({
           <div>
             <h1 className="text-xl font-bold tracking-tight flex items-center gap-2 text-foreground">
               {candidateName || 'Untitled Profile'}
-              <span className="text-xs font-normal text-muted-foreground px-2 py-0.5 bg-muted rounded-full border">
-                ID: {profile.$id}
-              </span>
             </h1>
             {profile.callRequestId && (
               <Link href="/call-requests" className="text-xs text-primary hover:underline flex items-center gap-1 mt-0.5">
@@ -195,7 +192,7 @@ export function ResumeProfileDetail({
             <select
               value={stage}
               onChange={(e) => setStage(e.target.value as ResumeProfileStage)}
-              className="rounded-md border border-input bg-background px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
+              className="rounded-md border border-input bg-background pl-3 pr-8 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
             >
               {RESUME_PROFILE_STAGES.map((st) => (
                 <option key={st} value={st}>
@@ -211,7 +208,7 @@ export function ResumeProfileDetail({
               value={assignedToId}
               disabled={!canAssign || saving}
               onChange={(e) => setAssignedToId(e.target.value)}
-              className="rounded-md border border-input bg-background px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              className="rounded-md border border-input bg-background pl-3 pr-8 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <option value="">-- Unassigned --</option>
               {assignableUsers.map((u) => (
@@ -232,7 +229,7 @@ export function ResumeProfileDetail({
           </Button>
 
           {movedToMarketing ? (
-            <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-100 dark:bg-emerald-900/40 px-3 py-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+            <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-100 dark:bg-emerald-900/40 pl-3 pr-8 py-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
               <TrendingUp className="h-4 w-4" />
               In Marketing
             </span>
