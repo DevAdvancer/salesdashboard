@@ -217,7 +217,19 @@ async function validateLeadUniqueness(
         }
     }
 
-    /**
+    return { isValid: true };
+}
+
+export async function validateLeadUniquenessAction(
+    data: LeadData,
+    excludeLeadId?: string
+) {
+    const user = await getAuthenticatedUser();
+    if (!user) throw new Error("Unauthorized");
+    return validateLeadUniqueness(data, excludeLeadId);
+}
+
+/**
  * Helper to resolve owner/assignee names for a duplicate lead doc.
  * Returns enriched duplicate result with human-readable agent names.
  */

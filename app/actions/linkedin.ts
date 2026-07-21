@@ -497,28 +497,30 @@ export async function createLinkedinRequestAction(input: {
       Permission.read(Role.label("admin")),
     ];
 
-    if (activeByCompany) {
-      if (activeByCompany.status === "accepted") {
-        throw new Error("This URL is already accepted for this company.");
-      }
+    if (activeByCompany && activeByCompany.status === "accepted") {
+      throw new Error("This URL is already accepted for this company.");
+    }
 
+    const docToUpdate = activeByCompany || (existingByCompany.length > 0 ? existingByCompany[0] : null);
+
+    if (docToUpdate) {
       const prev = {
-        accountId: activeByCompany.accountId,
-        agentId: activeByCompany.agentId,
-        teamLeadId: activeByCompany.teamLeadId,
-        dateSent: activeByCompany.dateSent,
-        status: activeByCompany.status,
-        coldCall: Boolean(activeByCompany.coldCall),
+        accountId: docToUpdate.accountId,
+        agentId: docToUpdate.agentId,
+        teamLeadId: docToUpdate.teamLeadId,
+        dateSent: docToUpdate.dateSent,
+        status: docToUpdate.status,
+        coldCall: Boolean(docToUpdate.coldCall),
         coldCallPhone:
-          typeof activeByCompany.coldCallPhone === "string"
-            ? activeByCompany.coldCallPhone
+          typeof docToUpdate.coldCallPhone === "string"
+            ? docToUpdate.coldCallPhone
             : null,
       };
 
       const updated = await databases.updateDocument(
         DATABASE_ID,
         COLLECTIONS.LINKEDIN_REQUESTS,
-        activeByCompany.$id,
+        docToUpdate.$id,
         {
           accountId: account.$id,
           agentId: user.$id,
@@ -538,7 +540,7 @@ export async function createLinkedinRequestAction(input: {
         actorId: user.$id,
         actorName: user.name,
         targetType: "linkedin_request",
-        targetId: activeByCompany.$id,
+        targetId: docToUpdate.$id,
         metadata: {
           company,
           targetUrl,

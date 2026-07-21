@@ -29,7 +29,7 @@ import {
   withdrawLinkedinRequestAction,
 } from "@/app/actions/linkedin";
 import type { LinkedinAccount, LinkedinRequest } from "@/lib/types";
-import { validateLeadUniqueness } from "@/lib/services/lead-validator";
+import { validateLeadUniquenessAction } from "@/app/actions/lead";
 import { getErrorMessage } from "@/lib/utils";
 import { getLinkedinRequestDateFilterValue } from "@/lib/utils/linkedin-request-dates";
 import {
@@ -262,7 +262,7 @@ function LinkedinRequestsContent() {
       setChecking(true);
       setHistoryLoading(true);
 
-      const urlCheck = await validateLeadUniqueness({
+      const urlCheck = await validateLeadUniquenessAction({
         linkedinProfileUrl: targetUrl.trim(),
       });
       if (!urlCheck.isValid) {
@@ -286,7 +286,7 @@ function LinkedinRequestsContent() {
           return;
         }
         const phoneFormatted = formatUsPhone(digits);
-        const phoneCheck = await validateLeadUniqueness({
+        const phoneCheck = await validateLeadUniquenessAction({
           phone: phoneFormatted,
         });
         if (!phoneCheck.isValid) {
