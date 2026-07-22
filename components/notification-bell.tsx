@@ -97,6 +97,7 @@ export function NotificationBell({ className }: { className?: string }) {
           showBrowserNotification(notification.title || 'Notification', {
             body: notification.body,
             icon: '/favicon.ico',
+            tag: notification.$id,
           });
           // Also show in-app toast
           toast({
@@ -118,9 +119,6 @@ export function NotificationBell({ className }: { className?: string }) {
   }, [canSeeNotifications, toast, user]);
 
   const forceLoad = useCallback(() => {
-    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
-      return;
-    }
     const now = Date.now();
     if (now - lastForceRefreshAt.current < NOTIFICATION_FORCE_REFRESH_COOLDOWN_MS) {
       return;

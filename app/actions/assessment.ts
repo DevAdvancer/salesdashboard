@@ -3,6 +3,9 @@
 import { ID, Query } from 'node-appwrite';
 import { createAdminClient } from '@/lib/server/appwrite';
 import { assertAuthenticatedUserId, getAuthenticatedAccount } from '@/lib/server/current-user';
+import { listLeadsAction } from '@/app/actions/lead';
+import { UserRole } from '@/lib/types';
+import { listAllDocuments } from '@/lib/server/appwrite-pagination';
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const ASSESSMENT_ATTEMPTS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_ASSESSMENT_ATTEMPTS_COLLECTION_ID || 'assessment_attempts';
@@ -206,39 +209,48 @@ export async function getAssessmentAttempts(userId: string, leadIds: string[]) {
  */
 export async function countAssessmentEmailsSentInRange(
     userId: string,
-    leadIds: string[],
+    role: UserRole,
+    branchIds: string[],
     dateFromIso: string,
     dateToIso: string,
 ): Promise<number> {
     await assertAuthenticatedUserId(userId);
-    if (!leadIds.length || !dateFromIso || !dateToIso) return 0;
+    if (!dateFromIso || !dateToIso) return 0;
 
     try {
         const { databases } = await createAdminClient();
 
-        const CHUNK = 100;
-        const chunks: string[][] = [];
-        for (let i = 0; i < leadIds.length; i += CHUNK) {
-            chunks.push(leadIds.slice(i, i + CHUNK));
-        }
+        // 1. Fetch ALL assessment attempts within the date range
+        const attempts = await listAllDocuments<AssessmentAttemptDocument>({
+            databases,
+            databaseId: DATABASE_ID,
+            collectionId: ASSESSMENT_ATTEMPTS_COLLECTION_ID,
+            queries: [
+                Query.greaterThanEqual('lastAttemptAt', dateFromIso),
+                Query.lessThanEqual('lastAttemptAt', dateToIso),
+            ],
+            pageLimit: 5000,
+            maxPages: 50,
+        });
 
-        const batchResults = await Promise.all(
-            chunks.map((chunk) =>
-                databases.listDocuments(
-                    DATABASE_ID,
-                    ASSESSMENT_ATTEMPTS_COLLECTION_ID,
-                    [
-                        Query.equal('leadId', chunk),
-                        Query.limit(5000),
-                    ]
-                )
-            )
+        if (attempts.length === 0) return 0;
+
+        // 2. Extract unique leadIds
+        const uniqueLeadIds = Array.from(new Set(attempts.map(a => a.leadId)));
+
+        // 3. Verify which leads are visible to this user
+        const { leads: visibleLeads } = await listLeadsAction(
+            { ids: uniqueLeadIds },
+            userId,
+            role,
+            branchIds,
+            { page: 1, pageSize: Math.max(uniqueLeadIds.length, 100) }
         );
+        const visibleLeadIdSet = new Set(visibleLeads.map(l => l.$id));
 
-        const documents = batchResults.flatMap((res) => res.documents as unknown as AssessmentAttemptDocument[]);
-        return documents.reduce((total, doc) => {
-            const sentAt = doc.lastAttemptAt;
-            if (!sentAt || sentAt < dateFromIso || sentAt > dateToIso) return total;
+        // 4. Sum counts for visible leads
+        return attempts.reduce((total, doc) => {
+            if (!visibleLeadIdSet.has(doc.leadId)) return total;
             return total + parseCount(doc.attemptCount);
         }, 0);
     } catch (error: unknown) {

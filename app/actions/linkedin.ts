@@ -1845,6 +1845,7 @@ export async function loadLinkedinConnectionKpiAction(input: {
     queries.push(Query.lessThanEqual("dateSent", expandIsoDateToEnd(input.dateRange.to)));
   }
   queries.push(Query.orderDesc("dateSent"));
+  queries.push(Query.select(['$id', 'accountId', 'isActive', 'status', 'dateSent']));
 
   const allRequests = await listAllDocuments<LinkedinRequest>({
     databases,

@@ -149,11 +149,12 @@ export async function loadDashboardData(
  */
 export async function loadDashboardAttemptCounts(
   userId: string,
-  leadIds: string[],
+  role: User["role"],
+  branchIds: string[] | undefined,
   dateFromIso: string,
   dateToIso: string,
 ): Promise<DashboardAttemptCounts> {
-  if (leadIds.length === 0 || !dateFromIso || !dateToIso) {
+  if (!dateFromIso || !dateToIso) {
     return {
       createdMocks: 0,
       createdInterviewSupport: 0,
@@ -163,13 +164,14 @@ export async function loadDashboardAttemptCounts(
 
   return cacheClientRead(
     `${DASHBOARD_DATA_SCOPE}:attemptCounts`,
-    [userId, [...leadIds].sort(), dateFromIso, dateToIso],
+    [userId, role, [...(branchIds ?? [])].sort(), dateFromIso, dateToIso],
     async () => {
+      const safeBranchIds = branchIds ?? [];
       const [createdMocks, createdInterviewSupport, createdAssessmentSupport] =
         await Promise.all([
-          countMockEmailsSentInRange(userId, leadIds, dateFromIso, dateToIso),
-          countInterviewEmailsSentInRange(userId, leadIds, dateFromIso, dateToIso),
-          countAssessmentEmailsSentInRange(userId, leadIds, dateFromIso, dateToIso),
+          countMockEmailsSentInRange(userId, role, safeBranchIds, dateFromIso, dateToIso),
+          countInterviewEmailsSentInRange(userId, role, safeBranchIds, dateFromIso, dateToIso),
+          countAssessmentEmailsSentInRange(userId, role, safeBranchIds, dateFromIso, dateToIso),
         ]);
 
       return {
@@ -256,11 +258,7 @@ export async function loadDashboardTopMetrics(
     async () => {
       // 1. Active (created in range) + closed (closed in range) counts. These
       //    two tiles are date-of-lead based and stay unchanged.
-      // 2. All visible leads regardless of date — used to scope the support
-      //    email counts. A support email is counted by its own send date, so
-      //    an email sent in the range against an older lead must still be seen;
-      //    scoping only to in-range leads is what previously undercounted.
-      const [active, closed, allActive, allClosed] = await Promise.all([
+      const [active, closed] = await Promise.all([
         listLeads(
           { isClosed: false, dateFrom, dateTo },
           input.userId,
@@ -273,18 +271,6 @@ export async function loadDashboardTopMetrics(
           input.role,
           input.branchIds,
         ),
-        listLeads(
-          { isClosed: false },
-          input.userId,
-          input.role,
-          input.branchIds,
-        ),
-        listLeads(
-          { isClosed: true },
-          input.userId,
-          input.role,
-          input.branchIds,
-        ),
       ]);
       const closedInRange = filterClosedLeadsInDateRange(
         closed,
@@ -292,21 +278,17 @@ export async function loadDashboardTopMetrics(
         dateTo ?? "",
       ).filter(isVisibleClientLead);
 
-      // Support-email counts run against every visible lead (all dates), then
-      // filter each email by its send timestamp against the range.
-      const visibleLeadIds = Array.from(
-        new Set([...allActive, ...allClosed].map((lead) => lead.$id)),
-      );
+      // 2. Support-email counts are based on their own send timestamp against the
+      //    range, then they check which leads the user is allowed to see.
       const dateFromIso = expandIsoDateToStart(dateFrom ?? "");
       const dateToIso = expandIsoDateToEnd(dateTo ?? "");
-      const attempts = visibleLeadIds.length
-        ? await loadDashboardAttemptCounts(
-            input.userId,
-            visibleLeadIds,
-            dateFromIso,
-            dateToIso,
-          )
-        : EMPTY_TOP_METRICS;
+      const attempts = await loadDashboardAttemptCounts(
+          input.userId,
+          input.role,
+          input.branchIds,
+          dateFromIso,
+          dateToIso,
+      );
 
       return {
         activeLeads: active.length,

@@ -310,6 +310,7 @@ export interface LeadRequest {
 }
 
 export interface LeadListFilters {
+  ids?: string[];
   status?: string;
   assignedToId?: string;
   ownerId?: string;

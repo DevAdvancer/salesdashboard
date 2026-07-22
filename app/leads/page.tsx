@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listLeadsForExport, clearLeadReadCache } from "@/lib/services/lead-action-service";
 import { useLeadsQuery } from "@/lib/queries/leads/use-leads-query";
 import { useRealtimeCollection } from "@/lib/hooks/use-realtime-collection";
+import { useDebounce } from "@/lib/hooks/use-debounce";
 import { queryKeys } from "@/lib/queries/keys";
 import { COLLECTIONS } from "@/lib/constants/appwrite";
 import { getUsersByIds } from "@/lib/services/user-service";
@@ -713,22 +714,36 @@ function LeadsContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadUserKey]);
 
-  const handleApplyFilters = () => {
-    writeFiltersToUrl({
-      q: searchDraft,
-      status: statusDraft,
-      assignedTo: assignedToDraft,
-      owner: ownerDraft,
-      mine: mineDraft,
-      branch: branchDraft,
-      from: dateFromDraft,
-      to: dateToDraft,
-      team: teamDraft,
-    });
-    // Reset to page 1 when filters change so users see results starting
-    // at the top.
-    setCurrentPage(1);
-  };
+  const debouncedDrafts = useDebounce(drafts, 300);
+
+  useEffect(() => {
+    if (
+      debouncedDrafts.q !== urlSearch ||
+      debouncedDrafts.status !== urlStatus ||
+      debouncedDrafts.assignedTo !== urlAssignedTo ||
+      debouncedDrafts.owner !== urlOwner ||
+      debouncedDrafts.mine !== urlMine ||
+      debouncedDrafts.branch !== urlBranch ||
+      debouncedDrafts.from !== urlFrom ||
+      debouncedDrafts.to !== urlTo ||
+      debouncedDrafts.team !== urlTeam
+    ) {
+      writeFiltersToUrl(debouncedDrafts);
+      setCurrentPage(1);
+    }
+  }, [
+    debouncedDrafts,
+    urlSearch,
+    urlStatus,
+    urlAssignedTo,
+    urlOwner,
+    urlMine,
+    urlBranch,
+    urlFrom,
+    urlTo,
+    urlTeam,
+    writeFiltersToUrl,
+  ]);
 
   const handleClearFilters = () => {
     writeFiltersToUrl({
@@ -844,11 +859,6 @@ function LeadsContent() {
                 onChange={(e) =>
                   setDrafts((prev) => ({ ...prev, q: e.target.value }))
                 }
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleApplyFilters();
-                  }
-                }}
               />
             </div>
 
@@ -975,8 +985,7 @@ function LeadsContent() {
             </div>
           </div>
 
-          <div className="flex gap-2 mt-4">
-            <Button onClick={handleApplyFilters}>Apply Filters</Button>
+          <div className="flex justify-end gap-2 mt-4 md:col-span-2 lg:col-span-3">
             <Button variant="outline" onClick={handleClearFilters}>
               Clear Filters
             </Button>

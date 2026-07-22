@@ -165,6 +165,7 @@ async function validateLeadUniqueness(
         queries: [
             Query.greaterThanEqual('$createdAt', windowStart.toISOString()),
             Query.orderDesc('$createdAt'),
+            Query.orderDesc('$id'),
         ],
         pageLimit: 100,
         maxPages: 10,
@@ -1425,6 +1426,10 @@ export async function listLeadsAction(
       );
     }
 
+    if (filters.ids && filters.ids.length > 0) {
+      queries.push(Query.equal('$id', filters.ids));
+    }
+
     // Filter by closed status (default to active leads)
     if (filters.isClosed !== undefined) {
       queries.push(Query.equal('isClosed', filters.isClosed));
@@ -1504,6 +1509,7 @@ export async function listLeadsAction(
 
     // Order by creation date (newest first)
     queries.push(Query.orderDesc('$createdAt'));
+    queries.push(Query.orderDesc('$id')); // Tie-breaker for cursor pagination
 
     // Pagination: clamp pageSize to a max of 100 to prevent abuse.
     // forExport=true bypasses pagination and pulls up to 10K rows (used by
@@ -1993,6 +1999,8 @@ export async function loadLeadTargetProgressAction(input: {
     queries.push(Query.lessThanEqual('$createdAt', expandIsoDateToEnd(input.dateRange.to)));
   }
   queries.push(Query.orderDesc('$createdAt'));
+  queries.push(Query.orderDesc('$id'));
+  queries.push(Query.select(['$id', 'ownerId', 'assignedToId', 'data']));
 
   const allLeads = await listAllDocuments<any>({
     databases,
@@ -2011,6 +2019,8 @@ export async function loadLeadTargetProgressAction(input: {
   if (input.dateRange.to) {
     niQueries.push(Query.lessThanEqual("markedAt", expandIsoDateToEnd(input.dateRange.to)));
   }
+  niQueries.push(Query.select(['$id', 'userId']));
+  
   const niEvents = await listAllDocuments<any>({
     databases,
     databaseId: DATABASE_ID,
