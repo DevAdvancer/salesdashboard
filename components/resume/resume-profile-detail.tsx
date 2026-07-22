@@ -29,11 +29,21 @@ import {
   type UpdateResumeProfileInput,
 } from '@/app/actions/resume-profiles';
 import { EmployerExperienceFields } from '@/components/resume/employer-experience-fields';
+import { EducationFields } from '@/components/resume/education-fields';
+import { TimelineFields } from '@/components/resume/timeline-fields';
 import {
   type EmployerEntry,
   parseExperience,
   serializeExperience,
 } from '@/lib/utils/resume-experience';
+import {
+  type EducationEntry,
+  type TimelineEntry,
+  parseEducation,
+  serializeEducation,
+  parseTimeline,
+  serializeTimeline,
+} from '@/lib/utils/resume-fields';
 
 interface ResumeProfileDetailProps {
   initialProfile: ResumeProfile & { $id: string };
@@ -58,21 +68,50 @@ export function ResumeProfileDetail({
   const [candidateName, setCandidateName] = useState(profile.candidateName || '');
   const [technology, setTechnology] = useState(profile.technology || '');
   const [usaArrival, setUsaArrival] = useState(profile.usaArrival || '');
-  const [bachelors, setBachelors] = useState(profile.bachelors || '');
-  const [masters, setMasters] = useState(profile.masters || '');
+  
+  let parsedData: any = {};
+  try {
+    if (profile.data) {
+      parsedData = JSON.parse(profile.data);
+    }
+  } catch {
+    // Ignore invalid JSON
+  }
+
+  const parsedEducation = parseEducation(parsedData.educationHistory);
+  const [educationHistory, setEducationHistory] = useState<EducationEntry[]>(parsedEducation.entries);
+  const [educationLegacyText] = useState(() => {
+    const parts = [];
+    if (parsedEducation.legacyText) parts.push(parsedEducation.legacyText);
+    if (profile.bachelors) parts.push(`Bachelors: ${profile.bachelors}`);
+    if (profile.masters) parts.push(`Masters: ${profile.masters}`);
+    return parts.join(' | ');
+  });
 
   const [cpt, setCpt] = useState(profile.cpt || 'NO');
-  const [cptDetails, setCptDetails] = useState(profile.cptDetails || '');
-  const [opt, setOpt] = useState(profile.opt || 'NO');
-  const [optDetails, setOptDetails] = useState(profile.optDetails || '');
-  const [stemOpt, setStemOpt] = useState(profile.stemOpt || 'NO');
-  const [stemOptDetails, setStemOptDetails] = useState(profile.stemOptDetails || '');
+  const parsedCpt = parseExperience(parsedData.cptEmployers || profile.cptDetails);
+  const [cptEmployers, setCptEmployers] = useState<EmployerEntry[]>(parsedCpt.entries);
+  const [cptLegacyText] = useState(parsedCpt.legacyText);
 
-  const parsedExperience = parseExperience(profile.indiaExperience);
+  const [opt, setOpt] = useState(profile.opt || 'NO');
+  const parsedOpt = parseExperience(parsedData.optEmployers || profile.optDetails);
+  const [optEmployers, setOptEmployers] = useState<EmployerEntry[]>(parsedOpt.entries);
+  const [optLegacyText] = useState(parsedOpt.legacyText);
+
+  const [stemOpt, setStemOpt] = useState(profile.stemOpt || 'NO');
+  const parsedStemOpt = parseExperience(parsedData.stemOptEmployers || profile.stemOptDetails);
+  const [stemOptEmployers, setStemOptEmployers] = useState<EmployerEntry[]>(parsedStemOpt.entries);
+  const [stemOptLegacyText] = useState(parsedStemOpt.legacyText);
+
+  const parsedExperience = parseExperience(profile.experience);
   const [experience, setExperience] = useState<EmployerEntry[]>(parsedExperience.entries);
   const [experienceLegacyText] = useState(parsedExperience.legacyText);
+  
   const [missingDocs, setMissingDocs] = useState(profile.missingDocs || '');
-  const [resumeTimeline, setResumeTimeline] = useState(profile.resumeTimeline || '');
+  
+  const parsedTimeline = parseTimeline(parsedData.timelineEntries || profile.resumeTimeline);
+  const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>(parsedTimeline.entries);
+  const [timelineLegacyText] = useState(parsedTimeline.legacyText);
   const [remarks, setRemarks] = useState(profile.remarks || '');
   const [stage, setStage] = useState<ResumeProfileStage>(
     (profile.stage as ResumeProfileStage) || '1. Draft'
@@ -124,17 +163,18 @@ export function ResumeProfileDetail({
         candidateName: candidateName.trim(),
         technology: technology.trim() || null,
         usaArrival: usaArrival.trim() || null,
-        bachelors: bachelors.trim() || null,
-        masters: masters.trim() || null,
         cpt,
-        cptDetails: cpt === 'YES' ? cptDetails.trim() || null : null,
         opt,
-        optDetails: opt === 'YES' ? optDetails.trim() || null : null,
         stemOpt,
-        stemOptDetails: stemOpt === 'YES' ? stemOptDetails.trim() || null : null,
-        indiaExperience: serializeExperience(experience),
+        experience: serializeExperience(experience),
+        data: JSON.stringify({
+          educationHistory: serializeEducation(educationHistory),
+          cptEmployers: cpt === 'YES' ? serializeExperience(cptEmployers) : null,
+          optEmployers: opt === 'YES' ? serializeExperience(optEmployers) : null,
+          stemOptEmployers: stemOpt === 'YES' ? serializeExperience(stemOptEmployers) : null,
+          timelineEntries: serializeTimeline(timelineEntries),
+        }),
         missingDocs: missingDocs.trim() || null,
-        resumeTimeline: resumeTimeline.trim() || null,
         remarks: remarks.trim() || null,
         stage: customStage || stage,
         assignedToId: canAssign ? (assignedToId || null) : profile.assignedToId,
@@ -316,31 +356,12 @@ export function ResumeProfileDetail({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">
-                  Bachelors (Start Date - End Date MM YYYY)
-                </label>
-                <input
-                  type="text"
-                  value={bachelors}
-                  onChange={(e) => setBachelors(e.target.value)}
-                  placeholder="e.g. JNTU Hyderabad (08 2016 - 05 2020)"
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">
-                  Masters (Start Date - End Date MM YYYY)
-                </label>
-                <input
-                  type="text"
-                  value={masters}
-                  onChange={(e) => setMasters(e.target.value)}
-                  placeholder="e.g. Texas A&M (08 2021 - 05 2023)"
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
+            <div className="pt-2">
+              <EducationFields
+                entries={educationHistory}
+                onChange={setEducationHistory}
+                legacyText={educationLegacyText}
+              />
             </div>
           </Card>
 
@@ -362,7 +383,7 @@ export function ResumeProfileDetail({
                   <select
                     value={cpt}
                     onChange={(e) => setCpt(e.target.value)}
-                    className="rounded-md border border-input bg-background px-2.5 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="rounded-md border border-input bg-background pl-2.5 pr-8 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="NO">NO</option>
                     <option value="YES">YES</option>
@@ -370,16 +391,11 @@ export function ResumeProfileDetail({
                 </div>
               </div>
               {cpt === 'YES' && (
-                <div>
-                  <label className="block text-[11px] font-medium text-muted-foreground mb-1">
-                    Employer Name - Job Title - Start Date and End Date (Confirm it from I-20)
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={cptDetails}
-                    onChange={(e) => setCptDetails(e.target.value)}
-                    placeholder="e.g. ABC Tech - Software Intern - 06/01/2022 to 08/15/2022 (Verified from I-20 pg 2)"
-                    className="w-full rounded-md border border-input bg-background p-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+                <div className="pt-2">
+                  <EmployerExperienceFields
+                    entries={cptEmployers}
+                    onChange={setCptEmployers}
+                    legacyText={cptLegacyText}
                   />
                 </div>
               )}
@@ -394,7 +410,7 @@ export function ResumeProfileDetail({
                   <select
                     value={opt}
                     onChange={(e) => setOpt(e.target.value)}
-                    className="rounded-md border border-input bg-background px-2.5 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="rounded-md border border-input bg-background pl-2.5 pr-8 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="NO">NO</option>
                     <option value="YES">YES</option>
@@ -402,16 +418,11 @@ export function ResumeProfileDetail({
                 </div>
               </div>
               {opt === 'YES' && (
-                <div>
-                  <label className="block text-[11px] font-medium text-muted-foreground mb-1">
-                    Employer Name - Job Title - Start Date and End Date (Confirm it from I-20)
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={optDetails}
-                    onChange={(e) => setOptDetails(e.target.value)}
-                    placeholder="e.g. XYZ Systems - Software Engineer - 06/01/2023 to 05/31/2024 (Verified from I-20)"
-                    className="w-full rounded-md border border-input bg-background p-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+                <div className="pt-2">
+                  <EmployerExperienceFields
+                    entries={optEmployers}
+                    onChange={setOptEmployers}
+                    legacyText={optLegacyText}
                   />
                 </div>
               )}
@@ -426,7 +437,7 @@ export function ResumeProfileDetail({
                   <select
                     value={stemOpt}
                     onChange={(e) => setStemOpt(e.target.value)}
-                    className="rounded-md border border-input bg-background px-2.5 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="rounded-md border border-input bg-background pl-2.5 pr-8 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="NO">NO</option>
                     <option value="YES">YES</option>
@@ -434,16 +445,11 @@ export function ResumeProfileDetail({
                 </div>
               </div>
               {stemOpt === 'YES' && (
-                <div>
-                  <label className="block text-[11px] font-medium text-muted-foreground mb-1">
-                    Employer Name - Job Title - Start Date and End Date (Confirm it from I-983 and I-20)
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={stemOptDetails}
-                    onChange={(e) => setStemOptDetails(e.target.value)}
-                    placeholder="e.g. TechCorp USA - Full Stack Developer - 06/01/2024 to 05/31/2026 (Verified from Form I-983 training plan & I-20)"
-                    className="w-full rounded-md border border-input bg-background p-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+                <div className="pt-2">
+                  <EmployerExperienceFields
+                    entries={stemOptEmployers}
+                    onChange={setStemOptEmployers}
+                    legacyText={stemOptLegacyText}
                   />
                 </div>
               )}
@@ -512,12 +518,10 @@ export function ResumeProfileDetail({
               <label className="block text-xs font-semibold text-foreground mb-1">
                 Resume Timeline Tracking & Stage Notes
               </label>
-              <textarea
-                rows={6}
-                value={resumeTimeline}
-                onChange={(e) => setResumeTimeline(e.target.value)}
-                placeholder="Record draft sent time, modification requests, candidate feedback, client approval notes..."
-                className="w-full rounded-md border border-input bg-background p-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary font-mono"
+              <TimelineFields
+                entries={timelineEntries}
+                onChange={setTimelineEntries}
+                legacyText={timelineLegacyText}
               />
             </div>
 

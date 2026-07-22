@@ -260,7 +260,8 @@ export interface ResumeProfile {
   optDetails?: string | null;
   stemOpt?: string | null;
   stemOptDetails?: string | null;
-  indiaExperience?: string | null;
+  experience?: string | null;
+  data?: string | null;
   missingDocs?: string | null;
   resumeTimeline?: string | null;
   remarks?: string | null;

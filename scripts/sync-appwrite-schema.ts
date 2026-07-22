@@ -369,7 +369,8 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'optDetails', type: 'string', required: false, size: 1000 },
       { key: 'stemOpt', type: 'string', required: false, size: 20 },
       { key: 'stemOptDetails', type: 'string', required: false, size: 1000 },
-      { key: 'indiaExperience', type: 'string', required: false, size: 2000 },
+      { key: 'experience', type: 'string', required: false, size: 2000 },
+      { key: 'data', type: 'string', required: false, size: 500000 },
       { key: 'missingDocs', type: 'string', required: false, size: 1500 },
       { key: 'resumeTimeline', type: 'string', required: false, size: 2500 },
       { key: 'remarks', type: 'string', required: false, size: 2000 },
@@ -406,6 +407,7 @@ const deprecatedFields = ['managerId', 'managerIds', 'assistantManagerId', 'assi
 // Per-collection fields to remove (scoped by collectionId)
 const deprecatedFieldsByCollection: Record<string, string[]> = {
   [COLLECTIONS.LEADS]: ['branchIds'],
+  [COLLECTIONS.RESUME_PROFILES]: ['indiaExperience'],
 };
 
 async function syncAttr(

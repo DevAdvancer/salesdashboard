@@ -28,10 +28,18 @@ import {
   type CreateResumeProfileInput,
 } from '@/app/actions/resume-profiles';
 import { EmployerExperienceFields } from '@/components/resume/employer-experience-fields';
+import { EducationFields } from '@/components/resume/education-fields';
+import { TimelineFields } from '@/components/resume/timeline-fields';
 import {
   type EmployerEntry,
   serializeExperience,
 } from '@/lib/utils/resume-experience';
+import {
+  type EducationEntry,
+  type TimelineEntry,
+  serializeEducation,
+  serializeTimeline,
+} from '@/lib/utils/resume-fields';
 
 interface ResumeProfileCreateFormProps {
   initialCallRequests: (CallRequest & { $id: string })[];
@@ -60,19 +68,18 @@ export function ResumeProfileCreateForm({
   const [candidateName, setCandidateName] = useState('');
   const [technology, setTechnology] = useState('');
   const [usaArrival, setUsaArrival] = useState('');
-  const [bachelors, setBachelors] = useState('');
-  const [masters, setMasters] = useState('');
+  const [educationHistory, setEducationHistory] = useState<EducationEntry[]>([]);
 
   const [cpt, setCpt] = useState('NO');
-  const [cptDetails, setCptDetails] = useState('');
+  const [cptEmployers, setCptEmployers] = useState<EmployerEntry[]>([]);
   const [opt, setOpt] = useState('NO');
-  const [optDetails, setOptDetails] = useState('');
+  const [optEmployers, setOptEmployers] = useState<EmployerEntry[]>([]);
   const [stemOpt, setStemOpt] = useState('NO');
-  const [stemOptDetails, setStemOptDetails] = useState('');
+  const [stemOptEmployers, setStemOptEmployers] = useState<EmployerEntry[]>([]);
 
   const [experience, setExperience] = useState<EmployerEntry[]>([]);
   const [missingDocs, setMissingDocs] = useState('');
-  const [resumeTimeline, setResumeTimeline] = useState('');
+  const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([]);
   const [remarks, setRemarks] = useState('');
   const [stage, setStage] = useState<ResumeProfileStage>('1. Draft');
   const [assignedToId, setAssignedToId] = useState('');
@@ -130,17 +137,18 @@ export function ResumeProfileCreateForm({
         candidateName: candidateName.trim(),
         technology: technology.trim() || null,
         usaArrival: usaArrival.trim() || null,
-        bachelors: bachelors.trim() || null,
-        masters: masters.trim() || null,
         cpt,
-        cptDetails: cpt === 'YES' ? cptDetails.trim() || null : null,
         opt,
-        optDetails: opt === 'YES' ? optDetails.trim() || null : null,
         stemOpt,
-        stemOptDetails: stemOpt === 'YES' ? stemOptDetails.trim() || null : null,
-        indiaExperience: serializeExperience(experience),
+        experience: serializeExperience(experience),
+        data: JSON.stringify({
+          educationHistory: serializeEducation(educationHistory),
+          cptEmployers: cpt === 'YES' ? serializeExperience(cptEmployers) : null,
+          optEmployers: opt === 'YES' ? serializeExperience(optEmployers) : null,
+          stemOptEmployers: stemOpt === 'YES' ? serializeExperience(stemOptEmployers) : null,
+          timelineEntries: serializeTimeline(timelineEntries),
+        }),
         missingDocs: missingDocs.trim() || null,
-        resumeTimeline: resumeTimeline.trim() || null,
         remarks: remarks.trim() || null,
         stage,
         callRequestId: mode === 'from_call' && selectedCallId ? selectedCallId : null,
@@ -280,27 +288,11 @@ export function ResumeProfileCreateForm({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-              <div>
-                <label className={LABEL_CLASS}>Bachelors (Start Date - End Date MM YYYY)</label>
-                <input
-                  type="text"
-                  value={bachelors}
-                  onChange={(e) => setBachelors(e.target.value)}
-                  placeholder="e.g. JNTU Hyderabad (08 2016 - 05 2020)"
-                  className={INPUT_CLASS}
-                />
-              </div>
-              <div>
-                <label className={LABEL_CLASS}>Masters (Start Date - End Date MM YYYY)</label>
-                <input
-                  type="text"
-                  value={masters}
-                  onChange={(e) => setMasters(e.target.value)}
-                  placeholder="e.g. Texas A&M (08 2021 - 05 2023)"
-                  className={INPUT_CLASS}
-                />
-              </div>
+            <div className="pt-2">
+              <EducationFields
+                entries={educationHistory}
+                onChange={setEducationHistory}
+              />
             </div>
           </Card>
 
@@ -320,7 +312,7 @@ export function ResumeProfileCreateForm({
                   <select
                     value={cpt}
                     onChange={(e) => setCpt(e.target.value)}
-                    className="rounded-md border border-input bg-background px-2.5 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="rounded-md border border-input bg-background pl-2.5 pr-8 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="NO">NO</option>
                     <option value="YES">YES</option>
@@ -328,16 +320,10 @@ export function ResumeProfileCreateForm({
                 </div>
               </div>
               {cpt === 'YES' && (
-                <div>
-                  <label className="block text-[11px] font-medium text-muted-foreground mb-1">
-                    Employer Name - Job Title - Start Date and End Date (Confirm it from I-20)
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={cptDetails}
-                    onChange={(e) => setCptDetails(e.target.value)}
-                    placeholder="e.g. ABC Tech - Software Intern - 06/2022 to 08/2022 (Verified from I-20)"
-                    className="w-full rounded-md border border-input bg-background p-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+                <div className="pt-2">
+                  <EmployerExperienceFields
+                    entries={cptEmployers}
+                    onChange={setCptEmployers}
                   />
                 </div>
               )}
@@ -352,7 +338,7 @@ export function ResumeProfileCreateForm({
                   <select
                     value={opt}
                     onChange={(e) => setOpt(e.target.value)}
-                    className="rounded-md border border-input bg-background px-2.5 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="rounded-md border border-input bg-background pl-2.5 pr-8 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="NO">NO</option>
                     <option value="YES">YES</option>
@@ -360,16 +346,10 @@ export function ResumeProfileCreateForm({
                 </div>
               </div>
               {opt === 'YES' && (
-                <div>
-                  <label className="block text-[11px] font-medium text-muted-foreground mb-1">
-                    Employer Name - Job Title - Start Date and End Date (Confirm it from I-20)
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={optDetails}
-                    onChange={(e) => setOptDetails(e.target.value)}
-                    placeholder="e.g. XYZ Systems - Software Engineer - 06/2023 to 05/2024 (Verified from I-20)"
-                    className="w-full rounded-md border border-input bg-background p-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+                <div className="pt-2">
+                  <EmployerExperienceFields
+                    entries={optEmployers}
+                    onChange={setOptEmployers}
                   />
                 </div>
               )}
@@ -384,7 +364,7 @@ export function ResumeProfileCreateForm({
                   <select
                     value={stemOpt}
                     onChange={(e) => setStemOpt(e.target.value)}
-                    className="rounded-md border border-input bg-background px-2.5 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="rounded-md border border-input bg-background pl-2.5 pr-8 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="NO">NO</option>
                     <option value="YES">YES</option>
@@ -392,16 +372,10 @@ export function ResumeProfileCreateForm({
                 </div>
               </div>
               {stemOpt === 'YES' && (
-                <div>
-                  <label className="block text-[11px] font-medium text-muted-foreground mb-1">
-                    Employer Name - Job Title - Start Date and End Date (Confirm it from I-983 and I-20)
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={stemOptDetails}
-                    onChange={(e) => setStemOptDetails(e.target.value)}
-                    placeholder="e.g. TechCorp USA - Full Stack Developer - 06/2024 to 05/2026 (Verified from I-983 & I-20)"
-                    className="w-full rounded-md border border-input bg-background p-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+                <div className="pt-2">
+                  <EmployerExperienceFields
+                    entries={stemOptEmployers}
+                    onChange={setStemOptEmployers}
                   />
                 </div>
               )}
@@ -485,12 +459,9 @@ export function ResumeProfileCreateForm({
               <label className="block text-xs font-semibold text-foreground mb-1">
                 Resume Timeline with Clients and Job Role
               </label>
-              <textarea
-                rows={5}
-                value={resumeTimeline}
-                onChange={(e) => setResumeTimeline(e.target.value)}
-                placeholder="Record draft sent time, modification requests, candidate feedback, client approval notes..."
-                className="w-full rounded-md border border-input bg-background p-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary font-mono"
+              <TimelineFields
+                entries={timelineEntries}
+                onChange={setTimelineEntries}
               />
             </div>
 

@@ -232,7 +232,8 @@ export interface CreateResumeProfileInput {
   optDetails?: string | null;
   stemOpt?: string | null;
   stemOptDetails?: string | null;
-  indiaExperience?: string | null;
+  experience?: string | null;
+  data?: string | null;
   missingDocs?: string | null;
   resumeTimeline?: string | null;
   remarks?: string | null;
@@ -283,7 +284,8 @@ export async function createResumeProfileAction(input: CreateResumeProfileInput)
     optDetails: input.optDetails?.trim() ?? null,
     stemOpt: input.stemOpt?.trim() ?? null,
     stemOptDetails: input.stemOptDetails?.trim() ?? null,
-    indiaExperience: input.indiaExperience?.trim() ?? null,
+    experience: input.experience?.trim() ?? null,
+    data: input.data?.trim() ?? null,
     missingDocs: input.missingDocs?.trim() ?? null,
     resumeTimeline: input.resumeTimeline?.trim() ?? null,
     remarks: input.remarks?.trim() ?? null,
@@ -389,7 +391,8 @@ export async function updateResumeProfileAction(input: UpdateResumeProfileInput)
     'optDetails',
     'stemOpt',
     'stemOptDetails',
-    'indiaExperience',
+    'experience',
+    'data',
     'missingDocs',
     'resumeTimeline',
     'remarks',
