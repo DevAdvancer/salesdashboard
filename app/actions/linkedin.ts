@@ -1738,6 +1738,185 @@ export async function listLinkedinRequestsForAdminAction(input: {
     : salesDocs;
 }
 
+export async function exportLinkedinRequestsForAdminAction(input: {
+  currentUserId: string;
+  teamLeadId?: string | null;
+  startDate: string;
+  endDate: string;
+  status?: "all" | "sent" | "accepted" | "withdrawn";
+  agentId?: string;
+}) {
+  await assertAuthenticatedUserId(input.currentUserId);
+  const user = await getAuthenticatedUserDoc();
+  if (!canSeeLinkedinReports(user)) {
+    throw new Error("Unauthorized");
+  }
+  const effectiveTeamLeadId = resolveLinkedinReportTeamLeadId(user, input.teamLeadId);
+  assertLinkedinReportTeamScope(user, effectiveTeamLeadId);
+
+  const start = toUtcDayStartIso(input.startDate);
+  const end = toUtcDayEndIso(input.endDate);
+
+  const queries = [
+    Query.greaterThanEqual("dateSent", start),
+    Query.lessThanEqual("dateSent", end),
+    Query.orderDesc("dateSent"),
+    Query.orderDesc("$createdAt"),
+  ];
+
+  if (effectiveTeamLeadId && effectiveTeamLeadId !== "all") {
+    queries.unshift(Query.equal("teamLeadId", effectiveTeamLeadId));
+  }
+
+  if (input.agentId) {
+    queries.unshift(Query.equal("agentId", input.agentId));
+  }
+
+  if (input.status && input.status !== "all") {
+    queries.unshift(Query.equal("status", input.status));
+  }
+
+  const { databases } = await createAdminClient();
+  const docs = await listAllDocuments<LinkedinRequest>({
+    databases,
+    databaseId: DATABASE_ID,
+    collectionId: COLLECTIONS.LINKEDIN_REQUESTS,
+    queries,
+    maxPages: 100 // 100 pages * 100 limit = 10,000
+  });
+
+  const uniqueDocs = Array.from(new Map(docs.map((r) => [r.$id, r] as const)).values());
+  const agentIds = Array.from(
+    new Set(uniqueDocs.map((r) => r.agentId).filter(Boolean)),
+  );
+  const salesAgentIds = await getSalesUserIds(databases, agentIds);
+  const salesDocs = uniqueDocs.filter((r) => salesAgentIds.has(r.agentId));
+
+  // Do not filter out the team lead's own requests
+  const finalDocs = salesDocs;
+
+  // Fetch Accounts
+  const accountIds = Array.from(new Set(finalDocs.map(r => r.accountId).filter(Boolean)));
+  const accountsMap = new Map<string, LinkedinAccount>();
+  if (accountIds.length > 0) {
+    const chunkSize = 100;
+    for (let i = 0; i < accountIds.length; i += chunkSize) {
+      const chunk = accountIds.slice(i, i + chunkSize);
+      const res = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LINKEDIN_ACCOUNTS, [
+        Query.equal("$id", chunk),
+        Query.limit(chunkSize)
+      ]);
+      for (const acc of res.documents as unknown as LinkedinAccount[]) {
+        accountsMap.set(acc.$id, acc);
+      }
+    }
+  }
+
+  // Fetch missing main accounts to ensure we can name sheets properly
+  const missingMainAccountIds = Array.from(
+    new Set(
+      Array.from(accountsMap.values())
+        .map(a => a.mainAccountId)
+        .filter(id => Boolean(id) && !accountsMap.has(id!))
+    )
+  ) as string[];
+
+  if (missingMainAccountIds.length > 0) {
+    const chunkSize = 100;
+    for (let i = 0; i < missingMainAccountIds.length; i += chunkSize) {
+      const chunk = missingMainAccountIds.slice(i, i + chunkSize);
+      const res = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LINKEDIN_ACCOUNTS, [
+        Query.equal("$id", chunk),
+        Query.limit(chunkSize)
+      ]);
+      for (const acc of res.documents as unknown as LinkedinAccount[]) {
+        accountsMap.set(acc.$id, acc);
+      }
+    }
+  }
+
+  // Fetch Leads
+  const leadIds = Array.from(new Set(finalDocs.map(r => r.leadId).filter(Boolean))) as string[];
+  const leadsMap = new Map<string, Lead>();
+  if (leadIds.length > 0) {
+    const chunkSize = 100;
+    for (let i = 0; i < leadIds.length; i += chunkSize) {
+      const chunk = leadIds.slice(i, i + chunkSize);
+      const res = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS, [
+        Query.equal("$id", chunk),
+        Query.limit(chunkSize)
+      ]);
+      for (const l of res.documents as unknown as Lead[]) {
+        leadsMap.set(l.$id, l);
+      }
+    }
+  }
+
+  // Map to flat export format
+  return finalDocs.map(req => {
+    const account = accountsMap.get(req.accountId);
+    const lead = (req.leadId && leadsMap.has(req.leadId)) ? leadsMap.get(req.leadId)! : null;
+    let leadData: any = {};
+    if (lead && lead.data) {
+      try {
+        leadData = JSON.parse(lead.data);
+      } catch (e) {
+        // ignore JSON parse error
+      }
+    }
+
+    const profileName = account ? (account.idName || account.company || req.accountId) : req.accountId;
+    
+    // Format call booked
+    let callBookedStr = 'N';
+    if (leadData.callBookedDate) {
+      callBookedStr = `Y - ${leadData.callBookedDate}`;
+    } else if (leadData.callBooked) {
+      callBookedStr = 'Y';
+    }
+
+    // Format closed
+    let closedStr = lead?.isClosed ? 'Y' : 'N';
+    if (lead?.isClosed && (leadData.closedAmount || leadData.amount)) {
+      closedStr = `Y - ${leadData.closedAmount || leadData.amount}`;
+    }
+
+    // Resolve main account name for the sheet grouping
+    const accountType = account?.accountType || "main";
+    const mainAccountId = account?.mainAccountId || req.accountId;
+    let mainAccountName = profileName;
+
+    if (accountType === "sudo" && account?.mainAccountId) {
+      // Find the main account in the map if it exists, otherwise use the ID
+      const mainAcc = accountsMap.get(account.mainAccountId);
+      if (mainAcc) {
+        mainAccountName = mainAcc.idName || mainAcc.company || mainAcc.$id;
+      } else {
+        mainAccountName = account.mainAccountId; // fallback
+      }
+    }
+
+    return {
+      linkedinProfile: profileName,
+      noOfRequestSent: 1, // Single request per row
+      date: req.dateSent,
+      linkedinUrl: req.targetUrl,
+      connectionNote: leadData.connectionNote || leadData.note || "",
+      status: req.status,
+      interested: lead ? (lead.status === 'not_interested' ? 'N' : 'Y') : "",
+      reasonOfReject: lead?.status === 'not_interested' ? (leadData.reason || leadData.lostReason || "") : "",
+      callBooked: callBookedStr,
+      callCompleted: leadData.callCompleted ? 'Y' : 'N',
+      closed: closedStr,
+      lostReason: leadData.lostReason || leadData.reason || "",
+      // Added for Excel multi-sheet grouping
+      accountType,
+      mainAccountId,
+      mainAccountName,
+    };
+  });
+}
+
 function parseIsoDateLocal(iso: string): Date {
   const [year, month, day] = iso.split("-").map(Number);
   return new Date(year, month - 1, day);

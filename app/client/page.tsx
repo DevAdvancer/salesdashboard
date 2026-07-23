@@ -235,6 +235,12 @@ function HistoryContent() {
       }
       if (!query) return true;
 
+      const visaStatusMatch = search.trim().match(/^visaStatus:\s*(.*)$/i);
+      if (visaStatusMatch) {
+        const vsQuery = visaStatusMatch[1].toLowerCase();
+        return `${data.visaStatus ?? ""}`.trim().toLowerCase().includes(vsQuery);
+      }
+
       const name = `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim();
       const email = `${data.email ?? ""}`.trim();
       const source = `${data.sourceName ?? data.source ?? ""}`.trim();

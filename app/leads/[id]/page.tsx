@@ -11,6 +11,7 @@ import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter, useParams } from "next/navigation";
 import { getLead } from "@/lib/services/lead-service";
 import { getLeadAction } from "@/app/actions/lead";
+import { getUsersNamesAction } from "@/app/actions/user";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queries/keys";
 import { sendChatMessageAction } from "@/app/actions/chat";
@@ -232,6 +233,7 @@ function LeadDetailContent() {
   const [leadData, setLeadData] = useState<LeadData>({});
   const [formFields, setFormFields] = useState<FormField[]>([]);
   const [agents, setAgents] = useState<User[]>([]);
+  const [metaNames, setMetaNames] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -267,6 +269,10 @@ function LeadDetailContent() {
           : await getLead(leadId);
       setLead(fetchedLead);
       setLeadData(JSON.parse(fetchedLead.data));
+      const idsToFetch = [fetchedLead.ownerId];
+      if (fetchedLead.assignedToId) idsToFetch.push(fetchedLead.assignedToId);
+      const names = await getUsersNamesAction(idsToFetch);
+      setMetaNames(names);
     } catch (err: unknown) {
       console.error("Error loading lead:", err);
       setError(getErrorMessage(err, "Failed to load lead"));
@@ -1545,6 +1551,18 @@ function LeadDetailContent() {
                   {lead.$updatedAt
                     ? new Date(lead.$updatedAt).toLocaleString()
                     : "N/A"}
+                </p>
+              </div>
+              <div>
+                <Label>Owner</Label>
+                <p className="text-muted-foreground">
+                  {metaNames[lead.ownerId] || "Unknown"}
+                </p>
+              </div>
+              <div>
+                <Label>Assigned To</Label>
+                <p className="text-muted-foreground">
+                  {lead.assignedToId ? (metaNames[lead.assignedToId] || "Unknown") : "Unassigned"}
                 </p>
               </div>
               {lead.closedAt && (

@@ -2,12 +2,13 @@
 
 import { ID, Permission, Query, Role } from 'node-appwrite';
 import { createAdminClient, createSessionClient } from '@/lib/server/appwrite';
-import { assertAuthenticatedUserId } from '@/lib/server/current-user';
+import { assertAuthenticatedUserId, getAuthenticatedAccount } from '@/lib/server/current-user';
 import { invalidateDepartmentScopedUserIds } from '@/lib/server/department-user-cache';
 import { CreateTeamLeadInput, CreateAgentInput, Department, UserRole, isValidDepartment } from '@/lib/types';
 import { COLLECTIONS } from '@/lib/constants/appwrite';
 import { normalizeEmail } from '@/lib/utils/user-hierarchy';
 import { getErrorMessage } from '@/lib/utils';
+import { getUsersByIds } from '@/lib/services/user-service';
 
 // Constants
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
@@ -804,5 +805,20 @@ export async function setAgentActiveAction(input: {
     } catch (error: unknown) {
         console.error("Agent active status update failed", error);
         throw new Error("Failed to update agent active status: " + getErrorMessage(error));
+    }
+}
+
+export async function getUsersNamesAction(ids: string[]): Promise<Record<string, string>> {
+    try {
+        await getAuthenticatedAccount();
+        const usersMap = await getUsersByIds(ids);
+        const result: Record<string, string> = {};
+        for (const [id, user] of Array.from(usersMap.entries())) {
+            result[id] = user.name;
+        }
+        return result;
+    } catch (error) {
+        console.error("Failed to fetch user names:", error);
+        return {};
     }
 }

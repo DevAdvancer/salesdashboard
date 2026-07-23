@@ -100,6 +100,7 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'team_lead_idx', type: 'key', attributes: ['teamLeadId'] },
       { key: 'branch_idx', type: 'key', attributes: ['branchIds'] },
       { key: 'department_idx', type: 'key', attributes: ['department'] },
+      { key: 'created_at_idx', type: 'key', attributes: ['$createdAt'] },
     ],
   },
   [COLLECTIONS.LEADS]: {
@@ -122,6 +123,12 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'status_idx', type: 'key', attributes: ['status'] },
       { key: 'branch_idx', type: 'key', attributes: ['branchId'] },
       { key: 'closed_status_idx', type: 'key', attributes: ['isClosed', 'status'] },
+      { key: 'created_at_idx', type: 'key', attributes: ['$createdAt'] },
+      { key: 'updated_at_idx', type: 'key', attributes: ['$updatedAt'] },
+      { key: 'owner_created_at_idx', type: 'key', attributes: ['ownerId', '$createdAt'] },
+      { key: 'assigned_created_at_idx', type: 'key', attributes: ['assignedToId', '$createdAt'] },
+      { key: 'status_created_at_idx', type: 'key', attributes: ['status', '$createdAt'] },
+      { key: 'branch_created_at_idx', type: 'key', attributes: ['branchId', '$createdAt'] },
     ],
   },
   [COLLECTIONS.BRANCHES]: {
@@ -154,6 +161,7 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'department_idx', type: 'key', attributes: ['department'] },
       // Composite index — both filters always co-occur in list queries.
       { key: 'channel_department_idx', type: 'key', attributes: ['channel', 'department'] },
+      { key: 'created_at_idx', type: 'key', attributes: ['$createdAt'] },
     ],
   },
 
@@ -181,6 +189,7 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'channel_idx', type: 'key', attributes: ['channel'] },
       { key: 'department_idx', type: 'key', attributes: ['department'] },
       { key: 'channel_department_idx', type: 'key', attributes: ['channel', 'department'] },
+      { key: 'created_at_idx', type: 'key', attributes: ['$createdAt'] },
     ],
   },
 

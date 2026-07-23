@@ -37,6 +37,8 @@ import type { LinkedinAccount, LinkedinRequest, User } from "@/lib/types";
 import { getErrorMessage } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { getTodayEst } from "@/lib/utils/est-date";
+import { exportLinkedinRequestsForAdminAction } from "@/app/actions/linkedin";
+import * as XLSX from "xlsx";
 
 /**
  * Format a Date object as YYYY-MM-DD in America/New_York.
@@ -97,6 +99,7 @@ function LinkedinReportsContent() {
   const [accounts, setAccounts] = useState<LinkedinAccount[]>([]);
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [autoWithdrawing, setAutoWithdrawing] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
@@ -253,14 +256,7 @@ function LinkedinReportsContent() {
         startDate,
         endDate,
       });
-      const nextRows = result.rows as unknown as ReportRow[];
-      setRows(
-        Array.from(
-          new Map(
-            nextRows.map((r) => [`${r.agentId}-${r.accountId}`, r] as const),
-          ).values(),
-        ),
-      );
+      setRows(result.rows);
     } catch (error: unknown) {
       toast({
         title: "Failed to load report",
@@ -272,6 +268,101 @@ function LinkedinReportsContent() {
       setLoading(false);
     }
   }, [range.from, range.to, teamLeadId, toast, user]);
+
+  const handleExport = async () => {
+    if (!user || !teamLeadId) return;
+    if (!range.from) {
+      toast({ title: "Please select a date range first", variant: "destructive" });
+      return;
+    }
+    const startDate = range.from;
+    const endDate = range.to ?? range.from;
+
+    try {
+      setExporting(true);
+      const effectiveTeamLeadId =
+        user.role === "team_lead"
+          ? user.$id
+          : teamLeadId === "all"
+            ? null
+            : teamLeadId;
+
+      const exportData = await exportLinkedinRequestsForAdminAction({
+        currentUserId: user.$id,
+        teamLeadId: effectiveTeamLeadId,
+        startDate,
+        endDate,
+      });
+
+      if (!exportData || exportData.length === 0) {
+        toast({ title: "No data to export", description: "No requests found for this date range." });
+        return;
+      }
+
+      // Group data by Main Account Name
+      const groupedData: Record<string, any[]> = {};
+      
+      exportData.forEach(row => {
+        const sheetName = row.mainAccountName || "Unknown";
+        // Excel sheet names cannot exceed 31 characters and shouldn't contain certain invalid chars,
+        // but we'll try to keep them clean.
+        const safeSheetName = sheetName.substring(0, 31).replace(/[\\/*?:[\]]/g, '');
+        
+        if (!groupedData[safeSheetName]) {
+          groupedData[safeSheetName] = [];
+        }
+
+        groupedData[safeSheetName].push({
+          "Linkedin Profile": row.linkedinProfile,
+          "No of Request Sent": row.noOfRequestSent,
+          "Date": row.date,
+          "Linkedin URL": row.linkedinUrl,
+          "Connection Note": row.connectionNote,
+          "Status": row.status,
+          "Interested (Y/N)": row.interested,
+          "Reason of Reject": row.reasonOfReject,
+          "Call Booked (Y/N + Date)": row.callBooked,
+          "Call Completed (Y/N)": row.callCompleted,
+          "Closed (Y/N + $)": row.closed,
+          "Lost Reason": row.lostReason,
+        });
+      });
+
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+
+      // Create and append sheets
+      Object.keys(groupedData).forEach(sheetName => {
+        // Sort the rows within the sheet so that same Linkedin Profiles are stacked together
+        const sheetRows = groupedData[sheetName].sort((a, b) => {
+          const nameA = String(a["Linkedin Profile"] || "").toLowerCase();
+          const nameB = String(b["Linkedin Profile"] || "").toLowerCase();
+          if (nameA < nameB) return -1;
+          if (nameA > nameB) return 1;
+          
+          // Secondary sort by date
+          const dateA = String(a["Date"] || "");
+          const dateB = String(b["Date"] || "");
+          return dateB.localeCompare(dateA); // Descending by date
+        });
+
+        const ws = XLSX.utils.json_to_sheet(sheetRows);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      });
+
+      // Write to file and download
+      XLSX.writeFile(wb, `linkedin_requests_export_${startDate}_${endDate}.xlsx`);
+
+    } catch (error: unknown) {
+      toast({
+        title: "Export Failed",
+        description: getErrorMessage(error),
+        variant: "destructive",
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const loadRequests = useCallback(async () => {
     if (!user || !teamLeadId) return;
@@ -425,6 +516,9 @@ function LinkedinReportsContent() {
           <div className="flex flex-wrap items-center gap-2">
             <Button onClick={loadReport} disabled={loading || !teamLeadId}>
               {loading ? "Loading..." : "Refresh"}
+            </Button>
+            <Button variant="outline" onClick={handleExport} disabled={exporting || loading || !teamLeadId}>
+              {exporting ? "Exporting..." : "Export CSV"}
             </Button>
             {canReadLikeAdmin && (
               <>
