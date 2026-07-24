@@ -27,7 +27,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "SalesHub CRM | Silverspace Inc.",
+  title: "CRM HUB | Silverspace Inc.",
   description: "Manager-controlled customer relationship management system by Silverspace Inc.",
   icons: {
     icon: "/silverspace.png",
