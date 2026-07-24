@@ -622,13 +622,20 @@ export async function listAllPaymentInsightsAction(
 
   const { databases } = await createAdminClient();
 
+  const paymentQueries: string[] = [];
+  if (dateFrom) {
+    // If we only want records in a time range, any payment update will bump updatedAt.
+    // This dramatically reduces full collection scans.
+    paymentQueries.push(Query.greaterThanEqual("updatedAt", dateFrom.trim()));
+  }
+
   // Fetch all payment records (admin sees everything) using cursor
   // pagination so we never silently cap at 5000.
   const paymentDocs = await listAllDocuments<any>({
     databases,
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.CLIENT_PAYMENTS,
-    queries: [],
+    queries: paymentQueries,
     pageLimit: 100,
     maxPages: 500,
   });
@@ -738,13 +745,17 @@ export async function listAllPaymentInsightsAction(
     pendingMap.set(pLeadId, existing);
   }
 
+  const followupQueries: string[] = [];
+  if (dateFrom) followupQueries.push(Query.greaterThanEqual("date", dateFrom.trim().slice(0, 10)));
+  if (dateTo) followupQueries.push(Query.lessThanEqual("date", dateTo.trim().slice(0, 10)));
+
   // Fetch all previous followups payments so manual entries that are not tied
   // to a client-payment lead still contribute to the monthly payments totals.
   const followupsDocs = await listAllDocuments<any>({
     databases,
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS,
-    queries: [],
+    queries: followupQueries,
     pageLimit: 100,
     maxPages: 500,
   });

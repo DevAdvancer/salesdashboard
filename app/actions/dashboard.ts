@@ -20,10 +20,15 @@ export async function loadDashboardDataServerAction(
   const normalizedBranchIds = [...branchIds].sort();
   const normalizedTeamLeadId = input.teamLeadId ?? null;
 
-  // Notice we removed the 60 days limit for closed leads to keep all historical data visible!
+  // Apply a 60-day limit to closed leads to prevent fetching the entire database history
+  // on every dashboard load. Historical leads are available in reports.
+  const sixtyDaysAgo = new Date();
+  sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+  const dateFrom = sixtyDaysAgo.toISOString();
+
   const [activeLeads, closedLeads, allBranches, lgHandoffs] = await Promise.all([
     listLeads({ isClosed: false, teamLeadId: input.teamLeadId }, input.user.$id, input.user.role, branchIds),
-    listLeads({ isClosed: true, teamLeadId: input.teamLeadId }, input.user.$id, input.user.role, branchIds),
+    listLeads({ isClosed: true, teamLeadId: input.teamLeadId, dateFrom }, input.user.$id, input.user.role, branchIds),
     listBranches(),
     listLgHandoffsAction().catch((error) => {
       console.error("Error loading LG handoffs:", error);

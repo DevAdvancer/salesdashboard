@@ -448,6 +448,11 @@ export async function listPreviousFollowupsPaymentsAction(input: {
 
   if (input.dateFrom) {
     queries.push(Query.greaterThanEqual("date", input.dateFrom));
+  } else {
+    // Default to 30 days ago to prevent full collection scans
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    queries.push(Query.greaterThanEqual("date", thirtyDaysAgo.toISOString().slice(0, 10)));
   }
 
   if (input.dateTo) {
