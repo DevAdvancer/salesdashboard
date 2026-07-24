@@ -1552,9 +1552,7 @@ export async function listLeadsAction(
               return String(data.visaStatus || '').toLowerCase().includes(vsQuery);
             }
 
-            return Object.values(data).some((value) =>
-              String(value).toLowerCase().includes(searchLower)
-            );
+            return (lead.data || '').toLowerCase().includes(searchLower);
           } catch (e) {
             return false;
           }
@@ -1605,9 +1603,7 @@ export async function listLeadsAction(
             return String(data.visaStatus || '').toLowerCase().includes(vsQuery);
           }
 
-          return Object.values(data).some((value) =>
-            String(value).toLowerCase().includes(searchLower)
-          );
+          return (lead.data || '').toLowerCase().includes(searchLower);
         } catch (e) {
           return false;
         }

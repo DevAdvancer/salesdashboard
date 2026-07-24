@@ -250,7 +250,8 @@ function HistoryContent() {
         name.toLowerCase().includes(query) ||
         email.toLowerCase().includes(query) ||
         source.toLowerCase().includes(query) ||
-        status.toLowerCase().includes(query)
+        status.toLowerCase().includes(query) ||
+        (lead.data || "").toLowerCase().includes(query)
       );
     });
 

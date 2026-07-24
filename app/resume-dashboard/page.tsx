@@ -2,15 +2,19 @@
 
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Button } from "@/components/ui/button";
 import { appIcons } from "@/components/navigation-config";
 import { Users, Clock, TrendingUp, FileText } from "lucide-react";
+import { getResumeDashboardStatsAction } from "@/app/actions/resume-profiles";
 
 function ResumeDashboardContent() {
   const { user, isAdmin, isMonitor, isOperations, activeDashboard } = useAuth();
   const router = useRouter();
+  const [stats, setStats] = useState({ totalTeamMembers: 0, resumesReviewed: 0, inProgress: 0, thisWeek: 0 });
+  const [loading, setLoading] = useState(true);
 
   // Belt-and-suspenders guard: ProtectedRoute gates by componentKey, but a
   // sales-only user (someone who can't switch dashboards and isn't in
@@ -18,6 +22,15 @@ function ResumeDashboardContent() {
   // Admin / Monitor / Operations are intentionally allowed — they oversee
   // both teams and can preview either dashboard from a single login.
   const canBeOnResumeView = isAdmin || isMonitor || isOperations || activeDashboard === "resume";
+
+  useEffect(() => {
+    if (user && canBeOnResumeView) {
+      getResumeDashboardStatsAction().then(data => {
+        setStats(data);
+        setLoading(false);
+      });
+    }
+  }, [user, canBeOnResumeView]);
 
   if (user && !canBeOnResumeView) {
     return (
@@ -64,8 +77,8 @@ function ResumeDashboardContent() {
             <ResumeIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">—</div>
-            <p className="text-xs text-muted-foreground mt-1">Coming soon</p>
+            <div className="text-2xl font-bold">{loading ? "—" : stats.resumesReviewed}</div>
+            <p className="text-xs text-muted-foreground mt-1">Total</p>
           </CardContent>
         </Card>
 
@@ -75,8 +88,8 @@ function ResumeDashboardContent() {
             <InProgressIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">—</div>
-            <p className="text-xs text-muted-foreground mt-1">Coming soon</p>
+            <div className="text-2xl font-bold">{loading ? "—" : stats.inProgress}</div>
+            <p className="text-xs text-muted-foreground mt-1">Currently active</p>
           </CardContent>
         </Card>
 
@@ -86,7 +99,7 @@ function ResumeDashboardContent() {
             <TeamIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0</div>
+            <div className="text-2xl font-bold">{loading ? "—" : stats.totalTeamMembers}</div>
             <p className="text-xs text-muted-foreground mt-1">Resume team</p>
           </CardContent>
         </Card>
@@ -97,8 +110,8 @@ function ResumeDashboardContent() {
             <WeeklyIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">—</div>
-            <p className="text-xs text-muted-foreground mt-1">Coming soon</p>
+            <div className="text-2xl font-bold">{loading ? "—" : stats.thisWeek}</div>
+            <p className="text-xs text-muted-foreground mt-1">Since Monday</p>
           </CardContent>
         </Card>
       </div>

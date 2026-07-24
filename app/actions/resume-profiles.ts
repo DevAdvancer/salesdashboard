@@ -201,6 +201,76 @@ export async function listResumeProfilesAction(
 }
 
 /**
+ * Get stats for the Resume Dashboard.
+ */
+export async function getResumeDashboardStatsAction() {
+  try {
+    const actor = await getAuthenticatedUserDoc();
+    if (!actor || !isResumeSide(actor)) {
+      return { totalTeamMembers: 0, resumesReviewed: 0, inProgress: 0, thisWeek: 0 };
+    }
+
+    const { databases } = await createAdminClient();
+
+    // Fetch team members count
+    const usersRes = await databases.listDocuments(
+      DATABASE_ID,
+      COLLECTIONS.USERS,
+      [
+        Query.equal('department', 'resume'),
+        Query.equal('isActive', true),
+        Query.limit(1)
+      ]
+    );
+
+    // Fetch reviewed resumes ('4. Marketing' and beyond, for simplicity let's use '4. Marketing' as proxy)
+    const reviewedRes = await databases.listDocuments(
+      DATABASE_ID,
+      COLLECTIONS.RESUME_PROFILES,
+      [
+        Query.equal('stage', '4. Marketing'),
+        Query.limit(1)
+      ]
+    );
+
+    // Fetch in progress resumes
+    const inProgressRes = await databases.listDocuments(
+      DATABASE_ID,
+      COLLECTIONS.RESUME_PROFILES,
+      [
+        Query.notEqual('stage', '4. Marketing'),
+        Query.notEqual('stage', '5. Doc Missing (Not calculated in the timeline)'),
+        Query.limit(1)
+      ]
+    );
+
+    // Fetch this week's resumes
+    const now = new Date();
+    const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const thisWeekRes = await databases.listDocuments(
+      DATABASE_ID,
+      COLLECTIONS.RESUME_PROFILES,
+      [
+        Query.greaterThanEqual('$createdAt', startOfWeek.toISOString()),
+        Query.limit(1)
+      ]
+    );
+
+    return {
+      totalTeamMembers: usersRes.total,
+      resumesReviewed: reviewedRes.total,
+      inProgress: inProgressRes.total,
+      thisWeek: thisWeekRes.total,
+    };
+  } catch (error) {
+    console.error('getResumeDashboardStatsAction error:', error);
+    return { totalTeamMembers: 0, resumesReviewed: 0, inProgress: 0, thisWeek: 0 };
+  }
+}
+
+/**
  * Get a single Resume Profile by ID.
  */
 export async function getResumeProfileByIdAction(id: string): Promise<ResumeProfileDocument | null> {

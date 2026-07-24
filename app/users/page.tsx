@@ -1254,16 +1254,13 @@ function UserManagementContent() {
                     </div>
                   )}
 
-                {/* Branch multi-select. The Resume team has no branches in
-                    this app, so the picker is hidden whenever the new user
-                    is destined for the Resume team (via the active view
-                    or the explicit createDepartment toggle). Admin /
-                    developer / monitor / operations are branch-less roles
-                    globally and also don't see the picker. */}
+                {/* Branch multi-select. Admin / developer / monitor / operations
+                    are branch-less roles globally and don't see the picker.
+                    The Resume team mostly has no branches, except that Resume Team Leads
+                    need to be assigned to branches, so we allow it for them. */}
                 {createRole !== "admin" &&
                   createRole !== "developer" &&
-                  createDepartment !== "resume" &&
-                  activeDashboard !== "resume" && (
+                  (createRole === "team_lead" || (createDepartment !== "resume" && activeDashboard !== "resume")) && (
                   <div>
                     <Label>Branches</Label>
                     {availableBranches.length === 0 ? (

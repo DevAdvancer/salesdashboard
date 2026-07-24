@@ -74,6 +74,7 @@ interface AdminAndTLUser {
   role?: string;
   email?: string;
   name?: string;
+  department?: string;
 }
 
 /** Fetch all admin + team_lead users and return their Appwrite IDs + email addresses */
@@ -123,10 +124,18 @@ async function handleDuplicateNotifications(
 ): Promise<void> {
   const { databases } = await createAdminClient();
 
+  // Fetch actor's department to make notifications department-oriented
+  const actorUser = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, input.actorId).catch(() => ({ department: 'sales' }));
+  const actorDept = actorUser.department || 'sales';
+
   // Fetch all admin + TL users
   const users = await getAdminAndTLUsers(databases);
-  const recipientIds = users.map((u) => u.$id).filter(Boolean);
+  const recipientIds = users
+    .filter(u => u.role === "admin" || u.role === "developer" || (u.role === "team_lead" && u.department === actorDept))
+    .map((u) => u.$id)
+    .filter(Boolean);
   const recipientEmails = users
+    .filter(u => u.role === "admin" || u.role === "developer" || (u.role === "team_lead" && u.department === actorDept))
     .map((u) => u.email)
     .filter((e): e is string => Boolean(e));
 

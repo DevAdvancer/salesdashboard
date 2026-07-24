@@ -492,7 +492,7 @@ export async function assignLeadAction(
             {
                 type: 'lead_assignment',
                 title: 'Lead assigned',
-                body: `${actorName} assigned ${getLeadDisplayName(currentLead)} to you.`,
+                body: `Lead ${getLeadDisplayName(currentLead)} is assigned to you by ${actorName}.`,
                 targetId: leadId,
                 targetType: 'LEAD',
             }
