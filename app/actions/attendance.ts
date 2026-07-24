@@ -1065,7 +1065,7 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
   const now = new Date();
   const dateKey = getEtDateKey(now);
   const hour = getEtHour(now);
-  if (hour < 10) {
+  if (hour !== 10) {
     return { dateKey, teamLeadAbsentNotified: 0, agentAbsentNotified: 0, agentEscalated: 0 };
   }
 
@@ -1327,171 +1327,179 @@ export async function getAttendanceReportAction(input: {
   }
 
   // Build report per team lead
-  const teams = await Promise.all(
-    teamLeads.map(async (tl) => {
-      // TL's own attendance records
-      const tlAttendanceResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
-        Query.equal("userId", tl.$id),
-        Query.greaterThanEqual("dateKey", startDateKey),
-        Query.lessThanEqual("dateKey", endDateKey),
-        Query.limit(100),
-      ]);
-      const tlAttRecords = tlAttendanceResponse.documents as unknown as AttendanceRecord[];
-      const latestTlAtt = tlAttRecords.length > 0 ? tlAttRecords.sort((a,b) => b.dateKey.localeCompare(a.dateKey))[0] : null;
-      
-      const tlDelegateUserId = latestTlAtt?.delegateUserId ?? null;
-      let tlDelegateName: string | null = null;
-      if (tlDelegateUserId) {
-        try {
-          const dlDoc = (await databases.getDocument(
-            DATABASE_ID,
-            COLLECTIONS.USERS,
-            tlDelegateUserId,
-          )) as unknown as User;
-          tlDelegateName = dlDoc.name;
-        } catch {
-          // ignore
-        }
-      }
+  // 1. Fetch all TL attendance at once
+  const teamLeadIds = teamLeads.map((tl) => tl.$id);
+  const allTlAttendanceResponse = teamLeadIds.length > 0 ? await databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
+    Query.equal("userId", teamLeadIds),
+    Query.greaterThanEqual("dateKey", startDateKey),
+    Query.lessThanEqual("dateKey", endDateKey),
+    Query.limit(2000),
+  ]) : { documents: [] as unknown[] };
+  const allTlAttRecords = allTlAttendanceResponse.documents as unknown as AttendanceRecord[];
 
-      // Agents in this team
-      const agentsResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
-        Query.equal("role", ["agent", "lead_generation"]),
-        Query.equal("teamLeadId", tl.$id),
+  // 2. Fetch all Agents for these TLs at once
+  const allAgentsResponse = teamLeadIds.length > 0 ? await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
+    Query.equal("role", ["agent", "lead_generation"]),
+    Query.equal("teamLeadId", teamLeadIds),
+    Query.limit(5000),
+  ]) : { documents: [] as unknown[] };
+  const allAgents = (allAgentsResponse.documents as unknown as User[])
+    .filter((a) => (a as unknown as { isActive?: unknown }).isActive !== false)
+    .filter((a) => matchesDepartmentScope(a, input.departmentScope ?? "sales"))
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+  // 3. Fetch all Agent Attendance at once
+  const allAgentAttendanceResponse = teamLeadIds.length > 0 ? await databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
+    Query.equal("teamLeadId", teamLeadIds),
+    Query.greaterThanEqual("dateKey", startDateKey),
+    Query.lessThanEqual("dateKey", endDateKey),
+    Query.limit(5000),
+  ]) : { documents: [] as unknown[] };
+  const allAgentAttRecords = allAgentAttendanceResponse.documents as unknown as AttendanceRecord[];
+
+  // Combine attendance docs for delegate extraction
+  const allAttendanceDocs = [...allTlAttRecords, ...allAgentAttRecords];
+  
+  // 4. Fetch all Delegates
+  const allDelegateIds = new Set<string>();
+  allAttendanceDocs.forEach((doc) => {
+    if (typeof doc.delegateUserId === "string" && doc.delegateUserId) {
+      allDelegateIds.add(doc.delegateUserId);
+    }
+    if (typeof doc.assignedById === "string" && doc.assignedById) {
+      allDelegateIds.add(doc.assignedById);
+    }
+  });
+
+  const delegateById = new Map<string, User>();
+  if (allDelegateIds.size > 0) {
+    const ids = Array.from(allDelegateIds);
+    const chunkSize = 100;
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const chunk = ids.slice(i, i + chunkSize);
+      const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
+        Query.equal("$id", chunk),
         Query.limit(2000),
       ]);
-      const agents = (agentsResponse.documents as unknown as User[])
-        .filter((a) => (a as unknown as { isActive?: unknown }).isActive !== false)
-        .filter((a) => matchesDepartmentScope(a, input.departmentScope ?? "sales"))
-        .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      (response.documents as unknown as User[]).forEach((u) => delegateById.set(u.$id, u));
+    }
+  }
 
-      // Attendance records for this team on the selected date range
-      const attendanceResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
-        Query.greaterThanEqual("dateKey", startDateKey),
-        Query.lessThanEqual("dateKey", endDateKey),
-        Query.equal("teamLeadId", tl.$id),
-        Query.limit(2000),
-      ]);
-      const attendanceDocs = attendanceResponse.documents as unknown as AttendanceRecord[];
-      const attendanceByUserId = new Map<string, AttendanceRecord[]>();
-      attendanceDocs.forEach((doc) => {
-        const existing = attendanceByUserId.get(doc.userId) || [];
-        existing.push(doc);
-        attendanceByUserId.set(doc.userId, existing);
-      });
-
-      // Collect all user IDs we need to resolve (delegates + assignedBy)
-      const allDelegateIds = new Set<string>();
-      attendanceDocs.forEach((doc) => {
-        if (typeof doc.delegateUserId === "string" && doc.delegateUserId) {
-          allDelegateIds.add(doc.delegateUserId);
-        }
-        if (typeof doc.assignedById === "string" && doc.assignedById) {
-          allDelegateIds.add(doc.assignedById);
-        }
-      });
-
-      const delegateById = new Map<string, User>();
-      if (allDelegateIds.size > 0) {
-        const ids = Array.from(allDelegateIds);
-        const chunkSize = 100;
-        for (let i = 0; i < ids.length; i += chunkSize) {
-          const chunk = ids.slice(i, i + chunkSize);
-          const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
-            Query.equal("$id", chunk),
-            Query.limit(2000),
-          ]);
-          (response.documents as unknown as User[]).forEach((u) => delegateById.set(u.$id, u));
-        }
-      }
-
-      // LinkedIn accounts for all agents
-      const accountsByUserId = await getActiveLinkedinAccountsForUsers(
-        databases,
-        agents.map((a) => a.$id),
-      );
-
-      const agentRows = agents.map((agent) => {
-        const attRecords = attendanceByUserId.get(agent.$id) ?? [];
-        const latestAtt = attRecords.length > 0 ? attRecords.sort((a,b) => b.dateKey.localeCompare(a.dateKey))[0] : null;
-        const presentDays = attRecords.filter(r => r.present).length;
-        
-        const isRange = startDateKey !== endDateKey;
-
-        // Aggregate delegates over the date range
-        const delegateCounts = new Map<string, number>();
-        for (const r of attRecords) {
-          const id = r.delegateUserId;
-          if (typeof id === "string" && id.trim().length > 0) {
-            delegateCounts.set(id, (delegateCounts.get(id) || 0) + 1);
-          }
-        }
-        const delegateNameStr = delegateCounts.size > 0 
-          ? Array.from(delegateCounts.entries())
-            .map(([id, count]) => {
-              const name = delegateById.get(id)?.name;
-              if (!name) return null;
-              return isRange ? `${name} (${count})` : name;
-            })
-            .filter(Boolean)
-            .join(", ")
-          : null;
-
-        // Aggregate assignedBy over the date range
-        const assignedByCounts = new Map<string, number>();
-        for (const r of attRecords) {
-          const id = r.assignedById;
-          if (typeof id === "string" && id.trim().length > 0) {
-            assignedByCounts.set(id, (assignedByCounts.get(id) || 0) + 1);
-          }
-        }
-        const assignedByNameStr = assignedByCounts.size > 0 
-          ? Array.from(assignedByCounts.entries())
-            .map(([id, count]) => {
-              const name = delegateById.get(id)?.name;
-              if (!name) return null;
-              return isRange ? `${name} (${count})` : name;
-            })
-            .filter(Boolean)
-            .join(", ")
-          : null;
-
-        const accounts = accountsByUserId.get(agent.$id) ?? [];
-        return {
-          userId: agent.$id,
-          userName: agent.name,
-          role: agent.role,
-          present: latestAtt?.present === true,
-          presentAt: latestAtt?.presentAt ?? null,
-          presentWithDelegateFlag: latestAtt?.presentWithDelegateFlag === true,
-          presentDays,
-          totalRecords: attRecords.length,
-          delegateUserId: latestAtt?.delegateUserId ?? null,
-          delegateUserName: delegateNameStr,
-          assignedById: latestAtt?.assignedById ?? null,
-          assignedByName: assignedByNameStr,
-          linkedinAccounts: accounts.map((a) => ({
-            id: a.$id,
-            company: a.company,
-            idName: a.idName,
-            accountType: a.accountType,
-          })),
-        };
-      });
-
-      return {
-        teamLeadId: tl.$id,
-        teamLeadName: tl.name,
-        teamLeadPresent: latestTlAtt?.present === true,
-        teamLeadPresentAt: latestTlAtt?.presentAt ?? null,
-        teamLeadPresentDays: tlAttRecords.filter(r => r.present).length,
-        teamLeadTotalRecords: tlAttRecords.length,
-        teamLeadDelegateUserId: tlDelegateUserId,
-        teamLeadDelegateName: tlDelegateName,
-        agents: agentRows,
-      };
-    }),
+  // 5. Fetch LinkedIn Accounts for all Agents
+  const accountsByUserId = await getActiveLinkedinAccountsForUsers(
+    databases,
+    allAgents.map((a) => a.$id),
   );
+
+  // Group data by user/TL in memory
+  const agentAttendanceByUserId = new Map<string, AttendanceRecord[]>();
+  allAgentAttRecords.forEach((doc) => {
+    const existing = agentAttendanceByUserId.get(doc.userId) || [];
+    existing.push(doc);
+    agentAttendanceByUserId.set(doc.userId, existing);
+  });
+
+  const tlAttendanceByUserId = new Map<string, AttendanceRecord[]>();
+  allTlAttRecords.forEach((doc) => {
+    const existing = tlAttendanceByUserId.get(doc.userId) || [];
+    existing.push(doc);
+    tlAttendanceByUserId.set(doc.userId, existing);
+  });
+
+  const agentsByTlId = new Map<string, User[]>();
+  allAgents.forEach((agent) => {
+    if (!agent.teamLeadId) return;
+    const existing = agentsByTlId.get(agent.teamLeadId) || [];
+    existing.push(agent);
+    agentsByTlId.set(agent.teamLeadId, existing);
+  });
+
+  // Build report per team lead
+  const teams = teamLeads.map((tl) => {
+    const tlAttRecords = tlAttendanceByUserId.get(tl.$id) || [];
+    const latestTlAtt = tlAttRecords.length > 0 ? tlAttRecords.sort((a,b) => b.dateKey.localeCompare(a.dateKey))[0] : null;
+    const tlDelegateUserId = latestTlAtt?.delegateUserId ?? null;
+    const tlDelegateName = tlDelegateUserId ? delegateById.get(tlDelegateUserId)?.name ?? null : null;
+
+    const agents = agentsByTlId.get(tl.$id) || [];
+
+    const agentRows = agents.map((agent) => {
+      const attRecords = agentAttendanceByUserId.get(agent.$id) ?? [];
+      const latestAtt = attRecords.length > 0 ? attRecords.sort((a,b) => b.dateKey.localeCompare(a.dateKey))[0] : null;
+      const presentDays = attRecords.filter(r => r.present).length;
+      const isRange = startDateKey !== endDateKey;
+
+      const delegateCounts = new Map<string, number>();
+      for (const r of attRecords) {
+        const id = r.delegateUserId;
+        if (typeof id === "string" && id.trim().length > 0) {
+          delegateCounts.set(id, (delegateCounts.get(id) || 0) + 1);
+        }
+      }
+      const delegateNameStr = delegateCounts.size > 0 
+        ? Array.from(delegateCounts.entries())
+          .map(([id, count]) => {
+            const name = delegateById.get(id)?.name;
+            if (!name) return null;
+            return isRange ? `${name} (${count})` : name;
+          })
+          .filter(Boolean)
+          .join(", ")
+        : null;
+
+      const assignedByCounts = new Map<string, number>();
+      for (const r of attRecords) {
+        const id = r.assignedById;
+        if (typeof id === "string" && id.trim().length > 0) {
+          assignedByCounts.set(id, (assignedByCounts.get(id) || 0) + 1);
+        }
+      }
+      const assignedByNameStr = assignedByCounts.size > 0 
+        ? Array.from(assignedByCounts.entries())
+          .map(([id, count]) => {
+            const name = delegateById.get(id)?.name;
+            if (!name) return null;
+            return isRange ? `${name} (${count})` : name;
+          })
+          .filter(Boolean)
+          .join(", ")
+        : null;
+
+      const accounts = accountsByUserId.get(agent.$id) ?? [];
+      return {
+        userId: agent.$id,
+        userName: agent.name,
+        role: agent.role,
+        present: latestAtt?.present === true,
+        presentAt: latestAtt?.presentAt ?? null,
+        presentWithDelegateFlag: latestAtt?.presentWithDelegateFlag === true,
+        presentDays,
+        totalRecords: attRecords.length,
+        delegateUserId: latestAtt?.delegateUserId ?? null,
+        delegateUserName: delegateNameStr,
+        assignedById: latestAtt?.assignedById ?? null,
+        assignedByName: assignedByNameStr,
+        linkedinAccounts: accounts.map((a) => ({
+          id: a.$id,
+          company: a.company,
+          idName: a.idName,
+          accountType: a.accountType,
+        })),
+      };
+    });
+
+    return {
+      teamLeadId: tl.$id,
+      teamLeadName: tl.name,
+      teamLeadPresent: latestTlAtt?.present === true,
+      teamLeadPresentAt: latestTlAtt?.presentAt ?? null,
+      teamLeadPresentDays: tlAttRecords.filter(r => r.present).length,
+      teamLeadTotalRecords: tlAttRecords.length,
+      teamLeadDelegateUserId: tlDelegateUserId,
+      teamLeadDelegateName: tlDelegateName,
+      agents: agentRows,
+    };
+  });
 
   return { startDateKey, endDateKey, teams, allTeamLeadOptions };
 }
