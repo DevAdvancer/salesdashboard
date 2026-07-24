@@ -15,7 +15,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 import { showBrowserNotification, playNotificationSound, primeNotificationPermission } from '@/lib/utils/notification-sound';
 
-const NOTIFICATION_FALLBACK_POLL_MS = 5 * 60 * 1000;
+const NOTIFICATION_FALLBACK_POLL_MS = 15 * 60 * 1000;
 const NOTIFICATION_FORCE_REFRESH_COOLDOWN_MS = 5000;
 
 function formatNotificationTime(value: string) {

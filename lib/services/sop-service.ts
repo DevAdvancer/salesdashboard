@@ -34,7 +34,7 @@ export interface UpdateLeadFollowUpInput {
 }
 
 export function updateLeadFollowUp(input: UpdateLeadFollowUpInput): Promise<Lead> {
-  return updateLeadFollowUpAction(input).finally(clearClientReadCache);
+  return updateLeadFollowUpAction(input).finally(() => clearClientReadCache('sop:'));
 }
 
 export function listLeadNotes(actorId: string, leadId: string): Promise<LeadNote[]> {
@@ -49,7 +49,7 @@ export function createLeadNote(input: {
   body: string;
   visibility: LeadNoteVisibility;
 }): Promise<LeadNote> {
-  return createLeadNoteAction(input).finally(clearClientReadCache);
+  return createLeadNoteAction(input).finally(() => clearClientReadCache('sop:listLeadNotes'));
 }
 
 export function listCoachingNotes(actorId: string, targetUserId?: string): Promise<CoachingNote[]> {
@@ -65,7 +65,7 @@ export function createCoachingNote(input: {
   note: string;
   visibility: CoachingNoteVisibility;
 }): Promise<CoachingNote> {
-  return createCoachingNoteAction(input).finally(clearClientReadCache);
+  return createCoachingNoteAction(input).finally(() => clearClientReadCache('sop:listCoachingNotes'));
 }
 
 export function listReviewQueue(actorId: string, status?: string): Promise<ReviewQueueItem[]> {
@@ -93,7 +93,7 @@ export function createReviewQueueItem(input: {
   reason?: string | null;
   metadata?: string | null;
 }): Promise<ReviewQueueItem> {
-  return createReviewQueueItemAction(input).finally(clearClientReadCache);
+  return createReviewQueueItemAction(input).finally(() => clearClientReadCache('sop:listReviewQueue'));
 }
 
 export function updateReviewQueueStatus(
@@ -101,7 +101,7 @@ export function updateReviewQueueStatus(
   itemId: string,
   status: string
 ): Promise<ReviewQueueItem> {
-  return updateReviewQueueStatusAction(actorId, itemId, status).finally(clearClientReadCache);
+  return updateReviewQueueStatusAction(actorId, itemId, status).finally(() => clearClientReadCache('sop:listReviewQueue'));
 }
 
 export function listNotifications(
@@ -118,9 +118,9 @@ export function markNotificationRead(
   actorId: string,
   notificationId: string
 ): Promise<NotificationRecord> {
-  return markNotificationReadAction(actorId, notificationId).finally(clearClientReadCache);
+  return markNotificationReadAction(actorId, notificationId).finally(() => clearClientReadCache('sop:listNotifications'));
 }
 
 export function markAllNotificationsRead(actorId: string): Promise<{ updatedCount: number }> {
-  return markAllNotificationsReadAction(actorId).finally(clearClientReadCache);
+  return markAllNotificationsReadAction(actorId).finally(() => clearClientReadCache('sop:listNotifications'));
 }

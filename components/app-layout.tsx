@@ -7,17 +7,13 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import {
   checkAndNotifyAdminAttendanceEscalationsAction,
-  markAttendancePresenceAction,
 } from '@/app/actions/attendance';
 import { LoaderOverlay } from '@/components/loader/LoaderOverlay';
 
 const PUBLIC_ROUTES = ['/login', '/referral'];
 const ADMIN_ATTENDANCE_PING_COOLDOWN_MS = 30 * 60 * 1000;
 const ADMIN_ATTENDANCE_PING_STORAGE_KEY = 'crm:last-admin-attendance-ping-at';
-const PRESENCE_PING_COOLDOWN_MS = 60 * 1000;
-const PRESENCE_PING_STORAGE_KEY = 'crm:last-attendance-presence-ping-at';
-const PRESENCE_EXPIRES_AFTER_MS = 5 * 60 * 1000;
-const PRESENCE_HEARTBEAT_MS = 2 * 60 * 1000;
+
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, activeDashboard } = useAuth();
@@ -27,8 +23,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const lastRedirectPath = useRef<string | null>(null);
   const lastAttendancePingAt = useRef(0);
-  const lastPresencePingAt = useRef(0);
-  const lastPresenceSyncKey = useRef<string | null>(null);
 
   useEffect(() => {
     // Post-login landing page depends on the user's active dashboard. Resume-
@@ -76,50 +70,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     checkAndNotifyAdminAttendanceEscalationsAction({ currentUserId: user.$id }).catch(() => {});
   }, [isPublicRoute, pathname, user]);
 
-  useEffect(() => {
-    if (!user || isPublicRoute) return;
 
-    const ping = async () => {
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
-        return;
-      }
-
-      const now = Date.now();
-      const storedLastPingAt = Number(
-        window.sessionStorage.getItem(PRESENCE_PING_STORAGE_KEY) || 0
-      );
-      const lastPingAt = Math.max(lastPresencePingAt.current, storedLastPingAt);
-      const presenceSyncKey = `${user.$id}:${pathname}`;
-      if (
-        now - lastPingAt < PRESENCE_PING_COOLDOWN_MS &&
-        lastPresenceSyncKey.current === presenceSyncKey
-      ) {
-        return;
-      }
-
-      lastPresencePingAt.current = now;
-      lastPresenceSyncKey.current = presenceSyncKey;
-      window.sessionStorage.setItem(PRESENCE_PING_STORAGE_KEY, String(now));
-
-
-      await markAttendancePresenceAction({
-        currentUserId: user.$id,
-        path: pathname,
-      }).catch(() => {});
-    };
-
-    const intervalId = window.setInterval(() => {
-      ping().catch(() => {});
-    }, PRESENCE_HEARTBEAT_MS);
-
-    window.addEventListener('focus', ping);
-    void ping();
-
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener('focus', ping);
-    };
-  }, [isPublicRoute, pathname, user]);
 
   if (loading) {
     return (

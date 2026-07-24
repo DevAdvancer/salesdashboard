@@ -12,7 +12,7 @@ import { cacheClientRead, clearClientReadCache } from "@/lib/utils/client-read-c
 
 type ToggleState = Awaited<ReturnType<typeof getMyAttendanceToggleStateAction>>;
 
-const REFRESH_MS = 60 * 1000;
+const REFRESH_MS = 5 * 60 * 1000;
 const ATTENDANCE_TOGGLE_SCOPE = "attendance:self-toggle";
 const FORCE_REFRESH_COOLDOWN_MS = 5 * 1000;
 
@@ -61,18 +61,13 @@ export function AttendanceSelfToggle() {
 
   useEffect(() => {
     if (!user || !visible) return;
-    const intervalId = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
-        return;
-      }
-      void refresh({ forceRefresh: true });
-    }, REFRESH_MS);
+    // Refresh only when the user returns to the tab — the attendance window
+    // changes at most twice a day (open/close), so polling is unnecessary.
     const refreshOnFocus = () => {
       void refresh({ forceRefresh: true });
     };
     window.addEventListener("focus", refreshOnFocus);
     return () => {
-      window.clearInterval(intervalId);
       window.removeEventListener("focus", refreshOnFocus);
     };
   }, [refresh, user, visible]);

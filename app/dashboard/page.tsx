@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ProtectedRoute } from "@/components/protected-route";
@@ -206,9 +206,15 @@ function MainDashboard({
   // hits the server, not the stale client-read cache. This is what makes an
   // add by one user reflect on everyone else's dashboard without a refresh.
   const [liveRefreshNonce, setLiveRefreshNonce] = useState(0);
+  const realtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useRealtimeCollection(COLLECTIONS.LEADS, () => {
-    clearDashboardDataCache();
-    setLiveRefreshNonce((n) => n + 1);
+    // Debounce to prevent cascade: 1 lead edit was triggering 50 users × 6
+    // parallel refetches. Batch rapid-fire events into a single 30s refresh.
+    if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
+    realtimeDebounceRef.current = setTimeout(() => {
+      clearDashboardDataCache();
+      setLiveRefreshNonce((n) => n + 1);
+    }, 30_000);
   });
 
   const isDashboardLoading =
@@ -751,9 +757,13 @@ function LeadGenerationDashboardContent() {
 
   // Live updates: refresh the lead-gen stats when any lead changes anywhere.
   const [lgRefreshNonce, setLgRefreshNonce] = useState(0);
+  const lgRealtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useRealtimeCollection(COLLECTIONS.LEADS, () => {
-    clearLeadReadCache();
-    setLgRefreshNonce((n) => n + 1);
+    if (lgRealtimeDebounceRef.current) clearTimeout(lgRealtimeDebounceRef.current);
+    lgRealtimeDebounceRef.current = setTimeout(() => {
+      clearLeadReadCache();
+      setLgRefreshNonce((n) => n + 1);
+    }, 30_000);
   });
 
   useEffect(() => {
