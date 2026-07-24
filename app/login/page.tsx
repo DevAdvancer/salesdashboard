@@ -12,6 +12,8 @@ import { Label } from '@/components/ui/label';
 import { Eye, EyeOff } from 'lucide-react';
 import { handleApiError } from '@/lib/utils/error-handler';
 
+export const dynamic = 'force-static';
+
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(1, 'Password is required'),

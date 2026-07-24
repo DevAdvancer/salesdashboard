@@ -26,11 +26,11 @@ import {
   updateLead,
 } from "@/lib/services/lead-action-service";
 import { getAssignableUsers } from "@/lib/services/user-service";
-import {
-  getClosureFormConfig,
-  getFormConfig,
-  getPaymentPlanFormConfig,
-} from "@/lib/services/form-config-service";
+import { 
+  getCachedFormConfigAction,
+  getCachedClosureFormConfigAction,
+  getCachedPaymentPlanFormConfigAction
+} from "@/app/actions/form-config";
 import { upsertClientPaymentRecord } from "@/lib/services/client-payment-service";
 import {
   Lead,
@@ -283,7 +283,9 @@ function LeadDetailContent() {
 
   const loadFormConfig = useCallback(async () => {
     try {
-      const config = await getFormConfig();
+      // Default to a fallback array if cached action fails.
+      const cachedConfig = await getCachedFormConfigAction().catch(() => ({ fields: [] }));
+      const config = cachedConfig as { fields: any[] };
       const fields = config.fields;
       setFormFields(fields.sort((a, b) => a.order - b.order));
     } catch (err: unknown) {
@@ -293,12 +295,12 @@ function LeadDetailContent() {
 
   const loadCloseConfigs = useCallback(async () => {
     try {
-      const [closureConfig, paymentConfig] = await Promise.all([
-        getClosureFormConfig(),
-        getPaymentPlanFormConfig(),
+      const [closureRes, paymentRes] = await Promise.all([
+        getCachedClosureFormConfigAction().catch(() => ({ fields: [] })),
+        getCachedPaymentPlanFormConfigAction().catch(() => ({ fields: [] })),
       ]);
-      const closure = closureConfig.fields.sort((a, b) => a.order - b.order);
-      const payment = paymentConfig.fields.sort((a, b) => a.order - b.order);
+      const closure = closureRes.fields.sort((a, b) => a.order - b.order);
+      const payment = paymentRes.fields.sort((a, b) => a.order - b.order);
       setClosureFields(closure);
       setPaymentPlanFields(payment);
 

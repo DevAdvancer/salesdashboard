@@ -6,8 +6,8 @@ import {
   getAssignableUsers,
   getTeamLeads,
 } from "@/lib/services/user-service";
-import { listBranches } from "@/lib/services/branch-service";
-import { getFormConfig } from "@/lib/services/form-config-service";
+import { getCachedBranchesAction } from "@/app/actions/branch-cache";
+import { getCachedFormConfigAction } from "@/app/actions/form-config";
 import { buildScope, queryKeys } from "@/lib/queries/keys";
 import type { Department, User, UserRole } from "@/lib/types";
 import type { Branch } from "@/lib/types";
@@ -88,7 +88,7 @@ export function useTeamAgentsQuery({
 export function useBranchesQuery() {
   return useQuery<Branch[]>({
     queryKey: queryKeys.branches.list(),
-    queryFn: () => listBranches(),
+    queryFn: () => getCachedBranchesAction().catch(() => []),
     staleTime: FIVE_MINUTES,
   });
 }
@@ -96,7 +96,7 @@ export function useBranchesQuery() {
 export function useLeadFormConfigQuery() {
   return useQuery({
     queryKey: queryKeys.formConfig.lead(),
-    queryFn: () => getFormConfig(),
+    queryFn: () => getCachedFormConfigAction().catch(() => ({ fields: [], version: 0, updatedBy: '' })),
     staleTime: TEN_MINUTES,
   });
 }

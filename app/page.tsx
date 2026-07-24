@@ -4,6 +4,8 @@ import { useEffect, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
 
+export const dynamic = 'force-static';
+
 // Use a module-level variable to prevent double redirection in React Strict Mode
 // and to ensure we don't try to exchange the same code twice if the user navigates back.
 let isRedirecting = false;

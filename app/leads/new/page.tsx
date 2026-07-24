@@ -13,7 +13,7 @@ import {
 } from "@/app/actions/linkedin";
 import { validateLeadUniqueness } from "@/lib/services/lead-validator";
 import { listBranches } from "@/lib/services/branch-service";
-import { getFormConfig } from "@/lib/services/form-config-service";
+import { getCachedFormConfigAction } from "@/app/actions/form-config";
 import { FormField, Branch, User } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -784,8 +784,9 @@ function LegacyNewLeadContent() {
   const loadFormConfig = async () => {
     try {
       setIsLoading(true);
-      setError(null);
-      const config = await getFormConfig();
+      setError(null);      // Default to a fallback array if cached action fails.
+      const cachedConfig = await getCachedFormConfigAction().catch(() => ({ fields: [] }));
+      const config = cachedConfig as { fields: any[] };
       const fields = config.fields;
       const sorted = fields.sort((a, b) => a.order - b.order);
       const adjusted = isLinkedinRequestLead

@@ -11,10 +11,10 @@ import { getUserByIdOrNull } from "@/lib/services/user-service";
 import { User } from "@/lib/types";
 import {
   getClosureFormConfig,
-  getFormConfig,
-  getClientIntakeFormConfig,
   getPaymentPlanFormConfig,
+  getClientIntakeFormConfig,
 } from "@/lib/services/form-config-service";
+import { getCachedFormConfigAction } from "@/app/actions/form-config";
 import {
   addClientPaymentUpdate,
   getClientPaymentRecord,
@@ -194,7 +194,9 @@ function HistoryDetailContent() {
 
   const loadFormConfig = async () => {
     try {
-      const config = await getFormConfig();
+      // Default to a fallback array if cached action fails.
+      const cachedConfig = await getCachedFormConfigAction().catch(() => ({ fields: [] }));
+      const config = cachedConfig as { fields: any[] };
       setFormFields(config.fields.sort((a, b) => a.order - b.order));
     } catch (err: unknown) {
       console.error("Error loading form config:", err);

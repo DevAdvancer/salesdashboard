@@ -1541,14 +1541,17 @@ export async function listLeadsAction(
       if (filters.searchQuery) {
         const queryStr = filters.searchQuery.trim();
         const searchLower = queryStr.toLowerCase();
-        const visaStatusMatch = queryStr.match(/^visaStatus:\s*(.*)$/i);
+        let visaStatusMatch: string | null = null;
+        if (searchLower.startsWith('visastatus:')) {
+          visaStatusMatch = queryStr.slice('visastatus:'.length).trim();
+        }
 
         leads = leads.filter((lead) => {
           try {
             const data = JSON.parse(lead.data) as LeadData;
 
-            if (visaStatusMatch) {
-              const vsQuery = visaStatusMatch[1].toLowerCase();
+            if (visaStatusMatch !== null) {
+              const vsQuery = visaStatusMatch.toLowerCase();
               return String(data.visaStatus || '').toLowerCase().includes(vsQuery);
             }
 
@@ -1592,14 +1595,17 @@ export async function listLeadsAction(
       // Apply search filter in memory
       const queryStr = filters.searchQuery.trim();
       const searchLower = queryStr.toLowerCase();
-      const visaStatusMatch = queryStr.match(/^visaStatus:\s*(.*)$/i);
+      let visaStatusMatch: string | null = null;
+      if (searchLower.startsWith('visastatus:')) {
+        visaStatusMatch = queryStr.slice('visastatus:'.length).trim();
+      }
 
       leads = leads.filter((lead) => {
         try {
           const data = JSON.parse(lead.data) as LeadData;
 
-          if (visaStatusMatch) {
-            const vsQuery = visaStatusMatch[1].toLowerCase();
+          if (visaStatusMatch !== null) {
+            const vsQuery = visaStatusMatch.toLowerCase();
             return String(data.visaStatus || '').toLowerCase().includes(vsQuery);
           }
 
