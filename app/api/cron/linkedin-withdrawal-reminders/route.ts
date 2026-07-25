@@ -2,6 +2,11 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { ID, Query } from 'node-appwrite';
 import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { createAdminClient } from '@/lib/server/appwrite';
+import { getRequestCount } from '@/lib/server/appwrite-request-meter';
+import {
+  loadNotificationCountsSince,
+  notificationDedupKey,
+} from '@/lib/server/notification-dedup';
 import { createNotificationsForRecipients } from '@/lib/server/notifications';
 import type { LinkedinRequest, User } from '@/lib/types';
 import {
@@ -10,8 +15,16 @@ import {
   shouldAutoWithdrawLinkedinRequest,
   shouldSendLinkedinWithdrawalReminder,
   LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS,
+  LINKEDIN_ACCEPTED_WITHDRAWAL_REMINDER_TYPE,
   LINKEDIN_SENT_AUTO_WITHDRAW_DAYS,
+  LINKEDIN_WITHDRAWAL_REMINDER_TYPE,
 } from '@/lib/utils/linkedin-withdrawal-reminders';
+
+// Every reminder this cron can emit, so one sweep covers both policies.
+const LINKEDIN_REMINDER_TYPES = [
+  LINKEDIN_WITHDRAWAL_REMINDER_TYPE,
+  LINKEDIN_ACCEPTED_WITHDRAWAL_REMINDER_TYPE,
+];
 
 function getAuthorizationToken(request: NextRequest) {
   const header = request.headers.get('authorization');
@@ -31,29 +44,6 @@ function getTodayStartIso(now: Date) {
   return new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0),
   ).toISOString();
-}
-
-async function getReminderCountToday(
-  databases: Awaited<ReturnType<typeof createAdminClient>>['databases'],
-  request: LinkedinRequest,
-  todayStartIso: string,
-) {
-  const policy = getLinkedinReminderPolicy(request);
-  if (!policy) return 0;
-
-  const response = await databases.listDocuments(
-    DATABASE_ID,
-    COLLECTIONS.NOTIFICATIONS,
-    [
-      Query.equal('recipientId', request.agentId),
-      Query.equal('type', policy.type),
-      Query.equal('targetId', request.$id),
-      Query.greaterThanEqual('createdAt', todayStartIso),
-      Query.limit(100),
-    ],
-  );
-
-  return response.total ?? response.documents.length;
 }
 
 async function getAdminRecipientIds(
@@ -144,6 +134,15 @@ export async function GET(request: NextRequest) {
   const { databases } = await createAdminClient();
   const adminRecipientIds = await getAdminRecipientIds(databases);
 
+  // One sweep of today's reminder notifications replaces a per-request count
+  // query, so the cost is bounded by notifications created today rather than by
+  // the number of active Linkedin requests.
+  const reminderCounts = await loadNotificationCountsSince({
+    databases,
+    types: LINKEDIN_REMINDER_TYPES,
+    sinceIso: todayStartIso,
+  });
+
   const response = await databases.listDocuments(
     DATABASE_ID,
     COLLECTIONS.LINKEDIN_REQUESTS,
@@ -170,7 +169,30 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
-    const remindersSentToday = await getReminderCountToday(databases, requestDoc, todayStartIso);
+    const policy = getLinkedinReminderPolicy(requestDoc);
+    if (!policy) {
+      continue;
+    }
+
+    // The age/due window does not depend on how many reminders already went
+    // out today, so test it first and skip the dedup lookup for rows that are
+    // not due at all.
+    if (
+      !shouldSendLinkedinWithdrawalReminder({
+        request: requestDoc,
+        now,
+        remindersSentToday: 0,
+      })
+    ) {
+      continue;
+    }
+
+    const dedupKey = notificationDedupKey(
+      requestDoc.agentId,
+      policy.type,
+      requestDoc.$id,
+    );
+    const remindersSentToday = reminderCounts.get(dedupKey) ?? 0;
 
     if (
       !shouldSendLinkedinWithdrawalReminder({
@@ -189,6 +211,9 @@ export async function GET(request: NextRequest) {
     ], {
       ...buildLinkedinWithdrawalReminder(requestDoc),
     });
+    // Keep the in-memory tally current so the per-day maximum still holds if
+    // this cron is ever moved to a schedule that runs more than once a day.
+    reminderCounts.set(dedupKey, remindersSentToday + 1);
     remindersSent += 1;
   }
 
@@ -198,5 +223,7 @@ export async function GET(request: NextRequest) {
     evaluated,
     remindersSent,
     autoWithdrawn,
+    // Counted only when the caller opened a meter scope; 0 otherwise.
+    appwriteRequests: getRequestCount(),
   });
 }
