@@ -11,33 +11,21 @@ export function LoaderOverlay() {
     <AnimatePresence>
       {shouldShow && (
         <motion.div
-          className="absolute inset-0 z-[9999]"
+          // A thin bar pinned to the top of the viewport. It deliberately never
+          // covers the page: a full-screen scrim on every route change made users
+          // reload the app, and each reload costs a fresh burst of Appwrite reads.
+          className="fixed inset-x-0 top-0 z-[9999] h-0.5 pointer-events-none"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0, transition: { duration: 0.3 } }}
         >
-          {/* Use sticky so that if the parent container is very tall, the loader stays in the viewport */}
-          <div className="sticky top-0 left-0 w-full h-[100dvh] flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm pointer-events-auto">
-            <div className="flex flex-col items-start w-full max-w-[320px] gap-3 relative -mt-32">
-              
-              {/* Monochrome Border Container */}
-              <div className="w-full h-3 rounded-full border border-foreground/30 p-[1px] bg-background/50 overflow-hidden relative flex items-center">
-                {/* Animated Progress Fill */}
-                <motion.div
-                  className="h-full bg-foreground rounded-full"
-                  initial={{ width: '0%' }}
-                  animate={{ width: `${progress}%` }}
-                  transition={{ ease: 'easeOut', duration: 0.3 }}
-                />
-              </div>
-
-              {/* Text Loading */}
-              <div className="flex items-center gap-3 font-mono text-foreground tracking-[0.2em]">
-                <span className="text-sm">LOADING...</span>
-                <span className="font-bold text-lg">{Math.round(progress)}%</span>
-              </div>
-            </div>
-          </div>
+          {/* Animated Progress Fill */}
+          <motion.div
+            className="h-full bg-foreground"
+            initial={{ width: '0%' }}
+            animate={{ width: `${progress}%` }}
+            transition={{ ease: 'easeOut', duration: 0.3 }}
+          />
         </motion.div>
       )}
     </AnimatePresence>
