@@ -31,6 +31,7 @@
 
 import { config } from 'dotenv';
 import { Client, Databases, Query } from 'node-appwrite';
+import { getSpecialBranchLeadAccess } from '../lib/constants/special-lead-access';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -46,6 +47,10 @@ const LEADS_ID = process.env.NEXT_PUBLIC_APPWRITE_LEADS_COLLECTION_ID ?? 'leads'
 
 const ADMIN_LIKE = ['admin', 'developer', 'monitor', 'operations'];
 
+// Appwrite documents are dynamically shaped: the attributes differ per
+// collection and are not typed in this repo, so a permissive record is the
+// honest type here.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyDoc = Record<string, any>;
 
 if (!ENDPOINT || !PROJECT_ID || !API_KEY) {
@@ -81,8 +86,24 @@ function appVisibleCount(user: AnyDoc, users: AnyDoc[], leads: AnyDoc[]): number
   // assertSalesCrmAccess (app/actions/lead.ts:662)
   if (department === 'resume' && !ADMIN_LIKE.includes(role)) return 'DENIED';
 
+  // listLeadsAction widens both agents and team leads by a per-email branch
+  // grant (app/actions/lead.ts, getSpecialBranchLeadAccess). Omitting it here
+  // understates the count for any user holding one, so the parity check would
+  // report a spurious drift the first time it ran.
+  //
+  // Not modelled: the additional backed-out widening that
+  // appendTeamLeadLeadVisibilityQuery applies from the caller-supplied
+  // branchIds. That depends on request input rather than stored state, it only
+  // matches leads that are both closed and backed out, and this script measures
+  // the whole lead universe with no status filter.
+  const specialBranchId = getSpecialBranchLeadAccess(user.email as string | undefined);
+  const inSpecialBranch = (l: AnyDoc) =>
+    Boolean(specialBranchId) && l.branchId === specialBranchId;
+
   if (role === 'agent') {
-    return leads.filter((l) => l.assignedToId === user.$id || l.ownerId === user.$id).length;
+    return leads.filter(
+      (l) => l.assignedToId === user.$id || l.ownerId === user.$id || inSpecialBranch(l)
+    ).length;
   }
 
   if (role === 'lead_generation') {
@@ -118,7 +139,8 @@ function appVisibleCount(user: AnyDoc, users: AnyDoc[], leads: AnyDoc[]): number
     return leads.filter(
       (l) =>
         ownerVisible.has(l.ownerId) ||
-        (typeof l.assignedToId === 'string' && assignVisible.has(l.assignedToId))
+        (typeof l.assignedToId === 'string' && assignVisible.has(l.assignedToId)) ||
+        inSpecialBranch(l)
     ).length;
   }
 

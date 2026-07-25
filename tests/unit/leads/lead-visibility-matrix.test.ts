@@ -257,7 +257,7 @@ jest.mock('@/lib/server/appwrite', () => ({
   createSessionClient: jest.fn(),
 }));
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { listLeadsAction, listLeadCountsAction } = require('@/app/actions/lead');
 
 async function visibleIdsFor(userId: string) {
@@ -502,11 +502,8 @@ describe('LEADS_DEPT_SCOPE_INLINE expresses the department scope as a query', ()
   });
 
   it('falls back to the walk when the scope exceeds the Appwrite value cap', () => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const {
-      buildDepartmentScopeQuery,
-      DEPARTMENT_INLINE_QUERY_MAX,
-    } = require('@/lib/server/department-scope-query');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { buildDepartmentScopeQuery, DEPARTMENT_INLINE_QUERY_MAX } = require('@/lib/server/department-scope-query');
     const tooMany = new Set(
       Array.from({ length: DEPARTMENT_INLINE_QUERY_MAX + 1 }, (_, i) => `u-${i}`)
     );
@@ -514,11 +511,16 @@ describe('LEADS_DEPT_SCOPE_INLINE expresses the department scope as a query', ()
     expect(buildDepartmentScopeQuery(new Set())).toBeNull();
     expect(buildDepartmentScopeQuery(new Set(['u-1']))).not.toBeNull();
   });
+
+  // The 4096-character query-length guard cannot be exercised here: this file
+  // mocks node-appwrite, so Query.or returns a descriptor object rather than a
+  // serialized string. It is covered against the real SDK in
+  // tests/unit/leads/department-scope-query.test.ts.
 });
 
 describe('production baseline fixture', () => {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const baseline = require('../../fixtures/lead-visibility-baseline.json');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const baseline = require('@/tests/fixtures/lead-visibility-baseline.json');
 
   it('is internally consistent', () => {
     expect(baseline.totals.leads).toBe(1352);

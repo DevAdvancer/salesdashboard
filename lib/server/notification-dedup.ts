@@ -30,8 +30,21 @@ export function notificationDedupKey(
  * run just to decide what NOT to send. One scan of the notifications created
  * today is bounded by the number of notifications, not by the fan-out.
  */
+/**
+ * Structural type rather than node-appwrite's `Databases`: callers pass the
+ * read-through cache proxy from lib/server/appwrite.ts, which is not an
+ * instance of that class. Only listDocuments is used here.
+ */
+type NotificationReader = {
+  listDocuments: (
+    databaseId: string,
+    collectionId: string,
+    queries?: string[]
+  ) => Promise<{ documents: unknown[] }>;
+};
+
 export async function loadNotificationCountsSince(input: {
-  databases: any;
+  databases: NotificationReader;
   types: string[];
   sinceIso: string;
 }): Promise<Map<string, number>> {
