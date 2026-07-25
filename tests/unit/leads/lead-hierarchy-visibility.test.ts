@@ -21,6 +21,8 @@ jest.mock('@/lib/services/user-service', () => ({
 jest.mock('appwrite', () => ({
   Query: {
     equal: jest.fn((key, value) => `equal("${key}", ${JSON.stringify(value)})`),
+    notEqual: jest.fn((key, value) => `notEqual("${key}", ${JSON.stringify(value)})`),
+    contains: jest.fn((key, value) => `contains("${key}", ${JSON.stringify(value)})`),
     or: jest.fn((conditions) => `or(${conditions.join(',')})`),
     orderDesc: jest.fn((key) => `orderDesc("${key}")`),
     limit: jest.fn((limit) => `limit(${limit})`),
@@ -68,18 +70,26 @@ describe('lead hierarchy visibility', () => {
   });
 
   it('scopes teamLead leads to the teamLead and their hierarchy instead of all leads', async () => {
+    // This case used to describe the removed `manager` role, which walked a
+    // `managerIds` chain upwards. In the current role model (UserRole in
+    // lib/types/index.ts has no `manager`) a team lead's scope is built from
+    // the users whose `teamLeadId` points at them, so the interesting edge is
+    // a team lead with no direct reports: the query must narrow to the viewer
+    // alone and must never fall back to an unscoped "all leads" query.
     (databases.listDocuments as jest.Mock)
-      .mockResolvedValueOnce({
-        documents: [
-          { $id: 'tl-1', role: 'team_lead', teamLeadIds: ['mgr-1'] },
-          { $id: 'agent-1', role: 'agent', teamLeadId: 'tl-1' },
-        ],
-      })
+      .mockResolvedValueOnce({ documents: [] })
       .mockResolvedValueOnce({ documents: [] });
 
     await listLeads({}, 'mgr-1', 'team_lead', []);
 
-    expect(Query.equal).toHaveBeenCalledWith('ownerId', ['mgr-1', 'tl-1', 'agent-1']);
-    expect(Query.equal).toHaveBeenCalledWith('assignedToId', ['mgr-1', 'tl-1', 'agent-1']);
+    expect(Query.equal).toHaveBeenCalledWith('ownerId', ['mgr-1']);
+    expect(Query.equal).toHaveBeenCalledWith('assignedToId', ['mgr-1']);
+
+    // The second listDocuments call is the lead query itself; it must carry
+    // the ownership/assignment scoping clause.
+    const leadQueries = (databases.listDocuments as jest.Mock).mock.calls[1][2];
+    expect(leadQueries).toContain(
+      'or(equal("ownerId", ["mgr-1"]),equal("assignedToId", ["mgr-1"]))'
+    );
   });
 });

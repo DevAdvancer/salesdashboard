@@ -23,6 +23,14 @@ jest.mock("@/lib/actions/lead-actions", () => ({
   backoutLeadAction: jest.fn(),
 }));
 
+// lead-action-service imports `clearDashboardDataCache` from the dashboard
+// data service, which transitively pulls in `node-appwrite` (ESM-only
+// node-fetch-native) through app/actions/assessment. That import chain is
+// irrelevant to the read-cache behaviour under test, so stub the module.
+jest.mock("@/lib/services/dashboard-data-service", () => ({
+  clearDashboardDataCache: jest.fn(),
+}));
+
 describe("lead action service", () => {
   beforeEach(() => {
     jest.clearAllMocks();

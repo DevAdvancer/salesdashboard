@@ -49,8 +49,8 @@ describe('LoginPage - Task 2.5: Login Flow with Session Management', () => {
       render(<LoginPage />);
 
       expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /log in/i })).toBeInTheDocument();
+      expect(screen.getByLabelText('Password')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
     });
 
     it('should not render link to signup page', () => {
@@ -68,8 +68,8 @@ describe('LoginPage - Task 2.5: Login Flow with Session Management', () => {
       render(<LoginPage />);
 
       const emailInput = screen.getByLabelText(/email/i);
-      const passwordInput = screen.getByLabelText(/password/i);
-      const submitButton = screen.getByRole('button', { name: /log in/i });
+      const passwordInput = screen.getByLabelText('Password');
+      const submitButton = screen.getByRole('button', { name: /sign in/i });
 
       fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
       fireEvent.change(passwordInput, { target: { value: 'password123' } });
@@ -86,8 +86,8 @@ describe('LoginPage - Task 2.5: Login Flow with Session Management', () => {
       render(<LoginPage />);
 
       const emailInput = screen.getByLabelText(/email/i);
-      const passwordInput = screen.getByLabelText(/password/i);
-      const submitButton = screen.getByRole('button', { name: /log in/i });
+      const passwordInput = screen.getByLabelText('Password');
+      const submitButton = screen.getByRole('button', { name: /sign in/i });
 
       fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
       fireEvent.change(passwordInput, { target: { value: 'password123' } });
@@ -106,8 +106,8 @@ describe('LoginPage - Task 2.5: Login Flow with Session Management', () => {
       render(<LoginPage />);
 
       const emailInput = screen.getByLabelText(/email/i);
-      const passwordInput = screen.getByLabelText(/password/i);
-      const submitButton = screen.getByRole('button', { name: /log in/i });
+      const passwordInput = screen.getByLabelText('Password');
+      const submitButton = screen.getByRole('button', { name: /sign in/i });
 
       fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
       fireEvent.change(passwordInput, { target: { value: 'wrongpassword' } });
@@ -124,8 +124,8 @@ describe('LoginPage - Task 2.5: Login Flow with Session Management', () => {
       render(<LoginPage />);
 
       const emailInput = screen.getByLabelText(/email/i);
-      const passwordInput = screen.getByLabelText(/password/i);
-      const submitButton = screen.getByRole('button', { name: /log in/i });
+      const passwordInput = screen.getByLabelText('Password');
+      const submitButton = screen.getByRole('button', { name: /sign in/i });
 
       fireEvent.change(emailInput, { target: { value: 'nonexistent@example.com' } });
       fireEvent.change(passwordInput, { target: { value: 'password123' } });
@@ -144,8 +144,8 @@ describe('LoginPage - Task 2.5: Login Flow with Session Management', () => {
       render(<LoginPage />);
 
       const emailInput = screen.getByLabelText(/email/i);
-      const passwordInput = screen.getByLabelText(/password/i);
-      const submitButton = screen.getByRole('button', { name: /log in/i });
+      const passwordInput = screen.getByLabelText('Password');
+      const submitButton = screen.getByRole('button', { name: /sign in/i });
 
       fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
       fireEvent.change(passwordInput, { target: { value: 'password123' } });

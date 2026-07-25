@@ -4,7 +4,7 @@
  * This test suite covers the complete authentication flows including:
  * - Login with valid credentials
  * - Login with invalid credentials
- * - Signup creates teamLead account
+ * - Signup is disabled (admins create accounts instead)
  * - Session expiration handling
  *
  * Requirements: 1.2, 1.4
@@ -21,6 +21,7 @@ jest.mock('@/lib/appwrite', () => ({
     get: jest.fn(),
     create: jest.fn(),
     createEmailPasswordSession: jest.fn(),
+    createJWT: jest.fn(),
     deleteSession: jest.fn(),
   },
   databases: {
@@ -36,11 +37,22 @@ jest.mock('@/lib/appwrite', () => ({
 const mockAccount = account as jest.Mocked<typeof account>;
 const mockDatabases = databases as jest.Mocked<typeof databases>;
 
+// The provider normalizes every user document it reads from Appwrite: a missing
+// `department` defaults to 'sales' and a missing `isActive` defaults to true.
+const normalized = <T extends Record<string, unknown>>(doc: T) => ({
+  department: 'sales',
+  isActive: true,
+  ...doc,
+});
+
 describe('Task 2.6: Authentication Flows', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // Default: no existing session
     mockAccount.get.mockRejectedValue(new Error('No session'));
+    // login()/checkSession() mint a JWT and POST it to /api/auth/appwrite-session.
+    mockAccount.createJWT.mockResolvedValue({ jwt: 'test-jwt' } as any);
+    global.fetch = jest.fn().mockResolvedValue({ ok: true }) as unknown as typeof fetch;
   });
 
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -79,8 +91,8 @@ describe('Task 2.6: Authentication Flows', () => {
         'teamLead@test.com',
         'password123'
       );
-      expect(result.current.user).toEqual(mockUserDoc);
-      expect(result.current.isManager).toBe(true);
+      expect(result.current.user).toEqual(normalized(mockUserDoc));
+      expect(result.current.isTeamLead).toBe(true);
       expect(result.current.isAgent).toBe(false);
     });
 
@@ -116,9 +128,9 @@ describe('Task 2.6: Authentication Flows', () => {
         'test-users-collection',
         'agent-456'
       );
-      expect(result.current.user).toEqual(mockUserDoc);
+      expect(result.current.user).toEqual(normalized(mockUserDoc));
       expect(result.current.isAgent).toBe(true);
-      expect(result.current.isManager).toBe(false);
+      expect(result.current.isTeamLead).toBe(false);
     });
   });
 
@@ -182,141 +194,59 @@ describe('Task 2.6: Authentication Flows', () => {
       }
 
       expect(result.current.user).toBeNull();
-      expect(result.current.isManager).toBe(false);
+      expect(result.current.isTeamLead).toBe(false);
       expect(result.current.isAgent).toBe(false);
     });
   });
 
-  describe('Signup creates teamLead account', () => {
-    it('should create teamLead account with role="team_lead" and teamLeadId=null', async () => {
+  // Self-service signup was deliberately removed from the product: /signup
+  // redirects to /login, the login page renders no signup link, and
+  // AuthProvider.signup rejects. Admins create accounts instead.
+  describe('Signup is disabled', () => {
+    const SIGNUP_DISABLED_MESSAGE =
+      'Signup is disabled. Ask an admin to create the user account.';
+
+    it('should reject with a message pointing the caller at an admin', async () => {
       const { result } = renderHook(() => useAuth(), { wrapper });
 
       await waitFor(() => {
         expect(result.current.loading).toBe(false);
       });
 
-      const mockAccountResponse = {
-        $id: 'new-user-123',
-        email: 'newmanager@test.com',
-        name: 'New TeamLead',
-      };
-
-      const mockUserDoc = {
-        $id: 'new-user-123',
-        name: 'New TeamLead',
-        email: 'newmanager@test.com',
-        role: 'team_lead',
-        teamLeadId: null,
-        branchIds: [],
-        branchId: null,
-        $createdAt: '2024-01-01T00:00:00.000Z',
-        $updatedAt: '2024-01-01T00:00:00.000Z',
-      };
-
-      mockAccount.create.mockResolvedValue(mockAccountResponse as any);
-      mockDatabases.createDocument.mockResolvedValue(mockUserDoc as any);
-      mockAccount.createEmailPasswordSession.mockResolvedValue({} as any);
-
-      await act(async () => {
-        await result.current.signup('New TeamLead', 'newmanager@test.com', 'password123');
-      });
-
-      // Verify account creation
-      expect(mockAccount.create).toHaveBeenCalledWith(
-        expect.any(String),
-        'newmanager@test.com',
-        'password123',
-        'New TeamLead'
-      );
-
-      // Verify user document creation with teamLead role
-      expect(mockDatabases.createDocument).toHaveBeenCalledWith(
-        'test-db',
-        'test-users-collection',
-        'new-user-123',
-        {
-          name: 'New TeamLead',
-          email: 'newmanager@test.com',
-          role: 'team_lead',
-          teamLeadId: null,
-        }
-      );
-
-      // Verify session creation
-      expect(mockAccount.createEmailPasswordSession).toHaveBeenCalledWith(
-        'newmanager@test.com',
-        'password123'
-      );
-
-      // Verify user state
-      expect(result.current.user).toEqual(mockUserDoc);
-      expect(result.current.isManager).toBe(true);
-      expect(result.current.isAgent).toBe(false);
+      await expect(
+        result.current.signup('New TeamLead', 'newmanager@test.com', 'password123')
+      ).rejects.toThrow(SIGNUP_DISABLED_MESSAGE);
     });
 
-    it('should use account ID as document ID for user document', async () => {
+    it('should not create an account or a user document', async () => {
       const { result } = renderHook(() => useAuth(), { wrapper });
 
       await waitFor(() => {
         expect(result.current.loading).toBe(false);
       });
 
-      const accountId = 'account-789';
-      mockAccount.create.mockResolvedValue({ $id: accountId } as any);
-      mockDatabases.createDocument.mockResolvedValue({
-        $id: accountId,
-        name: 'Test User',
-        email: 'test@test.com',
-        role: 'team_lead',
-        teamLeadId: null,
-      } as any);
-      mockAccount.createEmailPasswordSession.mockResolvedValue({} as any);
+      await expect(
+        result.current.signup('Test User', 'test@test.com', 'password123')
+      ).rejects.toThrow(SIGNUP_DISABLED_MESSAGE);
 
-      await act(async () => {
-        await result.current.signup('Test User', 'test@test.com', 'password123');
-      });
-
-      expect(mockDatabases.createDocument).toHaveBeenCalledWith(
-        'test-db',
-        'test-users-collection',
-        accountId, // Document ID should match account ID
-        expect.any(Object)
-      );
+      expect(mockAccount.create).not.toHaveBeenCalled();
+      expect(mockDatabases.createDocument).not.toHaveBeenCalled();
+      expect(result.current.user).toBeNull();
     });
 
-    it('should handle existing session during signup', async () => {
+    it('should not touch the existing session', async () => {
       const { result } = renderHook(() => useAuth(), { wrapper });
 
       await waitFor(() => {
         expect(result.current.loading).toBe(false);
       });
 
-      mockAccount.create.mockResolvedValue({ $id: 'user-999' } as any);
-      mockDatabases.createDocument.mockResolvedValue({
-        $id: 'user-999',
-        name: 'Test',
-        email: 'test@test.com',
-        role: 'team_lead',
-        teamLeadId: null,
-      } as any);
+      await expect(
+        result.current.signup('Test', 'test@test.com', 'password123')
+      ).rejects.toThrow(SIGNUP_DISABLED_MESSAGE);
 
-      // First session creation fails with existing session error
-      mockAccount.createEmailPasswordSession
-        .mockRejectedValueOnce({
-          code: 401,
-          type: 'user_session_already_exists',
-        })
-        .mockResolvedValueOnce({} as any);
-
-      mockAccount.deleteSession.mockResolvedValue({} as any);
-
-      await act(async () => {
-        await result.current.signup('Test', 'test@test.com', 'password123');
-      });
-
-      // Should delete existing session and create new one
-      expect(mockAccount.deleteSession).toHaveBeenCalledWith('current');
-      expect(mockAccount.createEmailPasswordSession).toHaveBeenCalledTimes(2);
+      expect(mockAccount.createEmailPasswordSession).not.toHaveBeenCalled();
+      expect(mockAccount.deleteSession).not.toHaveBeenCalled();
     });
   });
 
@@ -360,7 +290,7 @@ describe('Task 2.6: Authentication Flows', () => {
       const { result } = renderHook(() => useAuth(), { wrapper });
 
       await waitFor(() => {
-        expect(result.current.user).toEqual(mockUserDoc);
+        expect(result.current.user).toEqual(normalized(mockUserDoc));
       });
 
       // Simulate session expiration
@@ -399,7 +329,7 @@ describe('Task 2.6: Authentication Flows', () => {
       const { result } = renderHook(() => useAuth(), { wrapper });
 
       await waitFor(() => {
-        expect(result.current.user).toEqual(mockUserDoc);
+        expect(result.current.user).toEqual(normalized(mockUserDoc));
       });
 
       // Session expires
@@ -410,7 +340,7 @@ describe('Task 2.6: Authentication Flows', () => {
       });
 
       expect(result.current.user).toBeNull();
-      expect(result.current.isManager).toBe(false);
+      expect(result.current.isTeamLead).toBe(false);
       expect(result.current.isAgent).toBe(false);
     });
 
@@ -465,8 +395,8 @@ describe('Task 2.6: Authentication Flows', () => {
         await result.current.login('returning@test.com', 'password123');
       });
 
-      expect(result.current.user).toEqual(mockUserDoc);
-      expect(result.current.isManager).toBe(true);
+      expect(result.current.user).toEqual(normalized(mockUserDoc));
+      expect(result.current.isTeamLead).toBe(true);
     });
   });
 
@@ -490,10 +420,10 @@ describe('Task 2.6: Authentication Flows', () => {
       const { result } = renderHook(() => useAuth(), { wrapper });
 
       await waitFor(() => {
-        expect(result.current.user).toEqual(mockUserDoc);
+        expect(result.current.user).toEqual(normalized(mockUserDoc));
       });
 
-      expect(result.current.isManager).toBe(true);
+      expect(result.current.isTeamLead).toBe(true);
       expect(result.current.isAgent).toBe(false);
     });
 
@@ -516,11 +446,11 @@ describe('Task 2.6: Authentication Flows', () => {
       const { result } = renderHook(() => useAuth(), { wrapper });
 
       await waitFor(() => {
-        expect(result.current.user).toEqual(mockUserDoc);
+        expect(result.current.user).toEqual(normalized(mockUserDoc));
       });
 
       expect(result.current.isAgent).toBe(true);
-      expect(result.current.isManager).toBe(false);
+      expect(result.current.isTeamLead).toBe(false);
     });
   });
 });

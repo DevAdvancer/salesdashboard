@@ -656,10 +656,42 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
       const emailLabel = screen.getByText(/Email/i);
       expect(emailLabel.parentElement).toHaveTextContent('*');
 
-      // Optional field should not have asterisk in the label itself
+      // `phone` is optional in this form config but the server rejects a lead
+      // without it (REQUIRED_LEAD_FIELD_KEYS in lib/utils/required-lead-fields.ts),
+      // and the form deliberately mirrors the server so the asterisks match
+      // what actually saves. So the asterisk is expected here.
       const phoneLabel = screen.getByText(/Phone/i);
-      // Phone label itself shouldn't contain asterisk
-      expect(phoneLabel.textContent).not.toContain('*');
+      expect(phoneLabel.textContent).toContain('*');
+    });
+
+    it('should not display asterisk for a field that is optional everywhere', () => {
+      mockUseAuth.mockReturnValue({
+        user: { $id: '1', name: 'TeamLead', email: 'teamLead@test.com', role: 'team_lead', teamLeadId: null },
+        isManager: true,
+        isAgent: false,
+        loading: false,
+        login: jest.fn(),
+        logout: jest.fn(),
+        signup: jest.fn(),
+      });
+
+      // `notes` is neither required by the form config nor server-required.
+      const optionalFieldConfig: FormField[] = [
+        {
+          id: '1',
+          type: 'textarea',
+          label: 'Notes',
+          key: 'notes',
+          required: false,
+          visible: true,
+          order: 1,
+        },
+      ];
+
+      render(<DynamicLeadForm formConfig={optionalFieldConfig} onSubmit={mockOnSubmit} />);
+
+      const notesLabel = screen.getByText(/Notes/i);
+      expect(notesLabel.textContent).not.toContain('*');
     });
   });
 });

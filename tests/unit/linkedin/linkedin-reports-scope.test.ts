@@ -1,4 +1,9 @@
-export {};
+import { COLLECTIONS } from "@/lib/constants/appwrite";
+
+// The collection id is read from NEXT_PUBLIC_APPWRITE_LINKEDIN_REQUESTS_COLLECTION_ID,
+// which jest.env.js sets to a placeholder, so assert against the constant
+// rather than hard-coding the "linkedin_requests" fallback.
+const LINKEDIN_REQUESTS_COLLECTION = COLLECTIONS.LINKEDIN_REQUESTS;
 
 const mockAssertAuthenticatedUserId = jest.fn();
 const mockGetAuthenticatedUserDoc = jest.fn();
@@ -79,7 +84,7 @@ describe("Linkedin reports team lead scoping", () => {
 
     expect(mockListDocuments).toHaveBeenCalledWith(
       expect.any(String),
-      "linkedin_requests",
+      LINKEDIN_REQUESTS_COLLECTION,
       expect.arrayContaining([`equal:teamLeadId:"tl-1"`]),
     );
   });
@@ -105,7 +110,7 @@ describe("Linkedin reports team lead scoping", () => {
 
     expect(mockListDocuments).toHaveBeenCalledWith(
       expect.any(String),
-      "linkedin_requests",
+      LINKEDIN_REQUESTS_COLLECTION,
       expect.arrayContaining([`equal:teamLeadId:"tl-1"`]),
     );
   });

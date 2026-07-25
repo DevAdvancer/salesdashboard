@@ -21,6 +21,8 @@ jest.mock('@/lib/services/user-service', () => ({
 jest.mock('appwrite', () => ({
   Query: {
     equal: jest.fn((key, value) => `equal("${key}", ${JSON.stringify(value)})`),
+    notEqual: jest.fn((key, value) => `notEqual("${key}", ${JSON.stringify(value)})`),
+    contains: jest.fn((key, value) => `contains("${key}", ${JSON.stringify(value)})`),
     or: jest.fn((conditions) => `or(${conditions.join(',')})`),
     orderDesc: jest.fn((key) => `orderDesc("${key}")`),
     limit: jest.fn((limit) => `limit(${limit})`),

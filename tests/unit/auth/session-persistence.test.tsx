@@ -7,6 +7,7 @@ jest.mock('@/lib/appwrite', () => ({
   account: {
     get: jest.fn(),
     createEmailPasswordSession: jest.fn(),
+    createJWT: jest.fn(),
     deleteSession: jest.fn(),
   },
   databases: {
@@ -21,9 +22,19 @@ jest.mock('@/lib/appwrite', () => ({
 const mockAccount = account as jest.Mocked<typeof account>;
 const mockDatabases = databases as jest.Mocked<typeof databases>;
 
+// The provider normalizes every user document it reads from Appwrite: a missing
+// `department` defaults to 'sales' and a missing `isActive` defaults to true.
+const normalized = <T extends Record<string, unknown>>(doc: T) => ({
+  department: 'sales',
+  isActive: true,
+  ...doc,
+});
+
 describe('Session Persistence and Restoration - Task 2.5', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockAccount.createJWT.mockResolvedValue({ jwt: 'test-jwt' } as any);
+    global.fetch = jest.fn().mockResolvedValue({ ok: true }) as unknown as typeof fetch;
   });
 
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -53,7 +64,7 @@ describe('Session Persistence and Restoration - Task 2.5', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(result.current.user).toEqual(mockUserDoc);
+    expect(result.current.user).toEqual(normalized(mockUserDoc));
     expect(mockAccount.get).toHaveBeenCalled();
     expect(mockDatabases.getDocument).toHaveBeenCalled();
   });
@@ -100,7 +111,7 @@ describe('Session Persistence and Restoration - Task 2.5', () => {
       await result.current.login('agent@test.com', 'password123');
     });
 
-    expect(result.current.user).toEqual(mockUserDoc);
+    expect(result.current.user).toEqual(normalized(mockUserDoc));
   });
 
   it('should clear user data on logout', async () => {
@@ -122,7 +133,7 @@ describe('Session Persistence and Restoration - Task 2.5', () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
 
     await waitFor(() => {
-      expect(result.current.user).toEqual(mockUserDoc);
+      expect(result.current.user).toEqual(normalized(mockUserDoc));
     });
 
     mockAccount.deleteSession.mockResolvedValue({} as any);

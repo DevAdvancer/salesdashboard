@@ -7,8 +7,17 @@ jest.mock('node-appwrite', () => ({
     unique: jest.fn(() => 'unique-id'),
   },
   Query: {
-    orderDesc: jest.fn(),
-    orderAsc: jest.fn(),
+    orderDesc: jest.fn((attribute) => `orderDesc:${attribute}`),
+    orderAsc: jest.fn((attribute) => `orderAsc:${attribute}`),
+    equal: jest.fn((attribute, value) => `equal:${attribute}:${JSON.stringify(value)}`),
+    notEqual: jest.fn((attribute, value) => `notEqual:${attribute}:${JSON.stringify(value)}`),
+    greaterThanEqual: jest.fn(
+      (attribute, value) => `greaterThanEqual:${attribute}:${JSON.stringify(value)}`,
+    ),
+    lessThanEqual: jest.fn(
+      (attribute, value) => `lessThanEqual:${attribute}:${JSON.stringify(value)}`,
+    ),
+    limit: jest.fn((limit) => `limit:${limit}`),
   },
   Databases: jest.fn(),
 }));

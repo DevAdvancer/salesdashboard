@@ -37,6 +37,12 @@ jest.mock('node-appwrite', () => ({
   },
 }));
 
+// The retired attributes are the legacy `manager` / `assistant_manager` fields
+// that `teamLeadId` replaced. A blanket manager -> teamLead rename (commit
+// 9b76b2a) rewrote `managerId` / `managerIds` here into `teamLeadId` /
+// `teamLeadIds`, which made every case assert that the live `teamLeadId` field
+// must be absent while the objectContaining above requires it. The names below
+// are back on the fields that really were retired.
 describe('active user role creation actions', () => {
   beforeEach(() => {
     jest.resetModules();
@@ -75,7 +81,7 @@ describe('active user role creation actions', () => {
     return userCreateCall?.[3] as Record<string, unknown> | undefined;
   }
 
-  it('creates team leads without retired teamLead attributes', async () => {
+  it('creates team leads without retired manager attributes', async () => {
     const { createTeamLeadAction } = await import('@/app/actions/user');
 
     await createTeamLeadAction({
@@ -95,13 +101,13 @@ describe('active user role creation actions', () => {
         branchIds: ['branch-1'],
       }),
     );
-    expect(getCreatedUserPayload()).not.toHaveProperty('teamLeadId');
-    expect(getCreatedUserPayload()).not.toHaveProperty('teamLeadIds');
+    expect(getCreatedUserPayload()).not.toHaveProperty('managerId');
+    expect(getCreatedUserPayload()).not.toHaveProperty('managerIds');
     expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerId');
     expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerIds');
   });
 
-  it('creates agents without retired teamLead attributes', async () => {
+  it('creates agents without retired manager attributes', async () => {
     const { createAgentAction } = await import('@/app/actions/user');
 
     await createAgentAction({
@@ -123,13 +129,13 @@ describe('active user role creation actions', () => {
         branchIds: ['branch-1'],
       }),
     );
-    expect(getCreatedUserPayload()).not.toHaveProperty('teamLeadId');
-    expect(getCreatedUserPayload()).not.toHaveProperty('teamLeadIds');
+    expect(getCreatedUserPayload()).not.toHaveProperty('managerId');
+    expect(getCreatedUserPayload()).not.toHaveProperty('managerIds');
     expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerId');
     expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerIds');
   });
 
-  it('creates monitors without retired teamLead attributes', async () => {
+  it('creates monitors without retired manager attributes', async () => {
     const { createAgentAction } = await import('@/app/actions/user');
 
     await createAgentAction({
@@ -150,13 +156,13 @@ describe('active user role creation actions', () => {
         branchIds: [],
       }),
     );
-    expect(getCreatedUserPayload()).not.toHaveProperty('teamLeadId');
-    expect(getCreatedUserPayload()).not.toHaveProperty('teamLeadIds');
+    expect(getCreatedUserPayload()).not.toHaveProperty('managerId');
+    expect(getCreatedUserPayload()).not.toHaveProperty('managerIds');
     expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerId');
     expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerIds');
   });
 
-  it('creates operations users without retired teamLead attributes', async () => {
+  it('creates operations users without retired manager attributes', async () => {
     const { createAgentAction } = await import('@/app/actions/user');
 
     await createAgentAction({
@@ -177,8 +183,8 @@ describe('active user role creation actions', () => {
         branchIds: [],
       }),
     );
-    expect(getCreatedUserPayload()).not.toHaveProperty('teamLeadId');
-    expect(getCreatedUserPayload()).not.toHaveProperty('teamLeadIds');
+    expect(getCreatedUserPayload()).not.toHaveProperty('managerId');
+    expect(getCreatedUserPayload()).not.toHaveProperty('managerIds');
     expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerId');
     expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerIds');
   });

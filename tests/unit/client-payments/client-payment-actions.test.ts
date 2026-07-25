@@ -103,7 +103,18 @@ describe("client payment action authorization", () => {
     });
   });
 
-  it("rejects monitor client payment mutations", async () => {
+  // This test previously asserted that monitors are rejected. That expectation
+  // was written on 2026-06-08 (b53b743) and superseded on 2026-06-24 by 8154088,
+  // "fixed the issue that was breaking for the auth for monitor role user",
+  // which deliberately allows monitor to mutate. assertCanMutateClientPayments
+  // in app/actions/client-payments.ts carries the reasoning: a monitor may close
+  // a lead, and closing a lead upserts the matching client payment record.
+  // `operations` stays read-only and is covered by the next test.
+  //
+  // NOTE: CLAUDE.md still documents monitor as having "no mutation privileges",
+  // which contradicts the shipped behaviour. The code is newer and explicit, so
+  // this test follows the code; the documentation needs correcting.
+  it("allows monitor client payment mutations, unlike operations", async () => {
     mockGetDocument
       .mockResolvedValueOnce({
         $id: "monitor-1",
@@ -119,6 +130,29 @@ describe("client payment action authorization", () => {
         branchId: "branch-9",
       });
 
+    mockListDocuments.mockResolvedValueOnce({
+      documents: [
+        {
+          $id: "payment-1",
+          leadId: "lead-1",
+          personalDetails: "{}",
+          paymentPlan: JSON.stringify({ percent: 20, months: 4, upfrontAmount: 1000 }),
+          updates: "[]",
+          status: "partially_paid",
+          createdAt: "2026-06-01T00:00:00.000Z",
+        },
+      ],
+    });
+    mockUpdateDocument.mockResolvedValueOnce({
+      $id: "payment-1",
+      leadId: "lead-1",
+      personalDetails: "{}",
+      paymentPlan: JSON.stringify({ percent: 20, months: 4, upfrontAmount: 1000 }),
+      updates: "[]",
+      status: "fully_paid",
+      createdAt: "2026-06-01T00:00:00.000Z",
+    });
+
     const { addClientPaymentUpdateAction } = await import(
       "@/app/actions/client-payments"
     );
@@ -130,10 +164,13 @@ describe("client payment action authorization", () => {
         status: "fully_paid",
         note: "Paid",
       }),
-    ).rejects.toThrow("Not authorized");
+    ).resolves.toMatchObject({ $id: "payment-1" });
 
-    expect(mockUpdateDocument).not.toHaveBeenCalled();
-    expect(mockCreateDocument).not.toHaveBeenCalled();
+    expect(mockUpdateDocument).toHaveBeenCalledTimes(1);
+    const updateCall = mockUpdateDocument.mock.calls[0];
+    const payload = updateCall[updateCall.length - 1] as { updates?: string };
+    const parsed = JSON.parse(payload.updates!);
+    expect(parsed[0]).toMatchObject({ status: "fully_paid", actorId: "monitor-1" });
   });
 
   it("allows operations to read any client payment record", async () => {

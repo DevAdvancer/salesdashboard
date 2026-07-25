@@ -63,7 +63,7 @@ describe('AuthContext', () => {
       });
 
       expect(result.current.user).toBeNull();
-      expect(result.current.isManager).toBe(false);
+      expect(result.current.isTeamLead).toBe(false);
       expect(result.current.isAgent).toBe(false);
       expect(typeof result.current.login).toBe('function');
       expect(typeof result.current.logout).toBe('function');
@@ -71,30 +71,12 @@ describe('AuthContext', () => {
     });
   });
 
+  // Self-service signup was deliberately removed from the product: /signup
+  // redirects to /login, the login page renders no signup link, and
+  // AuthProvider.signup rejects. Accounts are created by an admin instead.
   describe('signup', () => {
-    it('should create teamLead account by default', async () => {
-      const mockAccountData = {
-        $id: 'user-123',
-        email: 'teamLead@test.com',
-        name: 'Test TeamLead',
-      };
-
-      const mockUserDoc = {
-        $id: 'user-123',
-        name: 'Test TeamLead',
-        email: 'teamLead@test.com',
-        role: 'team_lead',
-        teamLeadId: null,
-        branchIds: [],
-        branchId: null,
-        $createdAt: '2024-01-01T00:00:00.000Z',
-        $updatedAt: '2024-01-01T00:00:00.000Z',
-      };
-
+    it('should reject because self-service signup is disabled', async () => {
       mockAccount.get.mockRejectedValue(new Error('No session'));
-      mockAccount.create.mockResolvedValue(mockAccountData as any);
-      mockDatabases.createDocument.mockResolvedValue(mockUserDoc as any);
-      mockAccount.createEmailPasswordSession.mockResolvedValue({} as any);
 
       const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -102,37 +84,15 @@ describe('AuthContext', () => {
         expect(result.current.loading).toBe(false);
       });
 
-      await act(async () => {
-        await result.current.signup('Test TeamLead', 'teamLead@test.com', 'password123');
-      });
+      await expect(
+        result.current.signup('Test TeamLead', 'teamLead@test.com', 'password123')
+      ).rejects.toThrow('Signup is disabled. Ask an admin to create the user account.');
 
-      expect(mockAccount.create).toHaveBeenCalledWith(
-        expect.any(String),
-        'teamLead@test.com',
-        'password123',
-        'Test TeamLead'
-      );
-
-      expect(mockDatabases.createDocument).toHaveBeenCalledWith(
-        'test-db',
-        'test-users-collection',
-        'user-123',
-        {
-          name: 'Test TeamLead',
-          email: 'teamLead@test.com',
-          role: 'team_lead',
-          teamLeadId: null,
-        }
-      );
-
-      expect(mockAccount.createEmailPasswordSession).toHaveBeenCalledWith(
-        'teamLead@test.com',
-        'password123'
-      );
-
-      expect(result.current.user).toMatchObject(mockUserDoc);
-      expect(result.current.isManager).toBe(true);
-      expect(result.current.isAgent).toBe(false);
+      expect(mockAccount.create).not.toHaveBeenCalled();
+      expect(mockDatabases.createDocument).not.toHaveBeenCalled();
+      expect(mockAccount.createEmailPasswordSession).not.toHaveBeenCalled();
+      expect(result.current.user).toBeNull();
+      expect(result.current.isTeamLead).toBe(false);
     });
   });
 
@@ -178,7 +138,7 @@ describe('AuthContext', () => {
 
       expect(result.current.user).toMatchObject(mockUserDoc);
       expect(result.current.isAgent).toBe(true);
-      expect(result.current.isManager).toBe(false);
+      expect(result.current.isTeamLead).toBe(false);
     });
 
     it('should not resync the server session again on immediate window focus', async () => {
@@ -266,7 +226,7 @@ describe('AuthContext', () => {
 
       expect(mockAccount.deleteSession).toHaveBeenCalledWith('current');
       expect(result.current.user).toBeNull();
-      expect(result.current.isManager).toBe(false);
+      expect(result.current.isTeamLead).toBe(false);
       expect(result.current.isAgent).toBe(false);
     });
   });
@@ -294,7 +254,7 @@ describe('AuthContext', () => {
         expect(result.current.user).toMatchObject(mockUserDoc);
       });
 
-      expect(result.current.isManager).toBe(true);
+      expect(result.current.isTeamLead).toBe(true);
       expect(result.current.isAgent).toBe(false);
     });
 
@@ -321,7 +281,7 @@ describe('AuthContext', () => {
       });
 
       expect(result.current.isAgent).toBe(true);
-      expect(result.current.isManager).toBe(false);
+      expect(result.current.isTeamLead).toBe(false);
     });
   });
 
