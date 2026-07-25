@@ -43,6 +43,9 @@ for (const [key, value] of Object.entries(TEST_ENV)) {
 // jsdom does not provide TextEncoder / TextDecoder. jest.setup.js also sets
 // these, but it runs after this file and after module-scope code in anything a
 // test imports.
+// This file is loaded by Jest via setupFiles as CommonJS, before any ESM
+// transform applies, so require is the only form that works here.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { TextEncoder, TextDecoder } = require('util');
 if (typeof globalThis.TextEncoder === 'undefined') globalThis.TextEncoder = TextEncoder;
 if (typeof globalThis.TextDecoder === 'undefined') globalThis.TextDecoder = TextDecoder;

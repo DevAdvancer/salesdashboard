@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { ID, Query } from 'node-appwrite';
 import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { createAdminClient } from '@/lib/server/appwrite';
-import { getRequestCount } from '@/lib/server/appwrite-request-meter';
+import { getRequestCount, withRequestMeter } from '@/lib/server/appwrite-request-meter';
 import {
   loadNotificationCountsSince,
   notificationDedupKey,
@@ -128,6 +128,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // The scope has to be opened here. getRequestCount() reads the active
+  // AsyncLocalStorage store, so without this wrapper the appwriteRequests field
+  // in the response below reports 0 on every run.
+  const { result } = await withRequestMeter(() => runWithdrawalReminderSweep());
+  return result;
+}
+
+async function runWithdrawalReminderSweep() {
   const now = new Date();
   const nowIso = now.toISOString();
   const todayStartIso = getTodayStartIso(now);

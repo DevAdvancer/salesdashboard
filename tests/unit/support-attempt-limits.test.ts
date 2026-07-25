@@ -33,11 +33,14 @@ jest.mock('node-appwrite', () => ({
   },
 }));
 
-const { reserveAssessmentAttempt, countAssessmentEmailsSentInRange } = require('@/app/actions/assessment');
-const { reserveInterviewAttempt, countInterviewEmailsSentInRange } = require('@/app/actions/interview');
-const { countMockEmailsSentInRange } = require('@/app/actions/mock');
-const { listAllDocuments } = require('@/lib/server/appwrite-pagination');
-const { listLeadsAction } = require('@/app/actions/lead');
+// Static imports are safe here despite the jest.mock calls above: babel-jest
+// hoists jest.mock above imports, and this file does not call resetModules, so
+// there is no need for a deferred require.
+import { reserveAssessmentAttempt, countAssessmentEmailsSentInRange } from '@/app/actions/assessment';
+import { reserveInterviewAttempt, countInterviewEmailsSentInRange } from '@/app/actions/interview';
+import { countMockEmailsSentInRange } from '@/app/actions/mock';
+import { listAllDocuments } from '@/lib/server/appwrite-pagination';
+import { listLeadsAction } from '@/app/actions/lead';
 
 describe('support attempt limits', () => {
   beforeEach(() => {

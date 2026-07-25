@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { Query } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
-import { getRequestCount } from "@/lib/server/appwrite-request-meter";
+import { getRequestCount, withRequestMeter } from "@/lib/server/appwrite-request-meter";
 import { createNotificationsForRecipients } from "@/lib/server/notifications";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import {
@@ -147,6 +147,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // The scope has to be opened here. getRequestCount() reads the active
+  // AsyncLocalStorage store, so without this wrapper the appwriteRequests field
+  // in the response below reports 0 on every run.
+  const { result } = await withRequestMeter(() => runPartialPaidSweep());
+  return result;
+}
+
+async function runPartialPaidSweep() {
   const days = Number(
     process.env.PARTIAL_PAID_STALE_DAYS ?? "2",
   );

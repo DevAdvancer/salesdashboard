@@ -32,6 +32,8 @@
 import { config } from 'dotenv';
 import { Client, Databases, Query } from 'node-appwrite';
 import { getSpecialBranchLeadAccess } from '../lib/constants/special-lead-access';
+import { COLLECTIONS, DATABASE_ID } from '../lib/constants/appwrite';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -41,9 +43,11 @@ config({ path: '.env' });
 const ENDPOINT = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT;
 const PROJECT_ID = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID;
 const API_KEY = process.env.APPWRITE_API_KEY;
-const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID ?? 'crm-database-1';
-const USERS_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID ?? 'users';
-const LEADS_ID = process.env.NEXT_PUBLIC_APPWRITE_LEADS_COLLECTION_ID ?? 'leads';
+// DATABASE_ID and COLLECTIONS already apply the NEXT_PUBLIC_APPWRITE_* env
+// overrides with the same defaults, so reading those vars again here would just
+// duplicate the fallback literals in a second place.
+const USERS_ID = COLLECTIONS.USERS;
+const LEADS_ID = COLLECTIONS.LEADS;
 
 const ADMIN_LIKE = ['admin', 'developer', 'monitor', 'operations'];
 
@@ -163,9 +167,14 @@ async function main() {
     }
   }
 
+  // The baseline stores a truncated SHA-256 of each Appwrite document id rather
+  // than the id itself, so the committed fixture carries no production
+  // identifiers. Recompute the same hash here to line the two up.
+  const hashId = (id: string) => createHash('sha256').update(id).digest('hex').slice(0, 16);
+
   const current = new Map(
     users.map((u) => [
-      u.$id,
+      hashId(u.$id),
       {
         role: u.role,
         owned: leads.filter((l) => l.ownerId === u.$id).length,
@@ -186,9 +195,9 @@ async function main() {
   }
 
   for (const expected of baseline.users) {
-    const actual = current.get(expected.id);
+    const actual = current.get(expected.idHash);
     if (!actual) {
-      problems.push(`${expected.label} (${expected.id}) is missing from the users collection`);
+      problems.push(`${expected.label} (${expected.idHash}) is missing from the users collection`);
       continue;
     }
     for (const field of ['owned', 'assigned', 'app', 'doc'] as const) {
@@ -198,11 +207,11 @@ async function main() {
         );
       }
     }
-    current.delete(expected.id);
+    current.delete(expected.idHash);
   }
 
-  for (const [id, row] of current) {
-    problems.push(`new user not in baseline: ${id} (${row.role})`);
+  for (const [idHash, row] of current) {
+    problems.push(`new user not in baseline: ${idHash} (${row.role})`);
   }
 
   if (problems.length === 0) {
