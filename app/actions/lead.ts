@@ -22,6 +22,10 @@ import { REQUIRED_LEAD_FIELD_KEYS } from "@/lib/utils/required-lead-fields";
 import { expandIsoDateToStart, expandIsoDateToEnd } from "@/lib/utils/iso-date-range";
 import { workingDaysInRange, type KpiRow } from "@/lib/utils/dashboard-kpi";
 import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
+import {
+  buildDepartmentScopeQuery,
+  isDepartmentScopeInlineEnabled,
+} from "@/lib/server/department-scope-query";
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const LEADS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_LEADS_COLLECTION_ID!;
@@ -1369,7 +1373,7 @@ export async function listLeadsAction(
     assertSalesCrmAccess(userDoc);
     const userRole = userDoc.role;
     const skipDepartmentScope = options?.skipDepartmentScope === true;
-    const salesUserIds =
+    let salesUserIds =
       isAdminLikeReadAllRole(userRole) && !skipDepartmentScope
         ? await getDepartmentScopedUserIds(databases, 'sales')
         : null;
@@ -1424,6 +1428,22 @@ export async function listLeadsAction(
         branchIds,
         true,
       );
+    }
+
+    // Express the department scope as a query instead of walking the whole
+    // collection and filtering with leadMatchesDepartmentScope below. Nulling
+    // salesUserIds is what makes the walk branch fall through to the single
+    // paginated listDocuments call. This runs after the role branch on
+    // purpose: the teamLeadId branch narrows its teamIds with salesUserIds,
+    // and doing that narrowing is not equivalent to ORing the scope on top.
+    // Export keeps the walk (see wantExport below): its callers need the full
+    // set, so there is nothing to save and nothing to risk changing there.
+    if (salesUserIds && options?.forExport !== true && isDepartmentScopeInlineEnabled()) {
+      const departmentScopeQuery = buildDepartmentScopeQuery(salesUserIds);
+      if (departmentScopeQuery) {
+        queries.push(departmentScopeQuery);
+        salesUserIds = null;
+      }
     }
 
     if (filters.ids && filters.ids.length > 0) {
@@ -1691,7 +1711,7 @@ export async function listLeadCountsAction(
     const specialBranchId = getSpecialBranchLeadAccess(
       userDoc.email as string | undefined
     );
-    const salesUserIds =
+    let salesUserIds =
       isAdminLikeReadAllRole(userRole)
         ? await getDepartmentScopedUserIds(databases, 'sales')
         : null;
@@ -1766,6 +1786,19 @@ export async function listLeadCountsAction(
         branchIds,
         true
       );
+    }
+
+    // Same swap as listLeadsAction: with the scope expressed as a query the
+    // buckets below can be counted by Appwrite's `total`, instead of walking
+    // every page of the collection and counting in memory. Placed after the
+    // role branch because the teamLeadId branch narrows teamIds with
+    // salesUserIds, which is not the same predicate as ORing the scope on top.
+    if (salesUserIds && isDepartmentScopeInlineEnabled()) {
+      const departmentScopeQuery = buildDepartmentScopeQuery(salesUserIds);
+      if (departmentScopeQuery) {
+        visibilityQueries.push(departmentScopeQuery);
+        salesUserIds = null;
+      }
     }
 
     // Optional filter scope (branch / date / status). These are applied
