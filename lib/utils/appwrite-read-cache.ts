@@ -29,6 +29,8 @@
  *    cleared slot.
  */
 
+import { bumpRequestCount } from "@/lib/server/appwrite-request-meter";
+
 type Callable = (...args: unknown[]) => unknown;
 
 const DEFAULT_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
@@ -185,6 +187,12 @@ export function createReadThroughDatabases<T extends object>(
           if (existingRequest) {
             return existingRequest;
           }
+
+          // Nothing cached and nothing in flight: this is the single point
+          // where a read turns into a real Appwrite HTTP call, so it is the
+          // only place the meter should count. Hits and in-flight joins above
+          // cost nothing on the wire and must stay uncounted.
+          bumpRequestCount();
 
           const request = Promise.resolve(method.apply(target, args))
             .then((value) => {
