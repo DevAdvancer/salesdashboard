@@ -2,13 +2,47 @@ import { NextResponse, type NextRequest } from "next/server";
 import { Query } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
+import { getRequestCount } from "@/lib/server/appwrite-request-meter";
 import { createNotificationsForRecipients } from "@/lib/server/notifications";
+import { listAllDocuments } from "@/lib/server/appwrite-pagination";
+import {
+  loadNotificationCountsSince,
+  notificationDedupKey,
+} from "@/lib/server/notification-dedup";
 import type { ClientPaymentRecord, LeadData, User } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 const NOTIFICATION_TYPE = "CLIENT_PAYMENT_PARTIAL_PAID_STALE";
 const DAY_MS = 24 * 60 * 60 * 1000;
+// Appwrite caps a single Query.equal id list at 100 values.
+const ID_CHUNK_SIZE = 100;
+
+type AdminDatabases = Awaited<ReturnType<typeof createAdminClient>>["databases"];
+
+interface LeadReminderDoc {
+  $id?: unknown;
+  isClosed?: unknown;
+  assignedToId?: unknown;
+  ownerId?: unknown;
+  data?: unknown;
+}
+
+interface AgentReminderDoc {
+  $id?: unknown;
+  teamLeadId?: unknown;
+}
+
+interface PendingRow {
+  paymentDoc: ClientPaymentRecord;
+  leadId: string;
+  lastUpdateAt: string;
+}
+
+interface ReadyRow extends PendingRow {
+  lead: LeadReminderDoc;
+  agentId: string;
+}
 
 function getAuthorizationToken(request: NextRequest) {
   const header = request.headers.get("authorization");
@@ -74,25 +108,38 @@ async function getAdminAndOpsRecipientIds(
     .map((user) => user.$id);
 }
 
-async function hasNotificationToday(
-  databases: Awaited<ReturnType<typeof createAdminClient>>["databases"],
-  recipientId: string,
-  leadId: string,
-  todayStartIso: string,
+/**
+ * Fetch documents by id in batches of 100 instead of one getDocument per row.
+ * A missing entry in the returned map means the same thing the old per-row
+ * getDocument catch meant: the document is gone or unreadable.
+ */
+async function loadDocumentsByIds<T>(
+  databases: AdminDatabases,
+  collectionId: string,
+  ids: string[],
+  select: string[],
 ) {
-  const response = await databases.listDocuments(
-    DATABASE_ID,
-    COLLECTIONS.NOTIFICATIONS,
-    [
-      Query.equal("recipientId", recipientId),
-      Query.equal("type", NOTIFICATION_TYPE),
-      Query.equal("targetId", leadId),
-      Query.greaterThanEqual("createdAt", todayStartIso),
-      Query.limit(1),
-    ],
-  );
+  const byId = new Map<string, T>();
+  const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
 
-  return (response.total ?? response.documents.length) > 0;
+  for (let index = 0; index < uniqueIds.length; index += ID_CHUNK_SIZE) {
+    const chunk = uniqueIds.slice(index, index + ID_CHUNK_SIZE);
+    const documents = await listAllDocuments<Record<string, unknown>>({
+      databases,
+      databaseId: DATABASE_ID,
+      collectionId,
+      queries: [Query.equal("$id", chunk), Query.select(select)],
+      pageLimit: ID_CHUNK_SIZE,
+      maxPages: 5,
+    });
+
+    for (const doc of documents) {
+      const id = typeof doc.$id === "string" ? doc.$id : null;
+      if (id) byId.set(id, doc as T);
+    }
+  }
+
+  return byId;
 }
 
 export async function GET(request: NextRequest) {
@@ -127,6 +174,9 @@ export async function GET(request: NextRequest) {
   let skippedDailyCap = 0;
   let remindersSent = 0;
 
+  // Pass 1: apply the row filters that need no extra read, and collect the lead
+  // ids so the lead documents can be fetched in batches.
+  const pendingRows: PendingRow[] = [];
   for (const paymentDoc of response.documents as unknown as ClientPaymentRecord[]) {
     evaluated += 1;
 
@@ -140,14 +190,24 @@ export async function GET(request: NextRequest) {
     const leadId = paymentDoc.leadId;
     if (!leadId) continue;
 
-    let lead: Awaited<ReturnType<typeof databases.getDocument>> | null = null;
-    try {
-      lead = await databases.getDocument(DATABASE_ID, COLLECTIONS.LEADS, leadId);
-    } catch {
-      continue;
-    }
+    pendingRows.push({ paymentDoc, leadId, lastUpdateAt });
+  }
 
-    if (lead?.isClosed) {
+  const leadsById = await loadDocumentsByIds<LeadReminderDoc>(
+    databases,
+    COLLECTIONS.LEADS,
+    pendingRows.map((row) => row.leadId),
+    ["$id", "isClosed", "assignedToId", "ownerId", "data"],
+  );
+
+  // Pass 2: resolve each row against the lead map so the agent ids can also be
+  // fetched in batches rather than one getDocument per row.
+  const readyRows: ReadyRow[] = [];
+  for (const row of pendingRows) {
+    const lead = leadsById.get(row.leadId);
+    if (!lead) continue;
+
+    if (lead.isClosed) {
       // Closed-and-partial-paid is already covered by the existing
       // payment-reminders cron. This job targets OPEN partial-paid leads only.
       skippedClosed += 1;
@@ -155,22 +215,35 @@ export async function GET(request: NextRequest) {
     }
 
     const assignedToId =
-      typeof lead?.assignedToId === "string" ? lead.assignedToId : null;
-    const ownerId = typeof lead?.ownerId === "string" ? lead.ownerId : null;
+      typeof lead.assignedToId === "string" ? lead.assignedToId : null;
+    const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : null;
     const agentId = assignedToId ?? ownerId;
     if (!agentId) continue;
 
-    let agentDoc: Awaited<ReturnType<typeof databases.getDocument>> | null = null;
-    try {
-      agentDoc = await databases.getDocument(
-        DATABASE_ID,
-        COLLECTIONS.USERS,
-        agentId,
-      );
-    } catch {
-      agentDoc = null;
-    }
+    readyRows.push({ ...row, lead, agentId });
+  }
 
+  const agentsById = await loadDocumentsByIds<AgentReminderDoc>(
+    databases,
+    COLLECTIONS.USERS,
+    readyRows.map((row) => row.agentId),
+    ["$id", "teamLeadId"],
+  );
+
+  // One scan of today's notifications replaces the per-recipient per-row
+  // "already notified?" query. The map is kept live during the send loop so the
+  // once-per-day rule still holds for repeated leads within this run.
+  const notificationCounts =
+    readyRows.length > 0
+      ? await loadNotificationCountsSince({
+          databases,
+          types: [NOTIFICATION_TYPE],
+          sinceIso: todayStartIso,
+        })
+      : new Map<string, number>();
+
+  for (const { paymentDoc, leadId, lastUpdateAt, lead, agentId } of readyRows) {
+    const agentDoc = agentsById.get(agentId) ?? null;
     const teamLeadId =
       agentDoc && typeof agentDoc.teamLeadId === "string"
         ? agentDoc.teamLeadId
@@ -192,16 +265,12 @@ export async function GET(request: NextRequest) {
     );
 
     // Per-day dedup: skip any recipient who already received this notification
-    // for this lead today. Process sequentially to keep query count bounded.
+    // for this lead today. Answered from the preloaded map, no query per row.
     const dedupedRecipients: string[] = [];
     let suppressedForAnyone = false;
     for (const recipientId of recipients) {
-      const alreadySent = await hasNotificationToday(
-        databases,
-        recipientId,
-        leadId,
-        todayStartIso,
-      );
+      const key = notificationDedupKey(recipientId, NOTIFICATION_TYPE, leadId);
+      const alreadySent = (notificationCounts.get(key) ?? 0) > 0;
       if (alreadySent) {
         suppressedForAnyone = true;
         continue;
@@ -225,6 +294,13 @@ export async function GET(request: NextRequest) {
         targetType: "LEAD",
       },
     );
+
+    // Record the sends in memory so a second payment row for the same lead is
+    // suppressed exactly as it was when the check hit the database each time.
+    for (const recipientId of dedupedRecipients) {
+      const key = notificationDedupKey(recipientId, NOTIFICATION_TYPE, leadId);
+      notificationCounts.set(key, (notificationCounts.get(key) ?? 0) + 1);
+    }
 
     // Refresh the throttle marker so a future run on the same stale window
     // (before any payment update) doesn't re-evaluate the lead.
@@ -260,5 +336,7 @@ export async function GET(request: NextRequest) {
     skippedClosed,
     skippedDailyCap,
     remindersSent,
+    // Counted only when the caller opened a meter scope; 0 otherwise.
+    appwriteRequests: getRequestCount(),
   });
 }
