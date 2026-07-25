@@ -84,7 +84,7 @@ They are unrelated. A user can be signed into the CRM with no Outlook connection
 
 The actual chain in [app/layout.tsx](app/layout.tsx):
 
-```
+```text
 AzureMsalProvider
   → ErrorBoundary
     → AuthProvider
