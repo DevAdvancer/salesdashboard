@@ -1,13 +1,13 @@
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 import { AuthProvider, useAuth } from '@/lib/contexts/auth-context';
-import { account, databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
-import { ID } from 'appwrite';
+import { account, databases } from '@/lib/appwrite';
 
 // Mock Appwrite SDK
 jest.mock('@/lib/appwrite', () => ({
   account: {
     create: jest.fn(),
     createEmailPasswordSession: jest.fn(),
+    createJWT: jest.fn(),
     get: jest.fn(),
     deleteSession: jest.fn(),
   },
@@ -30,23 +30,81 @@ jest.mock('appwrite', () => ({
   },
 }));
 
-describe('AuthContext - Signup Flow', () => {
+/**
+ * Self-service signup was deliberately removed from the product. `/signup`
+ * redirects to `/login`, the login page renders no signup link, and
+ * `AuthProvider.signup` rejects instead of provisioning anything. Accounts are
+ * created by an admin. These tests pin that contract so signup cannot quietly
+ * come back as an unauthenticated account-creation path.
+ */
+describe('AuthContext - Signup Flow (disabled)', () => {
+  const SIGNUP_DISABLED_MESSAGE =
+    'Signup is disabled. Ask an admin to create the user account.';
+
   beforeEach(() => {
     jest.clearAllMocks();
+    (account.createJWT as jest.Mock).mockResolvedValue({ jwt: 'test-jwt' });
+    global.fetch = jest.fn().mockResolvedValue({ ok: true }) as unknown as typeof fetch;
   });
 
-  it('creates teamLead account with role=teamLead and teamLeadId=null on signup', async () => {
-    const mockAccountData = {
-      $id: 'test-user-id',
-      email: 'teamLead@example.com',
-      name: 'Test TeamLead',
-    };
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <AuthProvider>{children}</AuthProvider>
+  );
 
-    const mockUserDocument = {
-      $id: 'test-user-id',
-      name: 'Test TeamLead',
-      email: 'teamLead@example.com',
+  const renderReadyAuth = async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    return result;
+  };
+
+  it('rejects with an explanation that an admin must create the account', async () => {
+    (account.get as jest.Mock).mockRejectedValue(new Error('No session'));
+
+    const result = await renderReadyAuth();
+
+    await expect(
+      result.current.signup('Test TeamLead', 'teamLead@example.com', 'password123')
+    ).rejects.toThrow(SIGNUP_DISABLED_MESSAGE);
+  });
+
+  it('does not create an Appwrite account or a user document', async () => {
+    (account.get as jest.Mock).mockRejectedValue(new Error('No session'));
+
+    const result = await renderReadyAuth();
+
+    await expect(
+      result.current.signup('Test TeamLead', 'teamLead@example.com', 'password123')
+    ).rejects.toThrow(SIGNUP_DISABLED_MESSAGE);
+
+    expect(account.create).not.toHaveBeenCalled();
+    expect(databases.createDocument).not.toHaveBeenCalled();
+  });
+
+  it('does not create a session for the caller', async () => {
+    (account.get as jest.Mock).mockRejectedValue(new Error('No session'));
+
+    const result = await renderReadyAuth();
+
+    await expect(
+      result.current.signup('Test TeamLead', 'teamLead@example.com', 'password123')
+    ).rejects.toThrow(SIGNUP_DISABLED_MESSAGE);
+
+    expect(account.createEmailPasswordSession).not.toHaveBeenCalled();
+    expect(account.deleteSession).not.toHaveBeenCalled();
+  });
+
+  it('leaves the current auth state untouched', async () => {
+    const existingUserDoc = {
+      $id: 'existing-user',
+      name: 'Existing User',
+      email: 'existing@example.com',
       role: 'team_lead',
+      department: 'sales',
+      isActive: true,
       teamLeadId: null,
       branchIds: [],
       branchId: null,
@@ -54,158 +112,20 @@ describe('AuthContext - Signup Flow', () => {
       $updatedAt: '2024-01-01T00:00:00.000Z',
     };
 
-    // Mock Appwrite responses
-    (account.create as jest.Mock).mockResolvedValue(mockAccountData);
-    (databases.createDocument as jest.Mock).mockResolvedValue(mockUserDocument);
-    (account.createEmailPasswordSession as jest.Mock).mockResolvedValue({});
-    (account.get as jest.Mock).mockResolvedValue(mockAccountData);
+    (account.get as jest.Mock).mockResolvedValue({ $id: 'existing-user' });
+    (databases.getDocument as jest.Mock).mockResolvedValue(existingUserDoc);
 
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
-      <AuthProvider>{children}</AuthProvider>
-    );
-
-    const { result } = renderHook(() => useAuth(), { wrapper });
-
-    // Wait for initial loading to complete
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
-    // Call signup
-    await act(async () => {
-      await result.current.signup('Test TeamLead', 'teamLead@example.com', 'password123');
-    });
-
-    // Verify account.create was called with correct parameters
-    expect(account.create).toHaveBeenCalledWith(
-      'test-unique-id',
-      'teamLead@example.com',
-      'password123',
-      'Test TeamLead'
-    );
-
-    // Verify user document was created with teamLead role and null teamLeadId
-    expect(databases.createDocument).toHaveBeenCalledWith(
-      DATABASE_ID,
-      COLLECTIONS.USERS,
-      'test-user-id',
-      {
-        name: 'Test TeamLead',
-        email: 'teamLead@example.com',
-        role: 'team_lead',
-        teamLeadId: null,
-      }
-    );
-
-    // Verify session was created
-    expect(account.createEmailPasswordSession).toHaveBeenCalledWith(
-      'teamLead@example.com',
-      'password123'
-    );
-
-    // Verify user state is set correctly
-    expect(result.current.user).toEqual(mockUserDocument);
-    expect(result.current.isManager).toBe(true);
-    expect(result.current.isAgent).toBe(false);
-  });
-
-  it('sets teamLeadId to null for teamLead accounts', async () => {
-    const mockAccountData = {
-      $id: 'teamLead-id',
-      email: 'teamLead@example.com',
-      name: 'TeamLead User',
-    };
-
-    const mockUserDocument = {
-      $id: 'teamLead-id',
-      name: 'TeamLead User',
-      email: 'teamLead@example.com',
-      role: 'team_lead',
-      teamLeadId: null,
-      branchId: null,
-      $createdAt: '2024-01-01T00:00:00.000Z',
-      $updatedAt: '2024-01-01T00:00:00.000Z',
-    };
-
-    (account.create as jest.Mock).mockResolvedValue(mockAccountData);
-    (databases.createDocument as jest.Mock).mockResolvedValue(mockUserDocument);
-    (account.createEmailPasswordSession as jest.Mock).mockResolvedValue({});
-    (account.get as jest.Mock).mockResolvedValue(mockAccountData);
-
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
-      <AuthProvider>{children}</AuthProvider>
-    );
-
-    const { result } = renderHook(() => useAuth(), { wrapper });
+    const result = await renderReadyAuth();
 
     await waitFor(() => {
-      expect(result.current.loading).toBe(false);
+      expect(result.current.user).toEqual(existingUserDoc);
     });
 
-    await act(async () => {
-      await result.current.signup('TeamLead User', 'teamLead@example.com', 'password123');
-    });
+    await expect(
+      result.current.signup('Someone Else', 'someone@example.com', 'password123')
+    ).rejects.toThrow(SIGNUP_DISABLED_MESSAGE);
 
-    // Verify teamLeadId is explicitly set to null
-    const createDocumentCall = (databases.createDocument as jest.Mock).mock.calls[0];
-    expect(createDocumentCall[3].teamLeadId).toBeNull();
-    expect(createDocumentCall[3].role).toBe('team_lead');
-  });
-
-  it('throws error when account creation fails', async () => {
-    (account.create as jest.Mock).mockRejectedValue(new Error('Account creation failed'));
-    (account.get as jest.Mock).mockResolvedValue(null);
-
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
-      <AuthProvider>{children}</AuthProvider>
-    );
-
-    const { result } = renderHook(() => useAuth(), { wrapper });
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
-    await expect(async () => {
-      await act(async () => {
-        await result.current.signup('Test User', 'test@example.com', 'password123');
-      });
-    }).rejects.toThrow('Account creation failed');
-
-    // Verify user document was not created
-    expect(databases.createDocument).not.toHaveBeenCalled();
-  });
-
-  it('throws error when user document creation fails', async () => {
-    const mockAccountData = {
-      $id: 'test-user-id',
-      email: 'test@example.com',
-      name: 'Test User',
-    };
-
-    (account.create as jest.Mock).mockResolvedValue(mockAccountData);
-    (databases.createDocument as jest.Mock).mockRejectedValue(
-      new Error('Document creation failed')
-    );
-    (account.get as jest.Mock).mockResolvedValue(null);
-
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
-      <AuthProvider>{children}</AuthProvider>
-    );
-
-    const { result } = renderHook(() => useAuth(), { wrapper });
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
-    await expect(async () => {
-      await act(async () => {
-        await result.current.signup('Test User', 'test@example.com', 'password123');
-      });
-    }).rejects.toThrow('Document creation failed');
-
-    // Verify session was not created
-    expect(account.createEmailPasswordSession).not.toHaveBeenCalled();
+    expect(result.current.user).toEqual(existingUserDoc);
+    expect(result.current.isTeamLead).toBe(true);
   });
 });

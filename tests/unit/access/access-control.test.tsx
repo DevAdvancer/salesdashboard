@@ -28,11 +28,17 @@ jest.mock('@/lib/contexts/auth-context', () => ({
 // Import after mocks are set up
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { AccessControlProvider, useAccess, ComponentKey } from '@/lib/contexts/access-control-context';
+import { invalidateAccessRulesCache } from '@/lib/services/access-config-service';
 import React from 'react';
 
 describe('Access Control System', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Access rules are read through a module-level client read cache keyed by
+    // `${userId}:${role}`. That cache outlives an individual test, so without
+    // this reset a later test reusing the same user id would keep the rules
+    // fetched by an earlier test instead of its own mocked documents.
+    invalidateAccessRulesCache();
   });
 
   const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -59,14 +65,17 @@ describe('Access Control System', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // Agents get default access to work basics and their own settings
+      // Agents get default access to work basics, the client history page
+      // and their own settings. Agent access to history is deliberate: it is
+      // listed for 'agent' in COMPONENT_ACCESS and granted unconditionally in
+      // AccessControlProvider.canAccess.
       expect(result.current.canAccess('dashboard')).toBe(true);
       expect(result.current.canAccess('leads')).toBe(true);
+      expect(result.current.canAccess('history')).toBe(true);
       expect(result.current.canAccess('settings')).toBe(true);
 
       // Agents should be denied access to other components by default
       const deniedComponents: ComponentKey[] = [
-        'history',
         'user-management',
         'field-management',
       ];
@@ -101,13 +110,16 @@ describe('Access Control System', () => {
         'leads',
         'history',
         'user-management',
-        'field-management',
         'settings',
       ];
 
       components.forEach((component) => {
         expect(result.current.canAccess(component)).toBe(true);
       });
+
+      // Field management was removed from the product: its COMPONENT_ACCESS
+      // entry is empty, so no role, team lead included, is eligible.
+      expect(result.current.canAccess('field-management')).toBe(false);
     });
 
     it('should grant monitor broad read access by default', async () => {
@@ -266,7 +278,10 @@ describe('Access Control System', () => {
       // Custom rules should override defaults
       expect(result.current.canAccess('dashboard')).toBe(true);
       expect(result.current.canAccess('leads')).toBe(true);
-      expect(result.current.canAccess('history')).toBe(false);
+      // 'history' (the Client page) is an always-on component for agents, in
+      // the same way 'settings' is for every role: canAccess grants it before
+      // the custom-rule lookup, so a stored deny rule does not take it away.
+      expect(result.current.canAccess('history')).toBe(true);
 
       // Components without custom rules should use default (false for agents)
       expect(result.current.canAccess('user-management')).toBe(false);
@@ -362,8 +377,9 @@ describe('Access Control System', () => {
       expect(result.current.canAccess('leads')).toBe(true);
 
       // Explicitly denied
-      expect(result.current.canAccess('history')).toBe(false);
       expect(result.current.canAccess('user-management')).toBe(false);
+      // Always-on for agents, so the stored deny rule does not apply
+      expect(result.current.canAccess('history')).toBe(true);
 
       // No rule - field management stays false, profile settings stay available
       expect(result.current.canAccess('field-management')).toBe(false);
@@ -406,13 +422,14 @@ describe('Access Control System', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // TeamLead should have access to everything
+      // TeamLead should have access to everything they are eligible for.
+      // Field management is excluded because the module was removed and its
+      // COMPONENT_ACCESS entry is empty for every role.
       const components: ComponentKey[] = [
         'dashboard',
         'leads',
         'history',
         'user-management',
-        'field-management',
         'settings',
       ];
 
@@ -571,10 +588,10 @@ describe('Access Control System', () => {
       // Initial state
       expect(result.current.canAccess('dashboard')).toBe(true);
       expect(result.current.canAccess('leads')).toBe(true);
-      // history has no custom rule, defaults to false for agents
-      expect(result.current.canAccess('history')).toBe(false);
+      // history has no custom rule and agents are eligible for it by default
+      expect(result.current.canAccess('history')).toBe(true);
 
-      // Update rules attempt to add history access, but central role eligibility blocks it.
+      // Rules are refreshed; history stays available either way.
       const updatedRules = [
         {
           $id: 'rule-1',
@@ -602,7 +619,7 @@ describe('Access Control System', () => {
 
       // Updated state
       expect(result.current.canAccess('dashboard')).toBe(true);
-      expect(result.current.canAccess('history')).toBe(false);
+      expect(result.current.canAccess('history')).toBe(true);
       expect(result.current.canAccess('leads')).toBe(true);
     });
 

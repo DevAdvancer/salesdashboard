@@ -103,7 +103,9 @@ describe('Lead Service', () => {
         'test-leads-collection',
         'unique()',
         {
-          data: JSON.stringify(mockLeadData),
+          // createLead stamps the creating user into the serialized data
+          // blob as `creatorId` before persisting (lib/services/lead-service.ts).
+          data: JSON.stringify({ ...mockLeadData, creatorId: mockManagerId }),
           status: 'Interested',
           ownerId: mockManagerId,
           assignedToId: mockAgentId,

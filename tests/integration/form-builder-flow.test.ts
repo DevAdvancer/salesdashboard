@@ -46,7 +46,7 @@ describe('Integration: Form Builder Flow', () => {
     jest.clearAllMocks();
   });
 
-  it('should complete the form builder flow: add field → publish → validate → create lead', async () => {
+  it('should read the form config and render a custom field to agents', async () => {
     // Step 1: Get current form config (returns defaults when no config exists)
     (databases.getDocument as jest.Mock).mockRejectedValueOnce({
       code: 404,
@@ -57,7 +57,7 @@ describe('Integration: Form Builder Flow', () => {
     expect(initialConfig.fields).toEqual(DEFAULT_FIELDS);
     expect(initialConfig.version).toBe(0);
 
-    // Step 2: TeamLead adds a custom field
+    // Step 2: A config carrying a custom field, as read back from the database
     const customField: FormField = {
       id: '14',
       type: 'text',
@@ -68,31 +68,16 @@ describe('Integration: Form Builder Flow', () => {
       order: 14,
     };
 
-    const updatedFields = [...DEFAULT_FIELDS, customField];
+    const publishedFields = [...DEFAULT_FIELDS, customField];
 
-    // Mock getFormConfig for the addField call
-    (databases.getDocument as jest.Mock).mockRejectedValueOnce({
-      code: 404,
-      message: 'Document not found',
-    });
-
-    // Mock the updateFormConfig (which tries update then create)
-    (databases.getDocument as jest.Mock).mockRejectedValueOnce({
-      code: 404,
-      message: 'Document not found',
-    });
-    (databases.updateDocument as jest.Mock).mockRejectedValueOnce({
-      code: 404,
-      message: 'Document not found',
-    });
-    (databases.createDocument as jest.Mock).mockResolvedValueOnce({
+    (databases.getDocument as jest.Mock).mockResolvedValueOnce({
       $id: 'current',
-      fields: JSON.stringify(updatedFields),
+      fields: JSON.stringify(publishedFields),
       version: 1,
       updatedBy: teamLeadId,
     });
 
-    const publishedConfig = await addField(customField, teamLeadId);
+    const publishedConfig = await getFormConfig();
     expect(publishedConfig.version).toBe(1);
     expect(publishedConfig.fields).toHaveLength(DEFAULT_FIELDS.length + 1);
 
@@ -116,11 +101,13 @@ describe('Integration: Form Builder Flow', () => {
       linkedinProfile: 'https://linkedin.com/in/johndoe',
     };
 
-    // Schema should accept valid data (optional fields can be empty)
     const result = schema.safeParse(validData);
-    // Note: Some fields may fail validation due to required fields not being provided
-    // The important thing is that the schema includes the new field
-    expect(shape.linkedinProfile).toBeDefined();
+    // Other DEFAULT_FIELDS may be required and absent here, but the custom
+    // field must never be the reason validation fails.
+    const linkedinIssues = result.success
+      ? []
+      : result.error.issues.filter((issue) => issue.path[0] === 'linkedinProfile');
+    expect(linkedinIssues).toHaveLength(0);
   });
 
   it('should enforce required field validation from form config', () => {
@@ -313,32 +300,49 @@ describe('Integration: Form Builder Flow', () => {
     expect(validResult.success).toBe(true);
   });
 
-  it('should handle version increment on publish', async () => {
+  it('should reject every form config mutation while field management is disabled', async () => {
+    // updateFormConfig was gutted in commit 8343d51 and now throws
+    // unconditionally; nothing in app/ or components/ calls it any more. Every
+    // mutator delegates to it, so the whole field-management surface is closed
+    // and must not silently write to the form_config collection.
     const currentFields = DEFAULT_FIELDS;
 
-    // Mock current config at version 3
-    (databases.getDocument as jest.Mock)
-      .mockResolvedValueOnce({
-        $id: 'current',
-        fields: JSON.stringify(currentFields),
-        version: 3,
-        updatedBy: teamLeadId,
-      })
-      .mockResolvedValueOnce({
-        $id: 'current',
-        fields: JSON.stringify(currentFields),
-        version: 3,
-        updatedBy: teamLeadId,
-      });
-
-    (databases.updateDocument as jest.Mock).mockResolvedValueOnce({
+    (databases.getDocument as jest.Mock).mockResolvedValue({
       $id: 'current',
       fields: JSON.stringify(currentFields),
-      version: 4,
+      version: 3,
       updatedBy: teamLeadId,
     });
 
-    const result = await updateFormConfig(currentFields, teamLeadId);
-    expect(result.version).toBe(4);
+    const newField: FormField = {
+      id: '99',
+      type: 'text',
+      label: 'Extra',
+      key: 'extra',
+      required: false,
+      visible: true,
+      order: 99,
+    };
+
+    await expect(updateFormConfig(currentFields, teamLeadId)).rejects.toThrow(
+      'Field management is disabled'
+    );
+    await expect(addField(newField, teamLeadId)).rejects.toThrow('Field management is disabled');
+    await expect(removeField(currentFields[0].id, teamLeadId)).rejects.toThrow(
+      'Field management is disabled'
+    );
+    await expect(
+      reorderFields(currentFields.map((f) => f.id).reverse(), teamLeadId)
+    ).rejects.toThrow('Field management is disabled');
+    await expect(toggleFieldVisibility(currentFields[0].id, teamLeadId)).rejects.toThrow(
+      'Field management is disabled'
+    );
+    await expect(toggleFieldRequired(currentFields[0].id, teamLeadId)).rejects.toThrow(
+      'Field management is disabled'
+    );
+
+    // No mutation may reach the database
+    expect(databases.updateDocument).not.toHaveBeenCalled();
+    expect(databases.createDocument).not.toHaveBeenCalled();
   });
 });

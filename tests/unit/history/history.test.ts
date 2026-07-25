@@ -11,12 +11,61 @@ jest.mock('@/lib/appwrite', () => ({
   DATABASE_ID: 'test-database',
   COLLECTIONS: {
     LEADS: 'test-leads-collection',
+    // listLeads resolves the caller with getUserById and, for team leads,
+    // reads the team roster out of the users collection, so the mock has to
+    // know about that collection too.
+    USERS: 'test-users-collection',
   },
 }));
+
+const USERS_COLLECTION = 'test-users-collection';
+
+// Roster returned for the users collection: the team lead under test plus the
+// one agent reporting to them.
+const teamUserDocs = [
+  {
+    $id: 'agent-1',
+    name: 'Agent One',
+    email: 'agent-1@test.com',
+    role: 'agent',
+    teamLeadId: 'teamLead-1',
+    branchIds: [],
+  },
+];
+
+/**
+ * Route listDocuments by collection: leads for the leads collection, the team
+ * roster for the users collection. A single mockResolvedValue would hand the
+ * lead documents back as if they were user documents.
+ */
+function mockDocuments(leadDocs: unknown[]) {
+  (databases.listDocuments as jest.Mock).mockImplementation(
+    async (_databaseId: string, collectionId: string) => {
+      if (collectionId === USERS_COLLECTION) {
+        return { documents: teamUserDocs, total: teamUserDocs.length };
+      }
+      return { documents: leadDocs, total: leadDocs.length };
+    }
+  );
+}
 
 describe('History Functionality', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // getUserById (called by listLeads to resolve the acting user) reads a
+    // single user document. Without a default the mock resolves undefined and
+    // mapDocToUser throws on `doc.$id`.
+    (databases.getDocument as jest.Mock).mockImplementation(
+      async (_databaseId: string, _collectionId: string, documentId: string) => ({
+        $id: documentId,
+        name: documentId,
+        email: `${documentId}@test.com`,
+        role: documentId.startsWith('agent') ? 'agent' : 'team_lead',
+        teamLeadId: null,
+        branchIds: [],
+      })
+    );
   });
 
   describe('Closed Leads Filtering', () => {
@@ -34,10 +83,7 @@ describe('History Functionality', () => {
         },
       ];
 
-      (databases.listDocuments as jest.Mock).mockResolvedValue({
-        documents: mockLeads,
-        total: 1,
-      });
+      mockDocuments(mockLeads);
 
       const result = await listLeads({ isClosed: true }, 'teamLead-1', 'team_lead');
 
@@ -89,10 +135,7 @@ describe('History Functionality', () => {
         },
       ];
 
-      (databases.listDocuments as jest.Mock).mockResolvedValue({
-        documents: mockLeads,
-        total: 1,
-      });
+      mockDocuments(mockLeads);
 
       const result = await listLeads(
         { isClosed: true, status: 'Won' },
@@ -118,10 +161,7 @@ describe('History Functionality', () => {
         },
       ];
 
-      (databases.listDocuments as jest.Mock).mockResolvedValue({
-        documents: mockLeads,
-        total: 1,
-      });
+      mockDocuments(mockLeads);
 
       const result = await listLeads(
         { isClosed: true, assignedToId: 'agent-1' },
@@ -149,10 +189,7 @@ describe('History Functionality', () => {
         },
       ];
 
-      (databases.listDocuments as jest.Mock).mockResolvedValue({
-        documents: mockLeads,
-        total: 1,
-      });
+      mockDocuments(mockLeads);
 
       const result = await listLeads({ isClosed: true }, 'agent-1', 'agent');
 

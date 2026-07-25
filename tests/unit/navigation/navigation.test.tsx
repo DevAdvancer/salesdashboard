@@ -8,6 +8,12 @@ import { useRouter, usePathname } from "next/navigation";
 // Mock the contexts and hooks
 jest.mock("@/lib/contexts/auth-context");
 jest.mock("@/lib/contexts/access-control-context");
+// The notification bell pulls in the SOP service, which imports the
+// `node-appwrite` server SDK (ESM-only dependency Jest cannot parse).
+// The bell is not part of what these navigation tests assert, so stub it.
+jest.mock("@/components/notification-bell", () => ({
+  NotificationBell: () => null,
+}));
 jest.mock("next/navigation", () => ({
   useRouter: jest.fn(),
   usePathname: jest.fn(),
@@ -89,9 +95,12 @@ describe("Navigation Component", () => {
       expect(screen.getByText("Leads")).toBeInTheDocument();
       expect(screen.getByText("Client")).toBeInTheDocument();
       expect(screen.getByText("Users")).toBeInTheDocument();
-      expect(screen.getByText("Field Management")).toBeInTheDocument();
+      // The field management module was removed from the product (its
+      // COMPONENT_ACCESS entry is empty and it has no NAV_ITEMS entry), so
+      // it must never appear in the sidebar, not even for a team lead.
+      expect(screen.queryByText("Field Management")).not.toBeInTheDocument();
       expect(screen.getByText("Settings")).toBeInTheDocument();
-      fireEvent.click(screen.getByText("Technical Section"));
+      fireEvent.click(screen.getByText("Technical Support"));
       expect(screen.getByText("Mock Interview")).toBeInTheDocument();
       expect(screen.getByText("Interview Support")).toBeInTheDocument();
       expect(screen.getByText("Assessment Support")).toBeInTheDocument();
@@ -120,24 +129,25 @@ describe("Navigation Component", () => {
       } as any);
     });
 
+    // Nav entries are next/link anchors, so navigation happens through the
+    // href rather than an imperative router.push. Assert the destination on
+    // the rendered link instead of on the router mock.
     it("should navigate to dashboard when dashboard link is clicked", () => {
       render(<Navigation />);
-      const dashboardLink = screen.getByText("Dashboard");
-      fireEvent.click(dashboardLink);
-      expect(mockPush).toHaveBeenCalledWith("/dashboard");
+      const dashboardLink = screen.getByText("Dashboard").closest("a");
+      expect(dashboardLink).toHaveAttribute("href", "/dashboard");
     });
 
     it("should navigate to leads when leads link is clicked", () => {
       render(<Navigation />);
-      const leadsLink = screen.getByText("Leads");
-      fireEvent.click(leadsLink);
-      expect(mockPush).toHaveBeenCalledWith("/leads");
+      const leadsLink = screen.getByText("Leads").closest("a");
+      expect(leadsLink).toHaveAttribute("href", "/leads");
     });
 
     it("should highlight active route", () => {
       mockUsePathname.mockReturnValue("/leads");
       render(<Navigation />);
-      const leadsLink = screen.getByText("Leads").closest("button");
+      const leadsLink = screen.getByText("Leads").closest("a");
       expect(leadsLink).toHaveClass("active");
     });
   });
