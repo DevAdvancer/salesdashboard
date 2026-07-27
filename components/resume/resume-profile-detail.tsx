@@ -232,7 +232,7 @@ export function ResumeProfileDetail({
             <select
               value={stage}
               onChange={(e) => setStage(e.target.value as ResumeProfileStage)}
-              className="rounded-md border border-input bg-background pl-3 pr-8 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
+              className="rounded-2xl border border-transparent bg-[var(--input)] pl-3 pr-8 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
             >
               {RESUME_PROFILE_STAGES.map((st) => (
                 <option key={st} value={st}>
@@ -248,7 +248,7 @@ export function ResumeProfileDetail({
               value={assignedToId}
               disabled={!canAssign || saving}
               onChange={(e) => setAssignedToId(e.target.value)}
-              className="rounded-md border border-input bg-background pl-3 pr-8 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              className="rounded-2xl border border-transparent bg-[var(--input)] pl-3 pr-8 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <option value="">-- Unassigned --</option>
               {assignableUsers.map((u) => (
@@ -327,7 +327,7 @@ export function ResumeProfileDetail({
                   required
                   value={candidateName}
                   onChange={(e) => setCandidateName(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full rounded-2xl border border-transparent bg-[var(--input)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
               <div>
@@ -339,7 +339,7 @@ export function ResumeProfileDetail({
                   value={technology}
                   onChange={(e) => setTechnology(e.target.value)}
                   placeholder="e.g. Data Engineer / Java"
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full rounded-2xl border border-transparent bg-[var(--input)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
               <div>
@@ -351,7 +351,7 @@ export function ResumeProfileDetail({
                   value={usaArrival}
                   onChange={(e) => setUsaArrival(e.target.value)}
                   placeholder="e.g. Aug 2021 / F1"
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full rounded-2xl border border-transparent bg-[var(--input)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
             </div>
@@ -383,7 +383,7 @@ export function ResumeProfileDetail({
                   <select
                     value={cpt}
                     onChange={(e) => setCpt(e.target.value)}
-                    className="rounded-md border border-input bg-background pl-2.5 pr-8 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="rounded-2xl border border-transparent bg-[var(--input)] pl-2.5 pr-8 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="NO">NO</option>
                     <option value="YES">YES</option>
@@ -410,7 +410,7 @@ export function ResumeProfileDetail({
                   <select
                     value={opt}
                     onChange={(e) => setOpt(e.target.value)}
-                    className="rounded-md border border-input bg-background pl-2.5 pr-8 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="rounded-2xl border border-transparent bg-[var(--input)] pl-2.5 pr-8 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="NO">NO</option>
                     <option value="YES">YES</option>
@@ -437,7 +437,7 @@ export function ResumeProfileDetail({
                   <select
                     value={stemOpt}
                     onChange={(e) => setStemOpt(e.target.value)}
-                    className="rounded-md border border-input bg-background pl-2.5 pr-8 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="rounded-2xl border border-transparent bg-[var(--input)] pl-2.5 pr-8 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="NO">NO</option>
                     <option value="YES">YES</option>
@@ -478,7 +478,7 @@ export function ResumeProfileDetail({
                 value={missingDocs}
                 onChange={(e) => setMissingDocs(e.target.value)}
                 placeholder="List any missing transcripts, I-20 pages, relieving letters, or passport copies..."
-                className="w-full rounded-md border border-input bg-background p-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full rounded-2xl border border-transparent bg-[var(--input)] p-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
           </Card>

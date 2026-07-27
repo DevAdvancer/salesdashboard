@@ -440,7 +440,7 @@ export async function getLinkedinConnectionHistoryAction(input: {
               Query.equal("targetType", "linkedin_request"),
               Query.equal("targetId", r.$id),
               Query.equal("action", "LINKEDIN_REQUEST_LINK_LEAD"),
-              Query.orderDesc("createdAt"),
+              Query.orderDesc("$createdAt"),
               Query.limit(1),
             ],
           );
@@ -499,7 +499,7 @@ export async function getLinkedinConnectionHistoryAction(input: {
             const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, [
               Query.equal("targetType", "LEAD"),
               Query.equal("targetId", leadId),
-              Query.orderDesc("createdAt"),
+              Query.orderDesc("$createdAt"),
               Query.select(["$id", "action", "actorName", "createdAt", "metadata"]),
               Query.limit(50),
             ]);
@@ -522,7 +522,7 @@ export async function getLinkedinConnectionHistoryAction(input: {
               const logsResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, [
                 Query.equal("targetType", "linkedin_request"),
                 Query.equal("targetId", req.$id),
-                Query.orderDesc("createdAt"),
+                Query.orderDesc("$createdAt"),
                 Query.limit(100),
               ]);
 

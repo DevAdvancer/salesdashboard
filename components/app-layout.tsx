@@ -90,13 +90,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   if (isPublicRoute || !user) return <>{children}</>;
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--background)' }}>
+    <div className="flex min-h-screen relative overflow-hidden bg-background">
+      {/* Ambient Background Mesh */}
+      <div className="absolute top-[-10%] right-[-5%] -z-10 w-[70vw] h-[70vw] max-w-[800px] max-h-[800px] rounded-full opacity-[0.08] dark:opacity-[0.04] bg-[radial-gradient(circle_at_center,_var(--info)_0%,_transparent_60%)] blur-[100px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] left-[-5%] -z-10 w-[60vw] h-[60vw] max-w-[600px] max-h-[600px] rounded-full opacity-[0.05] dark:opacity-[0.03] bg-[radial-gradient(circle_at_center,_var(--accent-purple)_0%,_transparent_60%)] blur-[100px] pointer-events-none" />
+      
       <Navigation
         isCollapsed={isSidebarCollapsed}
         onCollapsedChange={setIsSidebarCollapsed}
       />
       <main
-        className={`relative flex-1 p-4 pt-16 transition-[margin] duration-300 sm:p-6 sm:pt-16 lg:p-8 lg:pt-8 ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}
+        className={`relative flex-1 p-6 pt-20 transition-[margin] duration-300 sm:p-8 sm:pt-20 lg:p-10 lg:pt-10 ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}
         style={{ minWidth: 0 }}
       >
         <LoaderOverlay />

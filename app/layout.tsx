@@ -1,7 +1,7 @@
 import React, { Suspense } from "react";
 import "./globals.css";
 import type { Metadata } from "next";
-import { Bebas_Neue, Inter } from "next/font/google";
+import { Bebas_Neue, Plus_Jakarta_Sans } from "next/font/google";
 import { AuthProvider } from "@/lib/contexts/auth-context";
 import { AccessControlProvider } from "@/lib/contexts/access-control-context";
 import { AzureMsalProvider } from "@/components/azure-msal-provider";
@@ -19,10 +19,10 @@ const bebasNeue = Bebas_Neue({
   display: "swap",
 });
 
-const inter = Inter({
-  variable: "--font-inter",
+const plusJakartaSans = Plus_Jakarta_Sans({
+  variable: "--font-sans-stack",
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600"],
+  weight: ["300", "400", "500", "600", "700"],
   display: "swap",
 });
 
@@ -59,7 +59,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
       <body
-        className={`${inter.variable} ${bebasNeue.variable} antialiased`}
+        className={`${plusJakartaSans.variable} ${bebasNeue.variable} antialiased`}
       >
         <Suspense fallback={null}>
           <GlobalLoader />

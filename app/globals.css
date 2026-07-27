@@ -57,16 +57,16 @@
 :root {
   /* Font stacks */
   --font-serif-stack: 'Bebas Neue', 'Anton', 'Arial Narrow', Arial, sans-serif;
-  --font-sans-stack:  'Inter', 'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif;
+  --font-sans-stack:  var(--font-sans-stack, 'Plus Jakarta Sans'), 'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif;
   --font-mono-stack:  'JetBrains Mono', 'Fira Code', monospace;
 
   /* Base radius */
   --radius: 1.875rem;
 
   /* Nike-inspired neutral palette primitives */
-  --ink:            #111111;
+  --ink:            #000000;
   --canvas:         #ffffff;
-  --soft-cloud:     #f5f5f5;
+  --soft-cloud:     #f4f4f5;
   --hairline:       #cacacb;
   --hairline-soft:  #e5e5e5;
   --charcoal:       #39393b;
@@ -77,8 +77,8 @@
   --sale-deep:      #780700;
   --success:        #007d48;
   --success-bright: #1eaa52;
-  --info:           #1151ff;
-  --info-deep:      #0034e3;
+  --info:           #3b82f6;
+  --info-deep:      #2563eb;
   --accent-pink:    #ed1aa0;
   --accent-purple:  #beaffd;
   --accent-teal:    #0a7281;
@@ -151,8 +151,8 @@
 ───────────────────────────────────────────────────────────── */
 .dark {
   --ink:            #ffffff;
-  --canvas:         #111111;
-  --soft-cloud:     #242424;
+  --canvas:         #000000;
+  --soft-cloud:     #18181b;
   --hairline:       #4b4b4d;
   --hairline-soft:  #39393b;
   --charcoal:       #e5e5e5;
@@ -160,7 +160,7 @@
   --mute:           #9e9ea0;
   --stone:          #707072;
   --success:        #1eaa52;
-  --info:           #6f93ff;
+  --info:           #3b82f6;
 
   --background:            var(--canvas);
   --foreground:            var(--ink);
@@ -498,19 +498,23 @@
     background: transparent;
     border: none;
     cursor: pointer;
-    transition: background-color 0.12s ease, color 0.12s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     line-height: 1.25;
+    position: relative;
+    overflow: hidden;
   }
   .nav-item:hover {
     background-color: var(--accent);
     color: var(--foreground);
+    transform: translateX(2px);
   }
   .nav-item.active {
-    background-color: var(--ink);
-    color: var(--canvas);
+    background: linear-gradient(135deg, var(--info), var(--info-deep));
+    color: #ffffff;
     font-weight: 500;
+    box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35);
   }
-  .nav-item.active svg { color: var(--canvas); }
+  .nav-item.active svg { color: #ffffff; }
 
   @media (min-width: 1024px) {
     .sidebar-collapsed .brand-accent-bar {
@@ -761,5 +765,37 @@
   }
   .attention-pulse {
     animation: attention-pulse 2s ease-in-out infinite;
+  }
+
+  /* Glassmorphism utilities */
+  .glass-panel {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  }
+  html.dark .glass-panel, .dark .glass-panel {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  }
+  .glass-button {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: all 0.2s ease;
+  }
+  .glass-button:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
+  }
+  html.dark .glass-button, .dark .glass-button {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  html.dark .glass-button:hover, .dark .glass-button:hover {
+    background: rgba(255, 255, 255, 0.1);
   }
 }

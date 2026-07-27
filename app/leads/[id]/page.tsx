@@ -856,7 +856,7 @@ function LeadDetailContent() {
   return (
     <div className="container mx-auto">
       {/* Header + Action Buttons */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+      <div className="sticky top-[72px] z-30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 p-4 -mx-4 sm:mx-0 rounded-3xl glass-panel border border-border/50 shadow-sm transition-all">
         <div id="tour-lead-header">
           <Button
             variant="outline"
@@ -963,63 +963,69 @@ function LeadDetailContent() {
         </div>
       </div>
 
-      <div className="grid gap-6">
-        {/* Lead Information */}
-        <LeadInfoCard
-          lead={lead}
-          leadData={leadData}
-          setLeadData={setLeadData}
-          user={user}
-          formFields={formFields}
-          isEditing={isEditing}
-          fieldErrors={fieldErrors}
-          onFieldChange={handleFieldChange}
-        />
-
-        {/* Assignment Section */}
-        {canAssignLead && (
-          <LeadAssignmentCard
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+        {/* Left Column: Primary Working Area */}
+        <div className="xl:col-span-8 space-y-6">
+          {/* Lead Information */}
+          <LeadInfoCard
             lead={lead}
+            leadData={leadData}
+            setLeadData={setLeadData}
             user={user}
-            assignableAgents={assignableAgents}
-            isAssigning={isAssigning}
-            onAssign={handleAssignAgent}
+            formFields={formFields}
+            isEditing={isEditing}
+            fieldErrors={fieldErrors}
+            onFieldChange={handleFieldChange}
           />
-        )}
 
-        {/* Follow-Up Card */}
-        {!isLeadGeneration && (
-          <div id="tour-lead-followup">
-            <LeadFollowUpCard
-              lead={lead}
-              user={user}
-              disabled={lead.isClosed || (isMonitor && !isLeadOwner)}
-              onUpdated={(updatedLead) => {
-                if (updatedLead) {
-                  setLead(updatedLead);
-                  setLeadData(JSON.parse(updatedLead.data));
-                  return;
-                }
-                return loadLead();
-              }}
-            />
+          {/* Follow-Up Card */}
+          {!isLeadGeneration && (
+            <div id="tour-lead-followup">
+              <LeadFollowUpCard
+                lead={lead}
+                user={user}
+                disabled={lead.isClosed || (isMonitor && !isLeadOwner)}
+                onUpdated={(updatedLead) => {
+                  if (updatedLead) {
+                    setLead(updatedLead);
+                    setLeadData(JSON.parse(updatedLead.data));
+                    return;
+                  }
+                  return loadLead();
+                }}
+              />
+            </div>
+          )}
+
+          {/* Activity Timeline */}
+          <div id="tour-lead-timeline">
+            <LeadActivityTimeline lead={lead} />
           </div>
-        )}
-
-        {/* Notes Card */}
-        {user && (!isMonitor || isLeadOwner) && (
-          <div id="tour-lead-notes">
-            <LeadNotesCard leadId={lead.$id} user={user} />
-          </div>
-        )}
-
-        {/* Activity Timeline */}
-        <div id="tour-lead-timeline">
-          <LeadActivityTimeline lead={lead} />
         </div>
 
-        {/* Metadata */}
-        <LeadMetadataCard lead={lead} metaNames={metaNames} />
+        {/* Right Column: Secondary Meta Area */}
+        <div className="xl:col-span-4 space-y-6">
+          {/* Assignment Section */}
+          {canAssignLead && (
+            <LeadAssignmentCard
+              lead={lead}
+              user={user}
+              assignableAgents={assignableAgents}
+              isAssigning={isAssigning}
+              onAssign={handleAssignAgent}
+            />
+          )}
+
+          {/* Notes Card */}
+          {user && (!isMonitor || isLeadOwner) && (
+            <div id="tour-lead-notes">
+              <LeadNotesCard leadId={lead.$id} user={user} />
+            </div>
+          )}
+
+          {/* Metadata */}
+          <LeadMetadataCard lead={lead} metaNames={metaNames} />
+        </div>
       </div>
 
       {/* Close Lead Dialog */}

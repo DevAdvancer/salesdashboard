@@ -489,10 +489,8 @@ export function Navigation({
 
       {/* ── Sidebar ── */}
       <aside
-        className={`fixed top-0 left-0 h-full w-64 flex flex-col z-40 transition-[width,transform] duration-300 lg:translate-x-0 ${isCollapsed ? "sidebar-collapsed lg:w-20" : "lg:w-64"} ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed top-0 left-0 h-full w-64 flex flex-col z-40 transition-all duration-300 lg:translate-x-0 glass-panel border-r border-border/50 ${isCollapsed ? "sidebar-collapsed lg:w-20" : "lg:w-64"} ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}
         style={{
-          background: "var(--sidebar)",
-          borderRight: "1px solid var(--border)",
         }}>
         {/* Brand */}
         <div
@@ -699,7 +697,8 @@ export function Navigation({
                 height: "2rem",
                 borderRadius: "50%",
                 flexShrink: 0,
-                background: "var(--ink)",
+                background: "linear-gradient(135deg, var(--info), var(--accent-purple))",
+                boxShadow: "0 2px 8px rgba(59, 130, 246, 0.4)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",

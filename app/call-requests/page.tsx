@@ -190,7 +190,7 @@ function CallsContent() {
                           <td className="p-3 text-sm">{r.requestedByName}</td>
                           <td className="p-3">
                             <select
-                              className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                              className="flex h-9 w-full rounded-2xl border border-transparent bg-[var(--input)] px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ink)]"
                               value={r.status}
                               disabled={rowBusy}
                               onChange={(e) =>
@@ -212,7 +212,7 @@ function CallsContent() {
                           <td className="p-3">
                             {canAssign ? (
                               <select
-                                className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                                className="flex h-9 w-full rounded-2xl border border-transparent bg-[var(--input)] px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ink)]"
                                 value={r.assignedToId ?? ""}
                                 disabled={rowBusy}
                                 onChange={(e) => assign(r.$id, e.target.value)}
@@ -249,7 +249,7 @@ function CallsContent() {
                                 >
                                   Open Profile
                                 </Button>
-                              ) : r.status !== "call_done" ? (
+                              ) : r.status === "call_done" ? (
                                 <Button
                                   type="button"
                                   size="sm"

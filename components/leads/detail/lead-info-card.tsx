@@ -94,9 +94,9 @@ export function LeadInfoCard({
             <textarea
               id={field.key}
               aria-invalid={Boolean(fieldError)}
-              className={`w-full min-h-[100px] px-3 py-2 rounded-md border ${
+              className={`w-full min-h-[100px] px-4 py-3 rounded-2xl border ${
                 fieldError ? "border-red-500" : "border-input"
-              } bg-background text-foreground`}
+              } bg-[var(--input)] text-foreground`}
               value={value}
               onChange={(e) => onFieldChange(field.key, e.target.value)}
               disabled={isReadOnly}
@@ -149,9 +149,9 @@ export function LeadInfoCard({
               <select
                 id={field.key}
                 aria-invalid={Boolean(fieldError)}
-                className={`flex h-10 w-full rounded-md border ${
-                  fieldError ? "border-red-500" : "border-input"
-                } bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
+                className={`flex h-10 w-full rounded-2xl border ${
+                  fieldError ? "border-red-500" : "border-transparent"
+                } bg-[var(--input)] px-4 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ink)] focus-visible:ring-offset-0 focus-visible:border-[var(--ink)]`}
                 value={value}
                 onChange={(e) => onFieldChange(field.key, e.target.value)}
                 disabled={isReadOnly}>
@@ -180,9 +180,9 @@ export function LeadInfoCard({
             <select
               id={field.key}
               aria-invalid={Boolean(fieldError)}
-              className={`flex h-10 w-full rounded-md border ${
-                fieldError ? "border-red-500" : "border-input"
-              } bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
+              className={`flex h-10 w-full rounded-2xl border ${
+                fieldError ? "border-red-500" : "border-transparent"
+              } bg-[var(--input)] px-4 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ink)] focus-visible:ring-offset-0 focus-visible:border-[var(--ink)]`}
               value={value}
               onChange={(e) => onFieldChange(field.key, e.target.value)}
               disabled={isReadOnly}>
