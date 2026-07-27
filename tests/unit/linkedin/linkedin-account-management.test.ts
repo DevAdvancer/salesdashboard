@@ -66,7 +66,7 @@ describe("Linkedin account management authorization", () => {
     });
 
     const { upsertLinkedinAccountAction } = await import(
-      "@/app/actions/linkedin"
+      "@/app/actions/linkedin/accounts"
     );
 
     await upsertLinkedinAccountAction({
@@ -99,7 +99,7 @@ describe("Linkedin account management authorization", () => {
     });
 
     const { upsertLinkedinAccountAction } = await import(
-      "@/app/actions/linkedin"
+      "@/app/actions/linkedin/accounts"
     );
 
     await expect(
@@ -130,7 +130,7 @@ describe("Linkedin account management authorization", () => {
     });
 
     const { upsertLinkedinAccountAction } = await import(
-      "@/app/actions/linkedin"
+      "@/app/actions/linkedin/accounts"
     );
 
     await upsertLinkedinAccountAction({
@@ -195,7 +195,7 @@ describe("Linkedin account management authorization", () => {
       });
 
     const { listLinkedinAccountsForManagementAction } = await import(
-      "@/app/actions/linkedin"
+      "@/app/actions/linkedin/accounts"
     );
 
     await expect(

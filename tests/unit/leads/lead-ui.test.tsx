@@ -1,13 +1,13 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { useAuth } from '@/lib/contexts/auth-context';
-import { listLeads } from '@/lib/services/lead-service';
+import { listLeads } from '@/lib/services/lead/queries';
 import { getAgentsByTeamLead } from '@/lib/services/user-service';
 import { Lead, User } from '@/lib/types';
 
 // Mock dependencies
 jest.mock('@/lib/contexts/auth-context');
-jest.mock('@/lib/services/lead-service');
+jest.mock('@/lib/services/lead/queries');
 jest.mock('@/lib/services/user-service');
 jest.mock('next/navigation', () => ({
   useRouter: () => ({

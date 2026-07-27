@@ -16,6 +16,14 @@ const eslintConfig = defineConfig([
     ".codex/**",
   ]),
   {
+    rules: {
+      "@typescript-eslint/no-explicit-any": "warn",
+      "no-console": ["warn", { allow: ["warn", "error"] }],
+      "complexity": ["warn", 20],
+      "max-lines-per-function": ["warn", 100],
+    },
+  },
+  {
     files: ["tests/**/*.{ts,tsx}"],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",

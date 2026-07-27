@@ -56,9 +56,6 @@ jest.mock('node-appwrite', () => ({
   },
 }));
 
-jest.mock('@/lib/constants/special-lead-access', () => ({
-  getSpecialBranchLeadAccess: jest.fn(() => null),
-}));
 
 describe('lead server action authorization', () => {
   let consoleErrorSpy: jest.SpyInstance;
@@ -137,7 +134,7 @@ describe('lead server action authorization', () => {
       branchIds: ['branch-1'],
     });
 
-    const { listLeadsAction } = await import('@/app/actions/lead');
+    const { listLeadsAction } = await import('@/app/actions/lead/queries');
     const { Query } = await import('node-appwrite');
 
     await listLeadsAction({}, 'viewer-1', 'admin', ['branch-1']);
@@ -154,7 +151,7 @@ describe('lead server action authorization', () => {
       branchIds: [],
     });
 
-    const { listLeadsAction } = await import('@/app/actions/lead');
+    const { listLeadsAction } = await import('@/app/actions/lead/queries');
     const { Query } = await import('node-appwrite');
 
     await listLeadsAction({}, 'monitor-1', 'agent', []);
@@ -172,7 +169,7 @@ describe('lead server action authorization', () => {
       branchIds: [],
     });
 
-    const { listLeadsAction } = await import('@/app/actions/lead');
+    const { listLeadsAction } = await import('@/app/actions/lead/queries');
     const { Query } = await import('node-appwrite');
 
     await listLeadsAction({}, 'operations-1', 'agent' as any, []);
@@ -217,7 +214,7 @@ describe('lead server action authorization', () => {
       total: 2,
     });
 
-    const { listLeadsAction } = await import('@/app/actions/lead');
+    const { listLeadsAction } = await import('@/app/actions/lead/queries');
 
     const result = await listLeadsAction(
       { isClosed: true },
@@ -264,7 +261,7 @@ describe('lead server action authorization', () => {
       total: 2,
     });
 
-    const { listLeadsAction } = await import('@/app/actions/lead');
+    const { listLeadsAction } = await import('@/app/actions/lead/queries');
 
     const result = await listLeadsAction(
       { isClosed: true },
@@ -300,11 +297,42 @@ describe('lead server action authorization', () => {
         status: 'Generated',
       });
 
-    const { getLeadAction } = await import('@/app/actions/lead');
+    const { getLeadAction } = await import('@/app/actions/lead/queries');
 
     await expect(getLeadAction('lead-1', 'operations-1')).resolves.toMatchObject({
       $id: 'lead-1',
       ownerId: 'owner-1',
+    });
+  });
+
+  it('allows access to leads in a special branch for an agent that would otherwise be denied', async () => {
+    mockGetDocument
+      .mockResolvedValueOnce({
+        $id: 'special-agent-1',
+        email: 'special@example.com',
+        role: 'agent',
+        branchIds: ['branch-2'], // not the special branch
+      })
+      .mockResolvedValueOnce({
+        $id: 'lead-special-1',
+        data: '{}',
+        ownerId: 'owner-other',
+        assignedToId: 'agent-other',
+        branchId: 'special-branch',
+        isClosed: false,
+        closedAt: null,
+        status: 'Generated',
+      });
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getSpecialBranchLeadAccess } = require('@/lib/constants/special-lead-access');
+    (getSpecialBranchLeadAccess as jest.Mock).mockReturnValueOnce('special-branch');
+
+    const { getLeadAction } = await import('@/app/actions/lead/queries');
+
+    await expect(getLeadAction('lead-special-1', 'special-agent-1')).resolves.toMatchObject({
+      $id: 'lead-special-1',
+      branchId: 'special-branch',
     });
   });
 
@@ -333,7 +361,7 @@ describe('lead server action authorization', () => {
         status: 'Interested',
       });
 
-    const { updateLeadAction } = await import('@/app/actions/lead');
+    const { updateLeadAction } = await import('@/app/actions/lead/mutations');
 
     await expect(
       updateLeadAction('lead-1', { firstName: 'Changed' }, 'monitor-1', 'Monitor')
@@ -374,7 +402,7 @@ describe('lead server action authorization', () => {
         status: 'Interested',
       });
 
-    const { updateLeadAction } = await import('@/app/actions/lead');
+    const { updateLeadAction } = await import('@/app/actions/lead/mutations');
 
     // Monitors can only edit their own leads, not leads owned by others.
     await expect(
@@ -407,7 +435,7 @@ describe('lead server action authorization', () => {
       status: 'Interested',
     });
 
-    const { createLeadAction } = await import('@/app/actions/lead');
+    const { createLeadAction } = await import('@/app/actions/lead/mutations');
 
     await expect(
       createLeadAction(
@@ -447,7 +475,7 @@ describe('lead server action authorization', () => {
       branchIds: [],
     });
 
-    const { createLeadAction } = await import('@/app/actions/lead');
+    const { createLeadAction } = await import('@/app/actions/lead/mutations');
 
     await expect(
       createLeadAction(
@@ -494,7 +522,7 @@ describe('lead server action authorization', () => {
         status: 'Interested',
       });
 
-    const { updateLeadAction } = await import('@/app/actions/lead');
+    const { updateLeadAction } = await import('@/app/actions/lead/mutations');
 
     await expect(
       updateLeadAction('lead-1', { firstName: 'Changed' }, 'operations-1', 'Operations')
@@ -511,7 +539,7 @@ describe('lead server action authorization', () => {
       branchIds: ['branch-1'],
     });
 
-    const { reopenLeadAction } = await import('@/app/actions/lead');
+    const { reopenLeadAction } = await import('@/app/actions/lead/mutations');
 
     await expect(reopenLeadAction('lead-1', 'agent-1', 'Agent')).rejects.toThrow('Permission denied');
     expect(mockUpdateDocument).not.toHaveBeenCalled();
@@ -543,7 +571,7 @@ describe('lead server action authorization', () => {
       ],
     });
 
-    const { reopenLeadAction } = await import('@/app/actions/lead');
+    const { reopenLeadAction } = await import('@/app/actions/lead/mutations');
 
     await expect(reopenLeadAction('lead-1', 'tl-1', 'TL')).resolves.toBeTruthy();
     expect(mockUpdateDocument).toHaveBeenCalled();
@@ -578,7 +606,7 @@ describe('lead server action authorization', () => {
         teamLeadIds: ['teamLead-2'],
       });
 
-    const { assignLeadAction } = await import('@/lib/actions/lead-actions');
+    const { assignLeadAction } = await import('@/lib/actions/lead/assignment');
 
     // agent-2 reports to teamLead-2, so assertAssignmentAllowed
     // (lib/actions/lead-actions.ts) denies the assignment. Team leads are
@@ -655,7 +683,7 @@ describe('lead server action authorization', () => {
       assignedToId: 'agent-1',
     });
 
-    const { assignLeadAction } = await import('@/lib/actions/lead-actions');
+    const { assignLeadAction } = await import('@/lib/actions/lead/assignment');
 
     await expect(assignLeadAction('lead-1', 'agent-1', 'tl-1', 'Team Lead')).resolves.toMatchObject({
       success: true,
@@ -710,7 +738,7 @@ describe('lead server action authorization', () => {
       assignedToId: 'agent-2',
     });
 
-    const { assignLeadAction } = await import('@/lib/actions/lead-actions');
+    const { assignLeadAction } = await import('@/lib/actions/lead/assignment');
 
     // Agents cannot assign leads, even leads they own. The assignment workflow is
     // controlled by teamLeads, team leads, lead generation, and admins.
@@ -756,7 +784,7 @@ describe('lead server action authorization', () => {
       return Promise.resolve(doc);
     });
 
-    const { assignLeadAction } = await import('@/lib/actions/lead-actions');
+    const { assignLeadAction } = await import('@/lib/actions/lead/assignment');
 
     await expect(assignLeadAction('lead-1', 'tl-1', 'leadgen-1', 'Lead Gen')).resolves.toMatchObject({
       success: true,
@@ -807,7 +835,7 @@ describe('lead server action authorization', () => {
       return Promise.resolve(doc);
     });
 
-    const { assignLeadAction } = await import('@/lib/actions/lead-actions');
+    const { assignLeadAction } = await import('@/lib/actions/lead/assignment');
 
     await expect(assignLeadAction('lead-1', 'agent-2', 'leadgen-1', 'Lead Gen')).rejects.toThrow(
       'Lead generation can only assign leads to team leads.'
@@ -856,7 +884,7 @@ describe('lead server action authorization', () => {
       assignedToId: 'agent-2',
     });
 
-    const { assignLeadAction } = await import('@/lib/actions/lead-actions');
+    const { assignLeadAction } = await import('@/lib/actions/lead/assignment');
 
     // Monitors cannot assign leads (per product decision to restrict
     // assignment to teamLeads, team leads, lead generation, and admins).
@@ -902,7 +930,7 @@ describe('lead server action authorization', () => {
       return Promise.resolve(doc);
     });
 
-    const { assignLeadAction } = await import('@/lib/actions/lead-actions');
+    const { assignLeadAction } = await import('@/lib/actions/lead/assignment');
 
     await expect(assignLeadAction('lead-1', 'agent-2', 'operations-1', 'Operations')).rejects.toThrow(
       'Permission denied'
@@ -976,7 +1004,7 @@ describe('lead server action authorization', () => {
         ],
       });
 
-    const { updateLeadAction } = await import('@/app/actions/lead');
+    const { updateLeadAction } = await import('@/app/actions/lead/mutations');
     const { createNotificationsForRecipients } = await import('@/lib/server/notifications');
 
     // The duplicate is now surfaced as a structured LeadActionError with a
@@ -1050,7 +1078,7 @@ describe('lead server action authorization', () => {
       status: 'Interested',
     });
 
-    const { updateLeadAction } = await import('@/app/actions/lead');
+    const { updateLeadAction } = await import('@/app/actions/lead/mutations');
     const { createNotificationsForRecipients } = await import('@/lib/server/notifications');
 
     await expect(
@@ -1159,7 +1187,7 @@ describe('lead server action authorization', () => {
       }),
     });
 
-    const { createLeadAction } = await import('@/app/actions/lead');
+    const { createLeadAction } = await import('@/app/actions/lead/mutations');
 
     await expect(
       createLeadAction(
@@ -1230,7 +1258,7 @@ describe('lead server action authorization', () => {
 
     mockListDocuments.mockResolvedValueOnce({ documents: [] });
 
-    const { updateLeadAction } = await import('@/app/actions/lead');
+    const { updateLeadAction } = await import('@/app/actions/lead/mutations');
 
     await expect(
       updateLeadAction('lead-1', { firstName: '   ' }, 'teamLead-1', 'TeamLead')
@@ -1247,7 +1275,7 @@ describe('lead server action authorization', () => {
       teamLeadId: null,
     });
 
-    const { createLeadAction } = await import('@/app/actions/lead');
+    const { createLeadAction } = await import('@/app/actions/lead/mutations');
 
     await expect(
       createLeadAction(
@@ -1308,7 +1336,7 @@ describe('lead server action authorization', () => {
       status: 'Backed Out',
     });
 
-    const { backoutLeadAction } = await import('@/lib/actions/lead-actions');
+    const { backoutLeadAction } = await import('@/lib/actions/lead/status');
 
     await expect(backoutLeadAction('lead-1', 'teamLead-1', 'TeamLead')).resolves.toMatchObject({
       success: true,
@@ -1392,7 +1420,7 @@ describe('lead server action authorization', () => {
         leadId: null,
       });
 
-    const { notInterestedLeadAction } = await import('@/lib/actions/lead-actions');
+    const { notInterestedLeadAction } = await import('@/lib/actions/lead/status');
 
     await expect(notInterestedLeadAction('lead-1', 'teamLead-1', 'TeamLead')).resolves.toMatchObject({
       success: true,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, type ReactNode } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { getSupportRequestCcEmails } from "@/lib/services/user-service";
 import type { Lead } from "@/lib/types";
@@ -11,24 +11,10 @@ import {
 } from "@/lib/utils/support-email-attachments";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { DateTimePicker } from "@/components/ui/date-picker";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { handleError } from "@/lib/utils/error-handler";
 import { useToast } from "@/components/ui/use-toast";
 import { ProtectedRoute } from "@/components/protected-route";
-// import { databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite'; // Removed client-side DB usage
-// import { Query, ID } from 'appwrite';
-import { Clock, RefreshCw, AlertCircle } from "lucide-react";
 import {
   getMockAttempts,
   reserveMockAttempt,
@@ -37,69 +23,17 @@ import {
 } from "@/app/actions/mock";
 import { listLeads } from "@/lib/services/lead-action-service";
 import { useDebounce } from "@/lib/hooks/use-debounce";
-// import { useMsal } from "@azure/msal-react";
-// import { loginRequest } from "@/lib/msal-config";
 
-interface MockFormData {
-  to: string;
-  cc: string;
-  // subject is computed dynamically based on candidate name
-  candidateName: string;
-  endClient: string;
-  emailId: string;
-  contactNumber: string;
-  resume: File | null;
-  role: string;
-  schedule: string; // ISO string from datetime-local input
-  emailBody: string; // "part 1"
-  // Signature fields
-  yourName: string;
-  yourRole: string;
-  yourPhone: string;
-  company: "Silverspace Inc." | "Vizva Consultancy";
-}
-
-const INITIAL_FORM_DATA: MockFormData = {
-  to: "tech.leaders@silverspaceinc.com",
-  // to: 'prateek.narvariya@silverspaceinc.com',
-  cc: "",
-  candidateName: "",
-  endClient: "",
-  emailId: "",
-  contactNumber: "",
-  resume: null,
-  role: "",
-  schedule: "",
-  emailBody: "Hi Team,\n\nThe candidate is available for the whole day.",
-  yourName: "",
-  yourRole: "",
-  yourPhone: "",
-  company: "Silverspace Inc.",
-};
-
-interface MockAttempt {
-  $id: string;
-  leadId: string;
-  userId: string;
-  attemptCount: number;
-  lastAttemptAt: string;
-}
-
-function RequiredText({ children }: { children: ReactNode }) {
-  return (
-    <>
-      {children}
-      <span className="ml-1 text-destructive">*</span>
-    </>
-  );
-}
-
-const lockedPrefilledInputClassName = "h-8 bg-muted text-muted-foreground";
+// Components
+import { MockFiltersCard } from "@/components/mock/mock-filters-card";
+import { MockTable } from "@/components/mock/mock-table";
+import { MockDialog } from "@/components/mock/mock-dialog";
+import { type MockFormData, type MockAttempt, INITIAL_FORM_DATA } from "@/components/mock/mock-types";
 
 function MockContent() {
   const { user, loading } = useAuth();
-  const isMonitor = user?.role === 'monitor';
-  const isReadOnly = isMonitor || user?.role === 'operations';
+  const isMonitor = user?.role === "monitor";
+  const isReadOnly = isMonitor || user?.role === "operations";
   const { toast } = useToast();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
@@ -112,21 +46,16 @@ function MockContent() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState<MockFormData>(INITIAL_FORM_DATA);
   const [isSending, setIsSending] = useState(false);
-  // const { instance, accounts } = useMsal();
   const [isOutlookConnected, setIsOutlookConnected] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
 
-  // Mock Attempts State
-  const [mockAttempts, setMockAttempts] = useState<Map<string, MockAttempt>>(
-    new Map(),
-  );
+  const [mockAttempts, setMockAttempts] = useState<Map<string, MockAttempt>>(new Map());
 
   const handleConnectOutlook = async () => {
     window.location.href = "/api/auth/login";
   };
 
-  // Check for existing connection status
   useEffect(() => {
     const checkConnection = async () => {
       try {
@@ -140,7 +69,6 @@ function MockContent() {
 
     checkConnection();
 
-    // Load signature preferences
     const storedSignature = localStorage.getItem("mockSignature");
     if (storedSignature) {
       const parsed = JSON.parse(storedSignature);
@@ -157,17 +85,13 @@ function MockContent() {
   const loadMockAttempts = useCallback(
     async (leadIds: string[]) => {
       if (!user) return;
-
       if (!leadIds.length) {
         setMockAttempts(new Map());
         return;
       }
-
       try {
         const attempts = await getMockAttempts(user.$id, leadIds);
-
         const nextAttempts = new Map<string, MockAttempt>();
-
         attempts.forEach((doc: MockAttempt) => {
           nextAttempts.set(doc.leadId, {
             $id: doc.$id,
@@ -177,7 +101,6 @@ function MockContent() {
             lastAttemptAt: doc.lastAttemptAt,
           });
         });
-
         setMockAttempts(nextAttempts);
       } catch (err) {
         console.error("Error loading mock attempts:", err);
@@ -189,15 +112,9 @@ function MockContent() {
 
   const loadLeads = useCallback(async () => {
     if (!user) return;
-
     try {
       setIsLoading(true);
-      const fetchedLeads = await listLeads(
-        {},
-        user.$id,
-        user.role,
-        user.branchIds,
-      );
+      const fetchedLeads = await listLeads({}, user.$id, user.role, user.branchIds);
       setLeads(fetchedLeads);
       setFilteredLeads(fetchedLeads);
       await loadMockAttempts(fetchedLeads.map((lead) => lead.$id));
@@ -253,9 +170,7 @@ function MockContent() {
     setFilteredLeads(result);
   }, [leads, filter, debouncedSearchQuery, mockAttempts]);
 
-  // Reset file input key to force re-render and clear file
   const [fileInputKey, setFileInputKey] = useState(Date.now());
-
   const [isPreparingMock, setIsPreparingMock] = useState(false);
 
   const getCooldownStatus = (leadId: string) => {
@@ -295,7 +210,6 @@ function MockContent() {
   };
 
   const handleCreateMock = async (lead: Lead) => {
-    // Check restrictions again
     const status = getCooldownStatus(lead.$id);
     if (!status.canCreate) {
       if (status.isMaxed) {
@@ -319,7 +233,6 @@ function MockContent() {
       setSelectedLead(lead);
       const leadData = JSON.parse(lead.data);
 
-      // Reset form data but keep signature preferences
       setFormData((prev) => ({
         ...INITIAL_FORM_DATA,
         yourName: prev.yourName,
@@ -331,10 +244,10 @@ function MockContent() {
         emailId: leadData.email || "",
         contactNumber: leadData.phone || "",
       }));
-      setFileInputKey(Date.now()); // Reset file input
+      setFileInputKey(Date.now());
 
       const currentUser = user;
-      if (!currentUser) return; // Should be protected route anyway
+      if (!currentUser) return;
 
       try {
         const ccEmails = await getSupportRequestCcEmails(currentUser);
@@ -372,7 +285,7 @@ function MockContent() {
           description: preparedAttachment.error ?? "File is too large.",
           variant: "destructive",
         });
-        e.target.value = ""; // Reset input
+        e.target.value = "";
         setFormData({ ...formData, resume: null });
         return;
       }
@@ -401,7 +314,6 @@ function MockContent() {
 
     try {
       setIsSending(true);
-      // Save signature preferences
       localStorage.setItem(
         "mockSignature",
         JSON.stringify({
@@ -412,7 +324,6 @@ function MockContent() {
         }),
       );
 
-      // Convert file to base64
       let attachment = null;
       if (formData.resume) {
         const attachmentSizeError = getSupportEmailAttachmentLimitError([formData.resume]);
@@ -424,7 +335,6 @@ function MockContent() {
         const base64Promise = new Promise<string>((resolve, reject) => {
           reader.onload = () => {
             const result = reader.result as string;
-            // Remove data URL prefix (e.g., "data:application/pdf;base64,")
             const base64 = result.split(",")[1];
             resolve(base64);
           };
@@ -441,27 +351,22 @@ function MockContent() {
         };
       }
 
-      // Format Schedule
       let formattedSchedule = "";
       if (formData.schedule) {
         const date = new Date(formData.schedule);
-        // Format: Feb 20, 2026 at 3:00 PM
         const datePart = new Intl.DateTimeFormat("en-US", {
           month: "short",
           day: "numeric",
           year: "numeric",
         }).format(date);
-
         const timePart = new Intl.DateTimeFormat("en-US", {
           hour: "numeric",
           minute: "numeric",
           hour12: true,
         }).format(date);
-
         formattedSchedule = `${datePart} at ${timePart}`;
       }
 
-      // Determine logo URL and website based on company
       let logoUrl =
         "https://egvjgtfjstxgszpzvvbx.supabase.co/storage/v1/object/public/images//20250610_1111_3D%20Gradient%20Logo_remix_01jxd69dc9ex29jbj9r701yjkf%20(2).png";
       let websiteUrl = "www.silverspaceinc.com";
@@ -474,7 +379,6 @@ function MockContent() {
         websiteLink = "https://vizvaconsultancyservices.com/";
       }
 
-      // Construct email body
       const emailBody = `
         <html>
           <body style="font-family: Arial, sans-serif; color: #333;">
@@ -497,7 +401,6 @@ function MockContent() {
         </html>
       `;
 
-      // Construct payload for our API
       const payload = {
         message: {
           subject: `Request to schedule mock interview - ${formData.candidateName}`,
@@ -507,33 +410,25 @@ function MockContent() {
           },
           toRecipients: formData.to
             .split(",")
-            .map((email) => ({
-              emailAddress: { address: email.trim() },
-            }))
+            .map((email) => ({ emailAddress: { address: email.trim() } }))
             .filter((r) => r.emailAddress.address),
           ccRecipients: formData.cc
             .split(",")
-            .map((email) => ({
-              emailAddress: { address: email.trim() },
-            }))
+            .map((email) => ({ emailAddress: { address: email.trim() } }))
             .filter((r) => r.emailAddress.address),
           attachments: attachment ? [attachment] : [],
         },
         saveToSentItems: "true",
       };
 
-      if (!user) {
-        throw new Error("User session not found");
-      }
+      if (!user) throw new Error("User session not found");
 
       const reservedAttempt = await reserveMockAttempt(user.$id, selectedLead.$id);
 
       try {
         const response = await fetch("/api/mock/send-email", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
 
@@ -545,23 +440,8 @@ function MockContent() {
         throw sendError;
       }
 
-      // We don't reset form data here to preserve signature, or we do reset but signature is re-read from state?
-      // Actually handleCreateMock resets it properly.
-      // But let's reset to initial state for next time, but keep signature?
-      // For now, simple reset is fine, next open will re-read or use handleCreateMock logic.
-      // Wait, handleCreateMock uses INITIAL_FORM_DATA and merges current state.
-      // So if I reset here, I lose current state signature.
-      // I should update INITIAL_FORM_DATA to have empty signature, but `handleCreateMock` preserves it.
-      // So I can just reset to INITIAL_FORM_DATA here.
-      // However, if I close and reopen without refreshing, `prev` in handleCreateMock will be INITIAL_FORM_DATA (empty).
-      // So I need to ensure signature is persisted in state or localStorage is read again.
-      // `handleCreateMock` reads `prev` state. If I reset state to INITIAL here, `prev` will be empty.
-      // So I should reload from localStorage or just not reset the signature fields.
-
       const storedSignature = localStorage.getItem("mockSignature");
-      const parsedSignature = storedSignature
-        ? JSON.parse(storedSignature)
-        : {};
+      const parsedSignature = storedSignature ? JSON.parse(storedSignature) : {};
 
       await completeMockAttempt(
         user.$id,
@@ -581,11 +461,7 @@ function MockContent() {
         }),
       );
 
-      toast({
-        title: "Success",
-        description: "Email sent successfully.",
-      });
-
+      toast({ title: "Success", description: "Email sent successfully." });
       setIsModalOpen(false);
       setFormData({
         ...INITIAL_FORM_DATA,
@@ -605,7 +481,6 @@ function MockContent() {
         variant: "destructive",
       });
 
-      // If token expired or invalid (server will return 401)
       if (errorMessage.includes("Not connected")) {
         setIsOutlookConnected(false);
       }
@@ -636,6 +511,7 @@ function MockContent() {
       </div>
     );
   }
+
   return (
     <div className="container mx-auto p-6">
       <div className="flex justify-between items-center mb-6">
@@ -645,380 +521,47 @@ function MockContent() {
             {isAuthLoading ? "Connecting..." : "Connect Outlook"}
           </Button>
         ) : (
-          <Button
-            variant="outline"
-            disabled
-            className="text-green-600 border-green-600">
+          <Button variant="outline" disabled className="text-green-600 border-green-600">
             Outlook Connected
           </Button>
         ))}
       </div>
 
+      <MockFiltersCard
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        filter={filter}
+        setFilter={setFilter}
+      />
+
       <Card>
-        <CardContent className="p-4 border-b">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <Label htmlFor="search" className="sr-only">
-                Search
-              </Label>
-              <Input
-                id="search"
-                placeholder="Search by name, email, phone or company..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <div className="w-full sm:w-[200px]">
-              <Label htmlFor="filter" className="sr-only">
-                Filter
-              </Label>
-              <select
-                id="filter"
-                className="w-full"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}>
-                <option value="all">All Leads</option>
-                <option value="mock_created">Mock Created</option>
-                <option value="mock_not_created">Mock Not Created</option>
-              </select>
-            </div>
-          </div>
-        </CardContent>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[600px]">
-              <thead className="border-b bg-muted/50">
-                <tr className="text-left">
-                  <th className="p-4 font-semibold">Name</th>
-                  <th className="p-4 font-semibold">Phone</th>
-                  <th className="p-4 font-semibold">Email</th>
-                  <th className="p-4 font-semibold">Source</th>
-                  <th className="p-4 font-semibold">Company</th>
-                  <th className="p-4 font-semibold">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedLeads.map((lead) => {
-                  const leadData = JSON.parse(lead.data);
-                  const status = getCooldownStatus(lead.$id);
-                  const attempt = mockAttempts.get(lead.$id);
-                  const attemptsCount = attempt?.attemptCount || 0;
-                  const isAdminUser = user?.role === "admin";
-
-                  return (
-                    <tr
-                      key={lead.$id}
-                      className="border-b hover:bg-muted/50 transition-colors">
-                      <td className="p-4">
-                        {leadData.firstName} {leadData.lastName}
-                        {leadData.legalName && (
-                          <div className="text-xs text-muted-foreground">
-                            ({leadData.legalName})
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-4">{leadData.phone || "N/A"}</td>
-                      <td className="p-4">{leadData.email || "N/A"}</td>
-                      <td className="p-4">
-                        {leadData.sourceName || leadData.source || "-"}
-                      </td>
-                      <td className="p-4">{leadData.company || "N/A"}</td>
-                      <td className="p-4 flex items-center gap-2">
-                        {attemptsCount > 0 && (
-                          <span style={{ fontSize: '0.6875rem', fontWeight: 500, color: '#4ade80', background: 'rgba(74,222,128,0.12)', padding: '0.125rem 0.5rem', borderRadius: '999px', border: '1px solid rgba(74,222,128,0.25)' }}>
-                            Mock Created
-                          </span>
-                        )}
-                        {!isReadOnly && (attemptsCount === 0 ? (
-                          <Button
-                            size="sm"
-                            onClick={() => handleCreateMock(lead)}
-                            disabled={!isOutlookConnected || isPreparingMock}>
-                            {isPreparingMock && selectedLead?.$id === lead.$id
-                              ? "Preparing..."
-                              : "Create Mock"}
-                          </Button>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            {/* Attempts count display removed as per request */}
-                            {(isAdminUser || attemptsCount < 2) &&
-                              (status.canCreate ? (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleCreateMock(lead)}
-                                  disabled={
-                                    !isOutlookConnected || isPreparingMock
-                                  }>
-                                  <RefreshCw className="h-3 w-3 mr-1" />
-                                  Retry
-                                </Button>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  disabled
-                                  className="text-orange-500 border-orange-200 bg-orange-50">
-                                  <Clock className="h-3 w-3 mr-1" />
-                                  {status.remainingTime}m
-                                </Button>
-                              ))}
-                            {!isAdminUser && attemptsCount >= 2 && (
-                              <span className="text-xs font-medium text-red-500 flex items-center">
-                                <AlertCircle className="h-3 w-3 mr-1" />
-                                Max Limit
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {paginatedLeads.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="p-8 text-center text-muted-foreground">
-                      No leads found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-end space-x-2 p-4 border-t">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}>
-                Previous
-              </Button>
-              <div className="text-sm font-medium">
-                Page {currentPage} of {totalPages}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setCurrentPage((prev) => Math.min(prev + 1, totalPages))
-                }
-                disabled={currentPage === totalPages}>
-                Next
-              </Button>
-            </div>
-          )}
-        </CardContent>
+        <MockTable
+          paginatedLeads={paginatedLeads}
+          mockAttempts={mockAttempts}
+          isReadOnly={isReadOnly}
+          isAdminUser={user?.role === "admin"}
+          isOutlookConnected={isOutlookConnected}
+          isPreparingMock={isPreparingMock}
+          selectedLead={selectedLead}
+          getCooldownStatus={getCooldownStatus}
+          handleCreateMock={handleCreateMock}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          setCurrentPage={setCurrentPage}
+        />
       </Card>
 
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Create Mock Interview</DialogTitle>
-          </DialogHeader>
-
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <Label htmlFor="to">To (Comma separated)</Label>
-                <Input
-                  id="to"
-                  value={formData.to}
-                  readOnly
-                  className="bg-muted"
-                />
-              </div>
-
-              <div className="col-span-2">
-                <Label htmlFor="cc">CC (Comma separated)</Label>
-                <Input
-                  id="cc"
-                  value={formData.cc}
-                  onChange={(e) =>
-                    setFormData({ ...formData, cc: e.target.value })
-                  }
-                  placeholder="manager@example.com"
-                />
-              </div>
-
-              <div className="col-span-2">
-                <Label>Subject</Label>
-                <div className="p-2 border rounded-md bg-muted text-muted-foreground">
-                  Request to schedule mock interview -{" "}
-                  {formData.candidateName}
-                </div>
-              </div>
-
-              <div className="col-span-2 border rounded-md overflow-hidden">
-                <div className="grid grid-cols-[200px_1fr] text-sm">
-                  <div className="p-3 bg-muted font-semibold border-b">
-                    <RequiredText>Candidate Name</RequiredText>
-                  </div>
-                  <div className="p-2 border-b">
-                    <Input
-                      value={formData.candidateName}
-                      placeholder="Full name"
-                      className={lockedPrefilledInputClassName}
-                      readOnly
-                      required
-                      aria-required="true"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-muted font-semibold border-b">End Client</div>
-                  <div className="p-2 border-b">
-                    <Input
-                      value={formData.endClient}
-                      onChange={(e) =>
-                        setFormData({ ...formData, endClient: e.target.value })
-                      }
-                      placeholder="e.g. Vizva INC"
-                      className="h-8"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-muted font-semibold border-b">Email ID</div>
-                  <div className="p-2 border-b">
-                    <Input
-                      value={formData.emailId}
-                      onChange={(e) =>
-                        setFormData({ ...formData, emailId: e.target.value })
-                      }
-                      placeholder="candidate@email.com"
-                      className="h-8"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-muted font-semibold">Contact Number</div>
-                  <div className="p-2">
-                    <Input
-                      value={formData.contactNumber}
-                      onChange={(e) =>
-                        setFormData({ ...formData, contactNumber: e.target.value })
-                      }
-                      placeholder="+1234567890"
-                      className="h-8"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="col-span-2">
-                <Label htmlFor="emailBody">Email Content</Label>
-                <Textarea
-                  id="emailBody"
-                  value={formData.emailBody}
-                  onChange={(e) =>
-                    setFormData({ ...formData, emailBody: e.target.value })
-                  }
-                  rows={4}
-                />
-              </div>
-
-              <div className="col-span-2 md:col-span-1">
-                <Label htmlFor="role">Role</Label>
-                <Input
-                  id="role"
-                  value={formData.role}
-                  onChange={(e) =>
-                    setFormData({ ...formData, role: e.target.value })
-                  }
-                  placeholder="e.g. Data Analyst"
-                />
-              </div>
-
-              <div className="col-span-2 md:col-span-1">
-                <Label htmlFor="schedule">Schedule</Label>
-                <DateTimePicker
-                  id="schedule"
-                  min={minDateTime}
-                  value={formData.schedule}
-                  onChange={(value) =>
-                    setFormData({ ...formData, schedule: value })
-                  }
-                />
-              </div>
-
-              <div className="col-span-2 md:col-span-1">
-                <Label htmlFor="company">Company (Signature)</Label>
-                <select
-                  id="company"
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent pl-3 pr-8 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                  value={formData.company}
-                  onChange={(e) =>
-                    setFormData({ ...formData, company: e.target.value as MockFormData["company"] })
-                  }>
-                  <option value="Silverspace Inc.">Silverspace Inc.</option>
-                  <option value="Vizva Consultancy">Vizva Consultancy</option>
-                </select>
-              </div>
-
-              <div className="col-span-2">
-                <Label htmlFor="resume">Upload Resume</Label>
-                <Input
-                  id="resume"
-                  key={fileInputKey}
-                  type="file"
-                  onChange={handleFileChange}
-                  accept=".pdf,.doc,.docx"
-                />
-              </div>
-
-              <div className="col-span-2 border-t pt-4 mt-2">
-                <h3 className="font-semibold mb-2">Signature Details</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2 md:col-span-1">
-                    <Label htmlFor="yourName">Your Name</Label>
-                    <Input
-                      id="yourName"
-                      value={formData.yourName}
-                      onChange={(e) =>
-                        setFormData({ ...formData, yourName: e.target.value })
-                      }
-                      placeholder="John Doe"
-                    />
-                  </div>
-                  <div className="col-span-2 md:col-span-1">
-                    <Label htmlFor="yourRole">Your Role</Label>
-                    <Input
-                      id="yourRole"
-                      value={formData.yourRole}
-                      onChange={(e) =>
-                        setFormData({ ...formData, yourRole: e.target.value })
-                      }
-                      placeholder="HR Manager"
-                    />
-                  </div>
-                  <div className="col-span-2 md:col-span-1">
-                    <Label htmlFor="yourPhone">Your Phone</Label>
-                    <Input
-                      id="yourPhone"
-                      value={formData.yourPhone}
-                      onChange={(e) =>
-                        setFormData({ ...formData, yourPhone: e.target.value })
-                      }
-                      placeholder="+1 (555) 123-4567"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setIsModalOpen(false)}>
-              Go Back
-            </Button>
-            <Button onClick={sendEmail} disabled={isSending}>
-              {isSending ? "Sending..." : "Create Mock"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <MockDialog
+        isModalOpen={isModalOpen}
+        setIsModalOpen={setIsModalOpen}
+        formData={formData}
+        setFormData={setFormData}
+        minDateTime={minDateTime}
+        fileInputKey={fileInputKey}
+        handleFileChange={handleFileChange}
+        sendEmail={sendEmail}
+        isSending={isSending}
+      />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { Banknote, CheckCircle2, Clock, Wallet } from "lucide-react";
-import type { PaymentsReportRow } from "@/app/actions/client-payments";
+import type { PaymentsReportRow } from "@/app/actions/client-payments/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const currency = new Intl.NumberFormat("en-US", {

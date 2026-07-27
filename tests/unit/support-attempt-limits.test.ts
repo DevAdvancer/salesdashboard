@@ -17,8 +17,8 @@ jest.mock('@/lib/server/appwrite-pagination', () => ({
   listAllDocuments: jest.fn(),
 }));
 
-jest.mock('@/app/actions/lead', () => ({
-  listLeadsAction: jest.fn(),
+jest.mock('@/app/actions/lead/queries', () => ({
+listLeadsAction: jest.fn(),
 }));
 
 jest.mock('node-appwrite', () => ({
@@ -40,7 +40,7 @@ import { reserveAssessmentAttempt, countAssessmentEmailsSentInRange } from '@/ap
 import { reserveInterviewAttempt, countInterviewEmailsSentInRange } from '@/app/actions/interview';
 import { countMockEmailsSentInRange } from '@/app/actions/mock';
 import { listAllDocuments } from '@/lib/server/appwrite-pagination';
-import { listLeadsAction } from '@/app/actions/lead';
+import { listLeadsAction } from '@/app/actions/lead/queries';
 
 describe('support attempt limits', () => {
   beforeEach(() => {

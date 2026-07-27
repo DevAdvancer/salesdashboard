@@ -1,4 +1,4 @@
-import { listLeads } from '@/lib/services/lead-service';
+import { listLeads } from '@/lib/services/lead/queries';
 import { databases } from '@/lib/appwrite';
 import { getUserById } from '@/lib/services/user-service';
 import { Query } from 'appwrite';
@@ -67,6 +67,25 @@ describe('special branch lead access', () => {
     expect(Query.equal).toHaveBeenCalledWith('assignedToId', [alishaUserId]);
     expect(queries).toContain(
       `or(equal("ownerId", ["${alishaUserId}"]),equal("assignedToId", ["${alishaUserId}"]),equal("branchId", "${ncrBranchId}"))`
+    );
+  });
+
+  it('adds all special branch leads for an agent', async () => {
+    (getUserById as jest.Mock).mockResolvedValue({
+      $id: 'agent-123',
+      email: 'Alisha.dsouza@silverspaceinc.com',
+      role: 'agent',
+      branchIds: ['other-branch'],
+    });
+
+    await listLeads({}, 'agent-123', 'agent', ['other-branch']);
+
+    const leadListCall = (databases.listDocuments as jest.Mock).mock.calls.at(-1);
+    const queries = leadListCall[2];
+
+    expect(Query.or).toHaveBeenCalled();
+    expect(queries).toContain(
+      `or(equal("assignedToId", "agent-123"),equal("ownerId", "agent-123"),equal("branchId", "${ncrBranchId}"))`
     );
   });
 });

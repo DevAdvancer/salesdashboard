@@ -1,9 +1,9 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { listLeadsAction } from "@/app/actions/lead";
 import { buildScope, queryKeys } from "@/lib/queries/keys";
 import type { LeadListFilters, UserRole } from "@/lib/types";
+import { listLeadsAction } from "@/app/actions/lead/queries";
 
 export interface UseLeadsQueryArgs {
   userId: string;

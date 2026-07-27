@@ -10,12 +10,14 @@
 import {
   createLead,
   updateLead,
-  getLead,
-  listLeads,
   closeLead,
   reopenLead,
   assignLead,
-} from '@/lib/services/lead-service';
+} from '@/lib/services/lead/mutations';
+import {
+  getLead,
+  listLeads,
+} from '@/lib/services/lead/queries';
 import { databases } from '@/lib/appwrite';
 import { Permission, Role } from 'appwrite';
 import { Lead, LeadData } from '@/lib/types';
@@ -23,6 +25,7 @@ import {
   LEAD_STATUS_PIPELINE,
   LEAD_STATUS_SIGNED_CLOSURE,
 } from '@/lib/utils/lead-status-workflow';
+import { COLLECTIONS } from '@/lib/constants/appwrite';
 
 jest.mock('@/lib/appwrite', () => ({
   account: {
@@ -54,9 +57,7 @@ describe('Integration: Complete Lead Lifecycle', () => {
   const agentId = 'agent-001';
   const newAgentId = 'agent-002';
 
-  // lib/services/user-service.ts reads USERS from
-  // NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID, which jest.env.js pins to this value.
-  const USERS_COLLECTION = 'test-users-collection';
+  const USERS_COLLECTION = COLLECTIONS.USERS;
 
   // createLead and listLeads both resolve the acting user through
   // getUserById, so the Appwrite mock has to serve the users collection as

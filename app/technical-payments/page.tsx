@@ -186,7 +186,7 @@ function TechnicalPaymentsPage() {
 
   // Apply filters + sort
   const filtered = useMemo(() => {
-    let result = payments.filter((p) => {
+    const result = payments.filter((p) => {
       if (typeFilter !== "all" && p.type !== typeFilter) return false;
       if (dateFrom && p.createdAt < dateFrom) return false;
       if (dateTo && p.createdAt > dateTo + "T23:59:59") return false;

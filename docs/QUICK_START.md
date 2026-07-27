@@ -42,7 +42,7 @@ npm run setup:appwrite
 npm run dev
 ```
 
-Open http://localhost:3000
+Open http://localhost:5000
 
 ### 8. Create Manager Account
 1. Go to signup page

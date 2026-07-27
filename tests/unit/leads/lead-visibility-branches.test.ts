@@ -1,4 +1,4 @@
-import { listLeads } from '@/lib/services/lead-service';
+import { listLeads } from '@/lib/services/lead/queries';
 import { databases } from '@/lib/appwrite';
 import { Query } from 'appwrite';
 

@@ -1,4 +1,5 @@
-import { listLeads, reopenLead } from '@/lib/services/lead-service';
+import { listLeads } from '@/lib/services/lead/queries';
+import { reopenLead } from '@/lib/services/lead/mutations';
 import { databases } from '@/lib/appwrite';
 import { Query } from 'appwrite';
 

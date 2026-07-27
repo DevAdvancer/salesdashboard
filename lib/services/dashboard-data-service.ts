@@ -2,19 +2,16 @@
 
 import { countAssessmentEmailsSentInRange } from "@/app/actions/assessment";
 import { listHolidayCalendarAction } from "@/app/actions/holiday-calendar";
-import {
-  listAllPaymentInsightsAction,
-  listClientPaymentSummariesAction,
-  listLeadPaidAmountsAction,
-  type PaymentInsightRecord,
-} from "@/app/actions/client-payments";
+import { listAllPaymentInsightsAction } from "@/app/actions/client-payments/insights";
+import { listClientPaymentSummariesAction, listLeadPaidAmountsAction } from "@/app/actions/client-payments/list";
+import type { PaymentInsightRecord } from "@/app/actions/client-payments/shared";
 import { countInterviewEmailsSentInRange } from "@/app/actions/interview";
 import { listLgHandoffsAction } from "@/app/actions/lg-handoffs";
 import { countMockEmailsSentInRange } from "@/app/actions/mock";
 import { listLeads } from "@/lib/services/lead-action-service";
-import { loadLeadTargetProgressAction } from "@/app/actions/lead";
 import { listBranches } from "@/lib/services/branch-service";
-import { loadLinkedinConnectionKpiAction, type LinkedinConnectionKpiRow } from "@/app/actions/linkedin";
+import { loadLinkedinConnectionKpiAction } from "@/app/actions/linkedin/reports";
+import type { LinkedinConnectionKpiRow } from "@/app/actions/linkedin/shared";
 import {
   getAgentsByTeamLead,
   getAssignableUsers,
@@ -109,6 +106,7 @@ export function clearDashboardDataCache(): void {
 }
 
 import { loadDashboardDataServerAction } from "@/app/actions/dashboard";
+import { loadLeadTargetProgressAction } from "@/app/actions/lead/queries";
 
 export async function loadDashboardData(
   input: DashboardDataInput,

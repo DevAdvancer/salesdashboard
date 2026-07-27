@@ -1,4 +1,4 @@
-import { createAgent, getAgentsByTeamLead } from '@/lib/services/user-service';
+import { getAgentsByTeamLead } from '@/lib/services/user-service';
 import { databases, account } from '@/lib/appwrite';
 import { clearCache } from '@/lib/utils/resource-cache';
 import { ID, Permission, Role, Query } from 'appwrite';
@@ -28,134 +28,6 @@ describe('User Management', () => {
     // getAgentsByTeamLead memoises its result in the shared resource cache,
     // so results would otherwise leak between tests that use the same id.
     clearCache();
-  });
-
-  describe('Agent Creation', () => {
-    it('should create agent with valid data', async () => {
-      const mockAgentData = {
-        name: 'Test Agent',
-        email: 'agent@example.com',
-        password: 'password123',
-        teamLeadId: 'teamlead-123',
-        branchIds: ['branch-1'],
-      };
-
-      const mockTeamLeadDoc = {
-        $id: 'teamlead-123',
-        name: 'Team Lead',
-        email: 'tl@example.com',
-        role: 'team_lead',
-        teamLeadId: null,
-        branchIds: ['branch-1', 'branch-2'],
-      };
-
-      const mockCreatedAgent = {
-        $id: 'agent-456',
-        name: mockAgentData.name,
-        email: mockAgentData.email,
-        role: 'agent',
-        teamLeadId: mockAgentData.teamLeadId,
-        branchIds: ['branch-1'],
-        $createdAt: '2024-01-01T00:00:00.000Z',
-        $updatedAt: '2024-01-01T00:00:00.000Z',
-      };
-
-      (databases.getDocument as jest.Mock).mockResolvedValue(mockTeamLeadDoc);
-      (account.create as jest.Mock).mockResolvedValue({ $id: 'agent-456' });
-      (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedAgent);
-
-      const result = await createAgent(mockAgentData);
-
-      expect(databases.getDocument).toHaveBeenCalled();
-      expect(account.create).toHaveBeenCalledWith(
-        expect.any(String),
-        mockAgentData.email,
-        mockAgentData.password,
-        mockAgentData.name
-      );
-
-      expect(databases.createDocument).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.any(String),
-        expect.any(String),
-        expect.objectContaining({
-          name: mockAgentData.name,
-          email: mockAgentData.email,
-          role: 'agent',
-          teamLeadId: mockAgentData.teamLeadId,
-          branchIds: ['branch-1'],
-        }),
-        expect.arrayContaining([
-          expect.stringContaining('read'),
-          expect.stringContaining('update'),
-        ])
-      );
-
-      expect(result.role).toBe('agent');
-      expect(result.teamLeadId).toBe(mockAgentData.teamLeadId);
-      expect(result.branchIds).toEqual(['branch-1']);
-    });
-
-    it('should handle duplicate email error', async () => {
-      const mockAgentData = {
-        name: 'Test Agent',
-        email: 'existing@example.com',
-        password: 'password123',
-        teamLeadId: 'teamlead-123',
-        branchIds: ['branch-1'],
-      };
-
-      (databases.getDocument as jest.Mock).mockResolvedValue({
-        $id: 'teamlead-123',
-        teamLeadId: 'teamLead-123',
-        branchIds: ['branch-1'],
-      });
-
-      const duplicateError = new Error('User already exists');
-      (duplicateError as any).code = 409;
-
-      (account.create as jest.Mock).mockRejectedValue(duplicateError);
-
-      await expect(createAgent(mockAgentData)).rejects.toThrow(
-        'A user with this email already exists'
-      );
-    });
-
-    it('should set agent role, teamLeadId and teamLeadId correctly', async () => {
-      const mockAgentData = {
-        name: 'New Agent',
-        email: 'newagent@example.com',
-        password: 'securepass',
-        teamLeadId: 'teamlead-789',
-        branchIds: ['branch-2'],
-      };
-
-      (databases.getDocument as jest.Mock).mockResolvedValue({
-        $id: 'teamlead-789',
-        teamLeadId: null,
-        branchIds: ['branch-2', 'branch-3'],
-      });
-
-      const mockCreatedAgent = {
-        $id: 'agent-999',
-        name: mockAgentData.name,
-        email: mockAgentData.email,
-        role: 'agent',
-        teamLeadId: mockAgentData.teamLeadId,
-        branchIds: ['branch-2'],
-        $createdAt: '2024-01-01T00:00:00.000Z',
-        $updatedAt: '2024-01-01T00:00:00.000Z',
-      };
-
-      (account.create as jest.Mock).mockResolvedValue({ $id: 'agent-999' });
-      (databases.createDocument as jest.Mock).mockResolvedValue(mockCreatedAgent);
-
-      const result = await createAgent(mockAgentData);
-
-      expect(result.role).toBe('agent');
-      expect(result.teamLeadId).toBe(mockAgentData.teamLeadId);
-      expect(result.branchIds).toEqual(['branch-2']);
-    });
   });
 
   describe('TeamLead Can Only See Their Agents', () => {
@@ -294,27 +166,6 @@ describe('User Management', () => {
   });
 
   describe('Error Handling', () => {
-    it('should handle network errors during agent creation', async () => {
-      const mockAgentData = {
-        name: 'Test Agent',
-        email: 'agent@example.com',
-        password: 'password123',
-        teamLeadId: 'teamlead-123',
-        branchIds: ['branch-1'],
-      };
-
-      (databases.getDocument as jest.Mock).mockResolvedValue({
-        $id: 'teamlead-123',
-        teamLeadId: 'teamLead-123',
-        branchIds: ['branch-1'],
-      });
-
-      const networkError = new Error('Network error');
-      (account.create as jest.Mock).mockRejectedValue(networkError);
-
-      await expect(createAgent(mockAgentData)).rejects.toThrow();
-    });
-
     it('should handle errors when fetching agents', async () => {
       const teamLeadId = 'teamLead-123';
       const error = new Error('Database error');

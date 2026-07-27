@@ -18,18 +18,17 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/contexts/auth-context";
+import { listMyLinkedinAccountsAction } from "@/app/actions/linkedin/accounts";
 import {
   checkLinkedinDuplicateAction,
   createLinkedinRequestAction,
   getBackoutStatusForLeadIdsAction,
   getLinkedinConnectionHistoryAction,
-  listMyLinkedinAccountsAction,
   listMyLinkedinRequestsAction,
   markLinkedinRequestAcceptedAction,
   withdrawLinkedinRequestAction,
-} from "@/app/actions/linkedin";
+} from "@/app/actions/linkedin/requests";
 import type { LinkedinAccount, LinkedinRequest } from "@/lib/types";
-import { validateLeadUniquenessAction } from "@/app/actions/lead";
 import { getErrorMessage } from "@/lib/utils";
 import { getLinkedinRequestDateFilterValue } from "@/lib/utils/linkedin-request-dates";
 import {
@@ -38,6 +37,7 @@ import {
   LINKEDIN_SENT_AUTO_WITHDRAW_DAYS,
   LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS,
 } from "@/lib/utils/linkedin-withdrawal-reminders";
+import { validateLeadUniquenessAction } from "@/app/actions/lead/validation";
 
 function todayDateInputValue() {
   return new Intl.DateTimeFormat("en-CA", {

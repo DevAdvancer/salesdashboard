@@ -62,7 +62,7 @@ const userDoc = await databases.createDocument(
 **Check Configuration:**
 ```bash
 # Visit this URL after starting dev server:
-http://localhost:3000/api/debug-config
+http://localhost:5000/api/debug-config
 ```
 
 **Expected Output:**

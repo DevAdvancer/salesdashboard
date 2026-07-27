@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw, Search } from "lucide-react";
 import type { User } from "@/lib/types";
-import type { PaymentsReportRow } from "@/app/actions/client-payments";
+import type { PaymentsReportRow } from "@/app/actions/client-payments/shared";
 import { listPaymentsReport } from "@/lib/services/client-payment-service";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

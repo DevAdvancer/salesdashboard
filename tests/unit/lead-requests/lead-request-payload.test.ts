@@ -13,6 +13,7 @@ const mockDatabases = {
   getDocument: jest.fn(() => Promise.reject(new Error('not found'))),
 };
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const mockCreateAdminClient = require('@/lib/server/appwrite').createAdminClient as jest.MockedFunction<typeof jest.fn>;
 mockCreateAdminClient.mockResolvedValue({ databases: mockDatabases });
 

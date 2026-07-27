@@ -1,20 +1,18 @@
 import {
-  createLeadAction,
-  listLeadsAction,
-  reopenLeadAction,
-  updateLeadAction,
-} from "@/app/actions/lead";
-import {
   assignLeadAction,
+  listLeadAssignableAgentsAction,
+} from "@/lib/actions/lead/assignment";
+import {
   backoutLeadAction,
   closeLeadAction,
-  listLeadAssignableAgentsAction,
   notInterestedLeadAction,
-} from "@/lib/actions/lead-actions";
+} from "@/lib/actions/lead/status";
 import { invalidateAuditLogReferenceCache } from "@/lib/services/audit-log-reference-service";
 import { cacheClientRead, clearClientReadCache } from "@/lib/utils/client-read-cache";
 import { clearDashboardDataCache } from "@/lib/services/dashboard-data-service";
-import type { CreateLeadInput, Lead, LeadData, LeadListFilters, User, UserRole } from "@/lib/types";
+import { createLeadAction, reopenLeadAction, updateLeadAction } from "@/app/actions/lead/mutations";
+import { listLeadsAction } from "@/app/actions/lead/queries";
+import type { Lead, LeadListFilters, UserRole, CreateLeadInput, LeadData, User } from "@/lib/types";
 
 const LEAD_READ_SCOPE_PREFIX = "lead:";
 const LEAD_LIST_TTL_MS = 60 * 1000;

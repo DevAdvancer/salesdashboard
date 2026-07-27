@@ -16,9 +16,6 @@ jest.mock("@/lib/server/appwrite", () => ({
   createAdminClient: () => mockCreateAdminClient(),
 }));
 
-jest.mock("@/lib/constants/special-lead-access", () => ({
-  getSpecialBranchLeadAccess: jest.fn(() => null),
-}));
 
 jest.mock("node-appwrite", () => ({
   ID: {
@@ -91,7 +88,7 @@ describe("client payment action authorization", () => {
     });
 
     const { getClientPaymentRecordAction } = await import(
-      "@/app/actions/client-payments"
+      "@/app/actions/client-payments/record"
     );
 
     await expect(
@@ -154,7 +151,7 @@ describe("client payment action authorization", () => {
     });
 
     const { addClientPaymentUpdateAction } = await import(
-      "@/app/actions/client-payments"
+      "@/app/actions/client-payments/record"
     );
 
     await expect(
@@ -207,7 +204,7 @@ describe("client payment action authorization", () => {
     });
 
     const { getClientPaymentRecordAction } = await import(
-      "@/app/actions/client-payments"
+      "@/app/actions/client-payments/record"
     );
 
     await expect(
@@ -236,7 +233,7 @@ describe("client payment action authorization", () => {
       });
 
     const { addClientPaymentUpdateAction } = await import(
-      "@/app/actions/client-payments"
+      "@/app/actions/client-payments/record"
     );
 
     await expect(
@@ -326,7 +323,7 @@ describe("client payment amount persistence and report", () => {
     });
 
     const { addClientPaymentUpdateAction } = await import(
-      "@/app/actions/client-payments"
+      "@/app/actions/client-payments/record"
     );
 
     await expect(
@@ -395,7 +392,7 @@ describe("client payment amount persistence and report", () => {
     });
 
     const { addClientPaymentUpdateAction } = await import(
-      "@/app/actions/client-payments"
+      "@/app/actions/client-payments/record"
     );
 
     await addClientPaymentUpdateAction({
@@ -479,7 +476,7 @@ describe("client payment amount persistence and report", () => {
       });
 
     const { listPaymentsReportAction } = await import(
-      "@/app/actions/client-payments"
+      "@/app/actions/client-payments/insights"
     );
 
     const rows = await listPaymentsReportAction({ actorId: "admin-1" });
@@ -565,7 +562,7 @@ describe("client payment amount persistence and report", () => {
       });
 
     const { listPaymentsReportAction } = await import(
-      "@/app/actions/client-payments"
+      "@/app/actions/client-payments/insights"
     );
 
     const rows = await listPaymentsReportAction({
@@ -588,7 +585,7 @@ describe("client payment amount persistence and report", () => {
     });
 
     const { listPaymentsReportAction } = await import(
-      "@/app/actions/client-payments"
+      "@/app/actions/client-payments/insights"
     );
 
     await expect(listPaymentsReportAction({ actorId: "agent-1" })).rejects.toThrow(

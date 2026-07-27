@@ -31,7 +31,6 @@
 
 import { config } from 'dotenv';
 import { Client, Databases, Query } from 'node-appwrite';
-import { getSpecialBranchLeadAccess } from '../lib/constants/special-lead-access';
 import { COLLECTIONS, DATABASE_ID } from '../lib/constants/appwrite';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -100,8 +99,7 @@ function appVisibleCount(user: AnyDoc, users: AnyDoc[], leads: AnyDoc[]): number
   // branchIds. That depends on request input rather than stored state, it only
   // matches leads that are both closed and backed out, and this script measures
   // the whole lead universe with no status filter.
-  const specialBranchId = getSpecialBranchLeadAccess(user.email as string | undefined);
-  const inSpecialBranch = (l: AnyDoc) =>
+    const inSpecialBranch = (l: AnyDoc) =>
     Boolean(specialBranchId) && l.branchId === specialBranchId;
 
   if (role === 'agent') {

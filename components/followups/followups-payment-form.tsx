@@ -18,10 +18,10 @@ import {
   type PreviousFollowupsPayment,
 } from "@/lib/types";
 import { useAuth } from "@/lib/contexts/auth-context";
-import { listLeadsAction, getLeadAction } from "@/app/actions/lead";
 import { isVisibleClientLead } from "@/lib/utils/client-history";
-import { getClientPaymentRecordAction } from "@/app/actions/client-payments";
+import { getClientPaymentRecordAction } from "@/app/actions/client-payments/record";
 import type { PaymentStatus } from "@/lib/types";
+import { listLeadsAction, getLeadAction } from "@/app/actions/lead/queries";
 
 export interface FollowupsPaymentFormValues {
   leadId?: string | null;

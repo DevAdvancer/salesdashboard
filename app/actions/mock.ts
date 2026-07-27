@@ -4,9 +4,9 @@ import { ID, Query } from 'node-appwrite';
 import { createAdminClient } from '@/lib/server/appwrite';
 import { assertAuthenticatedUserId } from '@/lib/server/current-user';
 import { createHash } from 'crypto';
-import { listLeadsAction } from '@/app/actions/lead';
 import { UserRole } from '@/lib/types';
 import { listAllDocuments } from '@/lib/server/appwrite-pagination';
+import { listLeadsAction } from "@/app/actions/lead/queries";
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const MOCK_ATTEMPTS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_MOCK_ATTEMPTS_COLLECTION_ID || 'mock_attempts';

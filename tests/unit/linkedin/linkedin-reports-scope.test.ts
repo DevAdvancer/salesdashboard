@@ -66,7 +66,7 @@ describe("Linkedin reports team lead scoping", () => {
     });
 
     const { getLinkedinWeeklyReportAction } = await import(
-      "@/app/actions/linkedin"
+      "@/app/actions/linkedin/reports"
     );
 
     await expect(
@@ -96,7 +96,7 @@ describe("Linkedin reports team lead scoping", () => {
     });
 
     const { listLinkedinRequestsForAdminAction } = await import(
-      "@/app/actions/linkedin"
+      "@/app/actions/linkedin/requests"
     );
 
     await expect(

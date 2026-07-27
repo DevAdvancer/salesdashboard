@@ -1,8 +1,10 @@
 import {
   createLeadAction,
   listLeadsAction,
-} from "@/app/actions/lead";
-import { assignLeadAction, backoutLeadAction } from "@/lib/actions/lead-actions";
+} from "@/app/actions/lead/mutations";
+import { listLeadsAction } from "@/app/actions/lead/queries";
+import { assignLeadAction } from "@/lib/actions/lead/assignment";
+import { backoutLeadAction } from "@/lib/actions/lead/status";
 import {
   assignLead,
   backoutLead,
@@ -12,14 +14,18 @@ import {
 } from "@/lib/services/lead-action-service";
 import { clearClientReadCache } from "@/lib/utils/client-read-cache";
 
-jest.mock("@/app/actions/lead", () => ({
+jest.mock("@/app/actions/lead/mutations", () => ({
   createLeadAction: jest.fn(),
-  listLeadsAction: jest.fn(),
   reopenLeadAction: jest.fn(),
 }));
+jest.mock("@/app/actions/lead/queries", () => ({
+  listLeadsAction: jest.fn(),
+}));
 
-jest.mock("@/lib/actions/lead-actions", () => ({
+jest.mock("@/lib/actions/lead/assignment", () => ({
   assignLeadAction: jest.fn(),
+}));
+jest.mock("@/lib/actions/lead/status", () => ({
   backoutLeadAction: jest.fn(),
 }));
 

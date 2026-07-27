@@ -11,7 +11,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { PaymentInsightRecord } from "@/app/actions/client-payments";
+import type { PaymentInsightRecord } from "@/app/actions/client-payments/shared";
 import type { PaymentStatus } from "@/lib/types";
 import { isClientExcludedStatus } from "@/lib/utils/client-history";
 

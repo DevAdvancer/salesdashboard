@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, type ReactNode } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { getSupportRequestCcEmails } from "@/lib/services/user-service";
 import type { Lead } from "@/lib/types";
@@ -13,8 +13,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { DateTimePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
@@ -36,77 +34,16 @@ import { saveTechnicalPayment } from "@/app/actions/technical-payments";
 import { listLeads } from "@/lib/services/lead-action-service";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 
-interface InterviewFormData {
-  to: string;
-  cc: string;
-  interviewDate: string;
-  candidateName: string;
-  technology: string;
-  endClient: string;
-  jobTitle: string;
-  interviewRound: string;
-  duration: string;
-  emailId: string;
-  contactNumber: string;
-  resume: File | null;
-  additionalAttachment: File | null;
-  jobDescription: string;
-  yourName: string;
-  yourRole: string;
-  yourPhone: string;
-  company: "Silverspace Inc." | "Vizva Consultancy";
-}
-
-const INITIAL_FORM_DATA: InterviewFormData = {
-  to: "rgahlot@silverspaceinc.com",
-  // to: "harsh.patel@silverspaceinc.com",
-  cc: "",
-  interviewDate: "",
-  candidateName: "",
-  technology: "",
-  endClient: "",
-  jobTitle: "",
-  interviewRound: "",
-  duration: "",
-  emailId: "",
-  contactNumber: "",
-  resume: null,
-  additionalAttachment: null,
-  jobDescription: "",
-  yourName: "",
-  yourRole: "",
-  yourPhone: "",
-  company: "Silverspace Inc.",
-};
-
-const INTERVIEW_SUPPORT_CC_EMAILS = ["tech.leaders@silverspaceinc.com"];
-
-interface InterviewAttempt {
-  $id: string;
-  leadId: string;
-  userId: string;
-  attemptCount: number;
-  lastAttemptAt: string;
-  sentSubjects: string[];
-}
-
-interface GraphAttachment {
-  "@odata.type": "#microsoft.graph.fileAttachment";
-  name: string;
-  contentType: string;
-  contentBytes: string;
-}
-
-function RequiredText({ children }: { children: ReactNode }) {
-  return (
-    <>
-      {children}
-      <span className="ml-1 text-destructive">*</span>
-    </>
-  );
-}
-
-const lockedPrefilledInputClassName = "h-8 bg-muted text-muted-foreground";
+// Components
+import { InterviewFiltersCard } from "@/components/interview-support/interview-filters-card";
+import { InterviewTable } from "@/components/interview-support/interview-table";
+import { InterviewDialog } from "@/components/interview-support/interview-dialog";
+import {
+  type InterviewFormData,
+  type InterviewAttempt,
+  INITIAL_FORM_DATA,
+  INTERVIEW_SUPPORT_CC_EMAILS,
+} from "@/components/interview-support/interview-types";
 
 function InterviewContent() {
   const { user, loading } = useAuth();
@@ -128,7 +65,7 @@ function InterviewContent() {
   const ITEMS_PER_PAGE = 10;
 
   const [interviewAttempts, setInterviewAttempts] = useState<Map<string, InterviewAttempt>>(
-    new Map()
+    new Map(),
   );
 
   const handleConnectOutlook = async () => {
@@ -175,17 +112,13 @@ function InterviewContent() {
   const loadInterviewAttempts = useCallback(
     async (leadIds: string[]) => {
       if (!user) return;
-
       if (!leadIds.length) {
         setInterviewAttempts(new Map());
         return;
       }
-
       try {
         const attempts = await getInterviewAttempts(user.$id, leadIds);
-
         const nextAttempts = new Map<string, InterviewAttempt>();
-
         attempts.forEach((doc: InterviewAttempt) => {
           nextAttempts.set(doc.leadId, {
             $id: doc.$id,
@@ -196,14 +129,13 @@ function InterviewContent() {
             sentSubjects: doc.sentSubjects || [],
           });
         });
-
         setInterviewAttempts(nextAttempts);
       } catch (err) {
         console.error("Error loading interview attempts:", err);
         setInterviewAttempts(new Map());
       }
     },
-    [user]
+    [user],
   );
 
   const loadLeads = useCallback(async () => {
@@ -307,11 +239,12 @@ function InterviewContent() {
       console.error("Failed to fetch CC users:", err);
     }
     setIsModalOpen(true);
+    setIsPreparingInterview(false);
   };
 
   const handleFileChange = async (
     e: React.ChangeEvent<HTMLInputElement>,
-    field: "resume" | "additionalAttachment"
+    field: "resume" | "additionalAttachment",
   ) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -358,9 +291,6 @@ function InterviewContent() {
     return `${datePart} at ${timePart} EST`;
   };
 
-  // Live subject preview: [Sales] Interview Support - Candidate Name - Technology - Date at Time EST
-  const liveSubject = `[Sales] Interview Support - ${formData.candidateName || "..."} - ${formData.technology || "..."} - ${formData.interviewDate ? formatDateEST(formData.interviewDate) : "..."}`;
-
   const sendEmail = async () => {
     if (!isOutlookConnected) {
       toast({
@@ -405,7 +335,7 @@ function InterviewContent() {
           yourRole: formData.yourRole,
           yourPhone: formData.yourPhone,
           company: formData.company,
-        })
+        }),
       );
 
       const fileToBase64 = (file: File): Promise<string> =>
@@ -419,11 +349,12 @@ function InterviewContent() {
           reader.readAsDataURL(file);
         });
 
-      const attachments: GraphAttachment[] = [];
-      const attachmentSizeError = getSupportEmailAttachmentLimitError([
-        formData.resume,
-        formData.additionalAttachment,
-      ].filter((attachment): attachment is File => Boolean(attachment)));
+      const attachments = [];
+      const attachmentSizeError = getSupportEmailAttachmentLimitError(
+        [formData.resume, formData.additionalAttachment].filter((attachment): attachment is File =>
+          Boolean(attachment),
+        ),
+      );
 
       if (attachmentSizeError) {
         throw new Error(attachmentSizeError);
@@ -548,8 +479,8 @@ function InterviewContent() {
 
       const reservedAttempt = await reserveInterviewAttempt(user.$id, selectedLead.$id, subject);
 
-      if ('error' in reservedAttempt) {
-        throw new Error(reservedAttempt.error);
+      if ("error" in reservedAttempt) {
+        throw new Error(reservedAttempt.error as string);
       }
 
       try {
@@ -567,29 +498,34 @@ function InterviewContent() {
         throw sendError;
       }
 
-      await completeInterviewAttempt(user.$id, selectedLead.$id, subject, reservedAttempt.attemptCount, {
-        candidateName: formData.candidateName,
-        technology: formData.technology,
-        endClient: formData.endClient,
-        jobTitle: formData.jobTitle,
-        interviewRound: formData.interviewRound,
-        interviewDate: formattedDate,
-        duration: formData.duration,
-        emailId: formData.emailId,
-        contactNumber: formData.contactNumber,
-      });
+      await completeInterviewAttempt(
+        user.$id,
+        selectedLead.$id,
+        subject,
+        reservedAttempt.attemptCount,
+        {
+          candidateName: formData.candidateName,
+          technology: formData.technology,
+          endClient: formData.endClient,
+          jobTitle: formData.jobTitle,
+          interviewRound: formData.interviewRound,
+          interviewDate: formattedDate,
+          duration: formData.duration,
+          emailId: formData.emailId,
+          contactNumber: formData.contactNumber,
+        },
+      );
 
-      // Save the technical payment if amount > 0
       if (currentUpfrontAmount > 0) {
         try {
           await saveTechnicalPayment({
             actorId: user.$id,
             leadId: selectedLead.$id,
             amount: currentUpfrontAmount,
-            type: 'interview',
+            type: "interview",
           });
         } catch (error) {
-          console.error('Failed to save technical payment:', error);
+          console.error("Failed to save technical payment:", error);
         }
       }
 
@@ -601,7 +537,7 @@ function InterviewContent() {
           attemptCount: reservedAttempt.attemptCount,
           lastAttemptAt: reservedAttempt.lastAttemptAt,
           sentSubjects: reservedAttempt.sentSubjects || [],
-        })
+        }),
       );
 
       toast({ title: "Success", description: "Interview support email sent successfully." });
@@ -629,12 +565,8 @@ function InterviewContent() {
   const totalPages = Math.max(1, Math.ceil(filteredLeads.length / ITEMS_PER_PAGE));
   const paginatedLeads = filteredLeads.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
+    currentPage * ITEMS_PER_PAGE,
   );
-
-  const now = new Date();
-  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-  const minDateTime = now.toISOString().slice(0, 16);
 
   if (loading || isLoading) {
     return (
@@ -664,131 +596,42 @@ function InterviewContent() {
         ) : null}
       </div>
 
-      <Card>
-        <CardContent className="p-4 border-b">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <Label htmlFor="search" className="sr-only">Search</Label>
-              <Input
-                id="search"
-                placeholder="Search by name, email, phone or company..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <div className="w-full sm:w-[200px]">
-              <Label htmlFor="filter" className="sr-only">Filter</Label>
-              <select
-                id="filter"
-                className="w-full"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}>
-                <option value="all">All Leads</option>
-                <option value="interview_created">Interview Created</option>
-                <option value="interview_not_created">Interview Not Created</option>
-              </select>
-            </div>
-          </div>
-        </CardContent>
+      <InterviewFiltersCard
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        filter={filter}
+        setFilter={setFilter}
+      />
 
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[600px]">
-              <thead className="border-b bg-muted/50">
-                <tr className="text-left">
-                  <th className="p-4 font-semibold">Name</th>
-                  <th className="p-4 font-semibold">Phone</th>
-                  <th className="p-4 font-semibold">Email</th>
-                  <th className="p-4 font-semibold">Source</th>
-                  <th className="p-4 font-semibold">Company</th>
-                  <th className="p-4 font-semibold">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedLeads.map((lead) => {
-                  const leadData = JSON.parse(lead.data);
-                  const attempt = interviewAttempts.get(lead.$id);
-                  const attemptsCount = attempt?.attemptCount || 0;
-
-                  return (
-                    <tr key={lead.$id} className="border-b hover:bg-muted/50 transition-colors">
-                      <td className="p-4">
-                        {leadData.firstName} {leadData.lastName}
-                        {leadData.legalName && (
-                          <div className="text-xs text-muted-foreground">({leadData.legalName})</div>
-                        )}
-                      </td>
-                      <td className="p-4">{leadData.phone || "N/A"}</td>
-                      <td className="p-4">{leadData.email || "N/A"}</td>
-                      <td className="p-4">{leadData.sourceName || leadData.source || "-"}</td>
-                      <td className="p-4">{leadData.company || "N/A"}</td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {attemptsCount > 0 && (
-                            <span style={{ fontSize: '0.6875rem', fontWeight: 500, color: '#60aaee', background: 'rgba(96,170,238,0.12)', padding: '0.125rem 0.5rem', borderRadius: '999px', border: '1px solid rgba(96,170,238,0.25)' }}>
-                              {attemptsCount} Sent
-                            </span>
-                          )}
-                          <Button
-                            size="sm"
-                            onClick={() => handleCreateInterview(lead)}
-                            disabled={isReadOnly || !isOutlookConnected || isPreparingInterview}>
-                            {isPreparingInterview && selectedLead?.$id === lead.$id
-                              ? "Preparing..."
-                              : "Create Interview"}
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {paginatedLeads.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                      No leads found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {totalPages > 1 && (
-            <div className="flex items-center justify-end space-x-2 p-4 border-t">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}>
-                Previous
-              </Button>
-              <div className="text-sm font-medium">
-                Page {currentPage} of {totalPages}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}>
-                Next
-              </Button>
-            </div>
-          )}
-        </CardContent>
+      <Card className="mt-4">
+        <InterviewTable
+          paginatedLeads={paginatedLeads}
+          interviewAttempts={interviewAttempts}
+          isReadOnly={isReadOnly}
+          isOutlookConnected={isOutlookConnected}
+          isPreparingInterview={isPreparingInterview}
+          selectedLead={selectedLead}
+          handleCreateInterview={handleCreateInterview}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          setCurrentPage={setCurrentPage}
+        />
       </Card>
 
-      {/* Upfront Payment Dialog */}
-      <Dialog open={isUpfrontDialogOpen} onOpenChange={(open) => {
-        if (!open) setSelectedLeadForUpfront(null);
-        setIsUpfrontDialogOpen(open);
-      }}>
+      <Dialog
+        open={isUpfrontDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) setSelectedLeadForUpfront(null);
+          setIsUpfrontDialogOpen(open);
+        }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Upfront Payment</DialogTitle>
           </DialogHeader>
           <div className="py-4">
             <p className="mb-4">
-              Before creating Interview Support, please enter the upfront payment amount for this candidate:
+              Before creating Interview Support, please enter the upfront payment amount for this
+              candidate:
             </p>
             <div className="space-y-2">
               <Label htmlFor="upfrontAmount">Amount ($)</Label>
@@ -811,289 +654,42 @@ function InterviewContent() {
             <Button
               onClick={() => {
                 if (!selectedLeadForUpfront) return;
+
                 const amount = Number(upfrontAmount);
                 if (isNaN(amount) || amount < 0) {
-                  toast({ title: "Invalid Amount", description: "Please enter a valid amount", variant: "destructive" });
+                  toast({
+                    title: "Invalid Amount",
+                    description: "Please enter a valid amount",
+                    variant: "destructive",
+                  });
                   return;
                 }
+
                 setIsUpfrontDialogOpen(false);
                 setCurrentUpfrontAmount(amount);
                 setUpformDataForInterview(selectedLeadForUpfront);
-              }}
-            >
+              }}>
               Continue
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Create Interview Dialog */}
-      <Dialog open={isModalOpen} onOpenChange={(open) => {
-        setIsModalOpen(open);
-        if (!open) {
-          setCurrentUpfrontAmount(0);
-        }
-      }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Create Interview Support</DialogTitle>
-          </DialogHeader>
-
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <Label htmlFor="to">To (Comma separated)</Label>
-                <Input id="to" value={formData.to} readOnly className="bg-muted" />
-              </div>
-
-              <div className="col-span-2">
-                <Label htmlFor="cc">CC (Comma separated)</Label>
-                <Input
-                  id="cc"
-                  value={formData.cc}
-                  onChange={(e) => setFormData({ ...formData, cc: e.target.value })}
-                  placeholder="manager@example.com"
-                />
-              </div>
-
-              {/* Live Subject Preview */}
-              <div className="col-span-2">
-                <Label>Subject</Label>
-                <div className="p-3 border-2 border-primary/30 rounded-md bg-primary/5 text-sm font-medium transition-all duration-200">
-                  {liveSubject}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  This subject updates in real-time as you fill in the fields below.
-                </p>
-              </div>
-
-              {/* Interview Details Table */}
-              <div className="col-span-2 border rounded-md overflow-hidden">
-                <div className="grid grid-cols-[200px_1fr] text-sm">
-                  <div className="p-3 bg-muted font-semibold border-b">
-                    <RequiredText>Candidate Name</RequiredText>
-                  </div>
-                  <div className="p-2 border-b">
-                    <Input
-                      value={formData.candidateName}
-                      placeholder="Full name"
-                      className={lockedPrefilledInputClassName}
-                      readOnly
-                      required
-                      aria-required="true"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-muted font-semibold border-b">
-                    <RequiredText>Technology</RequiredText>
-                  </div>
-                  <div className="p-2 border-b">
-                    <Input
-                      value={formData.technology}
-                      onChange={(e) => setFormData({ ...formData, technology: e.target.value })}
-                      placeholder="e.g. SDET, Java Developer"
-                      className="h-8"
-                      required
-                      aria-required="true"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-muted font-semibold border-b">
-                    <RequiredText>End Client</RequiredText>
-                  </div>
-                  <div className="p-2 border-b">
-                    <Input
-                      value={formData.endClient}
-                      onChange={(e) => setFormData({ ...formData, endClient: e.target.value })}
-                      placeholder="e.g. McAfee"
-                      className="h-8"
-                      required
-                      aria-required="true"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-muted font-semibold border-b">
-                    <RequiredText>Job Title</RequiredText>
-                  </div>
-                  <div className="p-2 border-b">
-                    <Input
-                      value={formData.jobTitle}
-                      onChange={(e) => setFormData({ ...formData, jobTitle: e.target.value })}
-                      placeholder="e.g. Software Developer In Test"
-                      className="h-8"
-                      required
-                      aria-required="true"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-muted font-semibold border-b">
-                    <RequiredText>Interview Round</RequiredText>
-                  </div>
-                  <div className="p-2 border-b">
-                    <Input
-                      value={formData.interviewRound}
-                      onChange={(e) => setFormData({ ...formData, interviewRound: e.target.value })}
-                      placeholder="e.g. 1st Round"
-                      className="h-8"
-                      required
-                      aria-required="true"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-muted font-semibold border-b">
-                    <RequiredText>Date &amp; Time (EST)</RequiredText>
-                  </div>
-                  <div className="p-2 border-b">
-                    <DateTimePicker
-                      id="interviewDate"
-                      min={minDateTime}
-                      value={formData.interviewDate}
-                      onChange={(value) => setFormData({ ...formData, interviewDate: value })}
-                      className="h-8"
-                      required
-                      aria-required="true"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-muted font-semibold border-b">
-                    <RequiredText>Duration</RequiredText>
-                  </div>
-                  <div className="p-2 border-b">
-                    <Input
-                      value={formData.duration}
-                      onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
-                      placeholder="e.g. 15 minutes"
-                      className="h-8"
-                      required
-                      aria-required="true"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-muted font-semibold border-b">Email ID</div>
-                  <div className="p-2 border-b">
-                    <Input
-                      value={formData.emailId}
-                      onChange={(e) => setFormData({ ...formData, emailId: e.target.value })}
-                      placeholder="candidate@email.com"
-                      className="h-8"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-muted font-semibold">
-                    <RequiredText>Contact Number</RequiredText>
-                  </div>
-                  <div className="p-2">
-                    <Input
-                      value={formData.contactNumber}
-                      onChange={(e) => setFormData({ ...formData, contactNumber: e.target.value })}
-                      placeholder="+1234567890"
-                      className="h-8"
-                      required
-                      aria-required="true"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Attachments */}
-              <div className="col-span-2 md:col-span-1">
-                <Label htmlFor="resume">
-                  <RequiredText>Resume</RequiredText>
-                </Label>
-                <Input
-                  id="resume"
-                  key={resumeInputKey}
-                  type="file"
-                  onChange={(e) => handleFileChange(e, "resume")}
-                  accept=".pdf,.doc,.docx"
-                  required
-                  aria-required="true"
-                />
-              </div>
-
-              <div className="col-span-2 md:col-span-1">
-                <Label htmlFor="additionalAttachment">Additional Attachment</Label>
-                <Input
-                  id="additionalAttachment"
-                  key={additionalInputKey}
-                  type="file"
-                  onChange={(e) => handleFileChange(e, "additionalAttachment")}
-                />
-              </div>
-
-              {/* Job Description */}
-              <div className="col-span-2">
-                <Label htmlFor="jobDescription">Job Description</Label>
-                <Textarea
-                  id="jobDescription"
-                  value={formData.jobDescription}
-                  onChange={(e) => setFormData({ ...formData, jobDescription: e.target.value })}
-                  rows={4}
-                  placeholder="Paste job description here (leave empty for 'JD Not Available')"
-                />
-              </div>
-
-              {/* Company Selector */}
-              <div className="col-span-2 md:col-span-1">
-                <Label htmlFor="company">Company (Signature)</Label>
-                <select
-                  id="company"
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent pl-3 pr-8 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                  value={formData.company}
-                  onChange={(e) =>
-                    setFormData({ ...formData, company: e.target.value as InterviewFormData["company"] })
-                  }>
-                  <option value="Silverspace Inc.">Silverspace Inc.</option>
-                  <option value="Vizva Consultancy">Vizva Consultancy</option>
-                </select>
-              </div>
-
-              {/* Signature Details */}
-              <div className="col-span-2 border-t pt-4 mt-2">
-                <h3 className="font-semibold mb-2">Signature Details</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2 md:col-span-1">
-                    <Label htmlFor="yourName">Your Name</Label>
-                    <Input
-                      id="yourName"
-                      value={formData.yourName}
-                      onChange={(e) => setFormData({ ...formData, yourName: e.target.value })}
-                      placeholder="John Doe"
-                    />
-                  </div>
-                  <div className="col-span-2 md:col-span-1">
-                    <Label htmlFor="yourRole">Your Role</Label>
-                    <Input
-                      id="yourRole"
-                      value={formData.yourRole}
-                      onChange={(e) => setFormData({ ...formData, yourRole: e.target.value })}
-                      placeholder="HR Manager"
-                    />
-                  </div>
-                  <div className="col-span-2 md:col-span-1">
-                    <Label htmlFor="yourPhone">Your Phone</Label>
-                    <Input
-                      id="yourPhone"
-                      value={formData.yourPhone}
-                      onChange={(e) => setFormData({ ...formData, yourPhone: e.target.value })}
-                      placeholder="+1 (555) 123-4567"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setIsModalOpen(false)}>
-              Go Back
-            </Button>
-            <Button onClick={sendEmail} disabled={isReadOnly || isSending}>
-              {isSending ? "Sending..." : "Send Request"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <InterviewDialog
+        isModalOpen={isModalOpen}
+        setIsModalOpen={(open) => {
+          setIsModalOpen(open);
+          if (!open) setCurrentUpfrontAmount(0);
+        }}
+        formData={formData}
+        setFormData={setFormData}
+        resumeInputKey={resumeInputKey}
+        additionalInputKey={additionalInputKey}
+        handleFileChange={handleFileChange}
+        sendEmail={sendEmail}
+        isSending={isSending}
+        formatDateEST={formatDateEST}
+      />
     </div>
   );
 }

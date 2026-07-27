@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { DatePicker, DateRangePicker } from "@/components/ui/date-picker";
-import { getAttendanceReportAction, listTeamLeadsAttendanceForAdminAction } from "@/app/actions/attendance";
+import { getAttendanceReportAction } from "@/app/actions/attendance/report";
+import { listTeamLeadsAttendanceForAdminAction } from "@/app/actions/attendance/list";
 
 type ReportResult = Awaited<ReturnType<typeof getAttendanceReportAction>>;
 type TeamReport = ReportResult["teams"][number];

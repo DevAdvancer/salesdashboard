@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, type ReactNode } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { getSupportRequestCcEmails } from "@/lib/services/user-service";
 import type { Lead } from "@/lib/types";
@@ -13,8 +13,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { DateTimePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
@@ -36,80 +34,16 @@ import { saveTechnicalPayment } from "@/app/actions/technical-payments";
 import { listLeads } from "@/lib/services/lead-action-service";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 
-interface AssessmentFormData {
-  to: string;
-  cc: string;
-  assessmentReceived: string; // ISO string from datetime-local input
-  assessmentDeadline: string; // ISO string from datetime-local input
-  candidateName: string;
-  technology: string;
-  emailId: string;
-  contactNumber: string;
-  endClient: string;
-  jobTitle: string;
-  interviewRound: string;
-  assessmentDuration: string;
-  resume: File | null;
-  additionalAttachment: File | null;
-  jobDescription: string;
-  // Signature fields
-  yourName: string;
-  yourRole: string;
-  yourPhone: string;
-  company: "Silverspace Inc." | "Vizva Consultancy";
-}
-
-const INITIAL_FORM_DATA: AssessmentFormData = {
-  to: "rgahlot@silverspaceinc.com",
-  // to: "prateek.narvariya@silverspaceinc.com",
-  cc: "",
-  assessmentReceived: "",
-  assessmentDeadline: "",
-  candidateName: "",
-  technology: "",
-  emailId: "",
-  contactNumber: "",
-  endClient: "",
-  jobTitle: "",
-  interviewRound: "",
-  assessmentDuration: "",
-  resume: null,
-  additionalAttachment: null,
-  jobDescription: "",
-  yourName: "",
-  yourRole: "",
-  yourPhone: "",
-  company: "Silverspace Inc.",
-};
-
-const ASSESSMENT_SUPPORT_CC_EMAILS = ["tech.leaders@silverspaceinc.com"];
-
-interface AssessmentAttempt {
-  $id: string;
-  leadId: string;
-  userId: string;
-  attemptCount: number;
-  lastAttemptAt: string;
-  sentSubjects: string[];
-}
-
-interface GraphAttachment {
-  "@odata.type": "#microsoft.graph.fileAttachment";
-  name: string;
-  contentType: string;
-  contentBytes: string;
-}
-
-function RequiredText({ children }: { children: ReactNode }) {
-  return (
-    <>
-      {children}
-      <span className="ml-1 text-destructive">*</span>
-    </>
-  );
-}
-
-const lockedPrefilledInputClassName = "h-8 bg-muted text-muted-foreground";
+// Components
+import { AssessmentFiltersCard } from "@/components/assessment-support/assessment-filters-card";
+import { AssessmentTable } from "@/components/assessment-support/assessment-table";
+import { AssessmentDialog } from "@/components/assessment-support/assessment-dialog";
+import {
+  type AssessmentFormData,
+  type AssessmentAttempt,
+  INITIAL_FORM_DATA,
+  ASSESSMENT_SUPPORT_CC_EMAILS,
+} from "@/components/assessment-support/assessment-types";
 
 function AssessmentContent() {
   const { user, loading } = useAuth();
@@ -130,7 +64,6 @@ function AssessmentContent() {
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
 
-  // Assessment Attempts State
   const [assessmentAttempts, setAssessmentAttempts] = useState<Map<string, AssessmentAttempt>>(
     new Map(),
   );
@@ -139,7 +72,6 @@ function AssessmentContent() {
     window.location.href = "/api/auth/login";
   };
 
-  // Check for existing connection status
   useEffect(() => {
     const checkConnection = async () => {
       try {
@@ -153,7 +85,6 @@ function AssessmentContent() {
 
     checkConnection();
 
-    // Load signature preferences
     const storedSignature = localStorage.getItem("assessmentSignature");
     if (storedSignature) {
       const parsed = JSON.parse(storedSignature);
@@ -165,7 +96,6 @@ function AssessmentContent() {
         company: parsed.company || "Silverspace Inc.",
       }));
     } else {
-      // Fallback: try to load from mock signature
       const mockSignature = localStorage.getItem("mockSignature");
       if (mockSignature) {
         const parsed = JSON.parse(mockSignature);
@@ -183,17 +113,13 @@ function AssessmentContent() {
   const loadAssessmentAttempts = useCallback(
     async (leadIds: string[]) => {
       if (!user) return;
-
       if (!leadIds.length) {
         setAssessmentAttempts(new Map());
         return;
       }
-
       try {
         const attempts = await getAssessmentAttempts(user.$id, leadIds);
-
         const nextAttempts = new Map<string, AssessmentAttempt>();
-
         attempts.forEach((doc: AssessmentAttempt) => {
           nextAttempts.set(doc.leadId, {
             $id: doc.$id,
@@ -204,7 +130,6 @@ function AssessmentContent() {
             sentSubjects: doc.sentSubjects || [],
           });
         });
-
         setAssessmentAttempts(nextAttempts);
       } catch (err) {
         console.error("Error loading assessment attempts:", err);
@@ -216,15 +141,9 @@ function AssessmentContent() {
 
   const loadLeads = useCallback(async () => {
     if (!user) return;
-
     try {
       setIsLoading(true);
-      const fetchedLeads = await listLeads(
-        {},
-        user.$id,
-        user.role,
-        user.branchIds,
-      );
+      const fetchedLeads = await listLeads({}, user.$id, user.role, user.branchIds);
       setLeads(fetchedLeads);
       setFilteredLeads(fetchedLeads);
       await loadAssessmentAttempts(fetchedLeads.map((lead) => lead.$id));
@@ -280,7 +199,6 @@ function AssessmentContent() {
     setFilteredLeads(result);
   }, [leads, filter, debouncedSearchQuery, assessmentAttempts]);
 
-  // Reset file input keys to force re-render and clear files
   const [resumeInputKey, setResumeInputKey] = useState(Date.now());
   const [additionalInputKey, setAdditionalInputKey] = useState(Date.now() + 1);
 
@@ -290,21 +208,7 @@ function AssessmentContent() {
   const [selectedLeadForUpfront, setSelectedLeadForUpfront] = useState<Lead | null>(null);
   const [currentUpfrontAmount, setCurrentUpfrontAmount] = useState(0);
 
-  // Multiple assessments are always allowed; duplicates are checked by subject
-  const canCreateAssessment = () => {
-    return true;
-  };
-
   const handleCreateAssessment = async (lead: Lead) => {
-    if (!canCreateAssessment()) {
-      toast({
-        title: "Already Sent",
-        description: "Assessment support has already been sent for this lead.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setSelectedLeadForUpfront(lead);
     setUpfrontAmount("");
     setIsUpfrontDialogOpen(true);
@@ -316,14 +220,12 @@ function AssessmentContent() {
 
     const leadData = JSON.parse(lead.data);
 
-    // Reset form data but keep signature preferences
     setFormData((prev) => ({
       ...INITIAL_FORM_DATA,
       yourName: prev.yourName,
       yourRole: prev.yourRole,
       yourPhone: prev.yourPhone,
       company: prev.company,
-      // Pre-fill from lead data
       candidateName: `${leadData.firstName || ""} ${leadData.lastName || ""}`.trim(),
       emailId: leadData.email || "",
       contactNumber: leadData.phone || "",
@@ -400,9 +302,6 @@ function AssessmentContent() {
     return `${datePart} at ${timePart} EST`;
   };
 
-  // Build the live subject line for real-time preview
-  const liveSubject = `[Sales] Assessment Support - ${formData.candidateName || '...'} - ${formData.jobTitle || '...'} - ${formData.assessmentReceived ? formatScheduleEST(formData.assessmentReceived) : '...'}`;
-
   const sendEmail = async () => {
     if (!isOutlookConnected) {
       toast({
@@ -441,7 +340,6 @@ function AssessmentContent() {
     try {
       setIsSending(true);
 
-      // Save signature preferences
       localStorage.setItem(
         "assessmentSignature",
         JSON.stringify({
@@ -452,7 +350,6 @@ function AssessmentContent() {
         }),
       );
 
-      // Convert files to base64
       const fileToBase64 = (file: File): Promise<string> => {
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -466,11 +363,12 @@ function AssessmentContent() {
         });
       };
 
-      const attachments: GraphAttachment[] = [];
-      const attachmentSizeError = getSupportEmailAttachmentLimitError([
-        formData.resume,
-        formData.additionalAttachment,
-      ].filter((attachment): attachment is File => Boolean(attachment)));
+      const attachments = [];
+      const attachmentSizeError = getSupportEmailAttachmentLimitError(
+        [formData.resume, formData.additionalAttachment].filter((attachment): attachment is File =>
+          Boolean(attachment),
+        ),
+      );
 
       if (attachmentSizeError) {
         throw new Error(attachmentSizeError);
@@ -496,14 +394,11 @@ function AssessmentContent() {
         });
       }
 
-      // Format Assessment Received
       const formattedReceived = formatScheduleEST(formData.assessmentReceived);
       const formattedDeadline = formatScheduleEST(formData.assessmentDeadline);
 
-      // Subject line
       const subject = `[Sales] Assessment Support - ${formData.candidateName} - ${formData.jobTitle} - ${formattedReceived}`;
 
-      // Determine logo URL and website based on company
       let logoUrl =
         "https://egvjgtfjstxgszpzvvbx.supabase.co/storage/v1/object/public/images//20250610_1111_3D%20Gradient%20Logo_remix_01jxd69dc9ex29jbj9r701yjkf%20(2).png";
       let websiteUrl = "www.silverspaceinc.com";
@@ -584,7 +479,6 @@ function AssessmentContent() {
         </html>
       `;
 
-      // Construct payload for our API
       const payload = {
         message: {
           subject,
@@ -651,18 +545,16 @@ function AssessmentContent() {
         },
       );
 
-      // Save the technical payment if amount > 0
       if (currentUpfrontAmount > 0) {
         try {
           await saveTechnicalPayment({
             actorId: user.$id,
             leadId: selectedLead.$id,
             amount: currentUpfrontAmount,
-            type: 'assessment',
+            type: "assessment",
           });
         } catch (error) {
-          console.error('Failed to save technical payment:', error);
-          // Don't throw - let the email be successful even if payment fails
+          console.error("Failed to save technical payment:", error);
         }
       }
 
@@ -685,9 +577,7 @@ function AssessmentContent() {
       setIsModalOpen(false);
 
       const storedSignature = localStorage.getItem("assessmentSignature");
-      const parsedSignature = storedSignature
-        ? JSON.parse(storedSignature)
-        : {};
+      const parsedSignature = storedSignature ? JSON.parse(storedSignature) : {};
 
       setFormData({
         ...INITIAL_FORM_DATA,
@@ -698,8 +588,7 @@ function AssessmentContent() {
       });
     } catch (error: unknown) {
       console.error("Error sending email:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to send email";
+      const errorMessage = error instanceof Error ? error.message : "Failed to send email";
 
       toast({
         title: "Error",
@@ -720,10 +609,6 @@ function AssessmentContent() {
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE,
   );
-
-  const now = new Date();
-  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-  const minDateTime = now.toISOString().slice(0, 16);
 
   if (loading || isLoading) {
     return (
@@ -747,149 +632,42 @@ function AssessmentContent() {
             {isAuthLoading ? "Connecting..." : "Connect Outlook"}
           </Button>
         ) : isOutlookConnected ? (
-          <Button
-            variant="outline"
-            disabled
-            className="text-green-600 border-green-600">
+          <Button variant="outline" disabled className="text-green-600 border-green-600">
             Outlook Connected
           </Button>
         ) : null}
       </div>
 
-      <Card>
-        <CardContent className="p-4 border-b">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <Label htmlFor="search" className="sr-only">
-                Search
-              </Label>
-              <Input
-                id="search"
-                placeholder="Search by name, email, phone or company..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <div className="w-full sm:w-[200px]">
-              <Label htmlFor="filter" className="sr-only">
-                Filter
-              </Label>
-              <select
-                id="filter"
-                className="w-full"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}>
-                <option value="all">All Leads</option>
-                <option value="assessment_created">Assessment Created</option>
-                <option value="assessment_not_created">Assessment Not Created</option>
-              </select>
-            </div>
-          </div>
-        </CardContent>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[600px]">
-              <thead className="border-b bg-muted/50">
-                <tr className="text-left">
-                  <th className="p-4 font-semibold">Name</th>
-                  <th className="p-4 font-semibold">Phone</th>
-                  <th className="p-4 font-semibold">Email</th>
-                  <th className="p-4 font-semibold">Source</th>
-                  <th className="p-4 font-semibold">Company</th>
-                  <th className="p-4 font-semibold">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedLeads.map((lead) => {
-                  const leadData = JSON.parse(lead.data);
-                  const attempt = assessmentAttempts.get(lead.$id);
-                  const attemptsCount = attempt?.attemptCount || 0;
+      <AssessmentFiltersCard
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        filter={filter}
+        setFilter={setFilter}
+      />
 
-                  return (
-                    <tr
-                      key={lead.$id}
-                      className="border-b hover:bg-muted/50 transition-colors">
-                      <td className="p-4">
-                        {leadData.firstName} {leadData.lastName}
-                        {leadData.legalName && (
-                          <div className="text-xs text-muted-foreground">
-                            ({leadData.legalName})
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-4">{leadData.phone || "N/A"}</td>
-                      <td className="p-4">{leadData.email || "N/A"}</td>
-                      <td className="p-4">
-                        {leadData.sourceName || leadData.source || "-"}
-                      </td>
-                      <td className="p-4">{leadData.company || "N/A"}</td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {attemptsCount > 0 && (
-                            <span style={{ fontSize: '0.6875rem', fontWeight: 500, color: '#4ade80', background: 'rgba(74,222,128,0.12)', padding: '0.125rem 0.5rem', borderRadius: '999px', border: '1px solid rgba(74,222,128,0.25)' }}>
-                              {attemptsCount} Sent
-                            </span>
-                          )}
-                          <Button
-                            size="sm"
-                            onClick={() => handleCreateAssessment(lead)}
-                            disabled={isReadOnly || !isOutlookConnected || isPreparingAssessment}>
-                            {isPreparingAssessment && selectedLead?.$id === lead.$id
-                              ? "Preparing..."
-                              : "Create Assessment"}
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {paginatedLeads.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="p-8 text-center text-muted-foreground">
-                      No leads found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-end space-x-2 p-4 border-t">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}>
-                Previous
-              </Button>
-              <div className="text-sm font-medium">
-                Page {currentPage} of {totalPages}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setCurrentPage((prev) => Math.min(prev + 1, totalPages))
-                }
-                disabled={currentPage === totalPages}>
-                Next
-              </Button>
-            </div>
-          )}
-        </CardContent>
+      <Card className="mt-4">
+        <AssessmentTable
+          paginatedLeads={paginatedLeads}
+          assessmentAttempts={assessmentAttempts}
+          isReadOnly={isReadOnly}
+          isOutlookConnected={isOutlookConnected}
+          isPreparingAssessment={isPreparingAssessment}
+          selectedLead={selectedLead}
+          handleCreateAssessment={handleCreateAssessment}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          setCurrentPage={setCurrentPage}
+        />
       </Card>
 
-      {/* Upfront Payment Dialog */}
-      <Dialog open={isUpfrontDialogOpen} onOpenChange={(open) => {
-        if (!open && !selectedLead) {
-          setSelectedLeadForUpfront(null);
-        }
-        setIsUpfrontDialogOpen(open);
-      }}>
+      <Dialog
+        open={isUpfrontDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && !selectedLead) {
+            setSelectedLeadForUpfront(null);
+          }
+          setIsUpfrontDialogOpen(open);
+        }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Upfront Payment</DialogTitle>
@@ -932,329 +710,31 @@ function AssessmentContent() {
 
                 setIsUpfrontDialogOpen(false);
                 setCurrentUpfrontAmount(amount);
-                // Pass amount to the next dialog
                 setUpformDataForAssessment(selectedLeadForUpfront);
-              }}
-            >
+              }}>
               Continue
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isModalOpen} onOpenChange={(open) => {
-        setIsModalOpen(open);
-        if (!open) {
-          setCurrentUpfrontAmount(0);
-        }
-      }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Create Assessment Support</DialogTitle>
-          </DialogHeader>
-
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <Label htmlFor="to">To (Comma separated)</Label>
-                <Input
-                  id="to"
-                  value={formData.to}
-                  readOnly
-                  className="bg-muted"
-                />
-              </div>
-
-              <div className="col-span-2">
-                <Label htmlFor="cc">CC (Comma separated)</Label>
-                <Input
-                  id="cc"
-                  value={formData.cc}
-                  onChange={(e) =>
-                    setFormData({ ...formData, cc: e.target.value })
-                  }
-                  placeholder="manager@example.com"
-                />
-              </div>
-
-              <div className="col-span-2">
-                <Label>Subject</Label>
-                <div className="p-3 border-2 border-primary/30 rounded-md bg-primary/5 text-sm font-medium transition-all duration-200">
-                  {liveSubject}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  This subject updates in real-time as you fill in the fields below.
-                </p>
-              </div>
-
-              {/* Assessment-specific fields in table-like layout */}
-              <div className="col-span-2 border rounded-md overflow-hidden">
-                <div className="grid grid-cols-[200px_1fr] text-sm">
-                  <div className="p-3 bg-muted font-semibold border-b">
-                    <RequiredText>Assessment Received (EST)</RequiredText>
-                  </div>
-                  <div className="p-2 border-b">
-                    <DateTimePicker
-                      id="assessmentReceived"
-                      min={minDateTime}
-                      value={formData.assessmentReceived}
-                      onChange={(value) =>
-                        setFormData({ ...formData, assessmentReceived: value })
-                      }
-                      className="h-8"
-                      required
-                      aria-required="true"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-muted font-semibold border-b">
-                    <RequiredText>Assessment Deadline (EST)</RequiredText>
-                  </div>
-                  <div className="p-2 border-b">
-                    <DateTimePicker
-                      id="assessmentDeadline"
-                      min={formData.assessmentReceived || minDateTime}
-                      value={formData.assessmentDeadline}
-                      onChange={(value) =>
-                        setFormData({ ...formData, assessmentDeadline: value })
-                      }
-                      className="h-8"
-                      required
-                      aria-required="true"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-muted font-semibold border-b">
-                    <RequiredText>Candidate Name</RequiredText>
-                  </div>
-                  <div className="p-2 border-b">
-                    <Input
-                      value={formData.candidateName}
-                      placeholder="Full name"
-                      className={lockedPrefilledInputClassName}
-                      readOnly
-                      required
-                      aria-required="true"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-muted font-semibold border-b">
-                    <RequiredText>Technology</RequiredText>
-                  </div>
-                  <div className="p-2 border-b">
-                    <Input
-                      value={formData.technology}
-                      onChange={(e) =>
-                        setFormData({ ...formData, technology: e.target.value })
-                      }
-                      placeholder="e.g. Full Stack Developer"
-                      className="h-8"
-                      required
-                      aria-required="true"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-muted font-semibold border-b">Email ID</div>
-                  <div className="p-2 border-b">
-                    <Input
-                      value={formData.emailId}
-                      onChange={(e) =>
-                        setFormData({ ...formData, emailId: e.target.value })
-                      }
-                      placeholder="candidate@email.com"
-                      className="h-8"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-muted font-semibold border-b">
-                    <RequiredText>Contact Number</RequiredText>
-                  </div>
-                  <div className="p-2 border-b">
-                    <Input
-                      value={formData.contactNumber}
-                      onChange={(e) =>
-                        setFormData({ ...formData, contactNumber: e.target.value })
-                      }
-                      placeholder="+1234567890"
-                      className="h-8"
-                      required
-                      aria-required="true"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-muted font-semibold border-b">
-                    <RequiredText>End Client</RequiredText>
-                  </div>
-                  <div className="p-2 border-b">
-                    <Input
-                      value={formData.endClient}
-                      onChange={(e) =>
-                        setFormData({ ...formData, endClient: e.target.value })
-                      }
-                      placeholder="e.g. Hacker Rank"
-                      className="h-8"
-                      required
-                      aria-required="true"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-muted font-semibold border-b">
-                    <RequiredText>Job Title</RequiredText>
-                  </div>
-                  <div className="p-2 border-b">
-                    <Input
-                      value={formData.jobTitle}
-                      onChange={(e) =>
-                        setFormData({ ...formData, jobTitle: e.target.value })
-                      }
-                      placeholder="e.g. Sde-2 Backend Engineer"
-                      className="h-8"
-                      required
-                      aria-required="true"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-muted font-semibold border-b">
-                    <RequiredText>Interview Round</RequiredText>
-                  </div>
-                  <div className="p-2 border-b">
-                    <Input
-                      value={formData.interviewRound}
-                      onChange={(e) =>
-                        setFormData({ ...formData, interviewRound: e.target.value })
-                      }
-                      placeholder="e.g. 1st Round"
-                      className="h-8"
-                      required
-                      aria-required="true"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-muted font-semibold">
-                    <RequiredText>Assessment Duration</RequiredText>
-                  </div>
-                  <div className="p-2">
-                    <Input
-                      value={formData.assessmentDuration}
-                      onChange={(e) =>
-                        setFormData({ ...formData, assessmentDuration: e.target.value })
-                      }
-                      placeholder="e.g. 60 minutes"
-                      className="h-8"
-                      required
-                      aria-required="true"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Attachments */}
-              <div className="col-span-2 md:col-span-1">
-                <Label htmlFor="resume">
-                  <RequiredText>Resume</RequiredText>
-                </Label>
-                <Input
-                  id="resume"
-                  key={resumeInputKey}
-                  type="file"
-                  onChange={(e) => handleFileChange(e, "resume")}
-                  accept=".pdf,.doc,.docx"
-                  required
-                  aria-required="true"
-                />
-              </div>
-
-              <div className="col-span-2 md:col-span-1">
-                <Label htmlFor="additionalAttachment">Additional Attachment</Label>
-                <Input
-                  id="additionalAttachment"
-                  key={additionalInputKey}
-                  type="file"
-                  onChange={(e) => handleFileChange(e, "additionalAttachment")}
-                />
-              </div>
-
-              {/* Job Description */}
-              <div className="col-span-2">
-                <Label htmlFor="jobDescription">Job Description</Label>
-                <Textarea
-                  id="jobDescription"
-                  value={formData.jobDescription}
-                  onChange={(e) =>
-                    setFormData({ ...formData, jobDescription: e.target.value })
-                  }
-                  rows={4}
-                  placeholder="Paste job description here (leave empty for 'JD Not Available')"
-                />
-              </div>
-
-              {/* Company selector */}
-              <div className="col-span-2 md:col-span-1">
-                <Label htmlFor="company">Company (Signature)</Label>
-                <select
-                  id="company"
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent pl-3 pr-8 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                  value={formData.company}
-                  onChange={(e) =>
-                    setFormData({ ...formData, company: e.target.value as AssessmentFormData["company"] })
-                  }>
-                  <option value="Silverspace Inc.">Silverspace Inc.</option>
-                  <option value="Vizva Consultancy">Vizva Consultancy</option>
-                </select>
-              </div>
-
-              {/* Signature Details */}
-              <div className="col-span-2 border-t pt-4 mt-2">
-                <h3 className="font-semibold mb-2">Signature Details</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2 md:col-span-1">
-                    <Label htmlFor="yourName">Your Name</Label>
-                    <Input
-                      id="yourName"
-                      value={formData.yourName}
-                      onChange={(e) =>
-                        setFormData({ ...formData, yourName: e.target.value })
-                      }
-                      placeholder="John Doe"
-                    />
-                  </div>
-                  <div className="col-span-2 md:col-span-1">
-                    <Label htmlFor="yourRole">Your Role</Label>
-                    <Input
-                      id="yourRole"
-                      value={formData.yourRole}
-                      onChange={(e) =>
-                        setFormData({ ...formData, yourRole: e.target.value })
-                      }
-                      placeholder="HR Manager"
-                    />
-                  </div>
-                  <div className="col-span-2 md:col-span-1">
-                    <Label htmlFor="yourPhone">Your Phone</Label>
-                    <Input
-                      id="yourPhone"
-                      value={formData.yourPhone}
-                      onChange={(e) =>
-                        setFormData({ ...formData, yourPhone: e.target.value })
-                      }
-                      placeholder="+1 (555) 123-4567"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setIsModalOpen(false)}>
-              Go Back
-            </Button>
-            <Button onClick={sendEmail} disabled={isReadOnly || isSending}>
-              {isSending ? "Sending..." : "Send Request"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AssessmentDialog
+        isModalOpen={isModalOpen}
+        setIsModalOpen={(open) => {
+          setIsModalOpen(open);
+          if (!open) {
+            setCurrentUpfrontAmount(0);
+          }
+        }}
+        formData={formData}
+        setFormData={setFormData}
+        resumeInputKey={resumeInputKey}
+        additionalInputKey={additionalInputKey}
+        handleFileChange={handleFileChange}
+        sendEmail={sendEmail}
+        isSending={isSending}
+        formatScheduleEST={formatScheduleEST}
+      />
     </div>
   );
 }

@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Check, Minus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { LinkedinConnectionKpiRow } from "@/app/actions/linkedin";
+import type { LinkedinConnectionKpiRow } from "@/app/actions/linkedin/shared";
 
 const KpiPieChart = dynamic(
   () =>

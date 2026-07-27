@@ -20,12 +20,14 @@ import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/contexts/auth-context";
 import {
   listAgentsForTeamLeadLinkedinAction,
-  listLinkedinAccountsForManagementAction,
   listTeamLeadsForLinkedinAction,
-  upsertLinkedinAccountAction,
   listAllUsersForLinkedinAction,
+} from "@/app/actions/linkedin/hierarchy";
+import {
+  listLinkedinAccountsForManagementAction,
+  upsertLinkedinAccountAction,
   toggleLinkedinAccountStatusAction,
-} from "@/app/actions/linkedin";
+} from "@/app/actions/linkedin/accounts";
 import type { LinkedinAccount, LinkedinAccountType, User } from "@/lib/types";
 import { getErrorMessage } from "@/lib/utils";
 

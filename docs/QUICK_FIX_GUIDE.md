@@ -37,13 +37,13 @@ npm run dev
 ```
 
 ### 4. Test Authentication
-1. Open: http://localhost:3000/test-auth
+1. Open: http://localhost:5000/test-auth
 2. Click **"Test Full Signup Flow"**
 3. Watch the logs - they will show exactly what's happening
 
 ### 5. Try Signup
 1. Clear browser cache or open incognito window
-2. Go to: http://localhost:3000/signup
+2. Go to: http://localhost:5000/signup
 3. Open browser DevTools (F12) → Console tab
 4. Fill in the signup form
 5. Submit and watch the console logs
@@ -75,7 +75,7 @@ npm run setup:appwrite
 ```
 
 ### Check 2: Environment Variables
-Visit: http://localhost:3000/api/debug-config
+Visit: http://localhost:5000/api/debug-config
 
 Should show:
 ```json
@@ -109,12 +109,12 @@ Should show:
 
 ## Tools Available
 
-1. **Test Tool**: http://localhost:3000/test-auth
+1. **Test Tool**: http://localhost:5000/test-auth
    - Tests full signup flow
    - Shows detailed logs
    - Tests permissions
 
-2. **Debug Config**: http://localhost:3000/api/debug-config
+2. **Debug Config**: http://localhost:5000/api/debug-config
    - Shows environment variables
    - Verifies configuration
 

@@ -177,7 +177,7 @@ async function main() {
       const actorDept = actor.department ?? 'sales';
       if (actorRole !== 'lead_generation' || actorDept !== 'sales') continue;
 
-      let targetLeadId = log.targetId;
+      const targetLeadId = log.targetId;
       if (!targetLeadId) continue;
 
       let assigneeId: string | null = null;

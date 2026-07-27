@@ -42,7 +42,7 @@ A comprehensive testing page that allows you to:
 - Test permissions
 - View detailed logs of each operation
 
-**Access:** http://localhost:3000/test-auth
+**Access:** http://localhost:5000/test-auth
 
 ### 4. Created Debug Config Endpoint
 
@@ -50,7 +50,7 @@ A comprehensive testing page that allows you to:
 
 An API endpoint to verify environment variables are loaded correctly.
 
-**Access:** http://localhost:3000/api/debug-config
+**Access:** http://localhost:5000/api/debug-config
 
 ### 5. Created Troubleshooting Guide
 
@@ -74,7 +74,7 @@ npm run dev
 
 ### Step 2: Verify Configuration
 
-Visit: http://localhost:3000/api/debug-config
+Visit: http://localhost:5000/api/debug-config
 
 Should show:
 ```json
@@ -89,7 +89,7 @@ Should show:
 
 ### Step 3: Run Test Tool
 
-1. Visit: http://localhost:3000/test-auth
+1. Visit: http://localhost:5000/test-auth
 2. Click "Test Full Signup Flow"
 3. Watch the logs to see where it fails
 
@@ -132,7 +132,7 @@ Expected output:
 ### Step 6: Try Signup Again
 
 1. Clear browser cache or use incognito mode
-2. Go to: http://localhost:3000/signup
+2. Go to: http://localhost:5000/signup
 3. Fill in the form
 4. Open browser DevTools (F12) → Console tab
 5. Submit the form

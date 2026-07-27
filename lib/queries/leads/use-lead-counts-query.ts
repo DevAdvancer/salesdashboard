@@ -1,9 +1,9 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { listLeadCountsAction } from "@/app/actions/lead";
 import { buildScope, queryKeys } from "@/lib/queries/keys";
 import type { LeadListFilters, UserRole } from "@/lib/types";
+import { listLeadCountsAction } from "@/app/actions/lead/queries";
 
 /**
  * Lightweight "count only" query. Replaces the dashboard's two

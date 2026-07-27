@@ -1,4 +1,4 @@
-import { usePageLoader } from '@/hooks/usePageLoader';
+import { usePageLoader } from '@/lib/hooks/usePageLoader';
 
 let loadingInterval: NodeJS.Timeout | null = null;
 let finishTimeout: NodeJS.Timeout | null = null;

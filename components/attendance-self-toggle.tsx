@@ -4,10 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useToast } from "@/components/ui/use-toast";
-import {
-  getMyAttendanceToggleStateAction,
-  markMyselfPresentAction,
-} from "@/app/actions/attendance";
+import { getMyAttendanceToggleStateAction, markMyselfPresentAction } from "@/app/actions/attendance/mark";
 import { cacheClientRead, clearClientReadCache } from "@/lib/utils/client-read-cache";
 
 type ToggleState = Awaited<ReturnType<typeof getMyAttendanceToggleStateAction>>;

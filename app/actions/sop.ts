@@ -1,7 +1,6 @@
 "use server";
 
 import { ID, Query } from "node-appwrite";
-import { listLeadsAction } from "@/app/actions/lead";
 import { createAdminClient } from "@/lib/server/appwrite";
 import { createNotificationsForRecipients } from "@/lib/server/notifications";
 import { assertAuthenticatedUserId } from "@/lib/server/current-user";
@@ -28,6 +27,7 @@ import type {
   User,
   UserRole,
 } from "@/lib/types";
+import { listLeadsAction } from "@/app/actions/lead/queries";
 
 async function getActor(userId: string): Promise<User> {
   await assertAuthenticatedUserId(userId);

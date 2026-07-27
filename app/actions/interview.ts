@@ -3,9 +3,9 @@
 import { ID, Query } from 'node-appwrite';
 import { createAdminClient } from '@/lib/server/appwrite';
 import { assertAuthenticatedUserId, getAuthenticatedAccount } from '@/lib/server/current-user';
-import { listLeadsAction } from '@/app/actions/lead';
 import { UserRole } from '@/lib/types';
 import { listAllDocuments } from '@/lib/server/appwrite-pagination';
+import { listLeadsAction } from "@/app/actions/lead/queries";
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const INTERVIEW_ATTEMPTS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_INTERVIEW_ATTEMPTS_COLLECTION_ID || 'interview_attempts';

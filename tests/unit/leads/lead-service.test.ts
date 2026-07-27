@@ -2,12 +2,14 @@ import {
   createLead,
   updateLead,
   deleteLead,
-  getLead,
-  listLeads,
   closeLead,
   reopenLead,
   assignLead,
-} from '@/lib/services/lead-service';
+} from '@/lib/services/lead/mutations';
+import {
+  getLead,
+  listLeads,
+} from '@/lib/services/lead/queries';
 import { databases } from '@/lib/appwrite';
 import { Lead, CreateLeadInput, LeadData } from '@/lib/types';
 import { Permission, Role } from 'appwrite';

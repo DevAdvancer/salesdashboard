@@ -2,7 +2,6 @@
 
 import { revalidatePath } from 'next/cache';
 import { Databases, ID, Query } from 'node-appwrite';
-import { createLeadAction } from '@/app/actions/lead';
 import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { createAdminClient } from '@/lib/server/appwrite';
 import { getAppwriteErrorMessage } from '@/lib/server/appwrite-errors';
@@ -17,6 +16,7 @@ import {
   normalizePublicLeadRequestInput,
   type PublicLeadRequestInput,
 } from '@/lib/utils/lead-requests';
+import { createLeadAction } from "@/app/actions/lead/mutations";
 
 type LeadRequestDocument = LeadRequest & {
   $id: string;

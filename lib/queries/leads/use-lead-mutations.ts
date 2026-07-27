@@ -1,19 +1,12 @@
 "use client";
 
+
+import { assignLeadAction } from "@/lib/actions/lead/assignment";
+import { backoutLeadAction, closeLeadAction, notInterestedLeadAction } from "@/lib/actions/lead/status";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  createLeadAction,
-  reopenLeadAction,
-  updateLeadAction,
-} from "@/app/actions/lead";
-import {
-  assignLeadAction,
-  backoutLeadAction,
-  closeLeadAction,
-  notInterestedLeadAction,
-} from "@/lib/actions/lead-actions";
 import { clearLeadReadCache } from "@/lib/services/lead-action-service";
 import { queryKeys } from "@/lib/queries/keys";
+import { createLeadAction, reopenLeadAction, updateLeadAction } from "@/app/actions/lead/mutations";
 import type { CreateLeadInput, LeadData, UserRole } from "@/lib/types";
 
 /**

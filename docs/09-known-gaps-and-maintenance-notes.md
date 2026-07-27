@@ -101,8 +101,7 @@ Impact:
 
 Lead listing gives special visibility to:
 
-- `shashi.pathak@silverspaceinc.com`
-
+- `alisha.dsouza@silverspaceinc.com`
 Impact:
 
 - access behavior is not purely role-based

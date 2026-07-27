@@ -18,8 +18,8 @@ jest.mock("@/lib/server/notifications", () => ({
   createNotificationsForRecipients: jest.fn(),
 }));
 
-jest.mock("@/app/actions/lead", () => ({
-  listLeadsAction: jest.fn(),
+jest.mock('@/app/actions/lead/queries', () => ({
+listLeadsAction: jest.fn(),
 }));
 
 jest.mock("node-appwrite", () => ({

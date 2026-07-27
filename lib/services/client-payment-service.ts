@@ -1,16 +1,7 @@
-import {
-  addClientPaymentUpdateAction,
-  listAdminClientHistoryRowsAction,
-  getClientPaymentRecordAction,
-  listClientPaymentSummariesAction,
-  listAllPaymentInsightsAction,
-  listPaymentsReportAction,
-  updateClientPersonalDetailsAction,
-  upsertClientPaymentRecordAction,
-  type AdminClientHistoryRow,
-  type PaymentInsightRecord,
-  type PaymentsReportRow,
-} from "@/app/actions/client-payments";
+import { addClientPaymentUpdateAction, getClientPaymentRecordAction, updateClientPersonalDetailsAction, upsertClientPaymentRecordAction } from "@/app/actions/client-payments/record";
+import { listAdminClientHistoryRowsAction, listAllPaymentInsightsAction, listPaymentsReportAction } from "@/app/actions/client-payments/insights";
+import { listClientPaymentSummariesAction } from "@/app/actions/client-payments/list";
+import type { AdminClientHistoryRow, PaymentInsightRecord, PaymentsReportRow } from "@/app/actions/client-payments/shared";
 import { cacheClientRead, clearClientReadCache } from "@/lib/utils/client-read-cache";
 import { clearDashboardDataCache } from "@/lib/services/dashboard-data-service";
 import type { ClientPaymentPlan, ClientPaymentRecord, PaymentStatus } from "@/lib/types";

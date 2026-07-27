@@ -187,9 +187,7 @@ Current code behavior in `lead-service.ts` and `app/actions/lead.ts`:
 - `team_lead`: sees leads owned by or assigned to themselves or their agents.
 - `assistant_manager`: sees a mix of own leads, subordinate leads, manager-owned leads, and sometimes branch-wide leads.
 
-There is also a hardcoded special-case email:
 
-- `shashi.pathak@silverspaceinc.com` is treated as global lead access.
 
 ## Dynamic Form Field Model
 

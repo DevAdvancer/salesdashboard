@@ -66,7 +66,7 @@ describe("Linkedin request history", () => {
       .mockResolvedValueOnce({ documents: [inactiveOldRequest], total: 1 });
 
     const { listMyLinkedinRequestsAction } = await import(
-      "@/app/actions/linkedin"
+      "@/app/actions/linkedin/requests"
     );
 
     const result = await listMyLinkedinRequestsAction({
@@ -97,7 +97,7 @@ describe("Linkedin request history", () => {
       .mockResolvedValueOnce({ documents: [], total: 0 });
 
     const { listMyLinkedinRequestsAction } = await import(
-      "@/app/actions/linkedin"
+      "@/app/actions/linkedin/requests"
     );
 
     await listMyLinkedinRequestsAction({

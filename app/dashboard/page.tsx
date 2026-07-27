@@ -28,7 +28,7 @@ import {
   loadLgHandoffSummaries,
   type TopMetrics,
 } from "@/lib/services/dashboard-data-service";
-import type { LinkedinConnectionKpiRow } from "@/app/actions/linkedin";
+import type { LinkedinConnectionKpiRow } from "@/app/actions/linkedin/shared";
 import {
   isSingleDay,
   type DateRange,
@@ -38,7 +38,7 @@ import { workingDaysInRange as countWorkingDaysInRange } from "@/lib/utils/holid
 import { useRealtimeCollection } from "@/lib/hooks/use-realtime-collection";
 import { COLLECTIONS } from "@/lib/constants/appwrite";
 import type { ReferralSplit } from "@/lib/utils/dashboard-referral";
-import type { PaymentInsightRecord } from "@/app/actions/client-payments";
+import type { PaymentInsightRecord } from "@/app/actions/client-payments/shared";
 import { listTechnicalPaymentsAction } from "@/app/actions/technical-payments";
 import type { TeamLeadAssignmentSummary } from "@/lib/utils/dashboard-insights";
 import { getTodayEst, getMonthStartEst, getMonthEndEst } from "@/lib/utils/est-date";

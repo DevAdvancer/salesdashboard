@@ -1,9 +1,9 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { listLeadsAction } from "@/app/actions/lead";
 import { buildScope, queryKeys } from "@/lib/queries/keys";
 import type { LeadListFilters, UserRole } from "@/lib/types";
+import { listLeadsAction } from "@/app/actions/lead/queries";
 
 /**
  * Fetch every lead matching the filters (capped at 10K by the action's

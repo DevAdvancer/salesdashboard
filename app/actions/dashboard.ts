@@ -3,7 +3,7 @@
 import { listLeads } from "@/lib/services/lead-action-service";
 import { listBranches } from "@/lib/services/branch-service";
 import { listLgHandoffsAction } from "@/app/actions/lg-handoffs";
-import { listClientPaymentSummariesAction } from "@/app/actions/client-payments";
+import { listClientPaymentSummariesAction } from "@/app/actions/client-payments/list";
 import {
   getAgentsByTeamLead,
   getAssignableUsers,

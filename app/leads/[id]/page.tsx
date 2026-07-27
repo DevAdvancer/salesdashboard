@@ -9,8 +9,7 @@ import {
 } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter, useParams } from "next/navigation";
-import { getLead } from "@/lib/services/lead-service";
-import { getLeadAction } from "@/app/actions/lead";
+import { getLead } from "@/lib/services/lead/queries";
 import { getUsersNamesAction } from "@/app/actions/user";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queries/keys";
@@ -49,21 +48,13 @@ import { ProtectedRoute } from "@/components/protected-route";
 import { LeadActivityTimeline } from "@/components/leads/lead-activity-timeline";
 import { LeadFollowUpCard } from "@/components/leads/lead-follow-up-card";
 import { LeadNotesCard } from "@/components/leads/lead-notes-card";
-import { storage } from "@/lib/appwrite";
-import { BUCKETS } from "@/lib/constants/appwrite";
 import {
-  LEAD_STATUS_SIGNED_CLOSURE,
-  LEAD_WORKFLOW_STATUSES,
-  MONITOR_ONLY_STATUSES,
-  getLeadEditAllowedStatusesForRole,
-  isAllowedLeadStatusTransition,
-  normalizeLeadStatus,
-  canonicalizeLeadStatus,
   shouldRequireLeadFollowUpForStatus,
+  isAllowedLeadStatusTransition,
 } from "@/lib/utils/lead-status-workflow";
 import {
-  getLinkedinProfileValue,
   isLinkedinProfileField,
+  getLinkedinProfileValue,
 } from "@/lib/utils/lead-linkedin-field";
 import {
   getLeadAmountValue,
@@ -75,143 +66,19 @@ import {
 } from "@/lib/utils/lead-close-gate";
 import { getErrorMessage } from "@/lib/utils";
 import { parseLeadActionError } from "@/lib/utils/lead-action-error";
-import { shouldShowRequiredAsterisk } from "@/lib/utils/required-lead-fields";
+import { getLeadAction } from "@/app/actions/lead/queries";
 
-function isBackoutStatus(value: unknown) {
-  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (!text) return false;
-  return (
-    text === "backout" ||
-    text === "backedout" ||
-    text === "backed out" ||
-    text === "back out" ||
-    text.replace(/\s+/g, "") === "backedout" ||
-    text.replace(/\s+/g, "") === "backout"
-  );
-}
-
-function normalizeStatusText(value: unknown) {
-  return normalizeLeadStatus(value);
-}
-
-function formatFollowUpDateTime(value?: string | null): string {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function formatFollowUpStatus(value?: string | null): string {
-  if (!value) return "Not set";
-  const normalized = value.toLowerCase();
-  if (normalized === "pending") return "Pending";
-  if (normalized === "completed") return "Completed";
-  if (normalized === "overdue") return "Overdue";
-  return value;
-}
-
-function isNotInterestedStatus(value: unknown) {
-  return normalizeStatusText(value) === "notinterested";
-}
-
-function isLinkedinRequestLead(data: LeadData) {
-  const requestId = (data as any).linkedinRequestId;
-  return typeof requestId === "string" && requestId.trim().length > 0;
-}
-
-// Ensures a "lastName" text field is always present and rendered just below
-// "firstName". Mirrors the fallback used in DynamicLeadForm so the lead edit
-// view never silently drops the last name field if it was removed from the
-// saved form config.
-function withLastNameField(fields: FormField[]): FormField[] {
-  if (fields.some((f) => f.key === "lastName")) return fields;
-
-  const firstNameField = fields.find((f) => f.key === "firstName");
-  const injected: FormField = {
-    id: "static-lastname",
-    key: "lastName",
-    label: "Last Name",
-    type: "text",
-    required: false,
-    visible: true,
-    order: firstNameField ? firstNameField.order + 0.1 : 0,
-  };
-
-  const firstNameIndex = fields.findIndex((f) => f.key === "firstName");
-  if (firstNameIndex !== -1) {
-    return [
-      ...fields.slice(0, firstNameIndex + 1),
-      injected,
-      ...fields.slice(firstNameIndex + 1),
-    ];
-  }
-  return [injected, ...fields];
-}
-
-// Ensures a "legalName" text field is always present and rendered near the
-// top of the Lead Information card. The Close Lead button requires Legal
-// Name to be filled, so we must always show it even if the saved form
-// config was created before Legal Name was a default field.
-function withLegalNameField(fields: FormField[]): FormField[] {
-  if (fields.some((f) => f.key === "legalName")) return fields;
-
-  const firstNameField = fields.find((f) => f.key === "firstName");
-  const injected: FormField = {
-    id: "static-legalname",
-    key: "legalName",
-    label: "Legal Name",
-    type: "text",
-    required: true,
-    visible: true,
-    order: firstNameField ? firstNameField.order + 0.5 : 1.5,
-  };
-
-  const firstNameIndex = fields.findIndex((f) => f.key === "firstName");
-  if (firstNameIndex !== -1) {
-    return [
-      ...fields.slice(0, firstNameIndex + 1),
-      injected,
-      ...fields.slice(firstNameIndex + 1),
-    ];
-  }
-  return [injected, ...fields];
-}
-
-// Ensures an "amount" text field is always present so historical leads
-// created under the legacy `field_15` key can be edited and migrated. We
-// only inject when neither the uniform key nor any legacy alias is
-// present in the form config — the new DEFAULT_FIELDS already has
-// `amount`, but older Appwrite form_config documents may not.
-function withAmountField(fields: FormField[]): FormField[] {
-  if (fields.some((f) => f.key === "amount" || f.key === "field_15")) {
-    return fields;
-  }
-  const firstNameField = fields.find((f) => f.key === "firstName");
-  const injected: FormField = {
-    id: "static-amount",
-    key: "amount",
-    label: "Amount ($)",
-    type: "text",
-    required: true,
-    visible: true,
-    order: firstNameField ? firstNameField.order + 1.5 : 12.5,
-  };
-  const firstNameIndex = fields.findIndex((f) => f.key === "firstName");
-  if (firstNameIndex !== -1) {
-    return [
-      ...fields.slice(0, firstNameIndex + 1),
-      injected,
-      ...fields.slice(firstNameIndex + 1),
-    ];
-  }
-  return [...fields, injected];
-}
+// Extracted components
+import { LeadInfoCard } from "@/components/leads/detail/lead-info-card";
+import { LeadCloseDialog } from "@/components/leads/detail/lead-close-dialog";
+import { LeadMetadataCard } from "@/components/leads/detail/lead-metadata-card";
+import { LeadAssignmentCard } from "@/components/leads/detail/lead-assignment-card";
+import {
+  isBackoutStatus,
+  isLinkedinRequestLead,
+  isNotInterestedStatus,
+  normalizeStatusText,
+} from "@/components/leads/detail/lead-detail-utils";
 
 export default function LeadDetailPage() {
   return (
@@ -254,6 +121,10 @@ function LeadDetailContent() {
   const [paymentPlanValues, setPaymentPlanValues] = useState<
     Record<string, unknown>
   >({});
+
+  // ---------------------------------------------------------------------------
+  // Data loading callbacks
+  // ---------------------------------------------------------------------------
 
   const loadLead = useCallback(async () => {
     if (!user) return;
@@ -373,6 +244,10 @@ function LeadDetailContent() {
     }
   }, [lead, user]);
 
+  // ---------------------------------------------------------------------------
+  // Effects
+  // ---------------------------------------------------------------------------
+
   useEffect(() => {
     if (!authLoading && !user) {
       router.push("/login");
@@ -407,6 +282,10 @@ function LeadDetailContent() {
     setCloseStep(1);
     void loadCloseConfigs();
   }, [showCloseDialog, loadCloseConfigs]);
+
+  // ---------------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------------
 
   const handleSave = async () => {
     if (!lead || !user) return;
@@ -554,8 +433,7 @@ function LeadDetailContent() {
 
     // Safety net: don't allow closing (except for Backout) when any of
     // the required close-time fields (Amount, LastName, Legal Name) is
-    // missing. The Close Lead button is already disabled, but block this
-    // path too in case the dialog is opened by another flow.
+    // missing.
     if (!isBackoutStatus(closeStatus)) {
       const missing = getMissingCloseRequiredFields(
         leadData as Record<string, unknown>,
@@ -610,13 +488,7 @@ function LeadDetailContent() {
         return missing;
       };
 
-      // Payment details are always required to close a lead, regardless of
-      // the field's `required` flag in the form config — even admin/developer/
-      // monitor cannot bypass this. Backout is exempt.
-      const paymentPlanMissing = getMissingPaymentFields(
-        paymentPlanValues,
-        closeStatus,
-      );
+      // Payment details are always required to close a lead
       if (isPaymentDetailsMissing(paymentPlanValues, closeStatus)) {
         toast({
           title: "Payment details required",
@@ -631,11 +503,11 @@ function LeadDetailContent() {
         paymentPlanFields,
         paymentPlanValues,
       );
-      const missing = [...missingClosure, ...missingPayment];
-      if (missing.length > 0) {
+      const missingAll = [...missingClosure, ...missingPayment];
+      if (missingAll.length > 0) {
         toast({
           title: "Missing required fields",
-          description: `Please fill: ${missing.join(", ")}`,
+          description: `Please fill: ${missingAll.join(", ")}`,
           variant: "destructive",
         });
         return;
@@ -689,10 +561,6 @@ function LeadDetailContent() {
         await sendChatMessageAction({
           currentUserId: user.$id,
           channel: "general",
-          // Lead-closure celebration is a sales-only flow; the closed lead
-          // goes to the user's pinned department chat. Defaulting to
-          // "sales" covers the very first run before the user doc has a
-          // department attribute (backfill script sets it for everyone).
           department: user.department ?? "sales",
           body: leadName
             ? `Congratulations ${user.name} for closing ${leadName}!`
@@ -748,15 +616,9 @@ function LeadDetailContent() {
 
   const handleAssignAgent = async (agentId: string) => {
     if (!lead || !user) return;
-    // Agents cannot assign leads — the assignment workflow is controlled by
-    // team leads, lead generation, and admins only. Lead generation may
-    // assign any of their own leads to any team lead.
     if (user.role === "operations") return;
     if (user.role === "agent") return;
     if (user.role === "lead_generation" && lead.ownerId !== user.$id) return;
-    // Single-click guard: the assignment <select> fires onChange synchronously
-    // and re-fires on every keystroke when the user reopens it; coalesce
-    // concurrent calls so only one assignLead() request goes out at a time.
     if (isAssigning) return;
     setIsAssigning(true);
     try {
@@ -803,171 +665,6 @@ function LeadDetailContent() {
       delete next[key];
       return next;
     });
-  };
-
-  const renderField = (field: FormField) => {
-    const value = isLinkedinProfileField(field)
-      ? getLinkedinProfileValue(leadData, [field])
-      : String(leadData[field.key] ?? "");
-    // Monitors are leadership-level observers and may edit any lead they
-    // can view (mirrors the server-side `assertLeadUpdateAllowed` policy
-    // in app/actions/lead.ts). Operations is read-only.
-    const isReadOnly =
-      !isEditing || lead?.isClosed || user?.role === "operations";
-    const fieldError = fieldErrors[field.key];
-
-    switch (field.type) {
-      case "textarea":
-        return (
-          <>
-            <textarea
-              id={field.key}
-              aria-invalid={Boolean(fieldError)}
-              className={`w-full min-h-[100px] px-3 py-2 rounded-md border ${
-                fieldError ? "border-red-500" : "border-input"
-              } bg-background text-foreground`}
-              value={value}
-              onChange={(e) => handleFieldChange(field.key, e.target.value)}
-              disabled={isReadOnly}
-              placeholder={field.placeholder}
-            />
-            {fieldError && (
-              <p className="text-sm text-red-500 mt-1">{fieldError}</p>
-            )}
-          </>
-        );
-
-      case "dropdown":
-        if (field.key === "status") {
-          const savedStatus = lead?.status ?? value;
-          const isMonitor = user?.role === "monitor";
-          const allowed = new Set(
-            getLeadEditAllowedStatusesForRole(
-              savedStatus,
-              user?.role,
-            ).map(normalizeStatusText),
-          );
-          // Monitor users get the LinkedIn and Leads statuses in addition
-          // to the standard workflow. Other roles must never see them.
-          const roleScopedOptions = isMonitor
-            ? [...LEAD_WORKFLOW_STATUSES, ...MONITOR_ONLY_STATUSES]
-            : LEAD_WORKFLOW_STATUSES;
-          const mergedOptions = Array.from(
-            new Set([
-              ...(field.options ?? []).map((opt) =>
-                canonicalizeLeadStatus(opt),
-              ),
-              ...roleScopedOptions,
-            ]),
-          );
-          const rawOptions =
-            value && !mergedOptions.includes(value)
-              ? [value, ...mergedOptions]
-              : mergedOptions;
-          const options = rawOptions.filter((opt) => {
-            const clean = opt.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
-            return (
-              clean !== "signed" &&
-              clean !== "closure" &&
-              clean !== "signedclosure" &&
-              canonicalizeLeadStatus(opt) !== LEAD_STATUS_SIGNED_CLOSURE
-            );
-          });
-
-          return (
-            <>
-              <select
-                id={field.key}
-                aria-invalid={Boolean(fieldError)}
-                className={`flex h-10 w-full rounded-md border ${
-                  fieldError ? "border-red-500" : "border-input"
-                } bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
-                value={value}
-                onChange={(e) => handleFieldChange(field.key, e.target.value)}
-                disabled={isReadOnly}>
-                <option value="">Select {field.label}</option>
-                {options.map((option) => (
-                  <option
-                    key={option}
-                    value={option}
-                    disabled={
-                      isEditing &&
-                      !lead?.isClosed &&
-                      !allowed.has(normalizeStatusText(option))
-                    }>
-                    {option}
-                  </option>
-                ))}
-              </select>
-              {fieldError && (
-                <p className="text-sm text-red-500 mt-1">{fieldError}</p>
-              )}
-            </>
-          );
-        }
-        return (
-          <>
-            <select
-              id={field.key}
-              aria-invalid={Boolean(fieldError)}
-              className={`flex h-10 w-full rounded-md border ${
-                fieldError ? "border-red-500" : "border-input"
-              } bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
-              value={value}
-              onChange={(e) => handleFieldChange(field.key, e.target.value)}
-              disabled={isReadOnly}>
-              <option value="">Select {field.label}</option>
-              {field.options?.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-            {fieldError && (
-              <p className="text-sm text-red-500 mt-1">{fieldError}</p>
-            )}
-          </>
-        );
-
-      default:
-        // Inline "missing" message for fields that gate the Close button.
-        // We only show this when the lead is open and not in backout
-        // status — closed leads don't need to be edited, and backout
-        // bypasses the close-time gate entirely.
-        const isCloseRequiredField =
-          field.key === "lastName" || field.key === "legalName";
-        const strValue = String(value || "").trim().toLowerCase();
-        const isMissingValue = strValue === "" || strValue === "n/a" || strValue === "na";
-        const isCloseRequiredFieldMissing =
-          isCloseRequiredField && Boolean(lead && !lead.isClosed) && isMissingValue;
-        return (
-          <>
-            <Input
-              id={field.key}
-              type={field.type}
-              value={value}
-              onChange={(e) => handleFieldChange(field.key, e.target.value)}
-              disabled={isReadOnly}
-              placeholder={field.placeholder}
-              aria-invalid={Boolean(fieldError) || isCloseRequiredFieldMissing}
-              className={
-                fieldError || isCloseRequiredFieldMissing
-                  ? "border-red-500"
-                  : undefined
-              }
-            />
-            {fieldError && (
-              <p className="text-sm text-red-500 mt-1">{fieldError}</p>
-            )}
-            {isCloseRequiredFieldMissing && (
-              <p className="text-sm text-red-500 mt-1">
-                {field.label} is required before the lead can be closed. N/A,
-                blank, or whitespace is not accepted.
-              </p>
-            )}
-          </>
-        );
-    }
   };
 
   const renderCloseField = (
@@ -1077,6 +774,10 @@ function LeadDetailContent() {
     }
   };
 
+  // ---------------------------------------------------------------------------
+  // Derived state
+  // ---------------------------------------------------------------------------
+
   if (authLoading || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -1107,39 +808,13 @@ function LeadDetailContent() {
     );
   }
 
-  const leadGenerationVisibleKeys = new Set([
-    "firstName",
-    "middleName",
-    "lastName",
-    "email",
-    "phone",
-    "visaStatus",
-    "linkedinProfileUrl",
-  ]);
-
   const isLeadGeneration = user.role === "lead_generation";
   const isMonitor = user.role === "monitor";
   const isOperations = user.role === "operations";
   const isLeadOwner = lead.ownerId === user.$id;
-  // Per-lead gating for the Edit / Close Lead / Reopen buttons. Operations
-  // is read-only and never gets these affordances. Admin, developer, and
-  // team_lead can close leads; monitor cannot close but can reopen. The
-  // server enforces the per-role permission rules
-  // (see `assertLeadUpdateAllowed` / `assertLeadReopenAllowed` /
-  // `closeLeadAction` in app/actions/lead.ts and lib/actions/lead-actions.ts).
   const canModifyLead = !isOperations;
-  // Read the current lead-amount value from the lead's parsed `data` JSON.
-  // The Amount key was previously `leadAmount` (still recognized as a
-  // legacy alias by the payments report) and is now the uniform `amount`
-  // key. We also accept `field_15` from the older form-config so historical
-  // leads count as having a real Amount. Anything blank, whitespace-only,
-  // "N/A", or unparseable is treated as missing — closing a lead for $0
-  // or with no value is not a real closure.
+
   const rawLeadAmount = getLeadAmountValue(leadData as Record<string, unknown>);
-  const isLeadAmountMissing = isAmountMissing(rawLeadAmount);
-  // Close button gate: Amount + LastName + Legal Name all required.
-  // Backout is exempt (a backout means the lead is being abandoned, not
-  // closed, so those fields are not expected to be filled).
   const isCloseRequiredFieldsMissingFlag = isCloseRequiredFieldsMissing({
     isClosed: lead.isClosed,
     closeStatus,
@@ -1160,16 +835,7 @@ function LeadDetailContent() {
     typeof leadData.firstName === "string" ? leadData.firstName : "";
   const headerLastName =
     typeof leadData.lastName === "string" ? leadData.lastName : "";
-  const resumeFileId =
-    typeof leadData.resumeFileId === "string" ? leadData.resumeFileId : "";
-  const resumeFileName =
-    typeof leadData.resumeFileName === "string" ? leadData.resumeFileName : "";
 
-  // When admin is viewing leads from the Resume CRM, the assign-leads
-  // dropdown should only show people who can actually work this lead —
-  // Resume-team agents (and the leadership roles that can switch
-  // dashboards). Sales-team agents are filtered out so an admin can't
-  // accidentally cross-assign a Resume lead to a Sales agent.
   const isResumeLeadership = (role?: string) =>
     role === "admin" ||
     role === "developer" ||
@@ -1182,8 +848,13 @@ function LeadDetailContent() {
         )
       : agents;
 
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
+
   return (
     <div className="container mx-auto">
+      {/* Header + Action Buttons */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div id="tour-lead-header">
           <Button
@@ -1293,217 +964,29 @@ function LeadDetailContent() {
 
       <div className="grid gap-6">
         {/* Lead Information */}
-        <Card id="tour-lead-info">
-          <CardHeader>
-            <CardTitle>Lead Information</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLeadGeneration && (
-              <div className="mb-4 flex flex-col gap-1 rounded-md border border-border bg-muted/20 p-3">
-                <Label>Source</Label>
-                <p className="text-sm text-muted-foreground">LinkedIN/Lead</p>
-              </div>
-            )}
-            {resumeFileId && (
-              <div className="mb-4 flex flex-col gap-1 rounded-md border border-border bg-muted/20 p-3">
-                <Label>Resume</Label>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm text-muted-foreground">
-                    {resumeFileName || "Resume"}
-                  </span>
-                  <div className="flex items-center gap-3">
-                    <a
-                      className="text-sm text-primary hover:underline"
-                      href={storage
-                        .getFileView(BUCKETS.RESUMES, resumeFileId)
-                        .toString()}
-                      target="_blank"
-                      rel="noreferrer">
-                      View
-                    </a>
-                    <a
-                      className="text-sm text-primary hover:underline"
-                      href={storage
-                        .getFileDownload(BUCKETS.RESUMES, resumeFileId)
-                        .toString()}
-                      target="_blank"
-                      rel="noreferrer">
-                      Download
-                    </a>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {withAmountField(withLegalNameField(withLastNameField(formFields)))
-                .filter((field) => {
-                  // The static "Total Amount to be Paid" input below is
-                  // the canonical editor for Amount. Skip the dynamic
-                  // `amount` row (and the legacy `field_15` alias) so we
-                  // don't render two Amount inputs on the same page.
-                  if (field.key === "amount" || field.key === "field_15") {
-                    return false;
-                  }
-                  if (isLeadGeneration) {
-                    return (
-                      leadGenerationVisibleKeys.has(field.key) ||
-                      isLinkedinProfileField(field)
-                    );
-                  }
-                  return user.role === "admin" || field.visible;
-                })
-                .map((field) => (
-                  <div key={field.id}>
-                    <Label htmlFor={field.key}>
-                      {field.label}
-                      {shouldShowRequiredAsterisk(field.key, field.required) && (
-                        <span className="text-red-500 ml-1">*</span>
-                      )}
-                    </Label>
-                    {renderField(field)}
-                  </div>
-                ))}
-              <div>
-                <Label htmlFor="leadAmount">
-                  Total Amount to be Paid
-                  <span className="text-red-500 ml-1" aria-label="required">
-                    *
-                  </span>
-                </Label>
-                <Input
-                  id="leadAmount"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={
-                    typeof rawLeadAmount === "number" ||
-                    typeof rawLeadAmount === "string"
-                      ? String(rawLeadAmount)
-                      : ""
-                  }
-                  onChange={(e) =>
-                    setLeadData((prev) => {
-                      const next: LeadData = {
-                        ...prev,
-                        amount: e.target.value,
-                      };
-                      // Mirror to `leadAmount` so the payments report
-                      // (which reads `leadAmount` first) keeps working
-                      // for any historical reads that haven't migrated.
-                      next.leadAmount = e.target.value;
-                      return next;
-                    })
-                  }
-                  placeholder="0.00"
-                  disabled={
-                    !isEditing ||
-                    lead?.isClosed ||
-                    user?.role === "operations"
-                  }
-                  aria-required="true"
-                  aria-invalid={isLeadAmountMissing}
-                  className={isLeadAmountMissing ? "border-red-500" : undefined}
-                />
-                {isLeadAmountMissing && (
-                  <p className="mt-1 text-xs text-red-500">
-                    Total Amount to be Paid is required before the lead can be
-                    closed. N/A, blank, or whitespace is not accepted. (The
-                    upfront value entered under Payments is the portion that
-                    has already been collected.)
-                  </p>
-                )}
-                {!isLeadAmountMissing &&
-                  typeof rawLeadAmount === "string" &&
-                  rawLeadAmount.trim() &&
-                  leadData.amount === undefined &&
-                  (leadData as Record<string, unknown>).field_15 !==
-                    undefined && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Showing a legacy value. Save the lead to migrate it to
-                      the new field.
-                    </p>
-                  )}
-              </div>
-            </div>
-
-            {/* Follow-Up summary — reflects the latest values saved from the Follow-Up Plan card */}
-            {!isLeadGeneration && (
-              <div className="mt-6 rounded-md border border-border bg-muted/20 p-4">
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-sm font-medium">Follow-Up</p>
-                  <p className="text-xs text-muted-foreground">
-                    Updated from Follow-Up Plan
-                  </p>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label>Next Follow-Up</Label>
-                    <p className="text-sm text-muted-foreground">
-                      {formatFollowUpDateTime(lead.nextFollowUpAt)}
-                    </p>
-                  </div>
-                  <div>
-                    <Label>Next Action</Label>
-                    <p className="text-sm text-muted-foreground">
-                      {lead.nextAction?.trim() ? lead.nextAction : "—"}
-                    </p>
-                  </div>
-                  <div>
-                    <Label>Follow-Up Status</Label>
-                    <p className="text-sm text-muted-foreground">
-                      {formatFollowUpStatus(lead.followUpStatus)}
-                    </p>
-                  </div>
-                  <div>
-                    <Label>Last Contacted</Label>
-                    <p className="text-sm text-muted-foreground">
-                      {formatFollowUpDateTime(lead.lastContactedAt)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <LeadInfoCard
+          lead={lead}
+          leadData={leadData}
+          setLeadData={setLeadData}
+          user={user}
+          formFields={formFields}
+          isEditing={isEditing}
+          fieldErrors={fieldErrors}
+          onFieldChange={handleFieldChange}
+        />
 
         {/* Assignment Section */}
         {canAssignLead && (
-          <Card id="tour-lead-assignment">
-            <CardHeader>
-              <CardTitle>Assignment</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="assignedTo">
-                    {isLeadGeneration ? "Assigned Team Lead" : "Assigned To"}
-                  </Label>
-                  <select
-                    id="assignedTo"
-                    className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    value={lead.assignedToId || ""}
-                    onChange={(e) => handleAssignAgent(e.target.value)}
-                    disabled={lead.isClosed || isAssigning}>
-                    {assignableAgents.map((agent) => (
-                      <option key={agent.$id} value={agent.$id}>
-                        {agent.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <Label>Status</Label>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    <span className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary">
-                      {lead.status}
-                    </span>
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <LeadAssignmentCard
+            lead={lead}
+            user={user}
+            assignableAgents={assignableAgents}
+            isAssigning={isAssigning}
+            onAssign={handleAssignAgent}
+          />
         )}
 
+        {/* Follow-Up Card */}
         {!isLeadGeneration && (
           <div id="tour-lead-followup">
             <LeadFollowUpCard
@@ -1522,246 +1005,50 @@ function LeadDetailContent() {
           </div>
         )}
 
+        {/* Notes Card */}
         {user && (!isMonitor || isLeadOwner) && (
           <div id="tour-lead-notes">
             <LeadNotesCard leadId={lead.$id} user={user} />
           </div>
         )}
 
+        {/* Activity Timeline */}
         <div id="tour-lead-timeline">
           <LeadActivityTimeline lead={lead} />
         </div>
 
         {/* Metadata */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Metadata</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <Label>Created</Label>
-                <p className="text-muted-foreground">
-                  {lead.$createdAt
-                    ? new Date(lead.$createdAt).toLocaleString()
-                    : "N/A"}
-                </p>
-              </div>
-              <div>
-                <Label>Last Updated</Label>
-                <p className="text-muted-foreground">
-                  {lead.$updatedAt
-                    ? new Date(lead.$updatedAt).toLocaleString()
-                    : "N/A"}
-                </p>
-              </div>
-              <div>
-                <Label>Owner</Label>
-                <p className="text-muted-foreground">
-                  {metaNames[lead.ownerId] || "Unknown"}
-                </p>
-              </div>
-              <div>
-                <Label>Assigned To</Label>
-                <p className="text-muted-foreground">
-                  {lead.assignedToId ? (metaNames[lead.assignedToId] || "Unknown") : "Unassigned"}
-                </p>
-              </div>
-              {lead.closedAt && (
-                <div>
-                  <Label>Closed At</Label>
-                  <p className="text-muted-foreground">
-                    {new Date(lead.closedAt).toLocaleString()}
-                  </p>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        <LeadMetadataCard lead={lead} metaNames={metaNames} />
       </div>
 
       {/* Close Lead Dialog */}
       {showCloseDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50">
-          <Card className="w-full sm:max-w-2xl sm:mx-4 rounded-b-none sm:rounded-b-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between gap-3">
-                <span>Close Lead</span>
-                <span className="text-sm text-muted-foreground">
-                  Step {closeStep} of 3
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {closeStep === 1 && (
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">
-                      Personal Details
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {closureFields
-                      .filter((field) => field.visible)
-                      .map((field) => (
-                        <div key={field.id} className="space-y-2">
-                          <Label htmlFor={field.key}>
-                            {field.label}
-                            {field.required && (
-                              <span className="text-red-500 ml-1">*</span>
-                            )}
-                          </Label>
-                          {renderCloseField(
-                            field,
-                            closureValues,
-                            setClosureValues,
-                          )}
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
-
-              {closeStep === 2 && (
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">
-                      Payment Plan
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {paymentPlanFields
-                      .filter((field) => {
-                        if (!field.visible) return false;
-                        if (field.key === "paymentMonths" && paymentPlanValues.paymentPercent === "H1B Agreement") {
-                          return false;
-                        }
-                        return true;
-                      })
-                      .map((field) => (
-                        <div key={field.id} className="space-y-2">
-                          <Label htmlFor={field.key}>
-                            {field.label}
-                            {field.required && (
-                              <span className="text-red-500 ml-1">*</span>
-                            )}
-                          </Label>
-                          {renderCloseField(
-                            field,
-                            paymentPlanValues,
-                            setPaymentPlanValues,
-                          )}
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
-
-              {closeStep === 3 && (
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">
-                      Final Status & Confirmation
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="closeStatus">Final Status</Label>
-                      <select
-                        id="closeStatus"
-                        className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        value={closeStatus}
-                        onChange={(e) => setCloseStatus(e.target.value)}>
-                        {isLinkedinRequestLead(leadData) ? (
-                          <>
-                            <option value="Signed/Closure">
-                              Signed/Closure
-                            </option>
-                          </>
-                        ) : (
-                          <>
-                            <option value="Won">Won</option>
-                            <option value="Lost">Lost</option>
-                            <option value="Rejected">Rejected</option>
-                          </>
-                        )}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="initialPaymentStatus">
-                        Initial Payment Status
-                      </Label>
-                      <select
-                        id="initialPaymentStatus"
-                        className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        value={
-                          initialPaymentStatus ||
-                          (Number(paymentPlanValues.upfrontAmount) > 0
-                            ? "partially_paid"
-                            : "not_paid")
-                        }
-                        onChange={(e) =>
-                          setInitialPaymentStatus(e.target.value)
-                        }>
-                        <option value="not_paid">Not Paid</option>
-                        <option value="partially_paid">Partially Paid</option>
-                        <option value="fully_paid">Fully Paid</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-6 flex flex-col-reverse sm:flex-row justify-between gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowCloseDialog(false);
-                  }}
-                  className="w-full sm:w-auto">
-                  Cancel
-                </Button>
-                <div className="flex flex-col-reverse sm:flex-row gap-2">
-                  {closeStep > 1 && (
-                    <Button
-                      variant="outline"
-                      onClick={() => setCloseStep((s) => Math.max(1, s - 1))}
-                      className="w-full sm:w-auto">
-                      Back
-                    </Button>
-                  )}
-                  {closeStep < 3 ? (
-                    <Button
-                      onClick={() => setCloseStep((s) => Math.min(3, s + 1))}
-                      className="w-full sm:w-auto">
-                      Next
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={handleCloseLead}
-                      disabled={
-                        isSaving ||
-                        (!isBackoutStatus(closeStatus) &&
-                          isCloseRequiredFieldsMissingFlag)
-                      }
-                      title={
-                        !isBackoutStatus(closeStatus) &&
-                        isCloseRequiredFieldsMissingFlag
-                          ? `Fill ${missingCloseRequiredFields.join(
-                              ", ",
-                            )} in the lead form before closing. N/A, blank, or whitespace is not accepted.`
-                          : undefined
-                      }
-                      variant="destructive"
-                      className="w-full sm:w-auto">
-                      {isSaving ? "Closing..." : "Close Lead"}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        <LeadCloseDialog
+          leadData={leadData}
+          leadId={leadId}
+          userId={user.$id}
+          userName={user.name}
+          userRole={user.role}
+          userDepartment={user.department ?? "sales"}
+          closeStep={closeStep}
+          setCloseStep={setCloseStep}
+          closeStatus={closeStatus}
+          setCloseStatus={setCloseStatus}
+          initialPaymentStatus={initialPaymentStatus}
+          setInitialPaymentStatus={setInitialPaymentStatus}
+          closureFields={closureFields}
+          paymentPlanFields={paymentPlanFields}
+          closureValues={closureValues}
+          setClosureValues={setClosureValues}
+          paymentPlanValues={paymentPlanValues}
+          setPaymentPlanValues={setPaymentPlanValues}
+          isSaving={isSaving}
+          isCloseRequiredFieldsMissingFlag={isCloseRequiredFieldsMissingFlag}
+          missingCloseRequiredFields={missingCloseRequiredFields}
+          onClose={() => setShowCloseDialog(false)}
+          onConfirmClose={handleCloseLead}
+          renderCloseField={renderCloseField}
+        />
       )}
     </div>
   );

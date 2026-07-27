@@ -5,9 +5,7 @@ import { WhatsNewModal } from './whats-new-modal';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
-import {
-  checkAndNotifyAdminAttendanceEscalationsAction,
-} from '@/app/actions/attendance';
+import { checkAndNotifyAdminAttendanceEscalationsAction } from '@/app/actions/attendance/notifications';
 import { LoaderOverlay } from '@/components/loader/LoaderOverlay';
 
 const PUBLIC_ROUTES = ['/login', '/referral'];

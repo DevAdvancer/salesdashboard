@@ -1,7 +1,7 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { usePageLoader } from '@/hooks/usePageLoader';
+import { usePageLoader } from '@/lib/hooks/usePageLoader';
 
 export function LoaderOverlay() {
   const { progress, isVisible } = usePageLoader();

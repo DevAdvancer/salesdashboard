@@ -21,7 +21,7 @@ import {
   listPreviousFollowupsPaymentsAction,
   updatePreviousFollowupsPaymentAction,
 } from "@/app/actions/previous-followups-payments";
-import { addClientPaymentUpdateAction } from "@/app/actions/client-payments";
+import { addClientPaymentUpdateAction } from "@/app/actions/client-payments/record";
 import type { ComponentKey } from "@/lib/contexts/access-control-context";
 import type { PreviousFollowupsPayment, PaymentStatus } from "@/lib/types";
 import { getCurrentEasternMonthKey } from "@/lib/utils/eastern-date";

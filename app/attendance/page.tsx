@@ -8,15 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
 import { DatePicker } from "@/components/ui/date-picker";
-import {
-  assignAttendanceDelegateAction,
-  checkAndNotifyAdminAttendanceEscalationsAction,
-  checkAndNotifyMyTeamAbsencesAction,
-  getAttendanceFlagSummaryAction,
-  listMyTeamAttendanceAction,
-  listTeamLeadsAttendanceForAdminAction,
-  markAttendancePresentByTeamLeadAction,
-} from "@/app/actions/attendance";
+import { assignAttendanceDelegateAction } from "@/app/actions/attendance/delegate";
+import { markAttendancePresentByTeamLeadAction } from "@/app/actions/attendance/mark";
+import { checkAndNotifyAdminAttendanceEscalationsAction, checkAndNotifyMyTeamAbsencesAction } from "@/app/actions/attendance/notifications";
+import { listMyTeamAttendanceAction, listTeamLeadsAttendanceForAdminAction } from "@/app/actions/attendance/list";
+import { getAttendanceFlagSummaryAction } from "@/app/actions/attendance/report";
 
 type TeamAttendanceResult = Awaited<
   ReturnType<typeof listMyTeamAttendanceAction>

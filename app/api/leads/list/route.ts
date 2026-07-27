@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listLeadsAction } from "@/app/actions/lead";
+import { listLeadsAction } from "@/app/actions/lead/queries";
 
 export async function POST(req: NextRequest) {
   try {

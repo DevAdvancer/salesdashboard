@@ -184,9 +184,6 @@ jest.mock('@/lib/server/department-user-cache', () => ({
   invalidateDepartmentScopedUserIds: jest.fn(),
 }));
 
-jest.mock('@/lib/constants/special-lead-access', () => ({
-  getSpecialBranchLeadAccess: jest.fn(() => null),
-}));
 
 jest.mock('@/lib/server/notifications', () => ({
   createNotificationsForRecipients: jest.fn(),
@@ -202,12 +199,19 @@ jest.mock('@/app/actions/lg-handoffs', () => ({ recordLgHandoffAction: jest.fn()
 jest.mock('@/app/actions/lead-duplicates', () => ({
   notifyDuplicateLeadUpdateAttemptAction: jest.fn(),
 }));
-jest.mock('@/lib/actions/lead-actions', () => ({
+jest.mock('@/lib/actions/lead/status', () => ({
   markPriorNotInterestedRowsReopened: jest.fn(),
   notInterestedLeadAction: jest.fn(),
 }));
 
-jest.mock('node-appwrite', () => ({
+const mockAppwriteModule = {
+  Client: class {
+    setEndpoint() { return this; }
+    setProject() { return this; }
+  },
+  Account: class {},
+  Databases: class {},
+  Storage: class {},
   ID: { unique: jest.fn(() => 'unique-id') },
   Permission: {
     read: jest.fn((r: string) => `read(${r})`),
@@ -231,7 +235,10 @@ jest.mock('node-appwrite', () => ({
     select: (fields: string[]) => ({ t: 'select', fields }),
     contains: (k: string, v: unknown) => ({ t: 'equal', k, v }),
   },
-}));
+};
+
+jest.mock('node-appwrite', () => mockAppwriteModule);
+jest.mock('appwrite', () => mockAppwriteModule);
 
 const mockGetDocument = jest.fn(async (_db: string, collection: string, id: string) => {
   if (collection.includes('user')) {
@@ -258,7 +265,7 @@ jest.mock('@/lib/server/appwrite', () => ({
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { listLeadsAction, listLeadCountsAction } = require('@/app/actions/lead');
+const { listLeadsAction, listLeadCountsAction } = require('@/app/actions/lead/queries');
 
 async function visibleIdsFor(userId: string) {
   const user = USERS.find((u) => u.$id === userId)!;
