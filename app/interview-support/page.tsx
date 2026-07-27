@@ -1,4 +1,5 @@
 "use client";
+import { logger } from '@/lib/utils/logger';
 
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
@@ -79,7 +80,7 @@ function InterviewContent() {
         const data = await response.json();
         setIsOutlookConnected(data.connected);
       } catch (error) {
-        console.error("Failed to check connection status", error);
+        logger.error("Failed to check connection status", error);
       }
     };
     checkConnection();
@@ -131,7 +132,7 @@ function InterviewContent() {
         });
         setInterviewAttempts(nextAttempts);
       } catch (err) {
-        console.error("Error loading interview attempts:", err);
+        logger.error("Error loading interview attempts:", err);
         setInterviewAttempts(new Map());
       }
     },
@@ -236,7 +237,7 @@ function InterviewContent() {
 
       setFormData((prev) => ({ ...prev, cc: uniqueCC.join(", ") }));
     } catch (err) {
-      console.error("Failed to fetch CC users:", err);
+      logger.error("Failed to fetch CC users:", err);
     }
     setIsModalOpen(true);
     setIsPreparingInterview(false);
@@ -525,7 +526,7 @@ function InterviewContent() {
             type: "interview",
           });
         } catch (error) {
-          console.error("Failed to save technical payment:", error);
+          logger.error("Failed to save technical payment:", error);
         }
       }
 
@@ -553,8 +554,8 @@ function InterviewContent() {
         company: parsedSig.company || "Silverspace Inc.",
       });
     } catch (error: unknown) {
-      console.error("Error sending email:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to send email";
+      logger.error("Error sending email:", error);
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : String(error)) : "Failed to send email";
       toast({ title: "Error", description: errorMessage, variant: "destructive" });
       if (errorMessage.includes("Not connected")) setIsOutlookConnected(false);
     } finally {

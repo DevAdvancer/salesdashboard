@@ -30,10 +30,6 @@ jest.mock('node-appwrite', () => ({
   },
 }));
 
-jest.mock('@/lib/constants/special-lead-access', () => ({
-  getSpecialBranchLeadAccess: jest.fn(() => null),
-}));
-
 jest.mock('@/lib/server/appwrite-pagination', () => ({
   listAllDocuments: jest.fn(async (args) => {
     const res = await mockListDocuments(args.databaseId, args.collectionId, args.queries);

@@ -29,6 +29,7 @@ import { MockFiltersCard } from "@/components/mock/mock-filters-card";
 import { MockTable } from "@/components/mock/mock-table";
 import { MockDialog } from "@/components/mock/mock-dialog";
 import { type MockFormData, type MockAttempt, INITIAL_FORM_DATA } from "@/components/mock/mock-types";
+import { logger } from '@/lib/utils/logger';
 
 function MockContent() {
   const { user, loading } = useAuth();
@@ -63,7 +64,7 @@ function MockContent() {
         const data = await response.json();
         setIsOutlookConnected(data.connected);
       } catch (error) {
-        console.error("Failed to check connection status", error);
+        logger.error("Failed to check connection status", error);
       }
     };
 
@@ -103,7 +104,7 @@ function MockContent() {
         });
         setMockAttempts(nextAttempts);
       } catch (err) {
-        console.error("Error loading mock attempts:", err);
+        logger.error("Error loading mock attempts:", err);
         setMockAttempts(new Map());
       }
     },
@@ -258,12 +259,12 @@ function MockContent() {
           cc: uniqueCC.join(", "),
         }));
       } catch (err) {
-        console.error("Failed to fetch CC users:", err);
+        logger.error("Failed to fetch CC users:", err);
       }
 
       setIsModalOpen(true);
     } catch (error) {
-      console.error("Error preparing mock:", error);
+      logger.error("Error preparing mock:", error);
       toast({
         title: "Error",
         description: "Failed to prepare mock interview form.",
@@ -471,7 +472,7 @@ function MockContent() {
         company: parsedSignature.company || "Silverspace Inc.",
       });
     } catch (error: unknown) {
-      console.error("Error sending email:", error);
+      logger.error("Error sending email:", error);
       const errorMessage =
         error instanceof Error ? error.message : "Failed to send email";
 

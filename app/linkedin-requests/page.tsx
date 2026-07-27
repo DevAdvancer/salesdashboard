@@ -876,11 +876,11 @@ function LinkedinRequestsContent() {
                             })),
                           ]
                             .sort((a, b) => {
-                              const aTime = a.log.performedAt
-                                ? new Date(a.log.performedAt).getTime()
+                              const aTime = a.log.createdAt
+                                ? new Date(a.log.createdAt).getTime()
                                 : 0;
-                              const bTime = b.log.performedAt
-                                ? new Date(b.log.performedAt).getTime()
+                              const bTime = b.log.createdAt
+                                ? new Date(b.log.createdAt).getTime()
                                 : 0;
                               return bTime - aTime;
                             })
@@ -933,8 +933,8 @@ function LinkedinRequestsContent() {
                                     </span>
                                   ) : null}
                                   <span className="text-muted-foreground">
-                                    {log.performedAt
-                                      ? `(${new Date(log.performedAt).toLocaleString()})`
+                                    {log.createdAt
+                                      ? `(${new Date(log.createdAt).toLocaleString()})`
                                       : ""}
                                   </span>
                                 </div>

@@ -10,11 +10,9 @@ import { isAllowedLeadStatusTransition, normalizeLeadStatus } from '@/lib/utils/
 import { getLead } from './queries';
 import { getHierarchyPermissions } from './visibility';
 import {
-  isValidId,
-  getLeadAuditName,
-  buildAuditChanges,
   isLinkedinRequestLeadData,
 } from './utils';
+import { isValidId, getLeadAuditName, buildAuditChanges } from "../../../app/actions/lead/sync-helpers";
 
 export async function assertActorCanMutateLead(actorId?: string) {
   if (!actorId) return;

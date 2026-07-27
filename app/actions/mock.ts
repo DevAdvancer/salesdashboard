@@ -132,7 +132,7 @@ async function logMockAudit(
           leadId,
           attemptCount,
         }),
-        performedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
       }
     );
   } catch (e) {

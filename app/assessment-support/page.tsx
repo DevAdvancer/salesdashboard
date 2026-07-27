@@ -1,4 +1,5 @@
 "use client";
+import { logger } from '@/lib/utils/logger';
 
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
@@ -79,7 +80,7 @@ function AssessmentContent() {
         const data = await response.json();
         setIsOutlookConnected(data.connected);
       } catch (error) {
-        console.error("Failed to check connection status", error);
+        logger.error("Failed to check connection status", error);
       }
     };
 
@@ -132,7 +133,7 @@ function AssessmentContent() {
         });
         setAssessmentAttempts(nextAttempts);
       } catch (err) {
-        console.error("Error loading assessment attempts:", err);
+        logger.error("Error loading assessment attempts:", err);
         setAssessmentAttempts(new Map());
       }
     },
@@ -246,7 +247,7 @@ function AssessmentContent() {
         cc: uniqueCC.join(", "),
       }));
     } catch (err) {
-      console.error("Failed to fetch CC users:", err);
+      logger.error("Failed to fetch CC users:", err);
     }
 
     setIsModalOpen(true);
@@ -554,7 +555,7 @@ function AssessmentContent() {
             type: "assessment",
           });
         } catch (error) {
-          console.error("Failed to save technical payment:", error);
+          logger.error("Failed to save technical payment:", error);
         }
       }
 
@@ -587,8 +588,8 @@ function AssessmentContent() {
         company: parsedSignature.company || "Silverspace Inc.",
       });
     } catch (error: unknown) {
-      console.error("Error sending email:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to send email";
+      logger.error("Error sending email:", error);
+      const errorMessage = error instanceof Error ? (error instanceof Error ? error.message : String(error)) : "Failed to send email";
 
       toast({
         title: "Error",

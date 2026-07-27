@@ -1,3 +1,4 @@
+import { logger } from '@/lib/utils/logger';
 import { ID, Permission, Role, Query } from 'appwrite';
 import { account, databases, DATABASE_ID, invalidateCollectionReads } from '@/lib/appwrite';
 import { logAction } from '@/lib/services/audit-service';
@@ -48,12 +49,17 @@ export async function getUsersByBranch(branchId: string): Promise<User[]> {
     const response = await databases.listDocuments(
       DATABASE_ID,
       USERS_COLLECTION_ID,
-      [Query.contains('branchIds', [branchId])]
+      [
+        Query.or([
+          Query.contains('branchIds', [branchId]),
+          Query.equal('branchId', branchId)
+        ])
+      ]
     );
     return response.documents.map(mapDocToUser);
-  } catch (error: any) {
-    console.error('Error fetching users by branch:', error);
-    throw new Error(error.message || 'Failed to fetch users by branch');
+  } catch (error: unknown) {
+    logger.error('Error fetching users by branch:', error);
+    throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to fetch users by branch');
   }
 }
 
@@ -66,12 +72,21 @@ export async function getUsersByBranches(branchIds: string[]): Promise<User[]> {
     const response = await databases.listDocuments(
       DATABASE_ID,
       USERS_COLLECTION_ID,
-      [Query.contains('branchIds', branchIds)]
+      [
+        Query.or([
+          Query.contains('branchIds', branchIds),
+          // For legacy users, we use a string attribute `branchId`.
+          // We can't do Query.equal('branchId', branchIds) since equal expects a single string.
+          // However, we can map them and construct a larger Query.or. But Appwrite supports
+          // Query.equal('attr', [array]) to match any of the array values!
+          Query.equal('branchId', branchIds)
+        ])
+      ]
     );
     return response.documents.map(mapDocToUser);
-  } catch (error: any) {
-    console.error('Error fetching users by branches:', error);
-    throw new Error(error.message || 'Failed to fetch users by branches');
+  } catch (error: unknown) {
+    logger.error('Error fetching users by branches:', error);
+    throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to fetch users by branches');
   }
 }
 
@@ -96,9 +111,9 @@ export async function getAllActiveUsers(limit = 5000): Promise<User[]> {
         ]
       );
       return response.documents.map(mapDocToUser).filter((user) => user.isActive);
-    } catch (error: any) {
-      console.error('Error fetching all active users:', error);
-      throw new Error(error.message || 'Failed to fetch all active users');
+    } catch (error: unknown) {
+      logger.error('Error fetching all active users:', error);
+      throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to fetch all active users');
     }
   });
 }
@@ -166,7 +181,12 @@ export async function getAssignableUsers(
       // see across all branches by design.
       if (creatorRole !== 'admin' && creatorRole !== 'developer' && creatorRole !== 'monitor' && creatorRole !== 'operations') {
         if (creatorBranchIds.length) {
-          queries.push(Query.contains('branchIds', creatorBranchIds));
+          queries.push(
+            Query.or([
+              Query.contains('branchIds', creatorBranchIds),
+              Query.equal('branchId', creatorBranchIds)
+            ])
+          );
         }
       }
 
@@ -204,9 +224,9 @@ export async function getAssignableUsers(
         .filter((u) => u.isActive)
         .filter((u) => matchesDepartmentScope(u, departmentScope));
       return creatorId ? users.filter(u => u.$id !== creatorId) : users;
-    } catch (error: any) {
-      console.error('Error fetching assignable users:', error);
-      throw new Error(error.message || 'Failed to fetch assignable users');
+    } catch (error: unknown) {
+      logger.error('Error fetching assignable users:', error);
+      throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to fetch assignable users');
     }
   });
 }
@@ -244,9 +264,9 @@ export async function getAgentsByTeamLead(
       return response.documents
         .map(mapDocToUser)
         .filter((user) => matchesDepartmentScope(user, departmentScope));
-    } catch (error: any) {
-      console.error('Error fetching agents by team lead:', error);
-      throw new Error(error.message || 'Failed to fetch agents by team lead');
+    } catch (error: unknown) {
+      logger.error('Error fetching agents by team lead:', error);
+      throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to fetch agents by team lead');
     }
   });
 }
@@ -275,7 +295,7 @@ export async function getUserById(userId: string): Promise<User> {
   const validIdPattern = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,35}$/;
 
   if (!userId || !validIdPattern.test(userId)) {
-    console.warn(`[getUserById] Skipped invalid ID: "${userId}"`);
+    logger.warn(`[getUserById] Skipped invalid ID: "${userId}"`);
     throw new Error(`Invalid ID format: ${userId}`);
   }
 
@@ -286,15 +306,15 @@ export async function getUserById(userId: string): Promise<User> {
       userId
     );
     return mapDocToUser(userDoc);
-  } catch (error: any) {
-    const code = typeof error?.code === 'number' ? error.code : null;
-    const message = typeof error?.message === 'string' ? error.message : String(error);
+  } catch (error: unknown) {
+    const code = typeof (error as any)?.code === 'number' ? (error as any).code : null;
+    const message = typeof (error as any)?.message === 'string' ? (error instanceof Error ? error.message : String(error)) : String(error);
 
     if (code === 404 || message.toLowerCase().includes('could not be found') || message.toLowerCase().includes('not found')) {
       throw new Error(`User not found: ${userId}`);
     }
 
-    console.error('Error fetching user:', error);
+    logger.error('Error fetching user:', error);
     throw new Error(message || 'Failed to fetch user');
   }
 }
@@ -313,9 +333,9 @@ export async function getUserByIdOrNull(userId: string): Promise<User | null> {
       userId
     );
     return mapDocToUser(userDoc);
-  } catch (error: any) {
-    const code = typeof error?.code === 'number' ? error.code : null;
-    const message = typeof error?.message === 'string' ? error.message : String(error);
+  } catch (error: unknown) {
+    const code = typeof (error as any)?.code === 'number' ? (error as any).code : null;
+    const message = typeof (error as any)?.message === 'string' ? (error instanceof Error ? error.message : String(error)) : String(error);
     const normalizedMessage = message.toLowerCase();
 
     if (code === 404 || normalizedMessage.includes('could not be found') || normalizedMessage.includes('not found')) {
@@ -393,9 +413,9 @@ export async function getUserByEmail(email: string): Promise<User | null> {
     }
 
     return mapDocToUser(response.documents[0]);
-  } catch (error: any) {
-    console.error('Error fetching user by email:', error);
-    throw new Error(error.message || 'Failed to fetch user by email');
+  } catch (error: unknown) {
+    logger.error('Error fetching user by email:', error);
+    throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to fetch user by email');
   }
 }
 
@@ -410,9 +430,9 @@ export async function getAllAgents(): Promise<User[]> {
       [Query.equal('role', 'agent')]
     );
     return response.documents.map(mapDocToUser);
-  } catch (error: any) {
-    console.error('Error fetching all agents:', error);
-    throw new Error(error.message || 'Failed to fetch all agents');
+  } catch (error: unknown) {
+    logger.error('Error fetching all agents:', error);
+    throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to fetch all agents');
   }
 }
 
@@ -431,9 +451,9 @@ export async function updateUser(
       data
     );
     return mapDocToUser(userDoc);
-  } catch (error: any) {
-    console.error('Error updating user:', error);
-    throw new Error(error.message || 'Failed to update user');
+  } catch (error: unknown) {
+    logger.error('Error updating user:', error);
+    throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to update user');
   }
 }
 
@@ -454,9 +474,9 @@ export async function updateUserTeamLead(
       }
     );
     return mapDocToUser(userDoc);
-  } catch (error: any) {
-    console.error('Error updating user team lead:', error);
-    throw new Error(error.message || 'Failed to update user team lead');
+  } catch (error: unknown) {
+    logger.error('Error updating user team lead:', error);
+    throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to update user team lead');
   }
 }
 
@@ -505,9 +525,9 @@ export async function removeUserFromBranch(
       return mapDocToUser(userDoc);
     }
     return user;
-  } catch (error: any) {
-    console.error('Error removing user from branch:', error);
-    throw new Error(error.message || 'Failed to remove user from branch');
+  } catch (error: unknown) {
+    logger.error('Error removing user from branch:', error);
+    throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to remove user from branch');
   }
 }
 
@@ -528,9 +548,9 @@ export async function updateUserRole(
       }
     );
     return mapDocToUser(userDoc);
-  } catch (error: any) {
-    console.error('Error updating user role:', error);
-    throw new Error(error.message || 'Failed to update user role');
+  } catch (error: unknown) {
+    logger.error('Error updating user role:', error);
+    throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to update user role');
   }
 }
 
@@ -555,9 +575,9 @@ export async function getSubordinates(userId: string): Promise<User[]> {
     const uniqueSubordinates = Array.from(new Map(directReports.map(item => [item.$id, item])).values());
 
     return uniqueSubordinates;
-  } catch (error: any) {
-    console.error('Error fetching subordinates:', error);
-    throw new Error(error.message || 'Failed to fetch subordinates');
+  } catch (error: unknown) {
+    logger.error('Error fetching subordinates:', error);
+    throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to fetch subordinates');
   }
 }
 
@@ -572,7 +592,12 @@ export async function getTeamLeads(
     const queries = [Query.equal('role', 'team_lead')];
 
     if (branchIds && branchIds.length > 0) {
-      queries.push(Query.contains('branchIds', branchIds));
+      queries.push(
+        Query.or([
+          Query.contains('branchIds', branchIds),
+          Query.equal('branchId', branchIds)
+        ])
+      );
     }
 
     const response = await databases.listDocuments(
@@ -583,9 +608,9 @@ export async function getTeamLeads(
     return response.documents
       .map(mapDocToUser)
       .filter((user) => matchesDepartmentScope(user, departmentScope));
-  } catch (error: any) {
-    console.error('Error fetching team leads:', error);
-    throw new Error(error.message || 'Failed to fetch team leads');
+  } catch (error: unknown) {
+    logger.error('Error fetching team leads:', error);
+    throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to fetch team leads');
   }
 }
 
@@ -616,8 +641,8 @@ export async function getSupportRequestCcEmails(currentUser: User): Promise<stri
     }
 
     return Array.from(ccEmails);
-  } catch (error: any) {
-    console.error('Error fetching support request CC emails:', error);
+  } catch (error: unknown) {
+    logger.error('Error fetching support request CC emails:', error);
     return [];
   }
 }

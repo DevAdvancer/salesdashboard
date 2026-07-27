@@ -109,7 +109,7 @@ type AuditLogDocument = {
   action?: string;
   targetType?: string;
   metadata?: string;
-  performedAt?: string;
+  createdAt?: string;
   createdAt?: string;
 };
 
@@ -148,7 +148,7 @@ async function findAuditLogForLead(leadId: string): Promise<AuditLogDocument | n
         Query.equal('action', 'LEAD_UPDATE'),
         Query.equal('targetType', 'LEAD'),
         Query.equal('targetId', leadId),
-        Query.orderDesc('performedAt'),
+        Query.orderDesc('createdAt'),
         Query.orderDesc('$createdAt'),
         Query.limit(50),
       ],
@@ -252,12 +252,12 @@ async function main() {
       let markedAt: string;
       let warning: string | null = null;
 
-      if (auditLog && auditLog.actorId && auditLog.performedAt) {
+      if (auditLog && auditLog.actorId && auditLog.createdAt) {
         markedById = auditLog.actorId;
         markedByName =
           (typeof auditLog.actorName === 'string' && auditLog.actorName.trim()) ||
           (await fetchUserName(auditLog.actorId));
-        markedAt = auditLog.performedAt;
+        markedAt = auditLog.createdAt;
       } else {
         // No audit trail — synthesize a marker so the row still appears in
         // reports. Operators can review these in the Appwrite console.

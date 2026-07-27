@@ -601,7 +601,7 @@ export function AuditLogsClient({ department }: { department?: "sales" | "resume
                   paginatedLogs.map((log) => (
                     <TableRow key={log.$id}>
                       <TableCell className="whitespace-nowrap font-medium">
-                        {new Date(log.performedAt).toLocaleString()}
+                        {new Date(log.createdAt).toLocaleString()}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -688,7 +688,7 @@ export function AuditLogsClient({ department }: { department?: "sales" | "resume
                     Action: <span className="font-medium text-foreground">{selectedLog.action}</span>
                   </span>
                   <span>
-                    Performed by: <span className="font-medium text-foreground">{selectedLog.actorName}</span> on {new Date(selectedLog.performedAt).toLocaleString()}
+                    Performed by: <span className="font-medium text-foreground">{selectedLog.actorName}</span> on {new Date(selectedLog.createdAt).toLocaleString()}
                   </span>
                 </span>
               )}

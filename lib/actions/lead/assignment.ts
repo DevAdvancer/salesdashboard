@@ -9,6 +9,7 @@ import { assertAuthenticatedUserId } from '@/lib/server/current-user';
 import { recordLgHandoffAction } from '@/app/actions/lg-handoffs';
 import { getHierarchyPermissionsServer, assertAssignmentAllowed } from './visibility';
 import { getLeadDisplayName, getLeadResumeFileId } from './utils';
+import { logger } from '@/lib/utils/logger';
 
 type AdminDatabases = Awaited<ReturnType<typeof createAdminClient>>['databases'];
 
@@ -38,7 +39,7 @@ async function syncResumePermissionsForAssignment(
             [...new Set(permissions)]
         );
     } catch (error) {
-        console.error('Failed to update resume permissions for lead assignment:', error);
+        logger.error('Failed to update resume permissions for lead assignment:', error);
     }
 }
 
@@ -118,7 +119,7 @@ export async function assignLeadAction(
                     branchId: currentLead.branchId ?? null,
                 });
             } catch (handoffError) {
-                console.error('Failed to record LG handoff on assignment:', handoffError);
+                logger.error('Failed to record LG handoff on assignment:', handoffError);
             }
         }
 
@@ -136,7 +137,7 @@ export async function assignLeadAction(
                     targetId: leadId,
                     targetType: 'LEAD',
                     metadata: JSON.stringify({ assignedToId: agentId }),
-                    performedAt: new Date().toISOString(),
+                    createdAt: new Date().toISOString(),
                 }
             );
         } catch (auditError) {
@@ -157,7 +158,7 @@ export async function assignLeadAction(
 
         return { success: true, lead: lead as unknown as Lead };
     } catch (error: unknown) {
-        console.error('Error assigning lead (server action):', error);
+        logger.error('Error assigning lead (server action):', error);
         throw new Error(error instanceof Error ? error.message : 'Failed to assign lead');
     }
 }

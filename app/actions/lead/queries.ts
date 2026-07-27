@@ -1,11 +1,13 @@
 'use server';
+import type { Databases } from 'node-appwrite';
+import { isReferralSource } from '@/lib/utils/lead-source';
 import { createAdminClient } from "@/lib/server/appwrite";
 import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
+import { parseIsoDateLocal, daysInMonthLocal } from "./sync-helpers";
 import { LeadActionError } from "@/lib/server/lead-errors";
 import { Lead, LeadData, LeadListFilters, UserRole, CreateLeadInput, Department } from "@/lib/types";
 import { Query, ID, Permission, Role } from "node-appwrite";
 import { COLLECTIONS } from "@/lib/constants/appwrite";
-import { getSpecialBranchLeadAccess } from "@/lib/constants/special-lead-access";
 import { logAction } from "@/lib/services/audit-service";
 import { assertAuthenticatedUserId, getAuthenticatedAccount } from "@/lib/server/current-user";
 import { notifyDuplicateLeadUpdateAttemptAction } from "@/app/actions/lead-duplicates";
@@ -20,10 +22,13 @@ import { workingDaysInRange, type KpiRow } from "@/lib/utils/dashboard-kpi";
 import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
 import { buildDepartmentScopeQuery, isDepartmentScopeInlineEnabled } from "@/lib/server/department-scope-query";
 import { DATABASE_ID, LEADS_COLLECTION_ID, USERS_COLLECTION_ID, LEADS_LIST_SELECT } from "./constants";
-import { isValidId, normalizeDuplicateFieldValue, REQUIRED_LEAD_FIELD_LABELS, isBlankLeadValue, shouldIgnoreLinkedinDuplicate, assertRequiredLeadData, validateLeadUniqueness, validateLeadUniquenessAction, enrichDuplicateResult } from "./validation";
+import { validateLeadUniqueness, validateLeadUniquenessAction, enrichDuplicateResult } from "./validation";
 import { isNotInterestedStatus, normalizeStatusText, isLinkedinRequestLeadData } from "./status";
 import { getHierarchyPermissions, HierarchyUserDocument, getVisibleHierarchyUserIds, getLeadVisibilityUserIds, TeamLeadScopedUserDocument, getTeamLeadLeadVisibilityScope, appendHierarchyLeadVisibilityQuery, appendTeamLeadLeadVisibilityQuery, UserDocument, normalizeDepartment, getDepartmentScopedUserIds, leadMatchesDepartmentScope, isMonitorRole, isOperationsRole, isAdminLikeReadAllRole, assertSalesCrmAccess, assertLeadReopenAllowed, assertLeadUpdateAllowed } from "./visibility";
-import { parseLeadDataSafely, restoreNotInterestedDuplicateLead, createLeadAction, updateLeadAction, reopenLeadAction, getLeadAuditName, buildAuditChanges, getDuplicateValue } from "./mutations";
+import { restoreNotInterestedDuplicateLead, createLeadAction, updateLeadAction, reopenLeadAction } from "./mutations";
+import { logger } from '@/lib/utils/logger';
+import { REQUIRED_LEAD_FIELD_LABELS, isValidId, normalizeDuplicateFieldValue, isBlankLeadValue, shouldIgnoreLinkedinDuplicate, assertRequiredLeadData } from "./sync-helpers";
+import { parseLeadDataSafely, getLeadAuditName, buildAuditChanges, getDuplicateValue } from "./sync-helpers";
 
 export async function getLeadAction(leadId: string, viewerId: string): Promise<Lead> {
     await assertAuthenticatedUserId(viewerId);
@@ -51,11 +56,6 @@ export async function getLeadAction(leadId: string, viewerId: string): Promise<L
       return lead;
     }
 
-    const specialBranchId = getSpecialBranchLeadAccess(viewerDoc.email);
-    if (specialBranchId && lead.branchId === specialBranchId) {
-      return lead;
-    }
-
     if (lead.ownerId === viewerId || lead.assignedToId === viewerId) {
       return lead;
     }
@@ -73,12 +73,12 @@ export async function getLeadAction(leadId: string, viewerId: string): Promise<L
     }
 
     throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
-    } catch (error: any) {
+    } catch (error: unknown) {
     if (error instanceof LeadActionError) throw error;
-    console.error('Error fetching lead (action):', error);
+    logger.error('Error fetching lead (action):', error);
     throw new LeadActionError(
       'UNKNOWN',
-      error?.message || 'Failed to fetch lead',
+      (error as any)?.message || 'Failed to fetch lead',
       { cause: error },
     );
     }
@@ -109,7 +109,6 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
         ? await getDepartmentScopedUserIds(databases, 'sales')
         : null;
 
-    const specialBranchId = getSpecialBranchLeadAccess(userDoc.email as string | undefined);
 
     if (userRole === 'agent') {
       // Agents see leads assigned to them OR leads they created
@@ -117,9 +116,6 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
           Query.equal('assignedToId', userId),
           Query.equal('ownerId', userId),
       ];
-      if (specialBranchId) {
-        orConditions.push(Query.equal('branchId', specialBranchId));
-      }
       queries.push(Query.or(orConditions));
     } else if (userRole === 'lead_generation') {
       queries.push(Query.equal('ownerId', userId));
@@ -155,7 +151,6 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
         queries,
         ownerVisibleUserIds,
         assignmentVisibleUserIds,
-        specialBranchId,
         branchIds,
         true,
       );
@@ -299,7 +294,7 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
 
         leads = leads.filter((lead) => {
           try {
-            const data = JSON.parse(lead.data) as LeadData;
+            const data = JSON.parse(lead.data as string) as LeadData;
 
             if (visaStatusMatch !== null) {
               const vsQuery = visaStatusMatch.toLowerCase();
@@ -353,7 +348,7 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
 
       leads = leads.filter((lead) => {
         try {
-          const data = JSON.parse(lead.data) as LeadData;
+          const data = JSON.parse(lead.data as string) as LeadData;
 
           if (visaStatusMatch !== null) {
             const vsQuery = visaStatusMatch.toLowerCase();
@@ -397,8 +392,8 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
       page,
       pageSize,
     };
-    } catch (error: any) {
-    console.error('Error listing leads (action):', error);
+    } catch (error: unknown) {
+    logger.error('Error listing leads (action):', error);
     throw new Error(getAppwriteErrorMessage(error) || 'Failed to list leads');
     }
 }
@@ -416,9 +411,6 @@ export async function listLeadCountsAction(userId: string, _userRole: UserRole, 
     ) as unknown as UserDocument;
     assertSalesCrmAccess(userDoc);
     const userRole = userDoc.role;
-    const specialBranchId = getSpecialBranchLeadAccess(
-      userDoc.email as string | undefined
-    );
     let salesUserIds =
       isAdminLikeReadAllRole(userRole)
         ? await getDepartmentScopedUserIds(databases, 'sales')
@@ -433,12 +425,9 @@ export async function listLeadCountsAction(userId: string, _userRole: UserRole, 
 
     if (userRole === 'agent') {
       const orConditions = [
-        Query.equal('assignedToId', userId),
-        Query.equal('ownerId', userId),
+          Query.equal('assignedToId', userId),
+          Query.equal('ownerId', userId),
       ];
-      if (specialBranchId) {
-        orConditions.push(Query.equal('branchId', specialBranchId));
-      }
       visibilityQueries.push(Query.or(orConditions));
     } else if (userRole === 'lead_generation') {
       visibilityQueries.push(Query.equal('ownerId', userId));
@@ -490,9 +479,8 @@ export async function listLeadCountsAction(userId: string, _userRole: UserRole, 
         visibilityQueries,
         ownerVisibleUserIds,
         assignmentVisibleUserIds,
-        specialBranchId,
         branchIds,
-        true
+        true,
       );
     }
 
@@ -643,8 +631,8 @@ export async function listLeadCountsAction(userId: string, _userRole: UserRole, 
       unassigned: unassignedRes.total,
       byStatus,
     };
-    } catch (error: any) {
-    console.error('Error listing lead counts (action):', error);
+    } catch (error: unknown) {
+    logger.error('Error listing lead counts (action):', error);
     throw new Error(
       getAppwriteErrorMessage(error) || 'Failed to list lead counts'
     );
@@ -660,29 +648,29 @@ export async function loadLeadTargetProgressAction(input: {
     }): Promise<KpiRow[]> {
     await assertAuthenticatedUserId(input.userId);
     const { databases } = await createAdminClient();
-    const isKpiEligible = (user: any): boolean =>
+    const isKpiEligible = (user: Record<string, unknown>): boolean =>
             Boolean(
               user &&
               user.isActive !== false &&
               user.department === "sales" &&
               (user.role === "agent" || user.role === "team_lead")
             );
-    let scopeUsers: any[] = [];
+    let scopeUsers: Record<string, unknown>[] = [];
     if (input.role === "agent" || input.role === "lead_generation") {
     const self = await getUserByIdOrNull(databases, input.userId);
-    scopeUsers = isKpiEligible(self) ? [self] : [];
+    scopeUsers = self && isKpiEligible(self as Record<string, unknown>) ? [self as Record<string, unknown>] : [];
     } else if (input.role === "team_lead") {
     const self = await getUserByIdOrNull(databases, input.userId);
     const agents = await getAgentsByTeamLead(databases, input.userId);
-    scopeUsers = [self, ...agents].filter(isKpiEligible);
+    scopeUsers = [self, ...agents].filter((u): u is Record<string, unknown> => u !== null).filter(isKpiEligible) as Record<string, unknown>[];
     } else {
     // admin / developer / monitor / operations
     if (input.teamLeadId) {
       const selected = await getUserByIdOrNull(databases, input.teamLeadId);
       const agents = await getAgentsByTeamLead(databases, input.teamLeadId);
-      scopeUsers = [selected, ...agents].filter(isKpiEligible);
+      scopeUsers = [selected, ...agents].filter((u): u is Record<string, unknown> => u !== null).filter(isKpiEligible) as Record<string, unknown>[];
     } else {
-      const allUsers = await listAllDocuments<any>({
+      const allUsers = await listAllDocuments<Record<string, unknown>>({
         databases,
         databaseId: DATABASE_ID,
         collectionId: COLLECTIONS.USERS,
@@ -716,7 +704,7 @@ export async function loadLeadTargetProgressAction(input: {
     queries.push(Query.orderDesc('$createdAt'));
     queries.push(Query.orderDesc('$id'));
     queries.push(Query.select(['$id', 'ownerId', 'assignedToId', 'data']));
-    const allLeads = await listAllDocuments<any>({
+    const allLeads = await listAllDocuments<Record<string, unknown>>({
             databases,
             databaseId: DATABASE_ID,
             collectionId: LEADS_COLLECTION_ID,
@@ -734,7 +722,7 @@ export async function loadLeadTargetProgressAction(input: {
     }
 
     niQueries.push(Query.select(['$id', 'userId']));
-    const niEvents = await listAllDocuments<any>({
+    const niEvents = await listAllDocuments<Record<string, unknown>>({
             databases,
             databaseId: DATABASE_ID,
             collectionId: COLLECTIONS.NOT_INTERESTED_LEADS,
@@ -767,7 +755,7 @@ export async function loadLeadTargetProgressAction(input: {
             const createdCount = allLeads.filter((lead) => {
               let creatorId = lead.ownerId;
               try {
-                const leadData = JSON.parse(lead.data);
+                const leadData = JSON.parse(lead.data as string);
                 if (leadData && leadData.creatorId) {
                   creatorId = leadData.creatorId;
                 }
@@ -777,7 +765,7 @@ export async function loadLeadTargetProgressAction(input: {
 
               // Exclude referral sources from KPI
               try {
-                const leadData = JSON.parse(lead.data);
+                const leadData = JSON.parse(lead.data as string);
                 if (leadData && isReferralSource(leadData.source)) {
                   return false;
                 }
@@ -813,7 +801,7 @@ export async function loadLeadTargetProgressAction(input: {
     const aGap = a.target - a.leadCount;
     const bGap = b.target - b.leadCount;
     if (aGap !== bGap) return bGap - aGap;
-    return a.userName.localeCompare(b.userName);
+    return (a.userName as string).localeCompare(b.userName as string);
     });
     return kpiRows as KpiRow[];
 }
@@ -836,17 +824,7 @@ export type LeadCounts = {
       byStatus: Record<string, number>;
     };
 
-export function parseIsoDateLocal(iso: string): Date {
-    const [year, month, day] = iso.split("-").map(Number);
-    return new Date(year, month - 1, day);
-}
-
-export function daysInMonthLocal(isoDate: string): number {
-    const date = parseIsoDateLocal(isoDate);
-    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-}
-
-export async function getUserByIdOrNull(databases: any, userId: string): Promise<any | null> {
+export async function getUserByIdOrNull(databases: Databases, userId: string): Promise<Record<string, unknown> | null> {
     try {
     return await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, userId);
     } catch {
@@ -854,9 +832,9 @@ export async function getUserByIdOrNull(databases: any, userId: string): Promise
     }
 }
 
-export async function getAgentsByTeamLead(databases: any, teamLeadId: string): Promise<any[]> {
+export async function getAgentsByTeamLead(databases: Databases, teamLeadId: string): Promise<Record<string, unknown>[]> {
     try {
-    return await listAllDocuments<any>({
+    return await listAllDocuments<Record<string, unknown>>({
       databases,
       databaseId: DATABASE_ID,
       collectionId: COLLECTIONS.USERS,
@@ -872,11 +850,3 @@ export async function getAgentsByTeamLead(databases: any, teamLeadId: string): P
     }
 }
 
-export function normalizeSource(value: unknown): string {
-    if (typeof value !== "string") return "";
-    return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
-export function isReferralSource(source: unknown): boolean {
-    return normalizeSource(source) === "referral";
-}

@@ -8,7 +8,6 @@ import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { isRoleEligibleForComponent } from "@/lib/constants/component-access";
 import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
 import type { ClientPaymentPlan, ClientPaymentRecord, ClientPaymentUpdate, Lead, PaymentStatus, User } from "@/lib/types";
-import { getSpecialBranchLeadAccess } from "@/lib/constants/special-lead-access";
 
 export async function getActor(userId: string): Promise<User> {
     await assertAuthenticatedUserId(userId);
@@ -63,11 +62,6 @@ export async function canActorAccessLead(actor: User, leadId: string): Promise<b
     const lead = (await databases.getDocument(DATABASE_ID, COLLECTIONS.LEADS, leadId)) as any;
     if (isAdminLikeReadRole(actor.role)) return true;
     const branchId = typeof lead.branchId === "string" ? lead.branchId : null;
-    const specialBranchId = getSpecialBranchLeadAccess(actor.email);
-    if (specialBranchId && branchId === specialBranchId) {
-    return true;
-    }
-
     const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : null;
     const assignedToId = typeof lead.assignedToId === "string" ? lead.assignedToId : null;
     const permissions = Array.isArray(lead.$permissions) ? (lead.$permissions as string[]) : [];

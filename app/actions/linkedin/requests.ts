@@ -1,3 +1,4 @@
+"use server";
 import { ID, Permission, Query, Role } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
 import { assertAuthenticatedUserId, getAuthenticatedUserDoc } from "@/lib/server/current-user";
@@ -9,9 +10,8 @@ import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import { expandIsoDateToEnd, expandIsoDateToStart } from "@/lib/utils/iso-date-range";
 import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
 import { getAgentsByTeamLead, getAssignableUsers, getUserByIdOrNull } from "@/lib/services/user-service";
-import { normalizeCompany, normalizeUrl, parseDateOnly, toUtcDayStartIso, toUtcDayEndIso, daysBetweenUtc, assertDateIso, normalizeLeadOutcomeStatus, getLeadOutcomeLabel, getLinkedinRequestLeadSnapshot, getLinkedinRequestLeadOutcomeLabel, isBlockingLinkedinRequest, createGeneralChatMessage, logAuditAction, canManageLinkedinAccounts, canSeeLinkedinReports, canReadLinkedinAccountsLikeAdmin, resolveLinkedinReportTeamLeadId, assertLinkedinReportTeamScope, assertAgentIsInTeam, getEtDateKey, getLinkedinAccountDoc, getTeamLeadAssignedUserIds, listDelegatedSourceUserIdsForToday, assertAccessibleLinkedinAccount, getSalesUserIds, parseIsoDateLocal, daysInMonthLocal, resolveScopeUsersForLinkedin, LinkedinConnectionKpiRow, AutoWithdrawResult } from "./shared";
-
-"use server";
+import { normalizeCompany, normalizeUrl, parseDateOnly, toUtcDayStartIso, toUtcDayEndIso, daysBetweenUtc, assertDateIso, normalizeLeadOutcomeStatus, getLeadOutcomeLabel, getLinkedinRequestLeadSnapshot, getLinkedinRequestLeadOutcomeLabel, isBlockingLinkedinRequest, createGeneralChatMessage, logAuditAction, canManageLinkedinAccounts, canSeeLinkedinReports, canReadLinkedinAccountsLikeAdmin, resolveLinkedinReportTeamLeadId, assertLinkedinReportTeamScope, assertAgentIsInTeam, getEtDateKey, getLinkedinAccountDoc, getTeamLeadAssignedUserIds, listDelegatedSourceUserIdsForToday, assertAccessibleLinkedinAccount, getSalesUserIds, resolveScopeUsersForLinkedin, LinkedinConnectionKpiRow, AutoWithdrawResult } from "./shared";
+import { parseIsoDateLocal, daysInMonthLocal } from "../lead/sync-helpers";
 
 export async function checkLinkedinDuplicateAction(input: {
       currentUserId: string;
@@ -430,7 +430,7 @@ export async function getLinkedinConnectionHistoryAction(input: {
               Query.equal("targetType", "linkedin_request"),
               Query.equal("targetId", r.$id),
               Query.equal("action", "LINKEDIN_REQUEST_LINK_LEAD"),
-              Query.orderDesc("performedAt"),
+              Query.orderDesc("createdAt"),
               Query.limit(1),
             ],
           );
@@ -476,7 +476,7 @@ export async function getLinkedinConnectionHistoryAction(input: {
 
     const leadAuditByLeadId = new Map<
             string,
-            Array<{ $id: string; action: string; actorName: string; performedAt: string; metadata: unknown }>
+            Array<{ $id: string; action: string; actorName: string; createdAt: string; metadata: unknown }>
           >();
     await Promise.all(
     leadIds.map(async (leadId) => {
@@ -484,14 +484,14 @@ export async function getLinkedinConnectionHistoryAction(input: {
         const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, [
           Query.equal("targetType", "LEAD"),
           Query.equal("targetId", leadId),
-          Query.orderDesc("performedAt"),
+          Query.orderDesc("createdAt"),
           Query.limit(50),
         ]);
         const logs = response.documents.map((doc) => ({
           $id: String((doc as any).$id),
           action: String((doc as any).action ?? ""),
           actorName: String((doc as any).actorName ?? ""),
-          performedAt: String((doc as any).performedAt ?? ""),
+          createdAt: String((doc as any).createdAt ?? ""),
           metadata: (doc as any).metadata ?? null,
         }));
         leadAuditByLeadId.set(leadId, logs);
@@ -505,7 +505,7 @@ export async function getLinkedinConnectionHistoryAction(input: {
               const logsResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, [
                 Query.equal("targetType", "linkedin_request"),
                 Query.equal("targetId", req.$id),
-                Query.orderDesc("performedAt"),
+                Query.orderDesc("createdAt"),
                 Query.limit(100),
               ]);
 
@@ -513,7 +513,7 @@ export async function getLinkedinConnectionHistoryAction(input: {
                 $id: String((doc as any).$id),
                 action: String((doc as any).action ?? ""),
                 actorName: String((doc as any).actorName ?? ""),
-                performedAt: String((doc as any).performedAt ?? ""),
+                createdAt: String((doc as any).createdAt ?? ""),
                 metadata: (doc as any).metadata ?? null,
               }));
 
@@ -1077,7 +1077,7 @@ export async function runLinkedinAutoWithdrawAction(input: {
             withdrawnAt: nowIso,
             triggeredBy: "admin_action",
           }),
-          performedAt: nowIso,
+          createdAt: nowIso,
         },
       );
 

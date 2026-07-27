@@ -168,7 +168,7 @@ async function logAuditAction(
                 targetId,
                 targetType,
                 metadata: metadata ? JSON.stringify(metadata) : null,
-                performedAt: new Date().toISOString(),
+                createdAt: new Date().toISOString(),
             },
             [
                 Permission.read(Role.any()),

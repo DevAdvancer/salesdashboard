@@ -38,7 +38,7 @@ async function logAccessSettingChange(input: {
           to: input.to,
         },
       }),
-      performedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
     },
     [
       Permission.read(Role.any()),

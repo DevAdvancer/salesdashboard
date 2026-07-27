@@ -61,7 +61,7 @@ async function logDuplicateAttempt(
         targetId: existingLeadId,
         targetType: "LEAD",
         metadata: JSON.stringify({ context }),
-        performedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
       },
     );
   } catch (err) {

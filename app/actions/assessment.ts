@@ -72,7 +72,7 @@ async function logAssessmentAudit(
         targetId: leadId,
         targetType: 'ASSESSMENT',
         metadata: JSON.stringify(metadata),
-        performedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
       }
     );
   } catch (e) {

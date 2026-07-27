@@ -1,9 +1,8 @@
-'use server';
-
 import { createAdminClient } from '@/lib/server/appwrite';
 import { BUCKETS, COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { Permission, Role, ID, Query } from 'node-appwrite';
 import { Lead, User } from '@/lib/types';
+import { logger } from '@/lib/utils/logger';
 
 type AdminDatabases = Awaited<ReturnType<typeof createAdminClient>>['databases'];
 type HierarchyUserDocument = {
@@ -43,12 +42,12 @@ export async function getHierarchyPermissionsServer(userId: string, databases: A
                     currentId = null;
                 }
             } catch (err) {
-                console.error(`Error fetching user ${currentId} for hierarchy:`, err);
+                logger.error(`Error fetching user ${currentId} for hierarchy:`, err);
                 break;
             }
         }
     } catch (e) {
-        console.error(`Error fetching hierarchy permissions for user ${userId}:`, e);
+        logger.error(`Error fetching hierarchy permissions for user ${userId}:`, e);
     }
     return permissions;
 }

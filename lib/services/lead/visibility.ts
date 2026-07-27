@@ -2,7 +2,7 @@ import { Permission, Role, Query } from 'appwrite';
 import { databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { UserRole } from '@/lib/types';
 import { getUserById } from '@/lib/services/user-service';
-import { isValidId } from './utils';
+import { isValidId } from "../../../app/actions/lead/sync-helpers";
 
 export type HierarchyUserDocument = {
   $id: string;
@@ -90,7 +90,6 @@ export async function getTeamLeadLeadVisibilityScope(viewerId: string): Promise<
 export function appendHierarchyLeadVisibilityQuery(
   queries: string[],
   visibleUserIds: string[],
-  specialBranchId?: string | null,
   branchIds?: string[],
   includeBackedOutForBranches?: boolean
 ) {
@@ -98,10 +97,6 @@ export function appendHierarchyLeadVisibilityQuery(
     Query.equal('ownerId', visibleUserIds),
     Query.equal('assignedToId', visibleUserIds),
   ];
-
-  if (specialBranchId) {
-    orConditions.push(Query.equal('branchId', specialBranchId));
-  }
 
   if (includeBackedOutForBranches && branchIds && branchIds.length > 0) {
     orConditions.push(
@@ -120,7 +115,6 @@ export function appendTeamLeadLeadVisibilityQuery(
   queries: string[],
   ownerVisibleUserIds: string[],
   assignmentVisibleUserIds: string[],
-  specialBranchId?: string | null,
   branchIds?: string[],
   includeBackedOutForBranches?: boolean
 ) {
@@ -128,10 +122,6 @@ export function appendTeamLeadLeadVisibilityQuery(
     Query.equal('ownerId', ownerVisibleUserIds),
     Query.equal('assignedToId', assignmentVisibleUserIds),
   ];
-
-  if (specialBranchId) {
-    orConditions.push(Query.equal('branchId', specialBranchId));
-  }
 
   if (includeBackedOutForBranches && branchIds && branchIds.length > 0) {
     orConditions.push(

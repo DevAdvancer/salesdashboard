@@ -67,7 +67,7 @@ describe('Lead Service', () => {
     targetId: 'lead-123',
     targetType: 'LEAD',
     metadata: JSON.stringify({ test: true }),
-    performedAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
   };
 
   beforeEach(() => {

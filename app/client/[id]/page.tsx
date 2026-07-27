@@ -51,6 +51,7 @@ import { ClientPaymentCreateCard } from "@/components/client/detail/client-payme
 import { ClientIntakeCard } from "@/components/client/detail/client-intake-card";
 import { ClientPaymentUpdateCard } from "@/components/client/detail/client-payment-update-card";
 import { ClientPaymentTimelineCard } from "@/components/client/detail/client-payment-timeline-card";
+import { logger } from '@/lib/utils/logger';
 
 export default function HistoryDetailPage() {
   return (
@@ -154,10 +155,10 @@ function HistoryDetailContent() {
         setOwner(ownerUser);
         setAssignedTo(assignedUser);
       } catch (err: unknown) {
-        console.error("Error loading related users:", err);
+        logger.error("Error loading related users:", err);
       }
     } catch (err: unknown) {
-      console.error("Error loading lead:", err);
+      logger.error("Error loading lead:", err);
       setError(err instanceof Error ? err.message : "Failed to load lead");
     } finally {
       setIsLoading(false);
@@ -171,7 +172,7 @@ function HistoryDetailContent() {
       const config = cachedConfig as { fields: any[] };
       setFormFields(config.fields.sort((a, b) => a.order - b.order));
     } catch (err: unknown) {
-      console.error("Error loading form config:", err);
+      logger.error("Error loading form config:", err);
     }
   };
 
@@ -186,7 +187,7 @@ function HistoryDetailContent() {
         paymentConfig.fields.sort((a, b) => a.order - b.order),
       );
     } catch (err: unknown) {
-      console.error("Error loading close configs:", err);
+      logger.error("Error loading close configs:", err);
     }
   };
 
@@ -195,7 +196,7 @@ function HistoryDetailContent() {
       const config = await getClientIntakeFormConfig();
       setClientIntakeFields(config.fields.sort((a, b) => a.order - b.order));
     } catch (err: unknown) {
-      console.error("Error loading client intake config:", err);
+      logger.error("Error loading client intake config:", err);
     }
   };
 
@@ -249,7 +250,7 @@ function HistoryDetailContent() {
       setPaymentStatus(created.status);
       toast({ title: "Success", description: "Payment record created." });
     } catch (err: unknown) {
-      console.error("Error creating payment record:", err);
+      logger.error("Error creating payment record:", err);
       toast({
         title: "Error",
         description:
@@ -279,7 +280,7 @@ function HistoryDetailContent() {
         setPaymentInitPersonalValues({});
       }
     } catch (err: unknown) {
-      console.error("Error loading payment record:", err);
+      logger.error("Error loading payment record:", err);
       setPaymentRecord(null);
     } finally {
       setPaymentLoading(false);
@@ -395,7 +396,7 @@ function HistoryDetailContent() {
       setShowReopenDialog(false);
       router.push(`/leads/${leadId}`);
     } catch (err: unknown) {
-      console.error("Error reopening lead:", err);
+      logger.error("Error reopening lead:", err);
       toast({
         title: "Error",
         description:
@@ -499,7 +500,7 @@ function HistoryDetailContent() {
       toast({ title: "Success", description: "Client details saved." });
       queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
     } catch (err: unknown) {
-      console.error("Error saving client intake:", err);
+      logger.error("Error saving client intake:", err);
       toast({
         title: "Error",
         description:
@@ -569,7 +570,7 @@ function HistoryDetailContent() {
       toast({ title: "Success", description: "Payment update saved." });
       queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
     } catch (err: unknown) {
-      console.error("Error saving payment update:", err);
+      logger.error("Error saving payment update:", err);
       toast({
         title: "Error",
         description:
@@ -622,8 +623,8 @@ function HistoryDetailContent() {
               Reopen Lead
             </Button>
           )}
-          <Button variant="outline" onClick={() => router.push("/history")}>
-            Back to History
+          <Button variant="outline" onClick={() => router.push("/client")}>
+            Back to Clients
           </Button>
         </div>
       </div>

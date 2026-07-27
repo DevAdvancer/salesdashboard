@@ -140,7 +140,7 @@ export function LeadActivityTimeline({ lead }: LeadActivityTimelineProps) {
                       <div className="mt-1 h-2 w-2 rounded-full bg-primary" />
                       <div className="min-w-0">
                         <p className="text-sm font-medium">Updated by {log.actorName}</p>
-                        <p className="text-xs text-muted-foreground">{formatDate(log.performedAt)}</p>
+                        <p className="text-xs text-muted-foreground">{formatDate(log.createdAt)}</p>
                         {description ? (
                           <p className="text-xs text-muted-foreground break-words">{description}</p>
                         ) : null}

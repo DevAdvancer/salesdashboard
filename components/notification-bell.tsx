@@ -156,8 +156,11 @@ export function NotificationBell({ className }: { className?: string }) {
 
     const unsubscribe = client.subscribe(
       `databases.${DATABASE_ID}.collections.${COLLECTIONS.NOTIFICATIONS}.documents`,
-      () => {
-        forceLoad();
+      (response: any) => {
+        // Only force a reload if the notification is actually for this user
+        if (response.payload && response.payload.recipientId === user.$id) {
+          forceLoad();
+        }
       }
     );
 

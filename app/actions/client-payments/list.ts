@@ -1,3 +1,4 @@
+"use server";
 import crypto from "crypto";
 import { upsertPendingAmountAction } from "@/app/actions/pending-amounts";
 import { ID, Query } from "node-appwrite";
@@ -8,10 +9,8 @@ import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { isRoleEligibleForComponent } from "@/lib/constants/component-access";
 import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
 import type { ClientPaymentPlan, ClientPaymentRecord, ClientPaymentUpdate, Lead, PaymentStatus, User } from "@/lib/types";
-import { getSpecialBranchLeadAccess } from "@/lib/constants/special-lead-access";
 import { getActor, ensureComponentAccess, isAdminLikeReadRole, assertCanMutateClientPayments, parseJsonOr, canActorAccessLead, mapRecord, findRecordByLeadId, mapLeadDocumentToLead, buildSyntheticLead, toComparableIsoDate, PaymentInsightRecord, AdminClientHistoryRow, PaymentsReportRow } from "./shared";
 
-"use server";
 
 export async function listClientPaymentSummariesAction(input: {
       actorId: string;

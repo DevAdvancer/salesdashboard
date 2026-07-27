@@ -1,5 +1,3 @@
-'use server';
-
 import { Lead } from '@/lib/types';
 
 export function getLeadDisplayName(lead: Lead): string {

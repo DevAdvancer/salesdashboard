@@ -25,7 +25,7 @@ export async function getAuditLogFilterOptionsAction(): Promise<AuditLogFilterOp
       [
         Query.limit(5000),
         Query.select(['action', 'targetType']),
-        Query.orderDesc('performedAt'),
+        Query.orderDesc('createdAt'),
       ]
     );
 

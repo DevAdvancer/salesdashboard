@@ -1,11 +1,12 @@
-'use server';
+"use server";
+import type { Databases } from 'node-appwrite';
 import { createAdminClient } from "@/lib/server/appwrite";
+import { isValidId, normalizeDuplicateFieldValue, isBlankLeadValue, shouldIgnoreLinkedinDuplicate, assertRequiredLeadData } from "./sync-helpers";
 import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
 import { LeadActionError } from "@/lib/server/lead-errors";
 import { Lead, LeadData, LeadListFilters, UserRole, CreateLeadInput, Department } from "@/lib/types";
 import { Query, ID, Permission, Role } from "node-appwrite";
 import { COLLECTIONS } from "@/lib/constants/appwrite";
-import { getSpecialBranchLeadAccess } from "@/lib/constants/special-lead-access";
 import { logAction } from "@/lib/services/audit-service";
 import { assertAuthenticatedUserId, getAuthenticatedAccount } from "@/lib/server/current-user";
 import { notifyDuplicateLeadUpdateAttemptAction } from "@/app/actions/lead-duplicates";
@@ -22,81 +23,12 @@ import { buildDepartmentScopeQuery, isDepartmentScopeInlineEnabled } from "@/lib
 import { DATABASE_ID, LEADS_COLLECTION_ID, USERS_COLLECTION_ID, LEADS_LIST_SELECT } from "./constants";
 import { isNotInterestedStatus, normalizeStatusText, isLinkedinRequestLeadData } from "./status";
 import { getHierarchyPermissions, HierarchyUserDocument, getVisibleHierarchyUserIds, getLeadVisibilityUserIds, TeamLeadScopedUserDocument, getTeamLeadLeadVisibilityScope, appendHierarchyLeadVisibilityQuery, appendTeamLeadLeadVisibilityQuery, UserDocument, normalizeDepartment, getDepartmentScopedUserIds, leadMatchesDepartmentScope, isMonitorRole, isOperationsRole, isAdminLikeReadAllRole, assertSalesCrmAccess, assertLeadReopenAllowed, assertLeadUpdateAllowed } from "./visibility";
-import { parseLeadDataSafely, restoreNotInterestedDuplicateLead, createLeadAction, updateLeadAction, reopenLeadAction, getLeadAuditName, buildAuditChanges, getDuplicateValue } from "./mutations";
-import { getLeadAction, listLeadsAction, listLeadCountsAction, loadLeadTargetProgressAction, LeadCounts, parseIsoDateLocal, daysInMonthLocal, getUserByIdOrNull, getAgentsByTeamLead, normalizeSource, isReferralSource } from "./queries";
+import { restoreNotInterestedDuplicateLead, createLeadAction, updateLeadAction, reopenLeadAction } from "./mutations";
+import { getLeadAction, listLeadsAction, listLeadCountsAction, loadLeadTargetProgressAction, LeadCounts, getUserByIdOrNull, getAgentsByTeamLead} from "./queries";
+import { normalizeSource, isReferralSource } from "@/lib/utils/lead-source";
+import { REQUIRED_LEAD_FIELD_LABELS, parseLeadDataSafely, getLeadAuditName, buildAuditChanges, getDuplicateValue } from "./sync-helpers";
+import { parseIsoDateLocal, daysInMonthLocal } from "./sync-helpers";
 
-export function isValidId(id: string | null | undefined): boolean {
-    if (!id) return false;
-    const validIdPattern = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,35}$/;
-    return validIdPattern.test(id);
-}
-
-export function normalizeDuplicateFieldValue(field: 'email' | 'phone' | 'linkedinProfileUrl', value: unknown) {
-    if (typeof value !== 'string') return '';
-    if (field === 'email') return value.trim().toLowerCase();
-    if (field === 'phone') {
-        const digits = value.replace(/\D/g, '');
-        return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
-    }
-
-    return normalizeLinkedinProfileUrl(value) ?? '';
-}
-
-export const REQUIRED_LEAD_FIELD_LABELS: Record<string, string> = {
-        firstName: 'First Name',
-        lastName: 'Last Name',
-        name: 'Name',
-        legalName: 'Legal Name',
-        email: 'Email',
-        phone: 'Phone',
-        visaStatus: 'Visa Status',
-        linkedinProfileUrl: 'LinkedIn profile URL',
-        linkedinProfile: 'LinkedIn profile URL',
-    };
-
-export function isBlankLeadValue(value: unknown) {
-    if (typeof value === 'string') return value.trim().length === 0;
-    if (Array.isArray(value)) return value.length === 0;
-    return value === null || value === undefined;
-}
-
-export function shouldIgnoreLinkedinDuplicate(doc: Record<string, unknown>, leadData: LeadData) {
-    const status = typeof doc.status === 'string' ? doc.status : leadData.status;
-    const normalizedStatus = normalizeLeadStatus(status);
-    return normalizedStatus === 'notinterested' || normalizedStatus === 'backedout';
-}
-
-export function assertRequiredLeadData(data: LeadData) {
-    const missing: Array<{ key: string; label: string }> = [];
-    const isReferral = isReferralSource(data.source);
-    const linkedinKeys = ['linkedinProfileUrl', 'linkedinProfile'];
-    for (const key of REQUIRED_LEAD_FIELD_KEYS) {
-        // Skip LinkedIn fields if source is referral
-        if (isReferral && linkedinKeys.includes(key)) {
-            continue;
-        }
-
-        if (Object.prototype.hasOwnProperty.call(data, key) && isBlankLeadValue(data[key])) {
-            missing.push({ key, label: REQUIRED_LEAD_FIELD_LABELS[key] ?? key });
-        }
-    }
-
-    if (missing.length === 0) return;
-    if (missing.length === 1) {
-        throw new LeadActionError(
-            'MISSING_REQUIRED_FIELD',
-            `${missing[0].label} is required.`,
-            { field: missing[0].key },
-        );
-    }
-
-    const missingLabels = missing.map((m) => m.label);
-    const summary = `${missingLabels.length} required fields are missing: ${missingLabels.join(', ')}.`;
-    throw new LeadActionError('MISSING_REQUIRED_FIELD', summary, {
-        field: missing[0].key,
-        meta: { missingFields: missing, missingLabels },
-    });
-}
 
 export async function validateLeadUniqueness(data: LeadData, excludeLeadId?: string): Promise<{
         isValid: boolean;
@@ -115,7 +47,7 @@ export async function validateLeadUniqueness(data: LeadData, excludeLeadId?: str
     const linkedinValue = (linkedinProfileUrl || linkedinProfile || '').trim();
     const windowStart = new Date();
     windowStart.setFullYear(windowStart.getFullYear() - 1);
-    const documents = await listAllDocuments<any>({
+    const documents = await listAllDocuments<Record<string, unknown>>({
                 databases,
                 databaseId: DATABASE_ID,
                 collectionId: LEADS_COLLECTION_ID,
@@ -187,7 +119,7 @@ export async function validateLeadUniquenessAction(data: LeadData, excludeLeadId
  * Helper to resolve owner/assignee names for a duplicate lead doc.
  * Returns enriched duplicate result with human-readable agent names.
  */
-export async function enrichDuplicateResult(databases: any, doc: Record<string, unknown>, duplicateField?: 'email' | 'phone' | 'linkedinProfileUrl'): Promise<{
+export async function enrichDuplicateResult(databases: Databases, doc: Record<string, unknown>, duplicateField?: 'email' | 'phone' | 'linkedinProfileUrl'): Promise<{
         isValid: boolean;
         duplicateField?: 'email' | 'phone' | 'linkedinProfileUrl';
         existingLeadId?: string;

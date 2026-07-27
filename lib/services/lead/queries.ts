@@ -2,7 +2,6 @@ import { Query } from 'appwrite';
 import { databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { Lead, LeadData, LeadListFilters, UserRole } from '@/lib/types';
 import { getUserById } from '@/lib/services/user-service';
-import { getSpecialBranchLeadAccess } from '@/lib/constants/special-lead-access';
 import { getErrorMessage } from '@/lib/utils';
 import { expandIsoDateToStart, expandIsoDateToEnd } from '@/lib/utils/iso-date-range';
 import { getTeamLeadLeadVisibilityScope, appendTeamLeadLeadVisibilityQuery } from './visibility';
@@ -27,15 +26,11 @@ export async function listLeads(
     const queries: string[] = [];
 
     const currentUser = await getUserById(userId);
-    const specialBranchId = getSpecialBranchLeadAccess(currentUser.email);
     if (userRole === 'agent') {
       const orConditions = [
           Query.equal('assignedToId', userId),
           Query.equal('ownerId', userId),
       ];
-      if (specialBranchId) {
-        orConditions.push(Query.equal('branchId', specialBranchId));
-      }
       queries.push(Query.or(orConditions));
     } else if (userRole === 'lead_generation') {
       queries.push(Query.equal('ownerId', userId));
@@ -48,7 +43,6 @@ export async function listLeads(
         queries,
         ownerVisibleUserIds,
         assignmentVisibleUserIds,
-        specialBranchId,
       );
     }
 

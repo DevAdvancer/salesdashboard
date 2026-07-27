@@ -305,36 +305,6 @@ describe('lead server action authorization', () => {
     });
   });
 
-  it('allows access to leads in a special branch for an agent that would otherwise be denied', async () => {
-    mockGetDocument
-      .mockResolvedValueOnce({
-        $id: 'special-agent-1',
-        email: 'special@example.com',
-        role: 'agent',
-        branchIds: ['branch-2'], // not the special branch
-      })
-      .mockResolvedValueOnce({
-        $id: 'lead-special-1',
-        data: '{}',
-        ownerId: 'owner-other',
-        assignedToId: 'agent-other',
-        branchId: 'special-branch',
-        isClosed: false,
-        closedAt: null,
-        status: 'Generated',
-      });
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getSpecialBranchLeadAccess } = require('@/lib/constants/special-lead-access');
-    (getSpecialBranchLeadAccess as jest.Mock).mockReturnValueOnce('special-branch');
-
-    const { getLeadAction } = await import('@/app/actions/lead/queries');
-
-    await expect(getLeadAction('lead-special-1', 'special-agent-1')).resolves.toMatchObject({
-      $id: 'lead-special-1',
-      branchId: 'special-branch',
-    });
-  });
 
   it('allows monitor lead edits only when the monitor owns the lead', async () => {
     mockGetDocument

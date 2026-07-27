@@ -24,7 +24,7 @@ async function logProfileUpdate(input: {
         targetId: input.actorId,
         targetType: "user",
         metadata: JSON.stringify(input.metadata),
-        performedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
       },
       [
         Permission.read(Role.any()),

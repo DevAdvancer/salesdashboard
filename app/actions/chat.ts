@@ -30,7 +30,7 @@ async function logAuditAction(
       targetId: input.targetId ?? null,
       targetType: input.targetType,
       metadata: input.metadata ? JSON.stringify(input.metadata) : null,
-      performedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
     });
   } catch {
     return;

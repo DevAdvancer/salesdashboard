@@ -251,7 +251,7 @@ export async function updateLeadFollowUpAction(input: {
               },
           changes: followUpChanges,
         }),
-        performedAt: nowIso,
+        createdAt: nowIso,
       });
     }
   } catch {}

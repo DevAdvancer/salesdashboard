@@ -388,7 +388,7 @@ async function listNotInterestedEventsInRange(
 async function listAuditLogsInRange(databases: any, range: WeeklyReportRange): Promise<AuditLogDocument[]> {
   // The audit log collection stores the timestamp as `$createdAt` (the
   // system field Appwrite always maintains). The writes elsewhere in
-  // the codebase use `performedAt` but the schema doesn't include that
+  // the codebase use `createdAt` but the schema doesn't include that
   // attribute, so queries against it return 0 results. Filter by
   // `$createdAt` instead — it's set when the audit document is created,
   // which is the same moment the action happened.

@@ -33,7 +33,6 @@ export async function logAction(input: CreateAuditLogInput): Promise<AuditLog> {
         targetId,
         targetType,
         metadata: metadata ? JSON.stringify(metadata) : null,
-        performedAt: new Date().toISOString(),
       }
       // Removed document-level permissions to rely on collection-level permissions
     );
@@ -46,7 +45,7 @@ export async function logAction(input: CreateAuditLogInput): Promise<AuditLog> {
       targetId: doc.targetId,
       targetType: doc.targetType,
       metadata: doc.metadata,
-      performedAt: doc.performedAt,
+      createdAt: doc.$createdAt,
     };
   } catch (error: any) {
     console.error('Error logging action:', error);
@@ -74,7 +73,7 @@ export async function getAuditLogs(
 ): Promise<{ logs: AuditLog[]; total: number }> {
   try {
     const queries = [
-      Query.orderDesc('performedAt'),
+      Query.orderDesc('$createdAt'),
       Query.limit(filters?.limit || 50),
       Query.offset(filters?.offset || 0),
     ];
@@ -98,11 +97,11 @@ export async function getAuditLogs(
     }
 
     if (filters?.dateFrom) {
-      queries.push(Query.greaterThanEqual('performedAt', expandIsoDateToStart(filters.dateFrom)));
+      queries.push(Query.greaterThanEqual('$createdAt', expandIsoDateToStart(filters.dateFrom)));
     }
 
     if (filters?.dateTo) {
-      queries.push(Query.lessThanEqual('performedAt', expandIsoDateToEnd(filters.dateTo)));
+      queries.push(Query.lessThanEqual('$createdAt', expandIsoDateToEnd(filters.dateTo)));
     }
 
     const response = await databases.listDocuments(
@@ -119,7 +118,7 @@ export async function getAuditLogs(
       targetId: doc.targetId,
       targetType: doc.targetType,
       metadata: doc.metadata,
-      performedAt: doc.performedAt,
+      createdAt: doc.$createdAt,
     }));
 
     return {

@@ -49,7 +49,7 @@ async function logAuditAction(
       targetId: input.targetId ?? null,
       targetType: 'call_request',
       metadata: input.metadata ? JSON.stringify(input.metadata) : null,
-      performedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
     });
   } catch {
     return;

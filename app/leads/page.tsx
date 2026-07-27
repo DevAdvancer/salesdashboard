@@ -31,6 +31,7 @@ import { Download } from "lucide-react";
 // Extracted components
 import { LeadFiltersCard, type FilterDrafts } from "@/components/leads/list/lead-filters-card";
 import { LeadTable, LeadRow } from "@/components/leads/list/lead-table";
+import { logger } from '@/lib/utils/logger';
 
 /**
  * Persist the visible filter state in URL search params.
@@ -51,7 +52,7 @@ function parseLeadData(lead: Lead): LeadData {
   try {
     return JSON.parse(lead.data) as LeadData;
   } catch (error) {
-    console.error("Failed to parse lead data", error);
+    logger.error("Failed to parse lead data", error);
     return {};
   }
 }
@@ -312,7 +313,7 @@ function LeadsContent() {
       link.click();
       document.body.removeChild(link);
     } catch (err) {
-      console.error("Export failed:", err);
+      logger.error("Export failed:", err);
     } finally {
       setIsExporting(false);
     }
@@ -533,7 +534,7 @@ function LeadsContent() {
         setAssignedUsers((prev) => new Map([...prev, ...assignedMap]));
       }
     } catch (err) {
-      console.error("Error loading lead user names:", err);
+      logger.error("Error loading lead user names:", err);
     }
   };
 

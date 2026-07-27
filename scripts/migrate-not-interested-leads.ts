@@ -280,7 +280,7 @@ async function resetLinkedinRequest(
           reopenedAt: occurredAt,
           source: 'migrate-not-interested-leads',
         }),
-        performedAt: occurredAt,
+        createdAt: occurredAt,
       },
     );
   } catch (err) {
@@ -441,7 +441,7 @@ async function run() {
               previousClosedAt: lead.closedAt,
               source: 'migrate-not-interested-leads',
             }),
-            performedAt: nowIso,
+            createdAt: nowIso,
           },
         );
       } catch (err) {

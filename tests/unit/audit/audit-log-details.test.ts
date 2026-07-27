@@ -10,7 +10,7 @@ function makeLog(overrides: Partial<AuditLog>): AuditLog {
     targetId: 'target_1',
     targetType: 'user',
     metadata: undefined,
-    performedAt: '2026-05-07T12:00:00.000Z',
+    createdAt: '2026-05-07T12:00:00.000Z',
     ...overrides,
   };
 }

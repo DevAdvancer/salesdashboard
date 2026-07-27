@@ -30,6 +30,20 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-unused-vars": "off",
     },
   },
+  {
+    files: [
+      "app/actions/lead/**/*.ts",
+      "app/actions/lead/*.ts",
+      "lib/services/lead-action-service.ts",
+      "lib/services/lead-service.ts",
+      "lib/services/user-service.ts",
+      "lib/utils/logger.ts"
+    ],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "error",
+      "no-console": "error",
+    },
+  },
 ]);
 
 export default eslintConfig;

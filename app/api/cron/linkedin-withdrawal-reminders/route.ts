@@ -102,7 +102,7 @@ async function autoWithdrawLinkedinRequest(
       reason,
       withdrawnAt: nowIso,
     }),
-    performedAt: nowIso,
+    createdAt: nowIso,
   });
 
   await createGeneralChatMessage(

@@ -1,4 +1,5 @@
 "use client";
+import { logger } from '@/lib/utils/logger';
 
 import {
   useCallback,
@@ -145,7 +146,7 @@ function LeadDetailContent() {
       const names = await getUsersNamesAction(idsToFetch);
       setMetaNames(names);
     } catch (err: unknown) {
-      console.error("Error loading lead:", err);
+      logger.error("Error loading lead:", err);
       setError(getErrorMessage(err, "Failed to load lead"));
     } finally {
       setIsLoading(false);
@@ -160,7 +161,7 @@ function LeadDetailContent() {
       const fields = config.fields;
       setFormFields(fields.sort((a, b) => a.order - b.order));
     } catch (err: unknown) {
-      console.error("Error loading form config:", err);
+      logger.error("Error loading form config:", err);
     }
   }, []);
 
@@ -201,7 +202,7 @@ function LeadDetailContent() {
       setClosureValues(nextClosureValues);
       setPaymentPlanValues(nextPaymentValues);
     } catch (err: unknown) {
-      console.error("Error loading close configs:", err);
+      logger.error("Error loading close configs:", err);
     }
   }, [leadData]);
 
@@ -240,7 +241,7 @@ function LeadDetailContent() {
         );
       }
     } catch (err: unknown) {
-      console.error("Error loading agents:", err);
+      logger.error("Error loading agents:", err);
     }
   }, [lead, user]);
 
@@ -386,7 +387,7 @@ function LeadDetailContent() {
       queryClient.invalidateQueries({ queryKey: ['assigned-report'] });
       await loadLead();
     } catch (err: unknown) {
-      console.error("Error saving lead:", err);
+      logger.error("Error saving lead:", err);
       const parsed = parseLeadActionError(err);
       if (parsed && parsed.code === "MISSING_REQUIRED_FIELD") {
         const missingFields = (
@@ -577,7 +578,7 @@ function LeadDetailContent() {
       queryClient.invalidateQueries({ queryKey: ['assigned-report'] });
       router.push("/leads");
     } catch (err: unknown) {
-      console.error("Error closing lead:", err);
+      logger.error("Error closing lead:", err);
       toast({
         title: "Error",
         description: getErrorMessage(err, "Failed to close lead"),
@@ -603,7 +604,7 @@ function LeadDetailContent() {
       queryClient.invalidateQueries({ queryKey: ['assigned-report'] });
       await loadLead();
     } catch (err: unknown) {
-      console.error("Error reopening lead:", err);
+      logger.error("Error reopening lead:", err);
       toast({
         title: "Error",
         description: getErrorMessage(err, "Failed to reopen lead"),
@@ -631,7 +632,7 @@ function LeadDetailContent() {
       queryClient.invalidateQueries({ queryKey: ['assigned-report'] });
       await loadLead();
     } catch (err: unknown) {
-      console.error("Error assigning lead:", err);
+      logger.error("Error assigning lead:", err);
       toast({
         title: "Error",
         description: getErrorMessage(err, "Failed to assign lead"),

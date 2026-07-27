@@ -1,7 +1,7 @@
 import React, { Suspense } from "react";
+import "./globals.css";
 import type { Metadata } from "next";
 import { Bebas_Neue, Inter } from "next/font/google";
-import "./globals.css";
 import { AuthProvider } from "@/lib/contexts/auth-context";
 import { AccessControlProvider } from "@/lib/contexts/access-control-context";
 import { AzureMsalProvider } from "@/components/azure-msal-provider";
@@ -54,7 +54,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>

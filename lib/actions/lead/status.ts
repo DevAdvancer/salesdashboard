@@ -8,6 +8,7 @@ import { Lead, LinkedinRequest, User } from '@/lib/types';
 import { assertAuthenticatedUserId } from '@/lib/server/current-user';
 import { assertLeadAccessAllowed, getHierarchyPermissionsServer } from './visibility';
 import { getUnassignedOwnerId, getLeadLinkedinRequestId, resolveBranchIdForEvent, getLeadDisplayName } from './utils';
+import { logger } from '@/lib/utils/logger';
 
 type AdminDatabases = Awaited<ReturnType<typeof createAdminClient>>['databases'];
 
@@ -57,7 +58,7 @@ async function syncLinkedinRequestAfterLeadClosure(
                     reopenedAt: occurredAt,
                     source: 'lead_status_sync',
                 }),
-                performedAt: occurredAt,
+                createdAt: occurredAt,
             });
 
             try {
@@ -98,10 +99,10 @@ async function syncLinkedinRequestAfterLeadClosure(
                 withdrawnAt: occurredAt,
                 source: 'lead_status_sync',
             }),
-            performedAt: occurredAt,
+            createdAt: occurredAt,
         });
     } catch (error) {
-        console.error(`Failed to sync Linkedin request for lead ${lead.$id}:`, error);
+        logger.error(`Failed to sync Linkedin request for lead ${lead.$id}:`, error);
     }
 }
 
@@ -192,7 +193,7 @@ export async function backoutLeadAction(
         isClosed: true,
         closedAt: nowIso,
       }),
-      performedAt: nowIso,
+      createdAt: nowIso,
     });
   } catch {}
 
@@ -221,7 +222,7 @@ export async function backoutLeadAction(
       });
     }
   } catch (err) {
-    console.error("Failed to send chat/notifications for Backout event:", err);
+    logger.error("Failed to send chat/notifications for Backout event:", err);
   }
 
   return { success: true, lead: updated as unknown as Lead };
@@ -316,7 +317,7 @@ export async function notInterestedLeadAction(
       status: "active",
     });
   } catch (err) {
-    console.error("Failed to write not_interested_leads event:", err);
+    logger.error("Failed to write not_interested_leads event:", err);
   }
 
   try {
@@ -333,7 +334,7 @@ export async function notInterestedLeadAction(
         isClosed: true,
         closedAt: nowIso,
       }),
-      performedAt: nowIso,
+      createdAt: nowIso,
     });
   } catch {}
 
@@ -362,7 +363,7 @@ export async function notInterestedLeadAction(
       });
     }
   } catch (err) {
-    console.error("Failed to send chat/notifications for Not Interested event:", err);
+    logger.error("Failed to send chat/notifications for Not Interested event:", err);
   }
 
   return { success: true, lead: updated as unknown as Lead };
@@ -394,12 +395,12 @@ export async function markPriorNotInterestedRowsReopened(
             reopenedById: actorId,
           })
           .catch((err) => {
-            console.error(`Failed to reopen not_interested row ${row.$id}:`, err);
+            logger.error(`Failed to reopen not_interested row ${row.$id}:`, err);
           }),
       ),
     );
   } catch (err) {
-    console.error("Failed to list active not_interested rows for lead", leadId, err);
+    logger.error("Failed to list active not_interested rows for lead", leadId, err);
   }
 }
 
@@ -504,7 +505,7 @@ export async function closeLeadAction(
                                 isClosed: { from: false, to: true },
                             },
                         }),
-                        performedAt: new Date().toISOString(),
+                        createdAt: new Date().toISOString(),
                     }
                 );
             } catch (auditErr) {
@@ -514,7 +515,7 @@ export async function closeLeadAction(
 
         return { success: true, lead: lead as unknown as Lead };
     } catch (error: unknown) {
-        console.error('Error closing lead (action):', error);
+        logger.error('Error closing lead (action):', error);
         throw new Error(error instanceof Error ? error.message : 'Failed to close lead');
     }
 }

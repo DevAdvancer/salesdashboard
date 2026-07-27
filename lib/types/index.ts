@@ -515,7 +515,7 @@ export interface AuditLog {
   targetId?: string;
   targetType: string;
   metadata?: string; // JSON string
-  performedAt: string;
+  createdAt: string;
 }
 
 // Authentication context types

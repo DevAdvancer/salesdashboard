@@ -1,3 +1,4 @@
+"use server";
 import { ID, Permission, Query, Role } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
 import { assertAuthenticatedUserId, getAuthenticatedUserDoc } from "@/lib/server/current-user";
@@ -6,7 +7,6 @@ import type { AttendanceRecord, Department, LinkedinAccount, User } from "@/lib/
 import { createNotificationRecord, createNotificationsForRecipients } from "@/lib/server/notifications";
 import { getEtDateKey, isAttendanceAdminLikeReadRole, isAttendanceAdminWriteRole, normalizeDepartment, matchesDepartmentScope, getEtHour, assertDateKey, dateKeyToUtcDate, utcDateToDateKey, addDaysUtc, buildInclusiveDateKeys, getIsoWeekStartDateKey, getMonthStartDateKey, getMonthEndDateKey, logAuditAction, getAttendanceDoc, upsertAttendanceDoc, getActiveLinkedinAccountsForUser, getActiveLinkedinAccountsForUsers, formatLinkedinAccountsForNotification } from "./shared";
 
-"use server";
 
 export async function markAttendancePresenceAction(input: {
       currentUserId: string;

@@ -73,7 +73,7 @@ async function logInterviewAudit(
         targetId: leadId,
         targetType: 'INTERVIEW',
         metadata: JSON.stringify(metadata),
-        performedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
       }
     );
   } catch (e) {

@@ -2,9 +2,9 @@ import { createAdminClient } from "@/lib/server/appwrite";
 import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
 import { LeadActionError } from "@/lib/server/lead-errors";
 import { Lead, LeadData, LeadListFilters, UserRole, CreateLeadInput, Department } from "@/lib/types";
-import { Query, ID, Permission, Role } from "node-appwrite";
+import { Databases, Query, Models, Client, Users, Permission, Role } from 'node-appwrite';
+import { logger } from '@/lib/utils/logger';
 import { COLLECTIONS } from "@/lib/constants/appwrite";
-import { getSpecialBranchLeadAccess } from "@/lib/constants/special-lead-access";
 import { logAction } from "@/lib/services/audit-service";
 import { assertAuthenticatedUserId, getAuthenticatedAccount } from "@/lib/server/current-user";
 import { notifyDuplicateLeadUpdateAttemptAction } from "@/app/actions/lead-duplicates";
@@ -19,10 +19,11 @@ import { workingDaysInRange, type KpiRow } from "@/lib/utils/dashboard-kpi";
 import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
 import { buildDepartmentScopeQuery, isDepartmentScopeInlineEnabled } from "@/lib/server/department-scope-query";
 import { DATABASE_ID, LEADS_COLLECTION_ID, USERS_COLLECTION_ID, LEADS_LIST_SELECT } from "./constants";
-import { isValidId, normalizeDuplicateFieldValue, REQUIRED_LEAD_FIELD_LABELS, isBlankLeadValue, shouldIgnoreLinkedinDuplicate, assertRequiredLeadData, validateLeadUniqueness, validateLeadUniquenessAction, enrichDuplicateResult } from "./validation";
+import { validateLeadUniqueness, validateLeadUniquenessAction, enrichDuplicateResult } from "./validation";
 import { isNotInterestedStatus, normalizeStatusText, isLinkedinRequestLeadData } from "./status";
-import { parseLeadDataSafely, restoreNotInterestedDuplicateLead, createLeadAction, updateLeadAction, reopenLeadAction, getLeadAuditName, buildAuditChanges, getDuplicateValue } from "./mutations";
-import { getLeadAction, listLeadsAction, listLeadCountsAction, loadLeadTargetProgressAction, LeadCounts, parseIsoDateLocal, daysInMonthLocal, getUserByIdOrNull, getAgentsByTeamLead, normalizeSource, isReferralSource } from "./queries";
+import { restoreNotInterestedDuplicateLead, createLeadAction, updateLeadAction, reopenLeadAction } from "./mutations";
+import { getLeadAction, listLeadsAction, listLeadCountsAction, loadLeadTargetProgressAction, LeadCounts, getUserByIdOrNull, getAgentsByTeamLead} from "./queries";
+import { normalizeSource, isReferralSource } from "@/lib/utils/lead-source";
 
 export async function getHierarchyPermissions(userId: string): Promise<string[]> {
     const permissions: string[] = [];
@@ -36,7 +37,7 @@ export async function getHierarchyPermissions(userId: string): Promise<string[]>
         // First level: walk sequentially until we hit the top, but
         // collect supervisor IDs as we go. Each level only needs one read.
         for (let depth = 0; depth < 5 && currentId && isValidId(currentId); depth++) {
-            let user: any;
+            let user: Record<string, unknown>;
             try {
                 user = await databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, currentId);
             } catch {
@@ -44,7 +45,7 @@ export async function getHierarchyPermissions(userId: string): Promise<string[]>
             }
 
             const supervisors = new Set<string>();
-            if (user.teamLeadId && isValidId(user.teamLeadId)) supervisors.add(user.teamLeadId);
+            if (user.teamLeadId && isValidId(user.teamLeadId as string)) supervisors.add(user.teamLeadId as string);
 
             // Issue perms for supervisors at this level
             for (const supId of supervisors) {
@@ -59,14 +60,14 @@ export async function getHierarchyPermissions(userId: string): Promise<string[]>
             // Choose the single next-up id for the next iteration.
             // Multiple supervisors are still issued perms, but we only
             // need to follow one chain upward to keep the bounded walk.
-            if (user.teamLeadId && isValidId(user.teamLeadId) && !visited.has(user.teamLeadId)) {
-                currentId = user.teamLeadId;
+            if (user.teamLeadId && isValidId(user.teamLeadId as string) && !visited.has(user.teamLeadId as string)) {
+                currentId = user.teamLeadId as string;
             } else {
                 currentId = null;
             }
         }
     } catch (e) {
-        console.error('Error fetching hierarchy permissions:', e);
+        logger.error('Error fetching hierarchy permissions:', e);
     }
 
     return permissions;
@@ -83,6 +84,9 @@ import {
   isOperationsRole,
   isAdminLikeReadAllRole,
 } from '@/lib/services/lead/visibility';
+import { REQUIRED_LEAD_FIELD_LABELS, isValidId, normalizeDuplicateFieldValue, isBlankLeadValue, shouldIgnoreLinkedinDuplicate, assertRequiredLeadData } from "./sync-helpers";
+import { parseLeadDataSafely, getLeadAuditName, buildAuditChanges, getDuplicateValue } from "./sync-helpers";
+import { parseIsoDateLocal, daysInMonthLocal } from "./sync-helpers";
 
 export {
   type HierarchyUserDocument,
@@ -96,7 +100,7 @@ export {
   isAdminLikeReadAllRole,
 };
 
-export async function getLeadVisibilityUserIds(databases: any, viewerId: string, viewerRole: UserRole): Promise<string[]> {
+export async function getLeadVisibilityUserIds(databases: Databases, viewerId: string, viewerRole: UserRole): Promise<string[]> {
     if (viewerRole === 'agent') return [viewerId];
     if (viewerRole === 'team_lead') {
     const agents = await listAllDocuments<{ $id: string }>({
@@ -138,7 +142,7 @@ export type TeamLeadScopedUserDocument = {
  * now expanded against the local timezone before being passed to
  * Appwrite's `$createdAt` filter.)
  */
-export async function getTeamLeadLeadVisibilityScope(databases: any, viewerId: string): Promise<{
+export async function getTeamLeadLeadVisibilityScope(databases: Databases, viewerId: string): Promise<{
       ownerVisibleUserIds: string[];
       assignmentVisibleUserIds: string[];
     }> {
@@ -208,8 +212,6 @@ export async function assertLeadReopenAllowed(databases: Awaited<ReturnType<type
     throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
     }
 
-    const specialBranchId = getSpecialBranchLeadAccess(actorDoc.email);
-    if (specialBranchId && lead.branchId === specialBranchId) return;
     const visibleUserIds = await getLeadVisibilityUserIds(databases, actorDoc.$id, actorDoc.role);
     if (
     visibleUserIds.includes(lead.ownerId) ||
@@ -237,8 +239,6 @@ export async function assertLeadUpdateAllowed(databases: Awaited<ReturnType<type
     throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
     }
 
-    const specialBranchId = getSpecialBranchLeadAccess(actorDoc.email);
-    if (specialBranchId && lead.branchId === specialBranchId) return;
     if (lead.ownerId === actorDoc.$id || lead.assignedToId === actorDoc.$id) {
     return;
     }

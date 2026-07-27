@@ -101,7 +101,7 @@ async function run() {
                         targetId: leadId,
                         targetType: 'LEAD',
                         metadata: JSON.stringify({ isClosed: false, method: 'worker_script' }),
-                        performedAt: new Date().toISOString(),
+                        createdAt: new Date().toISOString(),
                     }
                 );
             } catch (e) {

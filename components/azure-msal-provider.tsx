@@ -1,5 +1,5 @@
+"use client";
 
-'use client';
 
 import { PublicClientApplication } from "@azure/msal-browser";
 import { MsalProvider } from "@azure/msal-react";

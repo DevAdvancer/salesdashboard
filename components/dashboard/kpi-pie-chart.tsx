@@ -30,7 +30,7 @@ export function KpiPieChart({ completed, pending, onSliceClick }: KpiPieChartPro
 
   return (
     <div className="h-[260px] w-full">
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
         <PieChart>
           <Pie
             data={data}

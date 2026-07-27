@@ -1,11 +1,12 @@
 'use server';
+import { logger } from "@/lib/utils/logger";
 import { createAdminClient } from "@/lib/server/appwrite";
+import { parseLeadDataSafely, getLeadAuditName, buildAuditChanges, getDuplicateValue } from "./sync-helpers";
 import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
 import { LeadActionError } from "@/lib/server/lead-errors";
 import { Lead, LeadData, LeadListFilters, UserRole, CreateLeadInput, Department } from "@/lib/types";
 import { Query, ID, Permission, Role } from "node-appwrite";
 import { COLLECTIONS } from "@/lib/constants/appwrite";
-import { getSpecialBranchLeadAccess } from "@/lib/constants/special-lead-access";
 import { logAction } from "@/lib/services/audit-service";
 import { assertAuthenticatedUserId, getAuthenticatedAccount } from "@/lib/server/current-user";
 import { notifyDuplicateLeadUpdateAttemptAction } from "@/app/actions/lead-duplicates";
@@ -20,18 +21,13 @@ import { workingDaysInRange, type KpiRow } from "@/lib/utils/dashboard-kpi";
 import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
 import { buildDepartmentScopeQuery, isDepartmentScopeInlineEnabled } from "@/lib/server/department-scope-query";
 import { DATABASE_ID, LEADS_COLLECTION_ID, USERS_COLLECTION_ID, LEADS_LIST_SELECT } from "./constants";
-import { isValidId, normalizeDuplicateFieldValue, REQUIRED_LEAD_FIELD_LABELS, isBlankLeadValue, shouldIgnoreLinkedinDuplicate, assertRequiredLeadData, validateLeadUniqueness, validateLeadUniquenessAction, enrichDuplicateResult } from "./validation";
+import { validateLeadUniqueness, validateLeadUniquenessAction, enrichDuplicateResult } from "./validation";
 import { isNotInterestedStatus, normalizeStatusText, isLinkedinRequestLeadData } from "./status";
 import { getHierarchyPermissions, HierarchyUserDocument, getVisibleHierarchyUserIds, getLeadVisibilityUserIds, TeamLeadScopedUserDocument, getTeamLeadLeadVisibilityScope, appendHierarchyLeadVisibilityQuery, appendTeamLeadLeadVisibilityQuery, UserDocument, normalizeDepartment, getDepartmentScopedUserIds, leadMatchesDepartmentScope, isMonitorRole, isOperationsRole, isAdminLikeReadAllRole, assertSalesCrmAccess, assertLeadReopenAllowed, assertLeadUpdateAllowed } from "./visibility";
-import { getLeadAction, listLeadsAction, listLeadCountsAction, loadLeadTargetProgressAction, LeadCounts, parseIsoDateLocal, daysInMonthLocal, getUserByIdOrNull, getAgentsByTeamLead, normalizeSource, isReferralSource } from "./queries";
-
-export function parseLeadDataSafely(data: string): LeadData {
-    try {
-        return JSON.parse(data) as LeadData;
-    } catch {
-        return {};
-    }
-}
+import { getLeadAction, listLeadsAction, listLeadCountsAction, loadLeadTargetProgressAction, LeadCounts, getUserByIdOrNull, getAgentsByTeamLead} from "./queries";
+import { normalizeSource, isReferralSource } from "@/lib/utils/lead-source";
+import { REQUIRED_LEAD_FIELD_LABELS, isValidId, normalizeDuplicateFieldValue, isBlankLeadValue, shouldIgnoreLinkedinDuplicate, assertRequiredLeadData } from "./sync-helpers";
+import { parseIsoDateLocal, daysInMonthLocal } from "./sync-helpers";
 
 export async function restoreNotInterestedDuplicateLead(input: {
         databases: Awaited<ReturnType<typeof createAdminClient>>['databases'];
@@ -116,11 +112,11 @@ export async function restoreNotInterestedDuplicateLead(input: {
                     isClosed: false,
                     closedAt: null,
                 }),
-                performedAt: nowIso,
+                createdAt: nowIso,
             }
         );
     } catch (error) {
-        console.error('Failed to log restored not interested lead', error);
+        logger.error('Failed to log restored not interested lead', error);
     }
 
     return reopenedLead as unknown as Lead;
@@ -285,12 +281,12 @@ export async function createLeadAction(ownerId: string, input: CreateLeadInput, 
                         targetId: lead.$id,
                         targetType: 'LEAD',
                         metadata: JSON.stringify({ ...input.data, branchId: input.branchId ?? null }),
-                        performedAt: new Date().toISOString()
+                        createdAt: new Date().toISOString()
                      }
                  );
             }
         } catch (e) {
-            console.error("Failed to log audit action", e);
+            logger.error("Failed to log audit action", e);
         }
 
         // Notification: lead_generation -> TL flow disabled per product
@@ -335,21 +331,21 @@ export async function createLeadAction(ownerId: string, input: CreateLeadInput, 
                 }
             } catch (e) {
                 // Handoff row is best-effort. Log and continue.
-                console.error("Failed to record LG handoff:", e);
+                logger.error("Failed to record LG handoff:", e);
             }
         }
 
         return lead as unknown as Lead;
-    } catch (error: any) {
+    } catch (error: unknown) {
         // Re-throw structured LeadActionError as-is so the client can
         // read the `code` and `field` properties. Wrapping in
-        // `new Error(error.message || …)` would strip those and trigger
+        // `new Error((error instanceof Error ? error.message : String(error)) || …)` would strip those and trigger
         // the production "Server Components render" digest mask.
         if (error instanceof LeadActionError) throw error;
-        console.error('Error creating lead (action):', error);
+        logger.error('Error creating lead (action):', error);
         throw new LeadActionError(
             'UNKNOWN',
-            error?.message || 'Failed to create lead',
+            (error as any)?.message || 'Failed to create lead',
             { cause: error },
         );
     }
@@ -415,7 +411,7 @@ export async function updateLeadAction(leadId: string, data: Partial<LeadData>, 
                     existingLeadId: validation.existingLeadId,
                 });
             } catch (error) {
-                console.error('Failed to notify duplicate lead update attempt:', error);
+                logger.error('Failed to notify duplicate lead update attempt:', error);
             }
 
             const humanField =
@@ -512,21 +508,21 @@ export async function updateLeadAction(leadId: string, data: Partial<LeadData>, 
                             changes: buildAuditChanges(currentData, updatedData, data),
                             ...data,
                         }),
-                        performedAt: new Date().toISOString(),
+                        createdAt: new Date().toISOString(),
                     }
                 );
             } catch (error) {
-                console.error('Failed to log lead update action', error);
+                logger.error('Failed to log lead update action', error);
             }
         }
 
         return lead as unknown as Lead;
-    } catch (error: any) {
+    } catch (error: unknown) {
         if (error instanceof LeadActionError) throw error;
-        console.error('Error updating lead (action):', error);
+        logger.error('Error updating lead (action):', error);
         throw new LeadActionError(
             'UNKNOWN',
-            error?.message || 'Failed to update lead',
+            (error as any)?.message || 'Failed to update lead',
             { cause: error },
         );
     }
@@ -589,46 +585,13 @@ export async function reopenLeadAction(leadId: string, actorId?: string, actorNa
         );
 
         return lead as unknown as Lead;
-    } catch (error: any) {
+    } catch (error: unknown) {
         if (error instanceof LeadActionError) throw error;
-        console.error('Error reopening lead (action):', error);
+        logger.error('Error reopening lead (action):', error);
         throw new LeadActionError(
             'UNKNOWN',
-            error?.message || 'Failed to reopen lead',
+            (error as any)?.message || 'Failed to reopen lead',
             { cause: error },
         );
     }
-}
-
-export function getLeadAuditName(data: LeadData): string {
-    const firstName = typeof data.firstName === 'string' ? data.firstName : '';
-    const lastName = typeof data.lastName === 'string' ? data.lastName : '';
-    const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
-    const fallback = data.legalName || data.name || data.company || data.email || data.phone;
-    return fullName || (typeof fallback === 'string' ? fallback : '');
-}
-
-export function buildAuditChanges(previousData: LeadData, nextData: LeadData, changedData: Partial<LeadData>) {
-    const changes: Record<string, { from: unknown; to: unknown }> = {};
-    Object.keys(changedData).forEach((key) => {
-    const previousValue = previousData[key];
-    const nextValue = nextData[key];
-    if (JSON.stringify(previousValue) !== JSON.stringify(nextValue)) {
-      changes[key] = {
-        from: previousValue ?? null,
-        to: nextValue ?? null,
-      };
-    }
-    });
-    return changes;
-}
-
-export function getDuplicateValue(data: LeadData, field: 'email' | 'phone' | 'linkedinProfileUrl') {
-    if (field === 'linkedinProfileUrl') {
-    const value = (data.linkedinProfileUrl ?? data.linkedinProfile) as unknown;
-    return typeof value === 'string' ? value : undefined;
-    }
-
-    const value = data[field] as unknown;
-    return typeof value === 'string' ? value : undefined;
 }

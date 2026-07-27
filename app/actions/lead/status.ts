@@ -4,7 +4,6 @@ import { LeadActionError } from "@/lib/server/lead-errors";
 import { Lead, LeadData, LeadListFilters, UserRole, CreateLeadInput, Department } from "@/lib/types";
 import { Query, ID, Permission, Role } from "node-appwrite";
 import { COLLECTIONS } from "@/lib/constants/appwrite";
-import { getSpecialBranchLeadAccess } from "@/lib/constants/special-lead-access";
 import { logAction } from "@/lib/services/audit-service";
 import { assertAuthenticatedUserId, getAuthenticatedAccount } from "@/lib/server/current-user";
 import { notifyDuplicateLeadUpdateAttemptAction } from "@/app/actions/lead-duplicates";
@@ -19,10 +18,14 @@ import { workingDaysInRange, type KpiRow } from "@/lib/utils/dashboard-kpi";
 import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
 import { buildDepartmentScopeQuery, isDepartmentScopeInlineEnabled } from "@/lib/server/department-scope-query";
 import { DATABASE_ID, LEADS_COLLECTION_ID, USERS_COLLECTION_ID, LEADS_LIST_SELECT } from "./constants";
-import { isValidId, normalizeDuplicateFieldValue, REQUIRED_LEAD_FIELD_LABELS, isBlankLeadValue, shouldIgnoreLinkedinDuplicate, assertRequiredLeadData, validateLeadUniqueness, validateLeadUniquenessAction, enrichDuplicateResult } from "./validation";
+import { validateLeadUniqueness, validateLeadUniquenessAction, enrichDuplicateResult } from "./validation";
 import { getHierarchyPermissions, HierarchyUserDocument, getVisibleHierarchyUserIds, getLeadVisibilityUserIds, TeamLeadScopedUserDocument, getTeamLeadLeadVisibilityScope, appendHierarchyLeadVisibilityQuery, appendTeamLeadLeadVisibilityQuery, UserDocument, normalizeDepartment, getDepartmentScopedUserIds, leadMatchesDepartmentScope, isMonitorRole, isOperationsRole, isAdminLikeReadAllRole, assertSalesCrmAccess, assertLeadReopenAllowed, assertLeadUpdateAllowed } from "./visibility";
-import { parseLeadDataSafely, restoreNotInterestedDuplicateLead, createLeadAction, updateLeadAction, reopenLeadAction, getLeadAuditName, buildAuditChanges, getDuplicateValue } from "./mutations";
-import { getLeadAction, listLeadsAction, listLeadCountsAction, loadLeadTargetProgressAction, LeadCounts, parseIsoDateLocal, daysInMonthLocal, getUserByIdOrNull, getAgentsByTeamLead, normalizeSource, isReferralSource } from "./queries";
+import { restoreNotInterestedDuplicateLead, createLeadAction, updateLeadAction, reopenLeadAction } from "./mutations";
+import { getLeadAction, listLeadsAction, listLeadCountsAction, loadLeadTargetProgressAction, LeadCounts, getUserByIdOrNull, getAgentsByTeamLead} from "./queries";
+import { normalizeSource, isReferralSource } from "@/lib/utils/lead-source";
+import { REQUIRED_LEAD_FIELD_LABELS, isValidId, normalizeDuplicateFieldValue, isBlankLeadValue, shouldIgnoreLinkedinDuplicate, assertRequiredLeadData } from "./sync-helpers";
+import { parseLeadDataSafely, getLeadAuditName, buildAuditChanges, getDuplicateValue } from "./sync-helpers";
+import { parseIsoDateLocal, daysInMonthLocal } from "./sync-helpers";
 
 export function isNotInterestedStatus(status: unknown): boolean {
     return typeof status === 'string' && normalizeLeadStatus(status) === 'notinterested';
@@ -34,10 +37,11 @@ export function normalizeStatusText(value: unknown) {
 }
 
 export function isLinkedinRequestLeadData(data: LeadData) {
-    const requestId = (data as any).linkedinRequestId;
+    const dataRecord = data as Record<string, unknown>;
+    const requestId = dataRecord.linkedinRequestId;
     if (typeof requestId === 'string' && requestId.trim().length > 0) return true;
-    const source = typeof (data as any).source === 'string' ? (data as any).source.trim() : '';
-    const sourceName = typeof (data as any).sourceName === 'string' ? (data as any).sourceName.trim() : '';
+    const source = typeof dataRecord.source === 'string' ? dataRecord.source.trim() : '';
+    const sourceName = typeof dataRecord.sourceName === 'string' ? dataRecord.sourceName.trim() : '';
     const normalizedSource = normalizeStatusText(source || sourceName);
     return normalizedSource === 'linkedinlead' || normalizedSource === 'linkedin';
 }

@@ -5,11 +5,10 @@ const files = execSync('git grep -l special-lead-access').toString().split('\n')
 for (const file of files) {
   if (file.endsWith('.js') || file.endsWith('.md')) continue;
   let content = fs.readFileSync(file, 'utf8');
-  content = content.replace(/import \{ getSpecialBranchLeadAccess \} from ["'][^"']+["'];\r?\n/g, '');
   
-  // Remove jest.mock
-  content = content.replace(/jest\.mock\(['"]@\/lib\/constants\/special-lead-access['"], \(\) => \(\{\r?\n\s*getSpecialBranchLeadAccess: jest\.fn\(\(\) => null\),\r?\n\}\)\);\r?\n/g, '');
-  content = content.replace(/jest\.mock\(['"]@\/lib\/constants\/special-lead-access['"], \(\) => \(\{\r?\n\s*getSpecialBranchLeadAccess: jest\.fn\(\(\) => null\),\r?\n\}\)\);\r?\n/g, '');
+  // Split into lines and filter out any line containing 'special-lead-access'
+  const lines = content.split(/\r?\n/);
+  const newLines = lines.filter(line => !line.includes('special-lead-access') && !line.includes('getSpecialBranchLeadAccess'));
   
-  fs.writeFileSync(file, content);
+  fs.writeFileSync(file, newLines.join('\n'));
 }

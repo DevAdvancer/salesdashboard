@@ -81,7 +81,7 @@ type AuditLogDocument = {
   action?: string;
   targetType?: string;
   metadata?: string;
-  performedAt?: string;
+  createdAt?: string;
   $createdAt?: string;
 };
 
@@ -155,7 +155,7 @@ async function main() {
       AUDIT_LOGS_COLLECTION_ID,
       [
         Query.equal('targetType', 'LEAD'),
-        Query.orderDesc('performedAt'),
+        Query.orderDesc('createdAt'),
         Query.limit(auditPageSize),
         Query.offset(auditOffset),
       ]
@@ -263,7 +263,7 @@ async function main() {
         continue;
       }
 
-      const handedOffAt = log.performedAt || log.$createdAt || new Date().toISOString();
+      const handedOffAt = log.createdAt || log.$createdAt || new Date().toISOString();
       const payload = {
         leadId: targetLeadId,
         teamLeadId: assigneeId,

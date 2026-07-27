@@ -1,3 +1,4 @@
+import { logger } from '@/lib/utils/logger';
 import { Query } from 'appwrite';
 import { databases, DATABASE_ID, COLLECTIONS, invalidateCollectionReads } from '@/lib/appwrite';
 import { invalidateAuditLogReferenceCache } from '@/lib/services/audit-log-reference-service';
@@ -37,13 +38,13 @@ export async function createBranch(input: CreateBranchInput): Promise<Branch> {
     );
 
     invalidateBranchesCache();
-    return branch as unknown as Branch;
-  } catch (error: any) {
-    if (error.message === 'A branch with this name already exists') {
+    return JSON.parse(JSON.stringify(branch)) as Branch;
+  } catch (error: unknown) {
+    if ((error instanceof Error ? error.message : String(error)) === 'A branch with this name already exists') {
       throw error;
     }
-    console.error('Error creating branch:', error);
-    throw new Error(error.message || 'Failed to create branch');
+    logger.error('Error creating branch:', error);
+    throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to create branch');
   }
 }
 
@@ -64,17 +65,17 @@ export async function getBranch(branchId: string): Promise<Branch> {
       COLLECTIONS.BRANCHES,
       branchId
     );
-    return branch as unknown as Branch;
-  } catch (error: any) {
-    const code = typeof error?.code === 'number' ? error.code : null;
-    const message = typeof error?.message === 'string' ? error.message : String(error);
+    return JSON.parse(JSON.stringify(branch)) as Branch;
+  } catch (error: unknown) {
+    const code = typeof (error as any)?.code === 'number' ? (error as any).code : null;
+    const message = typeof (error as any)?.message === 'string' ? (error instanceof Error ? error.message : String(error)) : String(error);
     const normalizedMessage = message.toLowerCase();
 
     if (code === 404 || normalizedMessage.includes('could not be found') || normalizedMessage.includes('not found')) {
       throw new Error(`Branch not found: ${branchId}`);
     }
 
-    console.error('Error fetching branch:', error);
+    logger.error('Error fetching branch:', error);
     throw new Error(message || 'Failed to fetch branch');
   }
 }
@@ -117,13 +118,13 @@ export async function updateBranch(branchId: string, input: UpdateBranchInput): 
     );
 
     invalidateBranchesCache();
-    return branch as unknown as Branch;
-  } catch (error: any) {
-    if (error.message === 'A branch with this name already exists') {
+    return JSON.parse(JSON.stringify(branch)) as Branch;
+  } catch (error: unknown) {
+    if ((error instanceof Error ? error.message : String(error)) === 'A branch with this name already exists') {
       throw error;
     }
-    console.error('Error updating branch:', error);
-    throw new Error(error.message || 'Failed to update branch');
+    logger.error('Error updating branch:', error);
+    throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to update branch');
   }
 }
 
@@ -138,17 +139,20 @@ export async function deleteBranch(branchId: string): Promise<void> {
   try {
     // Check for assigned team leads
     // Users use `branchIds` (array attribute) — see scripts/sync-appwrite-schema.ts
-    const teamLeads = await databases.listDocuments(
+    // We also check the deprecated `branchId` to catch legacy assignments.
+    const assignedUsers = await databases.listDocuments(
       DATABASE_ID,
       COLLECTIONS.USERS,
       [
-        Query.equal('role', 'team_lead'),
-        Query.contains('branchIds', [branchId]),
+        Query.or([
+          Query.contains('branchIds', [branchId]),
+          Query.equal('branchId', branchId)
+        ]),
       ]
     );
 
-    if (teamLeads.total > 0) {
-      throw new Error('Cannot delete branch with assigned team leads');
+    if (assignedUsers.total > 0) {
+      throw new Error('Cannot delete branch with assigned users');
     }
 
     // Leads use `branchId` (singular string attribute) — see scripts/sync-appwrite-schema.ts
@@ -170,15 +174,15 @@ export async function deleteBranch(branchId: string): Promise<void> {
 
     await databases.deleteDocument(DATABASE_ID, COLLECTIONS.BRANCHES, branchId);
     invalidateBranchesCache();
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (
-      error.message === 'Cannot delete branch with assigned team leads' ||
-      error.message === 'Cannot delete branch with active leads'
+      (error instanceof Error ? error.message : String(error)) === 'Cannot delete branch with assigned users' ||
+      (error instanceof Error ? error.message : String(error)) === 'Cannot delete branch with active leads'
     ) {
       throw error;
     }
-    console.error('Error deleting branch:', error);
-    throw new Error(error.message || 'Failed to delete branch');
+    logger.error('Error deleting branch:', error);
+    throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to delete branch');
   }
 }
 
@@ -204,10 +208,10 @@ export async function listBranches(): Promise<Branch[]> {
           Query.orderDesc('$createdAt'),
         ]
       );
-      return response.documents as unknown as Branch[];
-    } catch (error: any) {
-      console.error('Error listing branches:', error);
-      throw new Error(error.message || 'Failed to list branches');
+      return JSON.parse(JSON.stringify(response.documents)) as Branch[];
+    } catch (error: unknown) {
+      logger.error('Error listing branches:', error);
+      throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to list branches');
     }
   });
 }
@@ -248,8 +252,8 @@ export async function getBranchStats(branchId: string): Promise<{ leadCount: num
     return {
       leadCount: leads.total,
     };
-  } catch (error: any) {
-    console.error('Error fetching branch stats:', error);
-    throw new Error(error.message || 'Failed to fetch branch stats');
+  } catch (error: unknown) {
+    logger.error('Error fetching branch stats:', error);
+    throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to fetch branch stats');
   }
 }
