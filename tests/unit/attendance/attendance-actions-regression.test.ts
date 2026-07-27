@@ -32,6 +32,7 @@ jest.mock('node-appwrite', () => ({
     notEqual: jest.fn((key, value) => `notEqual:${key}:${JSON.stringify(value)}`),
     limit: jest.fn((limit) => `limit:${limit}`),
     offset: jest.fn((offset) => `offset:${offset}`),
+    select: jest.fn((fields) => `select:${fields.join(',')}`),
   },
   Role: {
     user: jest.fn((userId) => `user:${userId}`),

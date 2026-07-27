@@ -33,6 +33,7 @@ export async function checkAndNotifyMyTeamAbsencesAction(input: {
     const agentsResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
             Query.equal("role", ["agent", "lead_generation"]),
             Query.equal("teamLeadId", user.$id),
+            Query.select(["$id", "name", "isActive"]),
             Query.limit(2000),
           ]);
     const agents = (agentsResponse.documents as unknown as User[]).filter(
@@ -45,6 +46,7 @@ export async function checkAndNotifyMyTeamAbsencesAction(input: {
     const attendanceResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
             Query.equal("dateKey", dateKey),
             Query.equal("teamLeadId", user.$id),
+            Query.select(["userId", "present", "absentNotifiedAt"]),
             Query.limit(2000),
           ]);
     const attendanceDocs = attendanceResponse.documents as unknown as AttendanceRecord[];
@@ -113,10 +115,12 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
     const [adminUsersResponse, teamLeadsResponse] = await Promise.all([
             databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
               Query.equal("role", ["admin", "operations"]),
+              Query.select(["$id", "isActive"]),
               Query.limit(2000),
             ]),
             databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
               Query.equal("role", "team_lead"),
+              Query.select(["$id", "name", "isActive", "department"]),
               Query.limit(2000),
             ]),
           ]);
@@ -136,11 +140,13 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
               ? databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
                   Query.equal("role", ["agent", "lead_generation"]),
                   Query.equal("teamLeadId", teamLeadIds),
+                  Query.select(["$id", "name", "isActive", "department", "teamLeadId"]),
                   Query.limit(5000),
                 ])
               : Promise.resolve({ documents: [] as unknown[] }),
             databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
               Query.equal("dateKey", dateKey),
+              Query.select(["userId", "present", "absentNotifiedAt", "adminEscalatedAt", "delegateUserId"]),
               Query.limit(5000),
             ]),
           ]);

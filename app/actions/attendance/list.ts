@@ -39,6 +39,7 @@ export async function listMyTeamAttendanceAction(input: {
     const agentsResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
             Query.equal("role", ["agent", "lead_generation"]),
             Query.equal("teamLeadId", effectiveTeamLeadId),
+            Query.select(["$id", "name", "isActive"]),
             Query.limit(2000),
           ]);
     const agents = (agentsResponse.documents as unknown as User[])
@@ -47,6 +48,7 @@ export async function listMyTeamAttendanceAction(input: {
     const attendanceResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
             Query.equal("dateKey", dateKey),
             Query.equal("teamLeadId", effectiveTeamLeadId),
+            Query.select(["userId", "present", "presentAt", "absentNotifiedAt", "presentWithDelegateFlag", "delegateUserId"]),
             Query.limit(2000),
           ]);
     const attendanceDocs = attendanceResponse.documents as unknown as AttendanceRecord[];
@@ -124,6 +126,7 @@ export async function listTeamLeadsAttendanceForAdminAction(input: {
     const { databases } = await createAdminClient();
     const teamLeadsResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
             Query.equal("role", "team_lead"),
+            Query.select(["$id", "name", "isActive", "department"]),
             Query.limit(2000),
           ]);
     const teamLeads = (teamLeadsResponse.documents as unknown as User[])
@@ -135,6 +138,7 @@ export async function listTeamLeadsAttendanceForAdminAction(input: {
               ? await databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
                   Query.equal("dateKey", dateKey),
                   Query.equal("userId", teamLeadIds),
+                  Query.select(["userId", "present", "presentAt", "absentNotifiedAt", "delegateUserId"]),
                   Query.limit(2000),
                 ])
               : { documents: [] as unknown[] };
@@ -155,7 +159,8 @@ export async function listTeamLeadsAttendanceForAdminAction(input: {
       const chunk = delegateIds.slice(i, i + chunkSize);
       const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
         Query.equal("$id", chunk),
-        Query.limit(2000),
+        Query.select(["$id", "name"]),
+        Query.limit(chunkSize),
       ]);
       (response.documents as unknown as User[]).forEach((u) => delegateById.set(u.$id, u));
     }

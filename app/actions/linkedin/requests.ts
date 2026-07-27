@@ -133,7 +133,9 @@ export async function createLinkedinRequestAction(input: {
             [
               Query.equal("accountId", account.$id),
               Query.equal("dateSent", dateSent),
-              Query.limit(2000),
+              Query.select(["$id", "isActive", "status"]),
+              // 200 is sufficient since typical connection limits are ~100
+              Query.limit(200),
             ],
           );
     const alreadySent = (alreadySentResponse.documents as unknown as LinkedinRequest[]).filter((doc) => {
@@ -369,7 +371,9 @@ export async function findBackedOutLeadForLinkedinTargetUrlAction(input: {
               Query.equal("targetUrl", targetUrl),
               ...(company ? [Query.equal("company", company)] : []),
               Query.orderDesc("$createdAt"),
-              Query.limit(2000),
+              Query.select(["$id", "leadId"]),
+              // 100 is enough since a single URL will rarely have this many requests
+              Query.limit(100),
             ],
           );
     const requests = requestsResponse.documents as unknown as LinkedinRequest[];
@@ -406,7 +410,13 @@ export async function getLinkedinConnectionHistoryAction(input: {
     const requestsResponse = await databases.listDocuments(
             DATABASE_ID,
             COLLECTIONS.LINKEDIN_REQUESTS,
-            [Query.equal("targetUrl", targetUrl), Query.orderDesc("$createdAt"), Query.limit(2000)],
+            [
+              Query.equal("targetUrl", targetUrl), 
+              Query.orderDesc("$createdAt"), 
+              // Leaving limit relatively high but capped at 100 (URL history is short)
+              // No Query.select since the full object is rendered in the UI
+              Query.limit(100)
+            ],
           );
     const requests = requestsResponse.documents as unknown as LinkedinRequest[];
     const requestToLeadId = new Map<string, string>();
@@ -456,50 +466,57 @@ export async function getLinkedinConnectionHistoryAction(input: {
 
     const leadIds = Array.from(new Set(requestToLeadId.values()));
     const leadById = new Map<string, { leadId: string; status: string; isClosed: boolean }>();
-    if (leadIds.length > 0) {
-    const chunkSize = 100;
-    for (let i = 0; i < leadIds.length; i += chunkSize) {
-      const chunk = leadIds.slice(i, i + chunkSize);
-      const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS, [
-        Query.equal("$id", chunk),
-        Query.limit(2000),
-      ]);
-      for (const doc of response.documents as unknown as Array<{ $id: string; status?: unknown; isClosed?: unknown }>) {
-        leadById.set(doc.$id, {
-          leadId: doc.$id,
-          status: typeof doc.status === "string" ? doc.status : "",
-          isClosed: Boolean(doc.isClosed),
-        });
-      }
-    }
-    }
-
     const leadAuditByLeadId = new Map<
             string,
             Array<{ $id: string; action: string; actorName: string; createdAt: string; metadata: unknown }>
           >();
-    await Promise.all(
-    leadIds.map(async (leadId) => {
-      try {
-        const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, [
-          Query.equal("targetType", "LEAD"),
-          Query.equal("targetId", leadId),
-          Query.orderDesc("createdAt"),
-          Query.limit(50),
-        ]);
-        const logs = response.documents.map((doc) => ({
-          $id: String((doc as any).$id),
-          action: String((doc as any).action ?? ""),
-          actorName: String((doc as any).actorName ?? ""),
-          createdAt: String((doc as any).createdAt ?? ""),
-          metadata: (doc as any).metadata ?? null,
-        }));
-        leadAuditByLeadId.set(leadId, logs);
-      } catch {
-        leadAuditByLeadId.set(leadId, []);
-      }
-    }),
-    );
+
+    // Parallelize independent queries that both depend only on `leadIds`
+    await Promise.all([
+      (async () => {
+        if (leadIds.length > 0) {
+          const chunkSize = 100;
+          for (let i = 0; i < leadIds.length; i += chunkSize) {
+            const chunk = leadIds.slice(i, i + chunkSize);
+            const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS, [
+              Query.equal("$id", chunk),
+              Query.select(["$id", "status", "isClosed"]),
+              Query.limit(chunkSize),
+            ]);
+            for (const doc of response.documents as unknown as Array<{ $id: string; status?: unknown; isClosed?: unknown }>) {
+              leadById.set(doc.$id, {
+                leadId: doc.$id,
+                status: typeof doc.status === "string" ? doc.status : "",
+                isClosed: Boolean(doc.isClosed),
+              });
+            }
+          }
+        }
+      })(),
+      Promise.all(
+        leadIds.map(async (leadId) => {
+          try {
+            const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, [
+              Query.equal("targetType", "LEAD"),
+              Query.equal("targetId", leadId),
+              Query.orderDesc("createdAt"),
+              Query.select(["$id", "action", "actorName", "createdAt", "metadata"]),
+              Query.limit(50),
+            ]);
+            const logs = response.documents.map((doc) => ({
+              $id: String((doc as any).$id),
+              action: String((doc as any).action ?? ""),
+              actorName: String((doc as any).actorName ?? ""),
+              createdAt: String((doc as any).createdAt ?? ""),
+              metadata: (doc as any).metadata ?? null,
+            }));
+            leadAuditByLeadId.set(leadId, logs);
+          } catch {
+            leadAuditByLeadId.set(leadId, []);
+          }
+        })
+      )
+    ]);
     const histories = await Promise.all(
             requests.map(async (req) => {
               const logsResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, [
@@ -556,7 +573,8 @@ export async function getBackoutStatusForLeadIdsAction(input: {
     const chunk = leadIds.slice(i, i + chunkSize);
     const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS, [
       Query.equal("$id", chunk),
-      Query.limit(2000),
+      Query.select(["$id", "status"]),
+      Query.limit(chunkSize),
     ]);
     for (const doc of response.documents as unknown as Array<{ $id: string; status?: unknown; isClosed?: unknown }>) {
       const statusLabel = getLeadOutcomeLabel(doc.status);
@@ -876,57 +894,71 @@ export async function exportLinkedinRequestsForAdminAction(input: {
     const salesDocs = uniqueDocs.filter((r) => salesAgentIds.has(r.agentId));
     const finalDocs = salesDocs;
     const accountIds = Array.from(new Set(finalDocs.map(r => r.accountId).filter(Boolean)));
-    const accountsMap = new Map<string, LinkedinAccount>();
-    if (accountIds.length > 0) {
-    const chunkSize = 100;
-    for (let i = 0; i < accountIds.length; i += chunkSize) {
-      const chunk = accountIds.slice(i, i + chunkSize);
-      const res = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LINKEDIN_ACCOUNTS, [
-        Query.equal("$id", chunk),
-        Query.limit(chunkSize)
-      ]);
-      for (const acc of res.documents as unknown as LinkedinAccount[]) {
-        accountsMap.set(acc.$id, acc);
-      }
-    }
-    }
-
-    const missingMainAccountIds = Array.from(
-            new Set(
-              Array.from(accountsMap.values())
-                .map(a => a.mainAccountId)
-                .filter(id => Boolean(id) && !accountsMap.has(id!))
-            )
-          ) as string[];
-    if (missingMainAccountIds.length > 0) {
-    const chunkSize = 100;
-    for (let i = 0; i < missingMainAccountIds.length; i += chunkSize) {
-      const chunk = missingMainAccountIds.slice(i, i + chunkSize);
-      const res = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LINKEDIN_ACCOUNTS, [
-        Query.equal("$id", chunk),
-        Query.limit(chunkSize)
-      ]);
-      for (const acc of res.documents as unknown as LinkedinAccount[]) {
-        accountsMap.set(acc.$id, acc);
-      }
-    }
-    }
-
     const leadIds = Array.from(new Set(finalDocs.map(r => r.leadId).filter(Boolean))) as string[];
+    
+    const accountsMap = new Map<string, LinkedinAccount>();
     const leadsMap = new Map<string, Lead>();
-    if (leadIds.length > 0) {
-    const chunkSize = 100;
-    for (let i = 0; i < leadIds.length; i += chunkSize) {
-      const chunk = leadIds.slice(i, i + chunkSize);
-      const res = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS, [
-        Query.equal("$id", chunk),
-        Query.limit(chunkSize)
-      ]);
-      for (const l of res.documents as unknown as Lead[]) {
-        leadsMap.set(l.$id, l);
-      }
-    }
-    }
+
+    // Parallelize independent data fetches
+    await Promise.all([
+      (async () => {
+        if (accountIds.length > 0) {
+          const chunkSize = 100;
+          for (let i = 0; i < accountIds.length; i += chunkSize) {
+            const chunk = accountIds.slice(i, i + chunkSize);
+            const res = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LINKEDIN_ACCOUNTS, [
+              Query.equal("$id", chunk),
+              Query.select(["$id", "accountType", "mainAccountId", "idName", "company", "assignedUserId"]),
+              Query.limit(chunkSize)
+            ]);
+            for (const acc of res.documents as unknown as LinkedinAccount[]) {
+              accountsMap.set(acc.$id, acc);
+            }
+          }
+        }
+
+        // This loop intentionally runs sequentially after the initial accountsMap loop
+        // because it depends on mainAccountId values collected from the first batch
+        const missingMainAccountIds = Array.from(
+          new Set(
+            Array.from(accountsMap.values())
+              .map(a => a.mainAccountId)
+              .filter(id => Boolean(id) && !accountsMap.has(id!))
+          )
+        ) as string[];
+
+        if (missingMainAccountIds.length > 0) {
+          const chunkSize = 100;
+          for (let i = 0; i < missingMainAccountIds.length; i += chunkSize) {
+            const chunk = missingMainAccountIds.slice(i, i + chunkSize);
+            const res = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LINKEDIN_ACCOUNTS, [
+              Query.equal("$id", chunk),
+              Query.select(["$id", "accountType", "mainAccountId", "idName", "company", "assignedUserId"]),
+              Query.limit(chunkSize)
+            ]);
+            for (const acc of res.documents as unknown as LinkedinAccount[]) {
+              accountsMap.set(acc.$id, acc);
+            }
+          }
+        }
+      })(),
+      (async () => {
+        if (leadIds.length > 0) {
+          const chunkSize = 100;
+          for (let i = 0; i < leadIds.length; i += chunkSize) {
+            const chunk = leadIds.slice(i, i + chunkSize);
+            const res = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS, [
+              Query.equal("$id", chunk),
+              Query.select(["$id", "status", "isClosed", "data"]),
+              Query.limit(chunkSize)
+            ]);
+            for (const l of res.documents as unknown as Lead[]) {
+              leadsMap.set(l.$id, l);
+            }
+          }
+        }
+      })()
+    ]);
 
     return finalDocs.map(req => {
     const account = accountsMap.get(req.accountId);
@@ -1027,6 +1059,8 @@ export async function runLinkedinAutoWithdrawAction(input: {
             [
               Query.equal("isActive", true),
               Query.equal("status", ["sent", "accepted"]),
+              Query.select(["$id", "status", "leadId", "dateSent", "acceptedAt", "company", "targetUrl", "isActive"]),
+              // A genuinely large limit (5000) is required here for background processing by cron
               Query.limit(5000),
             ],
           );

@@ -30,8 +30,9 @@ jest.mock('node-appwrite', () => ({
     equal: jest.fn((key, value) => `equal:${key}:${JSON.stringify(value)}`),
     greaterThanEqual: jest.fn((key, value) => `gte:${key}:${value}`),
     lessThanEqual: jest.fn((key, value) => `lte:${key}:${value}`),
-    limit: jest.fn((limit) => `limit:${limit}`),
-    orderDesc: jest.fn((key) => `orderDesc:${key}`),
+    limit: jest.fn((limit) => `limit(${limit})`),
+    select: jest.fn((fields) => `select(${fields.join(',')})`),
+    orderDesc: jest.fn((attr) => `orderDesc(${attr})`),
     orderAsc: jest.fn((key) => `orderAsc:${key}`),
   },
   Role: {

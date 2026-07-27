@@ -69,20 +69,57 @@ export async function getLinkedinWeeklyReportAction(input: {
     const visibleRequests = user.role === "team_lead"
               ? salesRequests.filter((request) => request.agentId !== user.$id)
               : salesRequests;
+    const leadIds = Array.from(
+      new Set(visibleRequests.map((r) => (typeof r.leadId === "string" && r.leadId ? r.leadId : null)).filter(Boolean))
+    ) as string[];
+
     const accountIds = Array.from(
             new Set(visibleRequests.map((r) => r.accountId).filter(Boolean)),
           );
     const accountsMap = new Map<string, LinkedinAccount>();
-    if (accountIds.length > 0) {
-    const accounts = await databases.listDocuments(
-      DATABASE_ID,
-      COLLECTIONS.LINKEDIN_ACCOUNTS,
-      [Query.equal("$id", accountIds), Query.limit(Math.min(accountIds.length, 2000))],
-    );
-    (accounts.documents as unknown as LinkedinAccount[]).forEach((a) => {
-      accountsMap.set(a.$id, a);
-    });
-    }
+    const leadById = new Map<string, { isClosed: boolean; status: string }>();
+
+    await Promise.all([
+      (async () => {
+        if (accountIds.length > 0) {
+          const chunkSize = 100;
+          for (let i = 0; i < accountIds.length; i += chunkSize) {
+            const chunk = accountIds.slice(i, i + chunkSize);
+            const accounts = await databases.listDocuments(
+              DATABASE_ID,
+              COLLECTIONS.LINKEDIN_ACCOUNTS,
+              [
+                Query.equal("$id", chunk), 
+                Query.select(["$id", "accountType", "idName"]),
+                Query.limit(chunkSize)
+              ],
+            );
+            (accounts.documents as unknown as LinkedinAccount[]).forEach((a) => {
+              accountsMap.set(a.$id, a);
+            });
+          }
+        }
+      })(),
+      (async () => {
+        if (leadIds.length > 0) {
+          const chunkSize = 100;
+          for (let i = 0; i < leadIds.length; i += chunkSize) {
+            const chunk = leadIds.slice(i, i + chunkSize);
+            const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS, [
+              Query.equal("$id", chunk),
+              Query.select(["$id", "status", "isClosed"]),
+              Query.limit(chunkSize),
+            ]);
+            for (const doc of response.documents as unknown as Array<{ $id: string; status?: unknown; isClosed?: unknown }>) {
+              leadById.set(doc.$id, {
+                isClosed: Boolean(doc.isClosed),
+                status: typeof doc.status === "string" ? doc.status : "",
+              });
+            }
+          }
+        }
+      })()
+    ]);
 
     type Row = {
             agentId: string;
@@ -142,26 +179,7 @@ export async function getLinkedinWeeklyReportAction(input: {
     map.set(key, existing);
     }
 
-    const leadIds = Array.from(
-            new Set(Array.from(leadIdsByKey.values()).flatMap((set) => Array.from(set))),
-          );
-    const leadById = new Map<string, { isClosed: boolean; status: string }>();
-    if (leadIds.length > 0) {
-    const chunkSize = 100;
-    for (let i = 0; i < leadIds.length; i += chunkSize) {
-      const chunk = leadIds.slice(i, i + chunkSize);
-      const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS, [
-        Query.equal("$id", chunk),
-        Query.limit(2000),
-      ]);
-      for (const doc of response.documents as unknown as Array<{ $id: string; status?: unknown; isClosed?: unknown }>) {
-        leadById.set(doc.$id, {
-          isClosed: Boolean(doc.isClosed),
-          status: typeof doc.status === "string" ? doc.status : "",
-        });
-      }
-    }
-    }
+    // leadById is already fetched above in parallel
 
     for (const [key, row] of map.entries()) {
     const leadIdsForKey = leadIdsByKey.get(key);
@@ -212,6 +230,7 @@ export async function loadLinkedinConnectionKpiAction(input: {
             COLLECTIONS.LINKEDIN_ACCOUNTS,
             [
               Query.equal("isActive", true),
+              Query.select(["$id", "assignedUserId", "company", "idName", "connectionLimit"]),
               Query.limit(2000),
             ]
           );
