@@ -6,10 +6,19 @@ let mockDatabases: {
 
 jest.mock('@/lib/server/current-user', () => ({
   assertAuthenticatedUserId: jest.fn().mockResolvedValue(undefined),
+  getAuthenticatedAccount: jest.fn().mockResolvedValue({ $id: 'user-3' }),
 }));
 
 jest.mock('@/lib/server/appwrite', () => ({
   createAdminClient: jest.fn(async () => ({ databases: mockDatabases })),
+}));
+
+jest.mock('@/lib/server/appwrite-pagination', () => ({
+  listAllDocuments: jest.fn(),
+}));
+
+jest.mock('@/app/actions/lead', () => ({
+  listLeadsAction: jest.fn(),
 }));
 
 jest.mock('node-appwrite', () => ({
@@ -17,14 +26,21 @@ jest.mock('node-appwrite', () => ({
     unique: jest.fn(() => 'generated-id'),
   },
   Query: {
-    equal: jest.fn((field, value) => ({ field, value })),
-    limit: jest.fn((limit) => ({ limit })),
+    equal: jest.fn((field, value) => ({ method: 'equal', field, value })),
+    limit: jest.fn((limit) => ({ method: 'limit', limit })),
+    greaterThanEqual: jest.fn((field, value) => ({ method: 'greaterThanEqual', field, value })),
+    lessThanEqual: jest.fn((field, value) => ({ method: 'lessThanEqual', field, value })),
   },
 }));
 
-const { reserveAssessmentAttempt, countAssessmentEmailsSentInRange } = require('@/app/actions/assessment');
-const { reserveInterviewAttempt, countInterviewEmailsSentInRange } = require('@/app/actions/interview');
-const { countMockEmailsSentInRange } = require('@/app/actions/mock');
+// Static imports are safe here despite the jest.mock calls above: babel-jest
+// hoists jest.mock above imports, and this file does not call resetModules, so
+// there is no need for a deferred require.
+import { reserveAssessmentAttempt, countAssessmentEmailsSentInRange } from '@/app/actions/assessment';
+import { reserveInterviewAttempt, countInterviewEmailsSentInRange } from '@/app/actions/interview';
+import { countMockEmailsSentInRange } from '@/app/actions/mock';
+import { listAllDocuments } from '@/lib/server/appwrite-pagination';
+import { listLeadsAction } from '@/app/actions/lead';
 
 describe('support attempt limits', () => {
   beforeEach(() => {
@@ -108,20 +124,12 @@ describe('support attempt limits', () => {
   });
 });
 
-describe('support emails sent in range', () => {
-  beforeEach(() => {
-    mockDatabases = {
-      getDocument: jest.fn(),
-      listDocuments: jest.fn(),
-      createDocument: jest.fn(),
-    };
-    jest.clearAllMocks();
-  });
+type StubQuery = { method: string; field?: string; value?: unknown };
 
-  // Two emails sent this month + two sent last month against the same leads.
-  // The dashboard tile asks for "this month" and must count all four sends
-  // whose lastAttemptAt lands inside the window — not just the two whose
-  // lead happened to be created in the window.
+describe('support emails sent in range', () => {
+  // Three emails sent this month + one sent last month against the same leads.
+  // The dashboard tile asks for "this month" and must count every send whose
+  // lastAttemptAt lands inside the window, and only those.
   const buildDocs = () => [
     { $id: 'a1', leadId: 'lead-1', userId: 'u1', attemptCount: '1', lastAttemptAt: '2026-07-02T10:00:00.000Z', sentSubjects: ['one'] },
     { $id: 'a2', leadId: 'lead-1', userId: 'u2', attemptCount: '1', lastAttemptAt: '2026-07-05T10:00:00.000Z', sentSubjects: ['two'] },
@@ -131,32 +139,72 @@ describe('support emails sent in range', () => {
 
   const RANGE_FROM = '2026-07-01T00:00:00.000Z';
   const RANGE_TO = '2026-07-31T23:59:59.999Z';
+  const BRANCH_IDS = ['branch-1'];
+
+  beforeEach(() => {
+    mockDatabases = {
+      getDocument: jest.fn(),
+      listDocuments: jest.fn(),
+      createDocument: jest.fn(),
+    };
+    jest.clearAllMocks();
+
+    // Stand in for Appwrite by actually applying the queries the action builds.
+    // That keeps the "counted by send date" assertion honest: if the action
+    // ever filtered on the wrong attribute, these docs would not be returned.
+    (listAllDocuments as jest.Mock).mockImplementation(
+      async ({ queries }: { queries: StubQuery[] }) =>
+        buildDocs().filter((doc) =>
+          queries.every((query) => {
+            if (!query.field) return true;
+            const value = (doc as Record<string, unknown>)[query.field];
+            if (query.method === 'greaterThanEqual') return String(value) >= String(query.value);
+            if (query.method === 'lessThanEqual') return String(value) <= String(query.value);
+            if (query.method === 'equal') return value === query.value;
+            return true;
+          })
+        )
+    );
+
+    (listLeadsAction as jest.Mock).mockResolvedValue({
+      leads: [{ $id: 'lead-1' }, { $id: 'lead-2' }],
+      total: 2,
+    });
+  });
 
   it('counts interview emails by send date, not lead creation date', async () => {
-    mockDatabases.listDocuments.mockResolvedValueOnce({ documents: buildDocs() });
     await expect(
-      countInterviewEmailsSentInRange('user-3', ['lead-1', 'lead-2'], RANGE_FROM, RANGE_TO)
+      countInterviewEmailsSentInRange('user-3', 'admin', BRANCH_IDS, RANGE_FROM, RANGE_TO)
     ).resolves.toBe(3);
   });
 
   it('counts assessment emails by send date', async () => {
-    mockDatabases.listDocuments.mockResolvedValueOnce({ documents: buildDocs() });
     await expect(
-      countAssessmentEmailsSentInRange('user-3', ['lead-1', 'lead-2'], RANGE_FROM, RANGE_TO)
+      countAssessmentEmailsSentInRange('user-3', 'admin', BRANCH_IDS, RANGE_FROM, RANGE_TO)
     ).resolves.toBe(3);
   });
 
   it('counts mock emails by send date', async () => {
-    mockDatabases.listDocuments.mockResolvedValueOnce({ documents: buildDocs() });
     await expect(
-      countMockEmailsSentInRange('user-3', ['lead-1', 'lead-2'], RANGE_FROM, RANGE_TO)
+      countMockEmailsSentInRange('user-3', 'admin', BRANCH_IDS, RANGE_FROM, RANGE_TO)
     ).resolves.toBe(3);
   });
 
-  it('returns 0 when no lead IDs are provided', async () => {
+  it('ignores attempts on leads the actor cannot see', async () => {
+    (listLeadsAction as jest.Mock).mockResolvedValue({
+      leads: [{ $id: 'lead-1' }],
+      total: 1,
+    });
+
     await expect(
-      countInterviewEmailsSentInRange('user-3', [], RANGE_FROM, RANGE_TO)
+      countInterviewEmailsSentInRange('user-3', 'agent', BRANCH_IDS, RANGE_FROM, RANGE_TO)
+    ).resolves.toBe(2);
+  });
+
+  it('returns 0 without querying when the date range is missing', async () => {
+    await expect(
+      countInterviewEmailsSentInRange('user-3', 'admin', BRANCH_IDS, '', '')
     ).resolves.toBe(0);
-    expect(mockDatabases.listDocuments).not.toHaveBeenCalled();
+    expect(listAllDocuments as jest.Mock).not.toHaveBeenCalled();
   });
 });

@@ -5,6 +5,7 @@ import {
   createAppwriteReadCacheStores,
   createReadThroughDatabases,
 } from "@/lib/utils/appwrite-read-cache";
+import { bumpRequestCount } from "@/lib/server/appwrite-request-meter";
 
 const adminDatabaseCacheStores = createAppwriteReadCacheStores();
 const sessionDatabaseCacheStores = createAppwriteReadCacheStores();
@@ -42,22 +43,23 @@ export async function createSessionClient() {
     `a_session_${projectId}_legacy`,
     projectId,
   ];
-  const allCookies = cookieStore.getAll();
-  const sessionCandidates = [
-    ...exactCookieNames
-      .map((name) => cookieStore.get(name))
-      .filter((cookie): cookie is { name: string; value: string } => Boolean(cookie?.value)),
-    ...allCookies.filter(
-      (cookie) =>
-        cookie.name.startsWith("a_session_") &&
-        Boolean(cookie.value) &&
-        !exactCookieNames.includes(cookie.name)
-    ),
-  ];
+  const sessionCandidates = exactCookieNames
+    .map((name) => cookieStore.get(name))
+    .filter((cookie): cookie is { name: string; value: string } => Boolean(cookie?.value));
 
+  // Each candidate below costs one Appwrite /v1/account request, and this path runs
+  // before any authentication. The defense is building the candidate list from
+  // `exactCookieNames` only: probing every a_session_* cookie on the request let an
+  // anonymous caller turn one HTTP request carrying N crafted cookies into N Appwrite
+  // requests. Never reinstate a catch-all prefix match here.
+  //
+  // The slice is a backstop for that rule, not the rule itself. It must stay >= the
+  // length of `exactCookieNames`, otherwise adding a legitimate cookie name above
+  // would silently drop it and those users would stop authenticating with no error.
+  const MAX_SESSION_CANDIDATES = Math.max(3, exactCookieNames.length);
   const uniqueCandidates = Array.from(
     new Map(sessionCandidates.map((cookie) => [cookie.name, cookie])).values()
-  );
+  ).slice(0, MAX_SESSION_CANDIDATES);
 
   for (const session of uniqueCandidates) {
     const client = new Client()
@@ -66,6 +68,10 @@ export async function createSessionClient() {
       .setSession(session.value);
 
     try {
+      // Metered: this probe is a real /v1/account request and it is the exact call
+      // the candidate cap above exists to bound. Leaving it uncounted would make the
+      // request meter blind to the abuse path it is meant to prove is closed.
+      bumpRequestCount();
       await new Account(client).get();
 
       return {

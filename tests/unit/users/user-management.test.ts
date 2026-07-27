@@ -1,5 +1,6 @@
 import { createAgent, getAgentsByTeamLead } from '@/lib/services/user-service';
 import { databases, account } from '@/lib/appwrite';
+import { clearCache } from '@/lib/utils/resource-cache';
 import { ID, Permission, Role, Query } from 'appwrite';
 
 // Mock the Appwrite modules
@@ -24,6 +25,9 @@ jest.mock('@/lib/appwrite', () => ({
 describe('User Management', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // getAgentsByTeamLead memoises its result in the shared resource cache,
+    // so results would otherwise leak between tests that use the same id.
+    clearCache();
   });
 
   describe('Agent Creation', () => {
@@ -41,7 +45,7 @@ describe('User Management', () => {
         name: 'Team Lead',
         email: 'tl@example.com',
         role: 'team_lead',
-        teamLeadId: 'teamLead-123',
+        teamLeadId: null,
         branchIds: ['branch-1', 'branch-2'],
       };
 
@@ -50,7 +54,7 @@ describe('User Management', () => {
         name: mockAgentData.name,
         email: mockAgentData.email,
         role: 'agent',
-        teamLeadId: 'teamLead-123',
+        teamLeadId: mockAgentData.teamLeadId,
         branchIds: ['branch-1'],
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
@@ -78,7 +82,7 @@ describe('User Management', () => {
           name: mockAgentData.name,
           email: mockAgentData.email,
           role: 'agent',
-          teamLeadId: 'teamLead-123',
+          teamLeadId: mockAgentData.teamLeadId,
           branchIds: ['branch-1'],
         }),
         expect.arrayContaining([
@@ -88,8 +92,7 @@ describe('User Management', () => {
       );
 
       expect(result.role).toBe('agent');
-      expect(result.teamLeadId).toBe('teamLead-123');
-      expect(result.teamLeadId).toBe('teamlead-123');
+      expect(result.teamLeadId).toBe(mockAgentData.teamLeadId);
       expect(result.branchIds).toEqual(['branch-1']);
     });
 
@@ -129,7 +132,7 @@ describe('User Management', () => {
 
       (databases.getDocument as jest.Mock).mockResolvedValue({
         $id: 'teamlead-789',
-        teamLeadId: 'teamLead-789',
+        teamLeadId: null,
         branchIds: ['branch-2', 'branch-3'],
       });
 
@@ -138,7 +141,7 @@ describe('User Management', () => {
         name: mockAgentData.name,
         email: mockAgentData.email,
         role: 'agent',
-        teamLeadId: 'teamLead-789',
+        teamLeadId: mockAgentData.teamLeadId,
         branchIds: ['branch-2'],
         $createdAt: '2024-01-01T00:00:00.000Z',
         $updatedAt: '2024-01-01T00:00:00.000Z',
@@ -150,8 +153,7 @@ describe('User Management', () => {
       const result = await createAgent(mockAgentData);
 
       expect(result.role).toBe('agent');
-      expect(result.teamLeadId).toBe('teamLead-789');
-      expect(result.teamLeadId).toBe('teamlead-789');
+      expect(result.teamLeadId).toBe(mockAgentData.teamLeadId);
       expect(result.branchIds).toEqual(['branch-2']);
     });
   });
@@ -190,10 +192,10 @@ describe('User Management', () => {
       expect(databases.listDocuments).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(String),
-        [
-          Query.equal('role', 'agent'),
+        expect.arrayContaining([
           Query.equal('teamLeadId', teamLeadId),
-        ]
+          Query.or([Query.equal('role', 'agent'), Query.equal('role', 'lead_generation')]),
+        ])
       );
 
       expect(result).toHaveLength(2);

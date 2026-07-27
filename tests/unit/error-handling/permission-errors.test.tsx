@@ -30,14 +30,15 @@ jest.mock('@/lib/utils/error-handler', () => ({
 
 describe('Permission Error Handling', () => {
   const mockPush = jest.fn();
-  const mockRouter = { push: mockPush };
+  const mockReplace = jest.fn();
+  const mockRouter = { push: mockPush, replace: mockReplace };
 
   beforeEach(() => {
     jest.clearAllMocks();
     (useRouter as jest.Mock).mockReturnValue(mockRouter);
   });
 
-  it('should redirect to login when user is not authenticated', () => {
+  it('should render nothing when user is not authenticated', () => {
     (useAuth as jest.Mock).mockReturnValue({ user: null });
     (useAccess as jest.Mock).mockReturnValue({
       canAccess: jest.fn(),
@@ -50,7 +51,13 @@ describe('Permission Error Handling', () => {
       </ProtectedRoute>
     );
 
-    expect(mockPush).toHaveBeenCalledWith('/login');
+    // The unauthenticated redirect to /login is owned by AppLayout
+    // (components/app-layout.tsx), so ProtectedRoute only has to make sure
+    // no protected content leaks and that it does not fire a competing
+    // navigation of its own.
+    expect(screen.queryByText('Protected Content')).not.toBeInTheDocument();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 
   it('should show permission error and redirect when access is denied', async () => {
@@ -74,7 +81,7 @@ describe('Permission Error Handling', () => {
         expect.stringContaining('user management'),
         { showToast: true }
       );
-      expect(mockPush).toHaveBeenCalledWith('/dashboard');
+      expect(mockReplace).toHaveBeenCalledWith('/dashboard');
     });
   });
 
@@ -96,6 +103,7 @@ describe('Permission Error Handling', () => {
 
     expect(screen.getByText('Protected Content')).toBeInTheDocument();
     expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
     expect(handlePermissionError).not.toHaveBeenCalled();
   });
 
@@ -114,7 +122,9 @@ describe('Permission Error Handling', () => {
       </ProtectedRoute>
     );
 
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    // The loading state is a skeleton placeholder, each piece labelled
+    // "Loading content" for assistive tech, rather than literal text.
+    expect(screen.getAllByLabelText('Loading content').length).toBeGreaterThan(0);
     expect(screen.queryByText('Protected Content')).not.toBeInTheDocument();
   });
 
@@ -135,7 +145,7 @@ describe('Permission Error Handling', () => {
     );
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/leads');
+      expect(mockReplace).toHaveBeenCalledWith('/leads');
     });
   });
 });

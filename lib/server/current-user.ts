@@ -1,10 +1,15 @@
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { createAdminClient, createSessionClient } from "@/lib/server/appwrite";
+import { bumpRequestCount } from "@/lib/server/appwrite-request-meter";
 import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
 import type { User } from "@/lib/types";
 
 export async function getAuthenticatedAccount() {
   const { account } = await createSessionClient();
+  // `/v1/account` never passes through the read cache, so without this the
+  // meter would miss the one request every authenticated server entry point
+  // makes.
+  bumpRequestCount();
   return account.get();
 }
 

@@ -19,8 +19,16 @@ import {
 import { databases } from '@/lib/appwrite';
 import { Permission, Role } from 'appwrite';
 import { Lead, LeadData } from '@/lib/types';
+import {
+  LEAD_STATUS_PIPELINE,
+  LEAD_STATUS_SIGNED_CLOSURE,
+} from '@/lib/utils/lead-status-workflow';
 
 jest.mock('@/lib/appwrite', () => ({
+  account: {
+    create: jest.fn(),
+    get: jest.fn(),
+  },
   databases: {
     createDocument: jest.fn(),
     getDocument: jest.fn(),
@@ -28,9 +36,11 @@ jest.mock('@/lib/appwrite', () => ({
     deleteDocument: jest.fn(),
     listDocuments: jest.fn(),
   },
+  invalidateCollectionReads: jest.fn(),
   DATABASE_ID: 'test-database',
   COLLECTIONS: {
     LEADS: 'test-leads-collection',
+    USERS: 'test-users-collection',
   },
 }));
 
@@ -43,6 +53,64 @@ describe('Integration: Complete Lead Lifecycle', () => {
   const teamLeadId = 'teamLead-001';
   const agentId = 'agent-001';
   const newAgentId = 'agent-002';
+
+  // lib/services/user-service.ts reads USERS from
+  // NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID, which jest.env.js pins to this value.
+  const USERS_COLLECTION = 'test-users-collection';
+
+  // createLead and listLeads both resolve the acting user through
+  // getUserById, so the Appwrite mock has to serve the users collection as
+  // well as the leads collection. Returning a lead document for every
+  // getDocument call made mapDocToUser blow up on an undefined document.
+  const userDocs: Record<string, Record<string, unknown>> = {
+    [teamLeadId]: {
+      $id: teamLeadId,
+      name: 'Test Team Lead',
+      email: 'tl@example.com',
+      role: 'team_lead',
+      teamLeadId: null,
+      branchIds: ['branch-1'],
+    },
+    [agentId]: {
+      $id: agentId,
+      name: 'Test Agent',
+      email: 'agent@example.com',
+      role: 'agent',
+      teamLeadId: teamLeadId,
+      branchIds: ['branch-1'],
+    },
+    [newAgentId]: {
+      $id: newAgentId,
+      name: 'Second Agent',
+      email: 'agent2@example.com',
+      role: 'agent',
+      teamLeadId: teamLeadId,
+      branchIds: ['branch-1'],
+    },
+  };
+
+  function notFound() {
+    return Object.assign(new Error('Document with the requested ID could not be found.'), {
+      code: 404,
+    });
+  }
+
+  /**
+   * Point databases.getDocument at the given lead while keeping user lookups working.
+   */
+  function mockLeadDocument(lead: Lead | null) {
+    (databases.getDocument as jest.Mock).mockImplementation(
+      async (_databaseId: string, collectionId: string, documentId: string) => {
+        if (collectionId === USERS_COLLECTION) {
+          const doc = userDocs[documentId];
+          if (!doc) throw notFound();
+          return doc;
+        }
+        if (!lead) throw notFound();
+        return lead;
+      }
+    );
+  }
 
   const leadData: LeadData = {
     firstName: 'Alice',
@@ -57,6 +125,7 @@ describe('Integration: Complete Lead Lifecycle', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockLeadDocument(null);
   });
 
   it('should complete the full lead lifecycle: create → assign → edit → close → reopen', async () => {
@@ -106,7 +175,7 @@ describe('Integration: Complete Lead Lifecycle', () => {
       assignedToId: agentId,
     };
 
-    (databases.getDocument as jest.Mock).mockResolvedValue(currentLead);
+    mockLeadDocument(currentLead);
     (databases.updateDocument as jest.Mock).mockResolvedValue(assignedLead);
 
     currentLead = await assignLead(currentLead.$id, agentId);
@@ -123,45 +192,54 @@ describe('Integration: Complete Lead Lifecycle', () => {
       ])
     );
 
-    // Step 3: Agent edits the lead data
+    // Step 3: Agent edits the lead data.
+    // 'Interested' only transitions to itself or to 'Pipeline / Follow up'
+    // (lib/utils/lead-status-workflow.ts). The old 'Contacted' status is not
+    // part of the workflow at all, so updateLead rejected the transition.
     const editedData: LeadData = {
       ...leadData,
-      status: 'Contacted',
+      status: LEAD_STATUS_PIPELINE,
       phone: '+9876543210',
     };
 
     const editedLead: Lead = {
       ...currentLead,
       data: JSON.stringify(editedData),
-      status: 'Contacted',
+      status: LEAD_STATUS_PIPELINE,
     };
 
-    (databases.getDocument as jest.Mock).mockResolvedValue(currentLead);
+    mockLeadDocument(currentLead);
     (databases.updateDocument as jest.Mock).mockResolvedValue(editedLead);
 
     currentLead = await updateLead(currentLead.$id, {
-      status: 'Contacted',
+      status: LEAD_STATUS_PIPELINE,
       phone: '+9876543210',
     });
 
-    expect(currentLead.status).toBe('Contacted');
+    expect(currentLead.status).toBe(LEAD_STATUS_PIPELINE);
 
     // Step 4: Close the lead
     const closedLead: Lead = {
       ...currentLead,
       isClosed: true,
       closedAt: '2026-02-10T12:00:00.000Z',
-      status: 'Won',
+      status: LEAD_STATUS_SIGNED_CLOSURE,
     };
 
-    (databases.getDocument as jest.Mock).mockResolvedValue(currentLead);
+    mockLeadDocument(currentLead);
     (databases.updateDocument as jest.Mock).mockResolvedValue(closedLead);
 
-    currentLead = await closeLead(currentLead.$id, 'Won', teamLeadId, 'TeamLead', 'team_lead');
+    currentLead = await closeLead(
+      currentLead.$id,
+      LEAD_STATUS_SIGNED_CLOSURE,
+      teamLeadId,
+      'TeamLead',
+      'team_lead'
+    );
 
     expect(currentLead.isClosed).toBe(true);
     expect(currentLead.closedAt).toBeTruthy();
-    expect(currentLead.status).toBe('Won');
+    expect(currentLead.status).toBe(LEAD_STATUS_SIGNED_CLOSURE);
 
     // Verify agent gets read-only permissions on close
     const closeCallArgs = (databases.updateDocument as jest.Mock).mock.calls[
@@ -189,7 +267,7 @@ describe('Integration: Complete Lead Lifecycle', () => {
       // closedAt preserved for audit trail
     };
 
-    (databases.getDocument as jest.Mock).mockResolvedValue(currentLead);
+    mockLeadDocument(currentLead);
     (databases.updateDocument as jest.Mock).mockResolvedValue(reopenedLead);
 
     currentLead = await reopenLead(currentLead.$id);
@@ -266,7 +344,7 @@ describe('Integration: Complete Lead Lifecycle', () => {
       assignedToId: newAgentId,
     };
 
-    (databases.getDocument as jest.Mock).mockResolvedValue(lead);
+    mockLeadDocument(lead);
     (databases.updateDocument as jest.Mock).mockResolvedValue(reassignedLead);
 
     const result = await assignLead(lead.$id, newAgentId);

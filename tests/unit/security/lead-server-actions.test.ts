@@ -77,6 +77,10 @@ describe('lead server action authorization', () => {
     process.env.NEXT_PUBLIC_APPWRITE_LEADS_COLLECTION_ID = 'leads';
     process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID = 'users';
     process.env.NEXT_PUBLIC_APPWRITE_AUDIT_LOGS_COLLECTION_ID = 'audit';
+    // Pin the LinkedIn requests collection the same way as the collections
+    // above; otherwise it resolves to the shared placeholder from jest.env.js
+    // and the assertions below cannot name it.
+    process.env.NEXT_PUBLIC_APPWRITE_LINKEDIN_REQUESTS_COLLECTION_ID = 'linkedin_requests';
     process.env.APPWRITE_UNASSIGNED_OWNER_ID = 'unassigned-owner';
 
     mockAssertAuthenticatedUserId.mockResolvedValue({ $id: 'viewer-1' });
@@ -576,7 +580,13 @@ describe('lead server action authorization', () => {
 
     const { assignLeadAction } = await import('@/lib/actions/lead-actions');
 
-    await expect(assignLeadAction('lead-1', 'agent-2', 'teamLead-1', 'TeamLead')).rejects.toThrow('Permission denied');
+    // agent-2 reports to teamLead-2, so assertAssignmentAllowed
+    // (lib/actions/lead-actions.ts) denies the assignment. Team leads are
+    // rejected on the team-membership check before the branch/visibility
+    // check, so the denial message is the team-scope one.
+    await expect(assignLeadAction('lead-1', 'agent-2', 'teamLead-1', 'TeamLead')).rejects.toThrow(
+      'Team leads can only assign agents under them.'
+    );
     expect(mockUpdateDocument).not.toHaveBeenCalled();
   });
 
@@ -600,21 +610,24 @@ describe('lead server action authorization', () => {
         closedAt: null,
         status: 'Generated',
       }],
+      // agent-1 and leadgen-1 report to the acting team lead (tl-1); that is
+      // what makes this "their own agent" and what
+      // assertAssignmentAllowed checks via agent.teamLeadId === actor.$id.
       ['agent-1', {
         $id: 'agent-1',
         email: 'agent@example.com',
         role: 'agent',
         branchIds: ['branch-1'],
-        teamLeadId: 'teamLead-1',
-        teamLeadIds: ['teamLead-1'],
+        teamLeadId: 'tl-1',
+        teamLeadIds: ['tl-1'],
       }],
       ['leadgen-1', {
         $id: 'leadgen-1',
         email: 'leadgen@example.com',
         role: 'lead_generation',
         branchIds: ['branch-1'],
-        teamLeadId: 'teamLead-1',
-        teamLeadIds: ['teamLead-1'],
+        teamLeadId: 'tl-1',
+        teamLeadIds: ['tl-1'],
       }],
       ['teamLead-1', {
         $id: 'teamLead-1',
@@ -921,6 +934,16 @@ describe('lead server action authorization', () => {
         isClosed: false,
         closedAt: null,
         status: 'Interested',
+      })
+      // Third lookup: handleDuplicateNotifications
+      // (app/actions/lead-duplicates.ts) re-reads the actor document to work
+      // out which team leads to alert. Without this the notification flow
+      // throws before it can notify anyone.
+      .mockResolvedValueOnce({
+        $id: 'teamLead-1',
+        email: 'teamLead@example.com',
+        role: 'team_lead',
+        branchIds: ['branch-1'],
       });
 
     mockListDocuments
@@ -940,20 +963,33 @@ describe('lead server action authorization', () => {
       })
       .mockResolvedValueOnce({
         documents: [
-          { $id: 'admin-1', role: 'admin' },
-          { $id: 'tl-1', role: 'team_lead' },
-          { $id: 'tl-2', role: 'team_lead' },
-          { $id: 'tl-3', role: 'team_lead' },
-          { $id: 'agent-1', role: 'agent' },
+          // `department` is required on the team_lead rows: the recipient filter
+          // in app/actions/lead-duplicates.ts only includes a team lead when
+          // their department matches the actor's, so rows without one are
+          // silently dropped from the fan-out. Every user document in
+          // production carries this field.
+          { $id: 'admin-1', role: 'admin', department: 'sales' },
+          { $id: 'tl-1', role: 'team_lead', department: 'sales' },
+          { $id: 'tl-2', role: 'team_lead', department: 'sales' },
+          { $id: 'tl-3', role: 'team_lead', department: 'sales' },
+          { $id: 'agent-1', role: 'agent', department: 'sales' },
         ],
       });
 
     const { updateLeadAction } = await import('@/app/actions/lead');
     const { createNotificationsForRecipients } = await import('@/lib/server/notifications');
 
+    // The duplicate is now surfaced as a structured LeadActionError with a
+    // user-facing message; the offending lead id travels in `meta`
+    // (app/actions/lead.ts, DUPLICATE_FIELD branch).
     await expect(
       updateLeadAction('lead-1', { phone: '+1 (555) 111-2222' }, 'teamLead-1', 'TeamLead')
-    ).rejects.toThrow('Duplicate phone found in lead lead-2');
+    ).rejects.toMatchObject({
+      code: 'DUPLICATE_FIELD',
+      field: 'phone',
+      message: 'A lead with this phone number already exists in another branch.',
+      meta: expect.objectContaining({ existingLeadId: 'lead-2' }),
+    });
 
     expect(mockUpdateDocument).not.toHaveBeenCalled();
     expect(createNotificationsForRecipients).toHaveBeenCalledWith(
@@ -1234,7 +1270,7 @@ describe('lead server action authorization', () => {
     expect(mockUpdateDocument).not.toHaveBeenCalled();
   });
 
-  it('moves backed out leads to the unassigned owner and clears assignedToId', async () => {
+  it('moves backed out leads to the unassigned owner and keeps the original assignee for reporting', async () => {
     mockGetDocument
       .mockResolvedValueOnce({
         $id: 'teamLead-1',
@@ -1267,7 +1303,7 @@ describe('lead server action authorization', () => {
     mockUpdateDocument.mockResolvedValueOnce({
       $id: 'lead-1',
       ownerId: 'unassigned-owner',
-      assignedToId: null,
+      assignedToId: 'agent-1',
       isClosed: true,
       status: 'Backed Out',
     });
@@ -1278,7 +1314,7 @@ describe('lead server action authorization', () => {
       success: true,
       lead: expect.objectContaining({
         ownerId: 'unassigned-owner',
-        assignedToId: null,
+        isClosed: true,
       }),
     });
 
@@ -1288,11 +1324,21 @@ describe('lead server action authorization', () => {
       'lead-1',
       expect.objectContaining({
         ownerId: 'unassigned-owner',
-        assignedToId: null,
         status: 'Backed Out',
+        isClosed: true,
       }),
       expect.any(Array),
     );
+
+    // backoutLeadAction deliberately leaves assignedToId untouched so the
+    // original assignee survives for reporting (lib/actions/lead-actions.ts).
+    // Access is revoked through document permissions instead: the previous
+    // assignee must not be granted anything on the backed out lead.
+    const [, , , backoutPayload, backoutPermissions] = mockUpdateDocument.mock.calls[0];
+    expect(backoutPayload).not.toHaveProperty('assignedToId');
+    expect(backoutPermissions).toContain('read:user:unassigned-owner');
+    expect(backoutPermissions).not.toContain('read:user:agent-1');
+    expect(backoutPermissions).not.toContain('update:user:agent-1');
   });
 
   it('moves not interested leads to the unassigned owner and clears assignedToId', async () => {

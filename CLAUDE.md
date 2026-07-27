@@ -125,8 +125,22 @@ Automated jobs run via API routes under `app/api/cron/`:
 | `team_lead` | Manage agents, see team leads, attendance |
 | `agent` | Own leads only, LinkedIn outreach |
 | `lead_generation` | Create leads only, no history/reports |
-| `monitor` | Admin-level read visibility, no mutation privileges |
-| `operations` | Broad read + operational access, no admin mutations |
+| `monitor` | Admin-level read visibility. **Not read-only**: may close and reopen leads, update leads it owns or is assigned, and mutate client payments. Cannot set monthly targets or followup payments, and has no admin-level lead update. |
+| `operations` | Admin-level read visibility, and read-only in practice: blocked from mutating leads, client payments, monthly targets and followup payments. |
+
+`monitor` and `operations` share read scope but differ on writes, so do not treat them as
+interchangeable. The authoritative checks are:
+
+| Guard | File | monitor | operations |
+|---|---|---|---|
+| Close or reopen a lead | `assertLeadReopenAllowed`, [app/actions/lead.ts](app/actions/lead.ts) | allowed | denied |
+| Update a lead | `assertLeadUpdateAllowed`, [app/actions/lead.ts](app/actions/lead.ts) | own or assigned only | denied |
+| Client payments | `assertCanMutateClientPayments`, [app/actions/client-payments.ts](app/actions/client-payments.ts) | allowed | denied |
+| Monthly targets | [app/actions/monthly-targets.ts](app/actions/monthly-targets.ts) | denied | denied |
+| Followup payments | `assertCanMutateFollowups`, [app/actions/previous-followups-payments.ts](app/actions/previous-followups-payments.ts) | denied | denied |
+
+The client-payment allowance is a consequence of the lead one: closing a lead upserts the
+matching client payment record, so a role that can close leads must be able to write that record.
 
 ## Known Patterns to Maintain
 
