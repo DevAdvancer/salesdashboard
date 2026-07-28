@@ -127,10 +127,11 @@ function LinkedinRequestsContent() {
 
   // --- Cooldown rate-limiter: prevents rapid double-clicks on any action ---
   const COOLDOWN_MS = 2000;
-  const lastActionAt = useRef<number>(0);
-  const isCoolingDown = useCallback(() => {
+  const lastActionAt = useRef<Record<string, number>>({});
+  const isCoolingDown = useCallback((actionKey: string = "default") => {
     const now = Date.now();
-    if (now - lastActionAt.current < COOLDOWN_MS) {
+    const last = lastActionAt.current[actionKey] || 0;
+    if (now - last < COOLDOWN_MS) {
       toast({
         title: "Please wait",
         description: "You're clicking too fast. Try again in a moment.",
@@ -138,7 +139,7 @@ function LinkedinRequestsContent() {
       });
       return true;
     }
-    lastActionAt.current = now;
+    lastActionAt.current[actionKey] = now;
     return false;
   }, [toast]);
 
@@ -250,8 +251,8 @@ function LinkedinRequestsContent() {
 
   const onCheck = async () => {
     if (!user) return;
-    if (checking || adding) return;
-    if (isCoolingDown()) return;
+    if (adding || checking) return;
+    if (isCoolingDown("check")) return;
     if (!selectedAccount) {
       toast({
         title: "Select an account",
@@ -359,7 +360,7 @@ function LinkedinRequestsContent() {
   const onAdd = async () => {
     if (!user) return;
     if (adding || checking) return;
-    if (isCoolingDown()) return;
+    if (isCoolingDown("add")) return;
     if (!selectedAccount) return;
 
     if (dateSent !== today) {
@@ -416,7 +417,7 @@ function LinkedinRequestsContent() {
   const markAccepted = async (request: LinkedinRequest) => {
     if (!user) return;
     if (acceptingId) return;
-    if (isCoolingDown()) return;
+    if (isCoolingDown(`accept-${request.$id}`)) return;
     try {
       setAcceptingId(request.$id);
       await markLinkedinRequestAcceptedAction({
@@ -461,7 +462,7 @@ function LinkedinRequestsContent() {
   const withdraw = async (request: LinkedinRequest) => {
     if (!user) return;
     if (withdrawingId) return;
-    if (isCoolingDown()) return;
+    if (isCoolingDown(`withdraw-${request.$id}`)) return;
     const reason =
       window.prompt("Enter withdraw reason for audit")?.trim() ?? "";
     if (!reason) {
@@ -624,9 +625,9 @@ function LinkedinRequestsContent() {
                   disabled={checking || !selectedAccount}>
                   Check
                 </Button>
-                {isDuplicate === false && (
+                {isDuplicate !== null && (
                   <Button onClick={onAdd} loading={adding} disabled={adding}>
-                    Add
+                    {isDuplicate ? "Resend" : "Add"}
                   </Button>
                 )}
                 {isDuplicate === null && (
