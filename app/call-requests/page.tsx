@@ -6,6 +6,7 @@ import { RefreshCw } from "lucide-react";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/lib/contexts/auth-context";
 import {
@@ -58,6 +59,8 @@ function CallsContent() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openChatId, setOpenChatId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
 
   const canAssign = useMemo(() => {
     if (!user) return false;
@@ -75,7 +78,7 @@ function CallsContent() {
     setError(null);
     try {
       const [list, opts] = await Promise.all([
-        listCallRequestsAction(),
+        listCallRequestsAction(appliedSearch),
         getCallRequestOptionsAction(),
       ]);
       setRequests(list);
@@ -85,7 +88,7 @@ function CallsContent() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [appliedSearch]);
 
   useEffect(() => {
     void load();
@@ -126,17 +129,27 @@ function CallsContent() {
 
   return (
     <div className="container mx-auto space-y-6">
-      <div className="flex items-end justify-between gap-3">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold mb-1">Calls</h1>
           <p className="text-muted-foreground">
             Incoming call requests from the Sales team.
           </p>
         </div>
-        <Button type="button" variant="outline" onClick={load} disabled={loading}>
-          <RefreshCw className="h-4 w-4 mr-1" />
-          {loading ? "Refreshing..." : "Refresh"}
-        </Button>
+        <div className="flex flex-row items-center gap-2">
+          <Input 
+            placeholder="Search client or lead..." 
+            value={search} 
+            onChange={(e) => setSearch(e.target.value)} 
+          />
+          <Button type="button" onClick={() => setAppliedSearch(search)}>
+            Search
+          </Button>
+          <Button type="button" variant="outline" onClick={load} disabled={loading}>
+            <RefreshCw className="h-4 w-4 mr-1" />
+            {loading ? "Refreshing..." : "Refresh"}
+          </Button>
+        </div>
       </div>
 
       {error && (

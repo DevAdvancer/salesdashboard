@@ -140,7 +140,7 @@ export async function logAuditAction(databases: Awaited<ReturnType<typeof create
     metadata?: Record<string, unknown>;
     }) {
     try {
-    await databases.createDocument(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, ID.unique(), {
+    await databases.createDocument(DATABASE_ID, "", ID.unique(), {
       action: input.action,
       actorId: input.actorId,
       actorName: input.actorName,

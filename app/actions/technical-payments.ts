@@ -72,19 +72,23 @@ export async function saveTechnicalPayment(input: {
 
 // ─── Read helpers ─────────────────────────────────────────────────────────────
 
-async function listAllTechnicalPayments(): Promise<any[]> {
+async function listAllTechnicalPayments(dateFrom?: string, dateTo?: string): Promise<any[]> {
   const { databases } = await createAdminClient();
+  const queries: string[] = [];
+  if (dateFrom) queries.push(Query.greaterThanEqual('createdAt', dateFrom));
+  if (dateTo) queries.push(Query.lessThanEqual('createdAt', dateTo));
+
   return listAllDocuments<any>({
     databases,
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.TECHNICAL_PAYMENTS,
-    queries: [],
+    queries,
     pageLimit: 100,
     maxPages: 500,
   });
 }
 
-async function listTechnicalPaymentsByUserIds(userIds: string[]): Promise<any[]> {
+async function listTechnicalPaymentsByUserIds(userIds: string[], dateFrom?: string, dateTo?: string): Promise<any[]> {
   if (!userIds.length) return [];
   const { databases } = await createAdminClient();
   const CHUNK = 100;
@@ -93,13 +97,17 @@ async function listTechnicalPaymentsByUserIds(userIds: string[]): Promise<any[]>
     chunks.push(userIds.slice(i, i + CHUNK));
   }
   const results = await Promise.all(
-    chunks.map((chunk) =>
-      databases.listDocuments(DATABASE_ID, COLLECTIONS.TECHNICAL_PAYMENTS, [
+    chunks.map((chunk) => {
+      const queries = [
         Query.equal('userId', chunk),
         Query.orderDesc('createdAt'),
         Query.limit(5000),
-      ])
-    )
+      ];
+      if (dateFrom) queries.push(Query.greaterThanEqual('createdAt', dateFrom));
+      if (dateTo) queries.push(Query.lessThanEqual('createdAt', dateTo));
+
+      return databases.listDocuments(DATABASE_ID, COLLECTIONS.TECHNICAL_PAYMENTS, queries);
+    })
   );
   return results.flatMap((r) => r.documents);
 }
@@ -194,7 +202,9 @@ export interface TechnicalPaymentSummary {
  * Admin/monitor/operations see everything; team_leads see their own + team agents.
  */
 export async function listTechnicalPaymentsAction(
-  actorId: string
+  actorId: string,
+  dateFrom?: string,
+  dateTo?: string
 ): Promise<TechnicalPaymentSummary[]> {
   const actor = await getActor(actorId);
   ensureComponentAccess(actor.role, 'technical-payments');
@@ -226,8 +236,8 @@ export async function listTechnicalPaymentsAction(
   }
 
   const payments = scopedUserIds
-    ? await listTechnicalPaymentsByUserIds(scopedUserIds)
-    : await listAllTechnicalPayments();
+    ? await listTechnicalPaymentsByUserIds(scopedUserIds, dateFrom, dateTo)
+    : await listAllTechnicalPayments(dateFrom, dateTo);
 
   // Collect lead IDs to batch-fetch lead data
   const leadIds = Array.from(new Set(payments.map((p: any) => p.leadId).filter(Boolean)));

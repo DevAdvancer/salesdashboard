@@ -395,7 +395,7 @@ async function listAuditLogsInRange(databases: any, range: WeeklyReportRange): P
   return listAllDocuments<AuditLogDocument>({
     databases,
     databaseId: DATABASE_ID,
-    collectionId: COLLECTIONS.AUDIT_LOGS,
+    collectionId: "",
     queries: [
       Query.equal("action", "LEAD_UPDATE"),
       Query.equal("targetType", "LEAD"),

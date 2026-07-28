@@ -106,8 +106,6 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'interview-support', label: 'Interview Support', href: '/interview-support', icon: appIcons.interviewSupport },
   { key: 'hierarchy', label: 'Hierarchy', href: '/hierarchy', icon: appIcons.hierarchy },
   { key: 'user-management', label: 'Users', href: '/users', icon: appIcons.users },
-  { key: 'audit-logs', label: 'Audit Logs', href: '/audit-logs', icon: appIcons.auditLogs },
   { key: 'settings', label: 'Settings', href: '/settings', icon: appIcons.settings },
   { key: 'assigned-report', label: 'Assigned Report', href: '/assigned-report', icon: appIcons.assignedReport },
-  { key: 'resume-audit-logs', label: 'Audit Logs', href: '/resume-dashboard/audit-logs', icon: appIcons.auditLogs },
 ];

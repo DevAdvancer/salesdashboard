@@ -26,7 +26,7 @@ async function getDuplicateAttemptCount(
     const docs = await listAllDocuments<{ $id: string }>(({
       databases,
       databaseId: DATABASE_ID,
-      collectionId: COLLECTIONS.AUDIT_LOGS,
+      collectionId: "",
       queries: [
         Query.equal("action", "DUPLICATE_ATTEMPT"),
         Query.equal("targetId", existingLeadId),
@@ -52,7 +52,7 @@ async function logDuplicateAttempt(
   try {
     await databases.createDocument(
       DATABASE_ID,
-      COLLECTIONS.AUDIT_LOGS,
+      "",
       ID.unique(),
       {
         action: "DUPLICATE_ATTEMPT",

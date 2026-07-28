@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -118,11 +118,30 @@ function LinkedinRequestsContent() {
     "all" | "sent" | "accepted" | "withdrawn"
   >("all");
   const [filterUrl, setFilterUrl] = useState<string>("");
+  const [appliedFilterUrl, setAppliedFilterUrl] = useState<string>("");
   const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
   const [leadOutcomeByLeadId, setLeadOutcomeByLeadId] = useState<
     Record<string, { statusLabel: string | null; isTerminal: boolean }>
   >({});
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+
+  // --- Cooldown rate-limiter: prevents rapid double-clicks on any action ---
+  const COOLDOWN_MS = 2000;
+  const lastActionAt = useRef<number>(0);
+  const isCoolingDown = useCallback(() => {
+    const now = Date.now();
+    if (now - lastActionAt.current < COOLDOWN_MS) {
+      toast({
+        title: "Please wait",
+        description: "You're clicking too fast. Try again in a moment.",
+        variant: "destructive",
+      });
+      return true;
+    }
+    lastActionAt.current = now;
+    return false;
+  }, [toast]);
+
   const selectedAccount = useMemo(
     () => accounts.find((a) => a.$id === selectedAccountId) ?? null,
     [accounts, selectedAccountId],
@@ -174,7 +193,8 @@ function LinkedinRequestsContent() {
       setLoadingList(true);
       const next = await listMyLinkedinRequestsAction({
         currentUserId: user.$id,
-        limit: 500,
+        limit: 10,
+        searchQuery: appliedFilterUrl,
       });
       setRequests(next);
       const leadIds = Array.from(
@@ -211,7 +231,7 @@ function LinkedinRequestsContent() {
     } finally {
       setLoadingList(false);
     }
-  }, [user]);
+  }, [user, appliedFilterUrl]);
 
   useEffect(() => {
     // Gate on serverSessionReady so the crm_appwrite_jwt cookie is in place
@@ -230,6 +250,8 @@ function LinkedinRequestsContent() {
 
   const onCheck = async () => {
     if (!user) return;
+    if (checking || adding) return;
+    if (isCoolingDown()) return;
     if (!selectedAccount) {
       toast({
         title: "Select an account",
@@ -336,6 +358,8 @@ function LinkedinRequestsContent() {
 
   const onAdd = async () => {
     if (!user) return;
+    if (adding || checking) return;
+    if (isCoolingDown()) return;
     if (!selectedAccount) return;
 
     if (dateSent !== today) {
@@ -391,6 +415,8 @@ function LinkedinRequestsContent() {
 
   const markAccepted = async (request: LinkedinRequest) => {
     if (!user) return;
+    if (acceptingId) return;
+    if (isCoolingDown()) return;
     try {
       setAcceptingId(request.$id);
       await markLinkedinRequestAcceptedAction({
@@ -434,6 +460,8 @@ function LinkedinRequestsContent() {
 
   const withdraw = async (request: LinkedinRequest) => {
     if (!user) return;
+    if (withdrawingId) return;
+    if (isCoolingDown()) return;
     const reason =
       window.prompt("Enter withdraw reason for audit")?.trim() ?? "";
     if (!reason) {
@@ -470,7 +498,6 @@ function LinkedinRequestsContent() {
   };
 
   const filteredRequests = useMemo(() => {
-    const normalizedUrl = filterUrl.trim().toLowerCase();
     return requests.filter((r) => {
       if (filterStatus !== "all" && r.status !== filterStatus) {
         return false;
@@ -479,12 +506,9 @@ function LinkedinRequestsContent() {
         const sentValue = getLinkedinRequestDateFilterValue(r.dateSent);
         if (sentValue !== filterDate) return false;
       }
-      if (normalizedUrl) {
-        if (!r.targetUrl.toLowerCase().includes(normalizedUrl)) return false;
-      }
       return true;
     });
-  }, [filterDate, filterStatus, filterUrl, requests]);
+  }, [filterDate, filterStatus, requests]);
 
   if (!user) return null;
 
@@ -655,12 +679,20 @@ function LinkedinRequestsContent() {
               </select>
             </div>
             <div className="space-y-2">
-              <Label>URL</Label>
-              <Input
-                value={filterUrl}
-                onChange={(e) => setFilterUrl(e.target.value)}
-                placeholder="Search URL"
-              />
+              <Label>URL or Company</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={filterUrl}
+                  onChange={(e) => setFilterUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      setAppliedFilterUrl(filterUrl);
+                    }
+                  }}
+                  placeholder="Search..."
+                />
+                <Button onClick={() => setAppliedFilterUrl(filterUrl)}>Search</Button>
+              </div>
             </div>
           </div>
           <Table>
@@ -829,8 +861,9 @@ function LinkedinRequestsContent() {
       </Card>
 
       {historyOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50">
-          <Card className="w-full sm:max-w-2xl sm:mx-4 rounded-b-none sm:rounded-b-lg">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50" onClick={() => setHistoryOpen(false)}>
+          <div className="w-full sm:max-w-2xl sm:mx-4 rounded-t-2xl sm:rounded-2xl bg-background border border-border shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <Card className="border-0 shadow-none bg-transparent">
             <CardHeader>
               <CardTitle>Connection History</CardTitle>
             </CardHeader>
@@ -952,7 +985,8 @@ function LinkedinRequestsContent() {
                 </Button>
               </div>
             </CardContent>
-          </Card>
+            </Card>
+          </div>
         </div>
       )}
     </div>

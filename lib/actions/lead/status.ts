@@ -44,7 +44,7 @@ async function syncLinkedinRequestAfterLeadClosure(
                 },
             );
 
-            await databases.createDocument(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, ID.unique(), {
+            await databases.createDocument(DATABASE_ID, "", ID.unique(), {
                 action: 'LINKEDIN_REQUEST_REOPEN',
                 actorId,
                 actorName,
@@ -85,7 +85,7 @@ async function syncLinkedinRequestAfterLeadClosure(
             },
         );
 
-        await databases.createDocument(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, ID.unique(), {
+        await databases.createDocument(DATABASE_ID, "", ID.unique(), {
             action: 'LINKEDIN_REQUEST_WITHDRAW',
             actorId,
             actorName,
@@ -180,7 +180,7 @@ export async function backoutLeadAction(
   );
 
   try {
-    await databases.createDocument(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, ID.unique(), {
+    await databases.createDocument(DATABASE_ID, "", ID.unique(), {
       action: "LEAD_UPDATE",
       actorId,
       actorName,
@@ -321,7 +321,7 @@ export async function notInterestedLeadAction(
   }
 
   try {
-    await databases.createDocument(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, ID.unique(), {
+    await databases.createDocument(DATABASE_ID, "", ID.unique(), {
       action: "LEAD_UPDATE",
       actorId,
       actorName,
@@ -483,7 +483,7 @@ export async function closeLeadAction(
             try {
                 await databases.createDocument(
                     DATABASE_ID,
-                    COLLECTIONS.AUDIT_LOGS,
+                    "",
                     ID.unique(),
                     {
                         action: 'LEAD_UPDATE',

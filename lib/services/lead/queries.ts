@@ -85,7 +85,7 @@ export async function listLeads(
     }
 
     queries.push(Query.orderDesc('$createdAt'));
-    queries.push(Query.limit(5000));
+    queries.push(Query.limit(filters.limit || 5000));
 
     const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS, queries);
 

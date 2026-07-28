@@ -45,5 +45,5 @@ export function buildDepartmentScopeQuery(ids: Set<string>): string | null {
 }
 
 export function isDepartmentScopeInlineEnabled(): boolean {
-  return process.env.LEADS_DEPT_SCOPE_INLINE === 'true';
+  return true;
 }

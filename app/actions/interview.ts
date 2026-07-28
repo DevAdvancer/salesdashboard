@@ -10,7 +10,7 @@ import { listLeadsAction } from "@/app/actions/lead/queries";
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const INTERVIEW_ATTEMPTS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_INTERVIEW_ATTEMPTS_COLLECTION_ID || 'interview_attempts';
 const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID || 'users';
-const AUDIT_LOGS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_AUDIT_LOGS_COLLECTION_ID!;
+const AUDIT_LOGS_COLLECTION_ID = "";
 
 type DatabasesClient = Awaited<ReturnType<typeof createAdminClient>>['databases'];
 

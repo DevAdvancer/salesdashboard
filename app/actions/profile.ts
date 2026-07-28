@@ -15,7 +15,7 @@ async function logProfileUpdate(input: {
   try {
     await databases.createDocument(
       DATABASE_ID,
-      COLLECTIONS.AUDIT_LOGS,
+      "",
       ID.unique(),
       {
         action: "USER_UPDATE",

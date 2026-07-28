@@ -424,18 +424,14 @@ function MainDashboard({
 
     (async () => {
       try {
-        const techPayments = await listTechnicalPaymentsAction(user.$id);
-
-        // Filter by date range to only include payments from the selected period
-        const filteredTechPayments = techPayments.filter(p => {
-          const paymentDate = p.createdAt?.substring(0, 10);
-          if (!paymentDate) return false;
-          return (!dateRange.from || paymentDate >= dateRange.from) &&
-                 (!dateRange.to || paymentDate <= dateRange.to);
-        });
+        const techPayments = await listTechnicalPaymentsAction(
+          user.$id,
+          dateRange.from ? `${dateRange.from}T00:00:00.000Z` : undefined,
+          dateRange.to ? `${dateRange.to}T23:59:59.999Z` : undefined
+        );
 
         if (!cancelled) {
-          const techTotal = filteredTechPayments.reduce((sum: number, p: { amount: number }) => sum + (Number(p.amount) || 0), 0);
+          const techTotal = techPayments.reduce((sum: number, p: { amount: number }) => sum + (Number(p.amount) || 0), 0);
           setTechnicalPaymentsTotal(techTotal);
         }
       } catch (error) {
@@ -491,7 +487,7 @@ function MainDashboard({
 
   // ── Fetch LG handoff summaries (admin-like only) ──────────────────────
   useEffect(() => {
-    if (!user || !isAdminLike) return;
+    if (!user || !isAdminLike || !dateRange) return;
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
@@ -500,7 +496,11 @@ function MainDashboard({
 
     (async () => {
       try {
-        const result = await loadLgHandoffSummaries(user.$id);
+        const result = await loadLgHandoffSummaries(
+          user.$id,
+          dateRange.from ? `${dateRange.from}T00:00:00.000Z` : undefined,
+          dateRange.to ? `${dateRange.to}T23:59:59.999Z` : undefined
+        );
         if (!cancelled) {
           setHandoffSummaries(result);
           setHandoffLoading(false);
@@ -517,7 +517,7 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, isAdminLike, liveRefreshNonce]);
+  }, [user, isAdminLike, dateRange, liveRefreshNonce]);
 
   // KPI section mode + target derived from range
   const kpiMode = (dateRange && isSingleDay(dateRange)) ? "daily" : "monthly";
@@ -773,8 +773,9 @@ function LeadGenerationDashboardContent() {
 
     (async () => {
       try {
+        const startOfMonthIso = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
         const leads = await listLeads(
-          { isClosed: false },
+          { isClosed: false, dateFrom: startOfMonthIso, limit: 200 },
           user.$id,
           user.role,
           user.branchIds,

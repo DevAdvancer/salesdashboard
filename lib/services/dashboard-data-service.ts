@@ -511,13 +511,15 @@ export async function loadDashboardReferralStats(
  */
 export async function loadLgHandoffSummaries(
   actorId: string,
+  dateFrom?: string,
+  dateTo?: string,
 ): Promise<TeamLeadAssignmentSummary[]> {
   return cacheClientRead(
     DASHBOARD_LG_HANDOFFS_SCOPE,
-    [actorId],
+    [actorId, dateFrom, dateTo],
     async () => {
-      // 1. Fetch all handoff rows.
-      const handoffs: LgHandoff[] = await listLgHandoffsAction().catch(() => []);
+      // 1. Fetch handoff rows within date range.
+      const handoffs: LgHandoff[] = await listLgHandoffsAction(dateFrom, dateTo).catch(() => []);
       if (handoffs.length === 0) return [];
 
       // 2. Collect unique user IDs referenced in the handoff rows.

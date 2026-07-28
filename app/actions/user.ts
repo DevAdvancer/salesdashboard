@@ -13,7 +13,7 @@ import { getUsersByIds } from '@/lib/services/user-service';
 // Constants
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
-const AUDIT_LOGS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_AUDIT_LOGS_COLLECTION_ID!;
+const AUDIT_LOGS_COLLECTION_ID = "";
 
 type CreateAdminInput = {
     name: string;

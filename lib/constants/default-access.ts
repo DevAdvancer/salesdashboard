@@ -7,7 +7,6 @@ export type ComponentKey =
   | 'field-management'
   | 'settings'
   | 'branch-management'
-  | 'audit-logs'
   | 'mock'
   | 'assessment-support'
   | 'interview-support'
@@ -44,7 +43,6 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'field-management', role: 'admin', allowed: false },
   { componentKey: 'settings', role: 'admin', allowed: true },
   { componentKey: 'branch-management', role: 'admin', allowed: true },
-  { componentKey: 'audit-logs', role: 'admin', allowed: true },
   { componentKey: 'mock', role: 'admin', allowed: true },
   { componentKey: 'assessment-support', role: 'admin', allowed: true },
   { componentKey: 'interview-support', role: 'admin', allowed: true },
@@ -69,7 +67,6 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'field-management', role: 'developer', allowed: false },
   { componentKey: 'settings', role: 'developer', allowed: true },
   { componentKey: 'branch-management', role: 'developer', allowed: true },
-  { componentKey: 'audit-logs', role: 'developer', allowed: true },
   { componentKey: 'mock', role: 'developer', allowed: true },
   { componentKey: 'assessment-support', role: 'developer', allowed: true },
   { componentKey: 'interview-support', role: 'developer', allowed: true },
@@ -94,7 +91,6 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'field-management', role: 'monitor', allowed: false },
   { componentKey: 'settings', role: 'monitor', allowed: true },
   { componentKey: 'branch-management', role: 'monitor', allowed: true },
-  { componentKey: 'audit-logs', role: 'monitor', allowed: true },
   { componentKey: 'mock', role: 'monitor', allowed: true },
   { componentKey: 'assessment-support', role: 'monitor', allowed: true },
   { componentKey: 'interview-support', role: 'monitor', allowed: true },
@@ -119,7 +115,6 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'field-management', role: 'operations', allowed: false },
   { componentKey: 'settings', role: 'operations', allowed: true },
   { componentKey: 'branch-management', role: 'operations', allowed: true },
-  { componentKey: 'audit-logs', role: 'operations', allowed: false },
   { componentKey: 'mock', role: 'operations', allowed: true },
   { componentKey: 'assessment-support', role: 'operations', allowed: true },
   { componentKey: 'interview-support', role: 'operations', allowed: true },
@@ -148,7 +143,6 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'field-management', role: 'team_lead', allowed: false },
   { componentKey: 'settings', role: 'team_lead', allowed: true },
   { componentKey: 'branch-management', role: 'team_lead', allowed: false },
-  { componentKey: 'audit-logs', role: 'team_lead', allowed: false },
   { componentKey: 'mock', role: 'team_lead', allowed: true },
   { componentKey: 'assessment-support', role: 'team_lead', allowed: true },
   { componentKey: 'interview-support', role: 'team_lead', allowed: true },
@@ -174,7 +168,6 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'field-management', role: 'agent', allowed: false },
   { componentKey: 'settings', role: 'agent', allowed: true },
   { componentKey: 'branch-management', role: 'agent', allowed: false },
-  { componentKey: 'audit-logs', role: 'agent', allowed: false },
   { componentKey: 'mock', role: 'agent', allowed: true },
   { componentKey: 'assessment-support', role: 'agent', allowed: true },
   { componentKey: 'interview-support', role: 'agent', allowed: true },
@@ -200,7 +193,6 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'field-management', role: 'lead_generation', allowed: false },
   { componentKey: 'settings', role: 'lead_generation', allowed: true },
   { componentKey: 'branch-management', role: 'lead_generation', allowed: false },
-  { componentKey: 'audit-logs', role: 'lead_generation', allowed: false },
   { componentKey: 'mock', role: 'lead_generation', allowed: false },
   { componentKey: 'assessment-support', role: 'lead_generation', allowed: false },
   { componentKey: 'interview-support', role: 'lead_generation', allowed: false },

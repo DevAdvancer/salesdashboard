@@ -429,40 +429,8 @@ export async function getLinkedinConnectionHistoryAction(input: {
     const requestsMissingLead = requests.filter(
             (r) => !requestToLeadId.has(r.$id),
           );
-    if (requestsMissingLead.length > 0) {
-    await Promise.all(
-      requestsMissingLead.map(async (r) => {
-        try {
-          const response = await databases.listDocuments(
-            DATABASE_ID,
-            COLLECTIONS.AUDIT_LOGS,
-            [
-              Query.equal("targetType", "linkedin_request"),
-              Query.equal("targetId", r.$id),
-              Query.equal("action", "LINKEDIN_REQUEST_LINK_LEAD"),
-              Query.orderDesc("$createdAt"),
-              Query.limit(1),
-            ],
-          );
-          for (const doc of response.documents) {
-            const meta = (doc as any).metadata;
-            let parsed: any = meta;
-            if (typeof meta === "string") {
-              try { parsed = JSON.parse(meta); } catch { parsed = null; }
-            }
-            const leadId =
-              parsed && typeof parsed === "object" && typeof parsed.leadId === "string"
-                ? parsed.leadId
-                : null;
-            if (leadId) requestToLeadId.set(r.$id, leadId);
-            break;
-          }
-        } catch {
-          // Ignore — history can still render without a linked lead.
-        }
-      }),
-    );
-    }
+    // AUDIT_LOGS removed, so we cannot link requests to leads via logs anymore.
+    // If request.leadId is missing, it remains missing.
 
     const leadIds = Array.from(new Set(requestToLeadId.values()));
     const leadById = new Map<string, { leadId: string; status: string; isClosed: boolean }>();
@@ -492,47 +460,11 @@ export async function getLinkedinConnectionHistoryAction(input: {
             }
           }
         }
-      })(),
-      Promise.all(
-        leadIds.map(async (leadId) => {
-          try {
-            const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, [
-              Query.equal("targetType", "LEAD"),
-              Query.equal("targetId", leadId),
-              Query.orderDesc("$createdAt"),
-              Query.select(["$id", "action", "actorName", "createdAt", "metadata"]),
-              Query.limit(50),
-            ]);
-            const logs = response.documents.map((doc) => ({
-              $id: String((doc as any).$id),
-              action: String((doc as any).action ?? ""),
-              actorName: String((doc as any).actorName ?? ""),
-              createdAt: String((doc as any).createdAt ?? ""),
-              metadata: (doc as any).metadata ?? null,
-            }));
-            leadAuditByLeadId.set(leadId, logs);
-          } catch {
-            leadAuditByLeadId.set(leadId, []);
-          }
-        })
-      )
+      })()
     ]);
     const histories = await Promise.all(
             requests.map(async (req) => {
-              const logsResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, [
-                Query.equal("targetType", "linkedin_request"),
-                Query.equal("targetId", req.$id),
-                Query.orderDesc("$createdAt"),
-                Query.limit(100),
-              ]);
-
-              const logs = logsResponse.documents.map((doc) => ({
-                $id: String((doc as any).$id),
-                action: String((doc as any).action ?? ""),
-                actorName: String((doc as any).actorName ?? ""),
-                createdAt: String((doc as any).createdAt ?? ""),
-                metadata: (doc as any).metadata ?? null,
-              }));
+              const logs: any[] = [];
 
               const leadId = requestToLeadId.get(req.$id) ?? null;
               return {
@@ -615,23 +547,42 @@ export async function listMyLinkedinRequestsForAccountAction(input: {
 export async function listMyLinkedinRequestsAction(input: {
       currentUserId: string;
       limit?: number;
+      searchQuery?: string;
     }) {
     await assertAuthenticatedUserId(input.currentUserId);
     const user = await getAuthenticatedUserDoc();
     const { databases } = await createAdminClient();
     const delegatedUserIds = await listDelegatedSourceUserIdsForToday(databases, user.$id);
     const agentIds = delegatedUserIds.length > 0 ? [user.$id, ...delegatedUserIds] : [user.$id];
-    const response = await databases.listDocuments(
-            DATABASE_ID,
-            COLLECTIONS.LINKEDIN_REQUESTS,
-            [
-              Query.equal("agentId", agentIds),
-              Query.orderDesc("dateSent"),
-              Query.orderDesc("$createdAt"),
-              Query.limit(Math.min(Math.max(input.limit ?? 200, 1), 500)),
-            ],
-          );
-    return response.documents as unknown as LinkedinRequest[];
+    
+    const queries = [
+      Query.equal("agentId", agentIds),
+      Query.orderDesc("dateSent"),
+      Query.orderDesc("$createdAt"),
+    ];
+
+    if (!input.searchQuery) {
+      queries.push(Query.limit(Math.min(Math.max(input.limit ?? 10, 1), 500)));
+      const response = await databases.listDocuments(
+        DATABASE_ID,
+        COLLECTIONS.LINKEDIN_REQUESTS,
+        queries,
+      );
+      return response.documents as unknown as LinkedinRequest[];
+    } else {
+      queries.push(Query.limit(500)); // Still limit max for memory
+      const response = await databases.listDocuments(
+        DATABASE_ID,
+        COLLECTIONS.LINKEDIN_REQUESTS,
+        queries,
+      );
+      const all = response.documents as unknown as LinkedinRequest[];
+      const q = input.searchQuery.toLowerCase();
+      return all.filter((r) => 
+        (r.targetUrl && r.targetUrl.toLowerCase().includes(q)) || 
+        (r.company && r.company.toLowerCase().includes(q))
+      );
+    }
 }
 
 export async function markLinkedinRequestAcceptedAction(input: {
@@ -794,6 +745,7 @@ export async function listLinkedinRequestsForAdminAction(input: {
       status?: "all" | "sent" | "accepted" | "withdrawn";
       agentId?: string;
       limit?: number;
+      searchQuery?: string;
     }) {
     await assertAuthenticatedUserId(input.currentUserId);
     const user = await getAuthenticatedUserDoc();
@@ -810,8 +762,15 @@ export async function listLinkedinRequestsForAdminAction(input: {
             Query.lessThanEqual("dateSent", end),
             Query.orderDesc("dateSent"),
             Query.orderDesc("$createdAt"),
-            Query.limit(Math.min(Math.max(input.limit ?? 500, 1), 2000)),
           ];
+
+    if (input.searchQuery) {
+        queries.push(Query.search("targetUrl", input.searchQuery.trim()));
+        queries.push(Query.limit(Math.min(Math.max(input.limit ?? 100, 1), 500)));
+    } else {
+        queries.push(Query.limit(10));
+    }
+
     if (effectiveTeamLeadId && effectiveTeamLeadId !== "all") {
     queries.unshift(Query.equal("teamLeadId", effectiveTeamLeadId));
     }
@@ -1093,27 +1052,7 @@ export async function runLinkedinAutoWithdrawAction(input: {
         },
       );
 
-      // Audit log
-      await databases.createDocument(
-        DATABASE_ID,
-        COLLECTIONS.AUDIT_LOGS,
-        ID.unique(),
-        {
-          action: "LINKEDIN_REQUEST_AUTO_WITHDRAW",
-          actorId: actor.$id,
-          actorName: actor.name,
-          targetId: doc.$id,
-          targetType: "linkedin_request",
-          metadata: JSON.stringify({
-            company: doc.company,
-            targetUrl: doc.targetUrl,
-            reason,
-            withdrawnAt: nowIso,
-            triggeredBy: "admin_action",
-          }),
-          createdAt: nowIso,
-        },
-      );
+      // Audit logs have been removed
 
       // General chat notification
       try {

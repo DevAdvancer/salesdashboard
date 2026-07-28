@@ -140,17 +140,21 @@ export async function recordLgHandoffAction(
  * If the collection is missing, returns an empty array so the
  * dashboard renders an empty-state instead of crashing.
  */
-export async function listLgHandoffsAction(): Promise<LgHandoff[]> {
+export async function listLgHandoffsAction(dateFrom?: string, dateTo?: string): Promise<LgHandoff[]> {
   const { databases } = await createAdminClient();
 
   try {
+    const queries = [
+      Query.limit(5000),
+      Query.select(['leadId', 'teamLeadId', 'leadGenerationId', 'handedOffAt', 'branchId']),
+    ];
+    if (dateFrom) queries.push(Query.greaterThanEqual('handedOffAt', dateFrom));
+    if (dateTo) queries.push(Query.lessThanEqual('handedOffAt', dateTo));
+
     const response = await databases.listDocuments(
       DATABASE_ID,
       LG_HANDOFFS_COLLECTION_ID,
-      [
-        Query.limit(5000),
-        Query.select(['leadId', 'teamLeadId', 'leadGenerationId', 'handedOffAt', 'branchId']),
-      ],
+      queries,
     );
     const rows: LgHandoff[] = [];
     for (const doc of response.documents) {

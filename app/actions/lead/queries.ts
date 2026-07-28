@@ -264,114 +264,96 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
     const page = wantExport ? 1 : Math.max(1, options?.page ?? 1);
     const pageSize = wantExport ? 10000 : Math.min(100, Math.max(1, options?.pageSize ?? 20));
 
-    const projectedQueries = [...queries];
-    if (!filters.searchQuery) {
-      projectedQueries.push(Query.select(LEADS_LIST_SELECT));
+    // We can now use Appwrite native fulltext search since we added the `data_search_idx` index.
+    if (filters.searchQuery) {
+      let queryStr = filters.searchQuery.trim();
+      let visaStatusMatch: string | null = null;
+      if (queryStr.toLowerCase().startsWith('visastatus:')) {
+        visaStatusMatch = queryStr.slice('visastatus:'.length).trim();
+        // Visa status search is specific and might not use fulltext efficiently 
+        // since it's just one word. But we can still search the whole JSON string
+        queryStr = visaStatusMatch;
+      }
+      if (queryStr) {
+        queries.push(Query.search('data', queryStr));
+      }
     }
 
+    const projectedQueries = [...queries];
+    projectedQueries.push(Query.select(LEADS_LIST_SELECT));
+
     if (wantExport || Boolean(salesUserIds)) {
-      const allLeads = await listAllDocuments<Lead>({
-        databases,
-        databaseId: DATABASE_ID,
-        collectionId: LEADS_COLLECTION_ID,
-        queries: projectedQueries,
-        pageLimit: 100,
-        maxPages: 500,
-      });
-
-      let leads = allLeads;
-      if (salesUserIds) {
-        leads = leads.filter((lead) => leadMatchesDepartmentScope(lead, salesUserIds));
-      }
-
-      if (filters.searchQuery) {
-        const queryStr = filters.searchQuery.trim();
-        const searchLower = queryStr.toLowerCase();
-        let visaStatusMatch: string | null = null;
-        if (searchLower.startsWith('visastatus:')) {
-          visaStatusMatch = queryStr.slice('visastatus:'.length).trim();
-        }
-
-        leads = leads.filter((lead) => {
-          try {
-            const data = JSON.parse(lead.data as string) as LeadData;
-
-            if (visaStatusMatch !== null) {
-              const vsQuery = visaStatusMatch.toLowerCase();
-              return String(data.visaStatus || '').toLowerCase().includes(vsQuery);
-            }
-
-            return (lead.data || '').toLowerCase().includes(searchLower);
-          } catch (e) {
-            return false;
-          }
+      if (wantExport) {
+        const allLeads = await listAllDocuments<Lead>({
+          databases,
+          databaseId: DATABASE_ID,
+          collectionId: LEADS_COLLECTION_ID,
+          queries: projectedQueries,
+          pageLimit: 100,
+          maxPages: 500,
         });
-      }
 
-      if (!wantExport) {
-        const start = (page - 1) * pageSize;
+        let leads = allLeads;
+        if (salesUserIds) {
+          leads = leads.filter((lead) => leadMatchesDepartmentScope(lead, salesUserIds!));
+        }
+        return { leads, total: leads.length, page: 1, pageSize: leads.length };
+      } else {
+        // We are paginating with a memory filter (salesUserIds). 
+        // DO NOT fetch all leads. Fetch in batches until we fulfill the requested page.
+        const targetCount = pageSize;
+        const startOffset = (page - 1) * pageSize;
+        let accumulatedLeads: Lead[] = [];
+        let cursor: string | undefined = undefined;
+        let hasMore = true;
+        let batchCount = 0;
+        
+        while (hasMore && accumulatedLeads.length < startOffset + targetCount && batchCount < 20) {
+          const batchQueries = [...projectedQueries, Query.limit(100)];
+          if (cursor) {
+            batchQueries.push(Query.cursorAfter(cursor));
+          }
+          
+          const batchRes = await databases.listDocuments(
+            DATABASE_ID,
+            LEADS_COLLECTION_ID,
+            batchQueries
+          );
+          
+          const batchDocs = batchRes.documents as unknown as Lead[];
+          if (batchDocs.length === 0) {
+            hasMore = false;
+            break;
+          }
+          
+          cursor = batchDocs[batchDocs.length - 1].$id;
+          
+          const filteredBatch = batchDocs.filter((lead) => 
+            leadMatchesDepartmentScope(lead, salesUserIds!)
+          );
+          
+          accumulatedLeads.push(...filteredBatch);
+          batchCount++;
+          
+          if (!filters.searchQuery && accumulatedLeads.length >= targetCount) {
+             // If not searching, just grab the first page and stop immediately.
+             break;
+          }
+        }
+        
+        const finalLeads = accumulatedLeads.slice(startOffset, startOffset + targetCount);
+        const hasSearch = Boolean(filters?.searchQuery?.trim());
+        const effectiveTotal = hasSearch ? accumulatedLeads.length : finalLeads.length;
+
         return {
-          leads: leads.slice(start, start + pageSize),
-          total: leads.length,
+          leads: finalLeads,
+          total: effectiveTotal,
           page,
           pageSize,
         };
       }
-
-      return { leads, total: leads.length, page: 1, pageSize: leads.length };
     }
 
-    // When search is active, fetch ALL visible leads using listAllDocuments
-    // (which handles pagination automatically) then filter in memory and paginate.
-    // This ensures leads on pages beyond the first can be found by search.
-    if (filters.searchQuery) {
-      const allLeads = await listAllDocuments<Lead>({
-        databases,
-        databaseId: DATABASE_ID,
-        collectionId: LEADS_COLLECTION_ID,
-        queries: queries.filter(
-          (q) => !String(q).startsWith('limit(') && !String(q).startsWith('offset(')
-        ),
-        pageLimit: 100,
-        maxPages: 500,
-      });
-
-      let leads = allLeads;
-
-      // Apply search filter in memory
-      const queryStr = filters.searchQuery.trim();
-      const searchLower = queryStr.toLowerCase();
-      let visaStatusMatch: string | null = null;
-      if (searchLower.startsWith('visastatus:')) {
-        visaStatusMatch = queryStr.slice('visastatus:'.length).trim();
-      }
-
-      leads = leads.filter((lead) => {
-        try {
-          const data = JSON.parse(lead.data as string) as LeadData;
-
-          if (visaStatusMatch !== null) {
-            const vsQuery = visaStatusMatch.toLowerCase();
-            return String(data.visaStatus || '').toLowerCase().includes(vsQuery);
-          }
-
-          return (lead.data || '').toLowerCase().includes(searchLower);
-        } catch (e) {
-          return false;
-        }
-      });
-
-      // Paginate the filtered results
-      const start = (page - 1) * pageSize;
-      return {
-        leads: leads.slice(start, start + pageSize),
-        total: leads.length,
-        page,
-        pageSize,
-      };
-    }
-
-    // Non-search path: use pagination directly from Appwrite
     if (!wantExport) {
       queries.push(Query.limit(pageSize));
       queries.push(Query.offset((page - 1) * pageSize));
@@ -386,9 +368,16 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
       queries
     );
 
+    // If searching, allow pagination by returning the actual total.
+    // If not searching, restrict to just the fetched page (e.g. 10 leads) to eliminate full table scans.
+    const hasSearch = Boolean(filters?.searchQuery?.trim());
+    const effectiveTotal = (wantExport || hasSearch) 
+      ? (response.total ?? response.documents.length) 
+      : response.documents.length;
+
     return {
       leads: response.documents as unknown as Lead[],
-      total: response.total ?? response.documents.length,
+      total: effectiveTotal,
       page,
       pageSize,
     };

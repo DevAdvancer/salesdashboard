@@ -13,7 +13,6 @@ export async function GET() {
       users: process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID,
       leads: process.env.NEXT_PUBLIC_APPWRITE_LEADS_COLLECTION_ID,
       formConfig: process.env.NEXT_PUBLIC_APPWRITE_FORM_CONFIG_COLLECTION_ID,
-      accessConfig: process.env.NEXT_PUBLIC_APPWRITE_ACCESS_CONFIG_COLLECTION_ID,
     },
   });
 }

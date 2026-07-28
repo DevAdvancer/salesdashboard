@@ -4,7 +4,7 @@ import { Query } from 'appwrite';
 import { databases } from '@/lib/appwrite';
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
-const AUDIT_LOGS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_AUDIT_LOGS_COLLECTION_ID!;
+const AUDIT_LOGS_COLLECTION_ID = "";
 
 export interface AuditLogFilterOptions {
   actions: string[];

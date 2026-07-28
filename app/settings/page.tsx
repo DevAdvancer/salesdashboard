@@ -114,7 +114,7 @@ function SettingsContent() {
     return <SettingsSkeleton />;
   }
 
-  const canManageAccess = user.role === 'admin';
+
 
   const saveProfile = async () => {
     if (!name.trim()) return;
@@ -278,20 +278,6 @@ function SettingsContent() {
             </Button>
           </CardContent>
         </Card>
-
-        {canManageAccess && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Access Control</CardTitle>
-              <CardDescription>Manage feature visibility for roles that are allowed to use each module.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button variant="outline" className="w-full" onClick={() => router.push('/settings/access')}>
-                Open Access Control
-              </Button>
-            </CardContent>
-          </Card>
-        )}
 
         <Card>
           <CardHeader>

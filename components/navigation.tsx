@@ -49,7 +49,6 @@ const RESUME_UNIVERSAL_ITEM_KEYS = new Set([
   "resume-chat",
   "resume-hierarchy",
   "user-management",
-  "resume-audit-logs",
   "settings",
 ]);
 
@@ -91,11 +90,11 @@ export function Navigation({
   const agentItemKeys = new Set(["dashboard", "leads", "history", "request-calls", "work-queue"]);
   const attendanceItemKeys = new Set(["attendance", "attendance-report"]);
   const teamLeadItemKeys = new Set(["user-management", "reports", "coaching-notes", "review-queue", "assigned-report"]);
-  const adminItemKeys = new Set(["branch-management", "hierarchy", "lead-requests", "audit-logs", "settings"]);
+  const adminItemKeys = new Set(["branch-management", "hierarchy", "lead-requests", "settings"]);
   const technicalItemKeys = new Set(["mock", "interview-support", "assessment-support"]);
   const linkedinItemKeys = new Set(["linkedin-requests", "linkedin-account-management", "linkedin-reports"]);
   const paymentsItemKeys = new Set(["payments-report", "target-report", "technical-payments", "followups-payments"]);
-  const resumeItemKeys = new Set(["resume-dashboard", "resume-profiles", "resume-marketing", "call-requests", "resume-hierarchy", "resume-audit-logs"]);
+  const resumeItemKeys = new Set(["resume-dashboard", "resume-profiles", "resume-marketing", "call-requests", "resume-hierarchy"]);
 
   // Resume-team members get a slim sidebar: the Resume Dashboard, the
   // Resume Team chat, and (for the resume team lead) User Management so
@@ -329,8 +328,6 @@ export function Navigation({
       itemsForUser.find((item) => item.key === "call-requests") ?? null;
     const resumeUserMgmtItem =
       itemsForUser.find((item) => item.key === "user-management") ?? null;
-    const resumeAuditLogsItem =
-      itemsForUser.find((item) => item.key === "resume-audit-logs") ?? null;
     const settingsItem =
       itemsForUser.find((item) => item.key === "settings") ?? null;
 
@@ -367,12 +364,11 @@ export function Navigation({
       resumeManagementTitle = "Management";
     }
 
-    if (resumeUserMgmtItem || resumeAuditLogsItem || settingsItem) {
+    if (resumeUserMgmtItem || settingsItem) {
       renderedItems.push(
         <div key="section-resume-management">
           {renderSectionHeader(resumeManagementTitle)}
           {resumeUserMgmtItem && renderNavButton(resumeUserMgmtItem)}
-          {resumeAuditLogsItem && renderNavButton(resumeAuditLogsItem)}
           {settingsItem && renderNavButton(settingsItem)}
         </div>
       );

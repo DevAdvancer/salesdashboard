@@ -129,6 +129,7 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'assigned_created_at_idx', type: 'key', attributes: ['assignedToId', '$createdAt'] },
       { key: 'status_created_at_idx', type: 'key', attributes: ['status', '$createdAt'] },
       { key: 'branch_created_at_idx', type: 'key', attributes: ['branchId', '$createdAt'] },
+      { key: 'data_search_idx', type: 'fulltext', attributes: ['data'] },
     ],
   },
   [COLLECTIONS.BRANCHES]: {
@@ -361,6 +362,7 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'assigned_to_idx', type: 'key', attributes: ['assignedToId'] },
       { key: 'lead_idx', type: 'key', attributes: ['leadId'] },
       { key: 'created_idx', type: 'key', attributes: ['createdAt'] },
+      { key: 'client_name_search_idx', type: 'fulltext', attributes: ['clientName'] },
     ],
   },
   [COLLECTIONS.RESUME_PROFILES]: {
@@ -405,6 +407,7 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'assigned_to_idx', type: 'key', attributes: ['assignedToId'] },
       { key: 'call_req_idx', type: 'key', attributes: ['callRequestId'] },
       { key: 'stage_updated_idx', type: 'key', attributes: ['stageUpdatedAt'] },
+      { key: 'candidate_name_search_idx', type: 'fulltext', attributes: ['candidateName'] },
     ],
   },
 };

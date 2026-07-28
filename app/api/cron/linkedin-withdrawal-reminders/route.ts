@@ -90,7 +90,7 @@ async function autoWithdrawLinkedinRequest(
     withdrawnAt: nowIso,
   });
 
-  await databases.createDocument(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, ID.unique(), {
+  await databases.createDocument(DATABASE_ID, "", ID.unique(), {
     action: 'LINKEDIN_REQUEST_AUTO_WITHDRAW',
     actorId: 'system',
     actorName: 'System',

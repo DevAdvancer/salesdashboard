@@ -1,12 +1,11 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { useAuth } from './auth-context';
 import {
   getDefaultComponentAccess,
   isRoleEligibleForComponent,
 } from '@/lib/constants/component-access';
-import { listAccessRules } from '@/lib/services/access-config-service';
 
 export type ComponentKey =
   | 'dashboard'
@@ -17,7 +16,6 @@ export type ComponentKey =
   | 'field-management'
   | 'settings'
   | 'branch-management'
-  | 'audit-logs'
   | 'mock'
   | 'assessment-support'
   | 'interview-support'
@@ -44,8 +42,7 @@ export type ComponentKey =
   | 'resume-hierarchy'
   | 'request-calls'
   | 'call-requests'
-  | 'assigned-report'
-  | 'resume-audit-logs';
+  | 'assigned-report';
 
 interface AccessControlContextType {
   canAccess: (componentKey: ComponentKey) => boolean;
@@ -60,7 +57,6 @@ const SALES_ONLY_COMPONENTS = new Set<ComponentKey>([
   'leads',
   'history',
   'branch-management',
-  'audit-logs',
   'mock',
   'assessment-support',
   'interview-support',
@@ -94,54 +90,11 @@ function canCrossDashboards(role: NonNullable<ReturnType<typeof useAuth>['user']
 
 export function AccessControlProvider({ children }: { children: React.ReactNode }) {
   const { user, isAdmin } = useAuth();
-  const [rules, setRules] = useState<Map<string, boolean>>(new Map());
-  const [isLoading, setIsLoading] = useState(true);
-  // Track the user that the current `rules` map was fetched for. When
-  // user changes we re-fetch; when user is reference-equal to lastFetchedFor
-  // we skip the effect entirely (page navigation alone does not refetch).
-  const lastFetchedFor = React.useRef<{ id: string; role: string } | null>(null);
+  const [isLoading] = useState(false);
 
-  const fetchRules = useCallback(async ({ forceRefresh = false }: { forceRefresh?: boolean } = {}) => {
-    if (!user) {
-      lastFetchedFor.current = null;
-      setRules(new Map());
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      const response = await listAccessRules(`${user.$id}:${user.role}`, { forceRefresh });
-
-      const rulesMap = new Map<string, boolean>();
-      response.forEach((rule) => {
-        const key = `${rule.componentKey}-${rule.role}`;
-        rulesMap.set(key, rule.allowed);
-      });
-
-      lastFetchedFor.current = { id: user.$id, role: user.role };
-      setRules(rulesMap);
-    } catch (error) {
-      console.error('Error fetching access rules:', error);
-      // Use empty map on error - will fall back to defaults
-      setRules(new Map());
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    // Skip the network round-trip when the user we already fetched rules
-    // for is still the active user. This keeps access-control stable
-    // across page navigations within a session.
-    if (user) {
-      const last = lastFetchedFor.current;
-      if (last && last.id === user.$id && last.role === user.role) {
-        return;
-      }
-    }
-    void fetchRules();
-  }, [fetchRules, user]);
+  const refreshRules = useCallback(async () => {
+    // No-op since we no longer fetch dynamic rules
+  }, []);
 
   const canAccess = useCallback((componentKey: ComponentKey): boolean => {
     if (!user) {
@@ -164,21 +117,8 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
     if (
       componentKey === 'resume-dashboard' ||
       componentKey === 'resume-profiles' ||
-      componentKey === 'resume-marketing' ||
-      componentKey === 'resume-audit-logs'
+      componentKey === 'resume-marketing'
     ) {
-      // For audit logs, only leadership or admins should see it.
-      if (componentKey === 'resume-audit-logs') {
-        if (
-          user.role === 'admin' ||
-          user.role === 'developer' ||
-          user.role === 'monitor' ||
-          user.role === 'operations'
-        ) {
-          return true;
-        }
-        return false;
-      }
       if (user.department === 'resume') return true;
       if (
         user.role === 'admin' ||
@@ -263,20 +203,9 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
       return true;
     }
 
-    // Check for custom rule from DB
-    const ruleKey = `${componentKey}-${user.role}`;
-    const customRule = rules.get(ruleKey);
-
-    if (customRule !== undefined) {
-      return customRule;
-    }
-
-    return getDefaultComponentAccess(componentKey, user.role);
-  }, [user, isAdmin, rules]);
-
-  const refreshRules = useCallback(async () => {
-    await fetchRules({ forceRefresh: true });
-  }, [fetchRules]);
+    // Rely exclusively on static rules
+    return isRoleEligibleForComponent(componentKey, user.role);
+  }, [user, isAdmin]);
 
   const value = useMemo<AccessControlContextType>(
     () => ({ canAccess, isLoading, refreshRules }),

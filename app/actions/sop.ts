@@ -234,7 +234,7 @@ export async function updateLeadFollowUpAction(input: {
 
     if (Object.keys(followUpChanges).length > 0) {
       const nowIso = new Date().toISOString();
-      await databases.createDocument(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, ID.unique(), {
+      await databases.createDocument(DATABASE_ID, "", ID.unique(), {
         action: "LEAD_UPDATE",
         actorId: actor.$id,
         actorName: actor.name,

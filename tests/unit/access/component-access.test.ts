@@ -25,7 +25,6 @@ describe("component access eligibility", () => {
       "user-management",
       "settings",
       "branch-management",
-      "audit-logs",
       "mock",
       "assessment-support",
       "interview-support",

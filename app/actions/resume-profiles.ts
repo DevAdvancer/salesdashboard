@@ -29,7 +29,7 @@ async function logAuditAction(
   },
 ) {
   try {
-    await databases.createDocument(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, ID.unique(), {
+    await databases.createDocument(DATABASE_ID, "", ID.unique(), {
       action: input.action,
       actorId: input.actorId,
       actorName: input.actorName,

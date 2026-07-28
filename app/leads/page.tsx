@@ -7,7 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listLeadsForExport, clearLeadReadCache } from "@/lib/services/lead-action-service";
 import { useLeadsQuery } from "@/lib/queries/leads/use-leads-query";
 import { useRealtimeCollection } from "@/lib/hooks/use-realtime-collection";
-import { useDebounce } from "@/lib/hooks/use-debounce";
+import { useToast } from "@/components/ui/use-toast";
 import { queryKeys } from "@/lib/queries/keys";
 import { COLLECTIONS } from "@/lib/constants/appwrite";
 import { getUsersByIds } from "@/lib/services/user-service";
@@ -546,29 +546,10 @@ function LeadsContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadUserKey]);
 
-  const debouncedDrafts = useDebounce(drafts, 300);
-
-  useEffect(() => {
-    if (
-      debouncedDrafts.q !== urlSearch ||
-      debouncedDrafts.status !== urlStatus ||
-      debouncedDrafts.assignedTo !== urlAssignedTo ||
-      debouncedDrafts.owner !== urlOwner ||
-      debouncedDrafts.mine !== urlMine ||
-      debouncedDrafts.branch !== urlBranch ||
-      debouncedDrafts.from !== urlFrom ||
-      debouncedDrafts.to !== urlTo ||
-      debouncedDrafts.team !== urlTeam
-    ) {
-      writeFiltersToUrl(debouncedDrafts);
-      setCurrentPage(1);
-    }
-  }, [
-    debouncedDrafts,
-    urlSearch, urlStatus, urlAssignedTo, urlOwner, urlMine,
-    urlBranch, urlFrom, urlTo, urlTeam,
-    writeFiltersToUrl,
-  ]);
+  const handleApplyFilters = () => {
+    writeFiltersToUrl(drafts);
+    setCurrentPage(1);
+  };
 
   const handleClearFilters = () => {
     writeFiltersToUrl({
@@ -662,6 +643,7 @@ function LeadsContent() {
         branches={branches}
         teamLeads={teamLeads}
         onClearFilters={handleClearFilters}
+        onApplyFilters={handleApplyFilters}
       />
 
       <LeadTable

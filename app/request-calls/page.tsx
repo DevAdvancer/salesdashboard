@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/lib/contexts/auth-context";
-import { useLeadsForExportQuery } from "@/lib/queries/leads/use-leads-for-export-query";
+import { useLeadsQuery } from "@/lib/queries/leads/use-leads-query";
 import { isVisibleClientLead } from "@/lib/utils/client-history";
 import { REQUIRED_DOCUMENTS } from "@/lib/constants/call-request-documents";
 import { useRealtimeCollection } from "@/lib/hooks/use-realtime-collection";
@@ -65,21 +65,23 @@ function RequestCallsContent() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openChatId, setOpenChatId] = useState<string | null>(null);
-
-  const clientsQuery = useLeadsForExportQuery({
+  const [appliedSearch, setAppliedSearch] = useState("");
+  const clientsQuery = useLeadsQuery({
     userId: user?.$id ?? "",
     role: user?.role ?? "agent",
     branchIds: user?.branchIds,
-    filters: { isClosed: true },
-    actionOptions: { skipDepartmentScope: true },
+    filters: { 
+      isClosed: true,
+      searchQuery: appliedSearch,
+    },
+    page: 1,
+    pageSize: 10,
   });
 
   const clients = useMemo(() => {
     const list = clientsQuery.data?.leads.filter(isVisibleClientLead) ?? [];
-    const query = search.trim().toLowerCase();
-    if (!query) return list;
-    return list.filter((lead) => leadName(lead).toLowerCase().includes(query));
-  }, [clientsQuery.data, search]);
+    return list;
+  }, [clientsQuery.data]);
 
   const requestByLeadId = useMemo(() => {
     const map = new Map<string, CallRequest>();
@@ -198,14 +200,19 @@ function RequestCallsContent() {
       <Card className="p-4">
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
           <h2 className="text-lg font-semibold">My Clients</h2>
-          <div className="sm:w-72">
-            <Label htmlFor="clientSearch">Search</Label>
-            <Input
-              id="clientSearch"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name..."
-            />
+          <div className="sm:w-72 flex gap-2">
+            <div className="flex-1">
+              <Label htmlFor="clientSearch">Search</Label>
+              <Input
+                id="clientSearch"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name..."
+              />
+            </div>
+            <div className="flex items-end">
+              <Button onClick={() => setAppliedSearch(search)}>Search</Button>
+            </div>
           </div>
         </div>
 
@@ -229,7 +236,7 @@ function RequestCallsContent() {
                     </td>
                   </tr>
                 ) : (
-                  clients.slice(0, 50).map((lead) => {
+                  clients.slice(0, 50).map((lead: Lead) => {
                     const existing = requestByLeadId.get(lead.$id);
                     return (
                       <tr key={lead.$id} className="border-b border-border">

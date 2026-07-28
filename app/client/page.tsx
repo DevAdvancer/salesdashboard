@@ -3,13 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/auth-context";
-import { useLeadsForExportQuery } from "@/lib/queries/leads/use-leads-for-export-query";
+import { useLeadsQuery } from "@/lib/queries/leads/use-leads-query";
 import {
   Branch,
   Lead,
   LeadData,
   HistoryFilters,
-  AuditLog,
   PaymentStatus,
   User,
 } from "@/lib/types";
@@ -19,7 +18,6 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ProtectedRoute } from "@/components/protected-route";
-import { getAuditLogs } from "@/lib/services/audit-service";
 import { DateRangePicker } from "@/components/ui/date-picker";
 import { listBranches } from "@/lib/services/branch-service";
 import { listClientPaymentSummaries } from "@/lib/services/client-payment-service";
@@ -56,6 +54,35 @@ function HistoryContent() {
   const [currentPage, setCurrentPage] = useState(1);
   const [teamLeadId, setTeamLeadId] = useState<string>("");
   const ITEMS_PER_PAGE = 10;
+  const [appliedFilters, setAppliedFilters] = useState<HistoryFilters>({});
+  const [appliedSearch, setAppliedSearch] = useState("");
+  const [appliedDateRange, setAppliedDateRange] = useState<{ from?: string; to?: string }>({});
+
+  const closedLeadsQuery = useLeadsQuery({
+    userId: user?.$id ?? "",
+    role: user?.role ?? "agent",
+    branchIds: user?.branchIds,
+    filters: {
+      isClosed: true,
+      assignedToId: appliedFilters.agentId,
+      branchId: appliedFilters.branchId,
+      teamLeadId: teamLeadId || undefined,
+      searchQuery: appliedSearch,
+      dateFrom: appliedDateRange.from,
+      dateTo: appliedDateRange.to,
+    },
+    page: currentPage,
+    pageSize: ITEMS_PER_PAGE,
+  });
+
+
+  const handleApplyFilters = () => {
+    setAppliedFilters(filters);
+    setAppliedSearch(search);
+    setAppliedDateRange(dateRange);
+    setCurrentPage(1);
+  };
+
   const getLeadData = (lead: Lead): LeadData => {
     try {
       return JSON.parse(lead.data);
@@ -123,70 +150,11 @@ function HistoryContent() {
   };
 
   async function loadClosedBy(currentLeads: Lead[]) {
-    try {
-      const entries: Record<string, string> = {};
-
-      await Promise.all(
-        currentLeads.map(async (lead) => {
-          try {
-            const { logs } = await getAuditLogs({
-              targetId: lead.$id,
-              targetType: "LEAD",
-              limit: 10,
-            });
-
-            const closeLog = logs.find((log: AuditLog) => {
-              if (log.action !== "LEAD_UPDATE" || !log.metadata) return false;
-              try {
-                const metadata = JSON.parse(log.metadata);
-                return metadata.isClosed === true;
-              } catch {
-                return false;
-              }
-            });
-
-            if (closeLog) {
-              entries[lead.$id] = closeLog.actorName;
-            }
-          } catch (error) {
-            console.error("Error loading closedBy for lead", lead.$id, error);
-          }
-        }),
-      );
-
-      if (Object.keys(entries).length > 0) {
-        setClosedByMap((prev) => ({
-          ...prev,
-          ...entries,
-        }));
-      }
-    } catch (error) {
-      console.error("Error loading closedBy names:", error);
-    }
+    // Audit logs have been removed. We no longer resolve closedBy name from logs.
   }
 
   const fetchClosedByName = async (leadId: string) => {
-    try {
-      const { logs } = await getAuditLogs({
-        targetId: leadId,
-        targetType: "LEAD",
-        limit: 10,
-      });
-
-      const closeLog = logs.find((log: AuditLog) => {
-        if (log.action !== "LEAD_UPDATE" || !log.metadata) return false;
-        try {
-          const metadata = JSON.parse(log.metadata);
-          return metadata.isClosed === true;
-        } catch {
-          return false;
-        }
-      });
-
-      return closeLog?.actorName || "";
-    } catch {
-      return "";
-    }
+    return "";
   };
 
   const handleCopy = async (lead: Lead) => {
@@ -219,67 +187,23 @@ function HistoryContent() {
   };
 
   const filteredLeads = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    const leadsInRange =
-      dateRange.from && dateRange.to
-        ? filterClosedLeadsInDateRange(leads, dateRange.from, dateRange.to)
-        : leads;
+    if (paymentFilter === "all") return leads;
 
-    const base = leadsInRange.filter((lead) => {
-      const data = getLeadData(lead);
-      if (filters.branchId && lead.branchId !== filters.branchId) {
-        return false;
-      }
-      if (filters.agentId && lead.assignedToId !== filters.agentId) {
-        return false;
-      }
-      if (!query) return true;
-
-      const visaStatusMatch = search.trim().match(/^visaStatus:\s*(.*)$/i);
-      if (visaStatusMatch) {
-        const vsQuery = visaStatusMatch[1].toLowerCase();
-        return `${data.visaStatus ?? ""}`.trim().toLowerCase().includes(vsQuery);
-      }
-
-      const name = `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim();
-      const email = `${data.email ?? ""}`.trim();
-      const source = `${data.sourceName ?? data.source ?? ""}`.trim();
-      const status = `${lead.status ?? ""}`.trim();
-
-      return (
-        name.toLowerCase().includes(query) ||
-        email.toLowerCase().includes(query) ||
-        source.toLowerCase().includes(query) ||
-        status.toLowerCase().includes(query) ||
-        (lead.data || "").toLowerCase().includes(query)
-      );
-    });
-
-    if (paymentFilter === "all") return base;
-
-    return base.filter((lead) => {
+    return leads.filter((lead) => {
       const status = paymentByLeadId[lead.$id]?.status ?? "no_record";
       return status === paymentFilter;
     });
   }, [
     leads,
-    search,
     paymentFilter,
     paymentByLeadId,
-    filters.branchId,
-    filters.agentId,
-    dateRange.from,
-    dateRange.to,
   ]);
 
   const totalPages = Math.max(
     1,
-    Math.ceil(filteredLeads.length / ITEMS_PER_PAGE),
+    Math.ceil((closedLeadsQuery.data?.total || 1) / ITEMS_PER_PAGE),
   );
-  const paginatedLeads = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredLeads.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [currentPage, filteredLeads]);
+  const paginatedLeads = filteredLeads;
   const canFilterByBranch = user?.role === "admin";
 
   useEffect(() => {
@@ -360,27 +284,6 @@ function HistoryContent() {
     });
   }, [paginatedLeads, closedByMap]);
 
-  // TanStack Query: fetch ALL closed leads matching the current filters.
-  // The action uses cursor pagination (listAllDocuments) so the result
-  // is uncapped at 5K — every closed lead in the user's visibility
-  // scope comes back.
-  const closedLeadsQuery = useLeadsForExportQuery({
-    userId: user?.$id ?? "",
-    role: user?.role ?? "agent",
-    branchIds: user?.branchIds,
-    filters: {
-      isClosed: true,
-      assignedToId: filters.agentId,
-      branchId: filters.branchId,
-      teamLeadId: teamLeadId || undefined,
-    },
-    actionOptions: {
-      // Client history should show every closed client the actor can access,
-      // even when the original owner / assignee is no longer in the current
-      // department-scoped user cache.
-      skipDepartmentScope: true,
-    },
-  });
 
   // Mirror the query result into local state, applying the
   // backout / not-interested filter that the client history page
@@ -439,6 +342,10 @@ function HistoryContent() {
     setSearch("");
     setPaymentFilter("all");
     setTeamLeadId("");
+    
+    setAppliedFilters({});
+    setAppliedSearch("");
+    setAppliedDateRange({});
     setCurrentPage(1);
   };
 
@@ -601,9 +508,12 @@ function HistoryContent() {
               </select>
             </div>
           )}
-          <div className="flex items-end">
-            <Button onClick={clearFilters} variant="outline" className="w-full">
+          <div className="sm:col-span-2 md:col-span-4 flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={clearFilters}>
               Clear Filters
+            </Button>
+            <Button onClick={handleApplyFilters}>
+              Apply Filters & Search
             </Button>
           </div>
         </div>

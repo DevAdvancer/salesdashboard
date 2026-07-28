@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,12 +25,11 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { getLinkedinWeeklyReportAction } from "@/app/actions/linkedin/reports";
-import { listLinkedinRequestsForAdminAction, runLinkedinAutoWithdrawAction } from "@/app/actions/linkedin/requests";
+import { runLinkedinAutoWithdrawAction } from "@/app/actions/linkedin/requests";
 import { listAgentsForTeamLeadLinkedinAction, listTeamLeadsForLinkedinAction, listAllUsersForLinkedinAction } from "@/app/actions/linkedin/hierarchy";
 import { listLinkedinAccountsForManagementAction } from "@/app/actions/linkedin/accounts";
-import type { LinkedinAccount, LinkedinRequest, User } from "@/lib/types";
+import type { LinkedinAccount, User } from "@/lib/types";
 import { getErrorMessage } from "@/lib/utils";
-import { Input } from "@/components/ui/input";
 import { getTodayEst } from "@/lib/utils/est-date";
 import { exportLinkedinRequestsForAdminAction } from "@/app/actions/linkedin/requests";
 import * as XLSX from "xlsx";
@@ -97,6 +96,7 @@ function LinkedinReportsContent() {
   const [exporting, setExporting] = useState(false);
   const [autoWithdrawing, setAutoWithdrawing] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const lastLoadedTeamLeadRef = useRef<string | null>(null);
 
   const executeAutoWithdraw = async () => {
     if (!user) return;
@@ -111,7 +111,6 @@ function LinkedinReportsContent() {
         description: `Evaluated: ${result.evaluated} requests, Auto-withdrawn: ${result.autoWithdrawn}, Errors: ${result.errors}`,
       });
       void loadReport();
-      void loadRequests();
     } catch (error: unknown) {
       toast({
         title: "Auto-Withdraw Failed",
@@ -123,13 +122,7 @@ function LinkedinReportsContent() {
     }
   };
 
-  const [requestsLoading, setRequestsLoading] = useState(false);
-  const [requests, setRequests] = useState<LinkedinRequest[]>([]);
-  const [requestStatus, setRequestStatus] = useState<
-    "all" | "sent" | "accepted" | "withdrawn"
-  >("all");
-  const [requestUrl, setRequestUrl] = useState("");
-  const [requestAgentId, setRequestAgentId] = useState<string>("");
+
 
   const agentsMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -137,11 +130,7 @@ function LinkedinReportsContent() {
     return map;
   }, [agents]);
 
-  const accountsMap = useMemo(() => {
-    const map = new Map<string, LinkedinAccount>();
-    accounts.forEach((account) => map.set(account.$id, account));
-    return map;
-  }, [accounts]);
+
 
   const sortedRows = useMemo(() => {
     const copy = [...rows];
@@ -359,49 +348,6 @@ function LinkedinReportsContent() {
     }
   };
 
-  const loadRequests = useCallback(async () => {
-    if (!user || !teamLeadId) return;
-    if (!range.from) return;
-    const startDate = range.from;
-    const endDate = range.to ?? range.from;
-
-    try {
-      setRequestsLoading(true);
-      const effectiveTeamLeadId =
-        user.role === "team_lead"
-          ? user.$id
-          : teamLeadId === "all"
-            ? null
-            : teamLeadId;
-      const next = await listLinkedinRequestsForAdminAction({
-        currentUserId: user.$id,
-        teamLeadId: effectiveTeamLeadId,
-        startDate,
-        endDate,
-        status: requestStatus,
-        agentId: requestAgentId || undefined,
-      });
-      setRequests(Array.from(new Map(next.map((r) => [r.$id, r] as const)).values()));
-    } catch (error: unknown) {
-      toast({
-        title: "Failed to load requests",
-        description: getErrorMessage(error),
-        variant: "destructive",
-      });
-      setRequests([]);
-    } finally {
-      setRequestsLoading(false);
-    }
-  }, [
-    range.from,
-    range.to,
-    requestAgentId,
-    requestStatus,
-    teamLeadId,
-    toast,
-    user,
-  ]);
-
   useEffect(() => {
     void loadTeamLeads();
   }, [loadTeamLeads]);
@@ -412,12 +358,12 @@ function LinkedinReportsContent() {
   }, [loadAccounts, loadAgents]);
 
   useEffect(() => {
-    void loadReport();
-  }, [loadReport]);
+    if (teamLeadId !== lastLoadedTeamLeadRef.current) {
+      lastLoadedTeamLeadRef.current = teamLeadId;
+      void loadReport();
+    }
+  }, [teamLeadId, loadReport]);
 
-  useEffect(() => {
-    void loadRequests();
-  }, [loadRequests]);
 
   const totals = useMemo(() => {
     return rows.reduce(
@@ -443,29 +389,7 @@ function LinkedinReportsContent() {
     );
   }, [rows]);
 
-  const visibleRequests = useMemo(() => {
-    const query = requestUrl.trim().toLowerCase();
-    if (!query) return requests;
-    return requests.filter((r) => r.targetUrl.toLowerCase().includes(query));
-  }, [requestUrl, requests]);
 
-  const sortedRequests = useMemo(() => {
-    const copy = [...visibleRequests];
-    copy.sort((a, b) => {
-      const aName = agentsMap.get(a.agentId) ?? a.agentId;
-      const bName = agentsMap.get(b.agentId) ?? b.agentId;
-      const aDate = a.dateSent ?? "";
-      const bDate = b.dateSent ?? "";
-      return (
-        aName.localeCompare(bName) ||
-        bDate.localeCompare(aDate) ||
-        a.company.localeCompare(b.company) ||
-        a.accountId.localeCompare(b.accountId) ||
-        a.targetUrl.localeCompare(b.targetUrl)
-      );
-    });
-    return copy;
-  }, [agentsMap, visibleRequests]);
 
   if (!user) return null;
 
@@ -637,128 +561,6 @@ function LinkedinReportsContent() {
                       <TableCell>{sentPerLead.toFixed(2)}</TableCell>
                       <TableCell>{acceptedPerLead.toFixed(2)}</TableCell>
                       <TableCell>{closurePerLead.toFixed(2)}</TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Requests (Admin)</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <select
-                value={requestStatus}
-                onChange={(e) =>
-                  setRequestStatus(
-                    e.target.value as "all" | "sent" | "accepted" | "withdrawn",
-                  )
-                }
-                className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-                <option value="all">All</option>
-                <option value="sent">Not Accepted</option>
-                <option value="accepted">Accepted</option>
-                <option value="withdrawn">Withdrawn</option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Agent</Label>
-              <select
-                value={requestAgentId}
-                onChange={(e) => setRequestAgentId(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-                <option value="">All agents</option>
-                {agents.map((agent) => (
-                  <option key={agent.$id} value={agent.$id}>
-                    {agent.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>URL</Label>
-              <Input
-                value={requestUrl}
-                onChange={(e) => setRequestUrl(e.target.value)}
-                placeholder="Search URL"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={loadRequests}
-              disabled={requestsLoading || !teamLeadId}>
-              {requestsLoading ? "Loading..." : "Refresh Requests"}
-            </Button>
-            <div className="text-sm text-muted-foreground">
-              Total: {sortedRequests.length}
-            </div>
-          </div>
-
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Agent</TableHead>
-                <TableHead>Account</TableHead>
-                <TableHead>Company</TableHead>
-                <TableHead>URL</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {requestsLoading ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={6}
-                    className="text-sm text-muted-foreground">
-                    Loading...
-                  </TableCell>
-                </TableRow>
-              ) : sortedRequests.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={6}
-                    className="text-sm text-muted-foreground">
-                    No requests found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                sortedRequests.map((r, index) => {
-                  const prevAgentId =
-                    index > 0 ? sortedRequests[index - 1].agentId : null;
-                  const showAgent = prevAgentId !== r.agentId;
-                  const account = accountsMap.get(r.accountId);
-                  const statusLabel =
-                    r.status === "accepted"
-                      ? "Accepted"
-                      : r.status === "withdrawn" || r.isActive === false
-                        ? "Withdrawn"
-                        : "Not Accepted";
-                  return (
-                    <TableRow key={r.$id}>
-                      <TableCell>
-                        {showAgent
-                          ? (agentsMap.get(r.agentId) ?? r.agentId)
-                          : ""}
-                      </TableCell>
-                      <TableCell>{account?.idName ?? r.accountId}</TableCell>
-                      <TableCell>{account?.company ?? r.company}</TableCell>
-                      <TableCell className="break-all">{r.targetUrl}</TableCell>
-                      <TableCell>
-                        {new Date(r.dateSent).toLocaleDateString(undefined, { timeZone: 'UTC' })}
-                      </TableCell>
-                      <TableCell>{statusLabel}</TableCell>
                     </TableRow>
                   );
                 })

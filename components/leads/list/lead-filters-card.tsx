@@ -40,6 +40,7 @@ interface LeadFiltersCardProps {
   branches: Branch[];
   teamLeads: User[];
   onClearFilters: () => void;
+  onApplyFilters: () => void;
 }
 
 export function LeadFiltersCard({
@@ -51,6 +52,7 @@ export function LeadFiltersCard({
   branches,
   teamLeads,
   onClearFilters,
+  onApplyFilters,
 }: LeadFiltersCardProps) {
   const {
     q: searchDraft,
@@ -209,6 +211,9 @@ export function LeadFiltersCard({
         <div className="flex justify-end gap-2 mt-4 md:col-span-2 lg:col-span-3">
           <Button variant="outline" onClick={onClearFilters}>
             Clear Filters
+          </Button>
+          <Button onClick={onApplyFilters}>
+            Apply Filters & Search
           </Button>
         </div>
       </CardContent>

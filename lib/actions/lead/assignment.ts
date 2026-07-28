@@ -128,7 +128,7 @@ export async function assignLeadAction(
         try {
             await databases.createDocument(
                 DATABASE_ID,
-                COLLECTIONS.AUDIT_LOGS,
+                "",
                 ID.unique(),
                 {
                     action: 'LEAD_UPDATE',

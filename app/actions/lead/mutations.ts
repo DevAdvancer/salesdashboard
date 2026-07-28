@@ -97,7 +97,7 @@ export async function restoreNotInterestedDuplicateLead(input: {
     try {
         await databases.createDocument(
             DATABASE_ID,
-            process.env.NEXT_PUBLIC_APPWRITE_AUDIT_LOGS_COLLECTION_ID!,
+            "",
             ID.unique(),
             {
                 action: 'LEAD_UPDATE',
@@ -272,7 +272,7 @@ export async function createLeadAction(ownerId: string, input: CreateLeadInput, 
             if (creatingUserName) {
                  await databases.createDocument(
                      DATABASE_ID,
-                     process.env.NEXT_PUBLIC_APPWRITE_AUDIT_LOGS_COLLECTION_ID!,
+                     "",
                      ID.unique(),
                      {
                         action: 'LEAD_CREATE',
@@ -495,7 +495,7 @@ export async function updateLeadAction(leadId: string, data: Partial<LeadData>, 
             try {
                 await databases.createDocument(
                     DATABASE_ID,
-                    process.env.NEXT_PUBLIC_APPWRITE_AUDIT_LOGS_COLLECTION_ID!,
+                    "",
                     ID.unique(),
                     {
                         action: 'LEAD_UPDATE',

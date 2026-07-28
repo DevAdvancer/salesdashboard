@@ -156,8 +156,10 @@ describe('lead server action authorization', () => {
 
     await listLeadsAction({}, 'monitor-1', 'agent', []);
 
-    expect(Query.equal).not.toHaveBeenCalledWith('ownerId', expect.anything());
-    expect(Query.equal).not.toHaveBeenCalledWith('assignedToId', expect.anything());
+    const cache = await import('@/lib/server/department-user-cache');
+    const expectedUserIds = Array.from(await cache.getDepartmentScopedUserIds(null as any, 'sales'));
+    expect(Query.equal).toHaveBeenCalledWith('ownerId', expectedUserIds);
+    expect(Query.equal).toHaveBeenCalledWith('assignedToId', expectedUserIds);
     expect(Query.equal).toHaveBeenCalledWith('isClosed', false);
   });
 
@@ -174,8 +176,10 @@ describe('lead server action authorization', () => {
 
     await listLeadsAction({}, 'operations-1', 'agent' as any, []);
 
-    expect(Query.equal).not.toHaveBeenCalledWith('ownerId', expect.anything());
-    expect(Query.equal).not.toHaveBeenCalledWith('assignedToId', expect.anything());
+    const cache = await import('@/lib/server/department-user-cache');
+    const expectedUserIds = Array.from(await cache.getDepartmentScopedUserIds(null as any, 'sales'));
+    expect(Query.equal).toHaveBeenCalledWith('ownerId', expectedUserIds);
+    expect(Query.equal).toHaveBeenCalledWith('assignedToId', expectedUserIds);
     expect(Query.equal).toHaveBeenCalledWith('isClosed', false);
   });
 

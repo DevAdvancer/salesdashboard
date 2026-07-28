@@ -4,7 +4,7 @@ import { AuditLog, AuditLogAction } from '@/lib/types';
 import { expandIsoDateToStart, expandIsoDateToEnd } from '@/lib/utils/iso-date-range';
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
-const AUDIT_LOGS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_AUDIT_LOGS_COLLECTION_ID!;
+const AUDIT_LOGS_COLLECTION_ID = "";
 
 export interface CreateAuditLogInput {
   action: AuditLogAction;
@@ -19,40 +19,16 @@ export interface CreateAuditLogInput {
  * Log an action to the audit logs
  */
 export async function logAction(input: CreateAuditLogInput): Promise<AuditLog> {
-  try {
-    const { action, actorId, actorName, targetId, targetType, metadata } = input;
-
-    const doc = await databases.createDocument(
-      DATABASE_ID,
-      AUDIT_LOGS_COLLECTION_ID,
-      ID.unique(),
-      {
-        action,
-        actorId,
-        actorName,
-        targetId,
-        targetType,
-        metadata: metadata ? JSON.stringify(metadata) : null,
-      }
-      // Removed document-level permissions to rely on collection-level permissions
-    );
-
-    return {
-      $id: doc.$id,
-      action: doc.action,
-      actorId: doc.actorId,
-      actorName: doc.actorName,
-      targetId: doc.targetId,
-      targetType: doc.targetType,
-      metadata: doc.metadata,
-      createdAt: doc.$createdAt,
-    };
-  } catch (error: any) {
-    console.error('Error logging action:', error);
-    // Don't throw, just log error so we don't block the main action
-    // But we might want to return null or throw if it's critical
-    throw error;
-  }
+  return {
+    $id: 'audit_logs_disabled',
+    action: input.action,
+    actorId: input.actorId,
+    actorName: input.actorName,
+    targetId: input.targetId,
+    targetType: input.targetType,
+    metadata: input.metadata ? JSON.stringify(input.metadata) : undefined,
+    createdAt: new Date().toISOString(),
+  };
 }
 
 /**
@@ -71,62 +47,8 @@ export async function getAuditLogs(
     offset?: number;
   }
 ): Promise<{ logs: AuditLog[]; total: number }> {
-  try {
-    const queries = [
-      Query.orderDesc('$createdAt'),
-      Query.limit(filters?.limit || 50),
-      Query.offset(filters?.offset || 0),
-    ];
-
-    if (filters?.actorId) {
-      queries.push(Query.equal('actorId', filters.actorId));
-    }
-
-    if (filters?.targetType) {
-      queries.push(Query.equal('targetType', filters.targetType));
-    }
-
-    if (filters?.targetId) {
-      queries.push(Query.equal('targetId', filters.targetId));
-    }
-
-    if (filters?.action) {
-      queries.push(Query.equal('action', filters.action));
-    } else if (filters?.actions && filters.actions.length > 0) {
-      queries.push(Query.equal('action', filters.actions));
-    }
-
-    if (filters?.dateFrom) {
-      queries.push(Query.greaterThanEqual('$createdAt', expandIsoDateToStart(filters.dateFrom)));
-    }
-
-    if (filters?.dateTo) {
-      queries.push(Query.lessThanEqual('$createdAt', expandIsoDateToEnd(filters.dateTo)));
-    }
-
-    const response = await databases.listDocuments(
-      DATABASE_ID,
-      AUDIT_LOGS_COLLECTION_ID,
-      queries
-    );
-
-    const logs = response.documents.map((doc: any) => ({
-      $id: doc.$id,
-      action: doc.action,
-      actorId: doc.actorId,
-      actorName: doc.actorName,
-      targetId: doc.targetId,
-      targetType: doc.targetType,
-      metadata: doc.metadata,
-      createdAt: doc.$createdAt,
-    }));
-
-    return {
-      logs,
-      total: response.total,
-    };
-  } catch (error: any) {
-    console.error('Error fetching audit logs:', error);
-    throw new Error(error.message || 'Failed to fetch audit logs');
-  }
+  return {
+    logs: [],
+    total: 0,
+  };
 }

@@ -42,7 +42,7 @@ async function logAuditAction(
   },
 ) {
   try {
-    await databases.createDocument(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, ID.unique(), {
+    await databases.createDocument(DATABASE_ID, "", ID.unique(), {
       action: input.action,
       actorId: input.actorId,
       actorName: input.actorName,
@@ -206,7 +206,7 @@ export async function createCallRequestAction(input: {
 }
 
 // ─── List (Resume side) ──────────────────────────────────────────────────────
-export async function listCallRequestsAction(): Promise<CallRequest[]> {
+export async function listCallRequestsAction(searchQuery?: string): Promise<CallRequest[]> {
   const actor = await getAuthenticatedUserDoc();
   if (!canManageCallRequests(actor)) {
     throw new Error('You are not allowed to view call requests.');
@@ -214,14 +214,27 @@ export async function listCallRequestsAction(): Promise<CallRequest[]> {
 
   const { databases } = await createAdminClient();
   try {
-    const all = await listAllDocuments<CallRequestDocument>({
-      databases,
-      databaseId: DATABASE_ID,
-      collectionId: COLLECTIONS.CALL_REQUESTS,
-      queries: [Query.orderDesc('$createdAt')],
-      pageLimit: 100,
-      maxPages: 200,
-    });
+    let all: CallRequestDocument[] = [];
+    const queries = [Query.orderDesc('$createdAt')];
+
+    if (!searchQuery) {
+      queries.push(Query.limit(10));
+      const response = await databases.listDocuments(
+        DATABASE_ID,
+        COLLECTIONS.CALL_REQUESTS,
+        queries
+      );
+      all = response.documents as unknown as CallRequestDocument[];
+    } else {
+      queries.push(Query.search('clientName', searchQuery.trim()));
+      queries.push(Query.limit(100)); // allow up to 100 search results
+      const response = await databases.listDocuments(
+        DATABASE_ID,
+        COLLECTIONS.CALL_REQUESTS,
+        queries
+      );
+      all = response.documents as unknown as CallRequestDocument[];
+    }
 
     // Resume Team Leads and leadership see everything. A plain resume user
     // sees requests assigned to them plus still-unassigned ones (so they can
@@ -241,21 +254,33 @@ export async function listCallRequestsAction(): Promise<CallRequest[]> {
 }
 
 // ─── List my own requests (Sales side) ───────────────────────────────────────
-export async function listMyCallRequestsAction(): Promise<CallRequest[]> {
+export async function listMyCallRequestsAction(searchQuery?: string): Promise<CallRequest[]> {
   const actor = await getAuthenticatedUserDoc();
   const { databases } = await createAdminClient();
   try {
-    return await listAllDocuments<CallRequestDocument>({
-      databases,
-      databaseId: DATABASE_ID,
-      collectionId: COLLECTIONS.CALL_REQUESTS,
-      queries: [
-        Query.equal('requestedById', actor.$id),
-        Query.orderDesc('$createdAt'),
-      ],
-      pageLimit: 100,
-      maxPages: 50,
-    });
+    const queries = [
+      Query.equal('requestedById', actor.$id),
+      Query.orderDesc('$createdAt'),
+    ];
+
+    if (!searchQuery) {
+      queries.push(Query.limit(10));
+      const response = await databases.listDocuments(
+        DATABASE_ID,
+        COLLECTIONS.CALL_REQUESTS,
+        queries
+      );
+      return response.documents as unknown as CallRequestDocument[];
+    } else {
+      queries.push(Query.search('clientName', searchQuery.trim()));
+      queries.push(Query.limit(100));
+      const response = await databases.listDocuments(
+        DATABASE_ID,
+        COLLECTIONS.CALL_REQUESTS,
+        queries
+      );
+      return response.documents as unknown as CallRequestDocument[];
+    }
   } catch (error) {
     throw new Error(getAppwriteErrorMessage(error));
   }
