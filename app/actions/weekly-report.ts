@@ -666,27 +666,7 @@ export async function getWeeklyReportAction(input: {
     teams.push({ teamLead, members, totals });
   }
 
-  // Handle unassigned users (e.g., lead_generation without a teamLeadId)
-  const unassigned = scopedUsers
-    .filter((user) => !seenMembers.has(user.$id))
-    .sort((a, b) => String(a.name).localeCompare(String(b.name)))
-    .map((user) => buildMember(user.$id));
 
-  if (unassigned.length > 0) {
-    const totals: WeeklyReportMetrics = {
-      calls: 0,
-      leads: 0,
-      followups: 0,
-      closures: 0,
-      upfront: 0,
-      coldCalls: 0,
-      notInterested: 0,
-      technicalUpfront: 0,
-      kpi: combineKpi(unassigned),
-    };
-    unassigned.forEach((member) => addMetrics(totals, member.metrics));
-    teams.push({ teamLead: null, members: unassigned, totals });
-  }
 
   if (actor.role === "team_lead") {
     const only = teams.filter((team) => team.teamLead?.$id === actor.$id);
