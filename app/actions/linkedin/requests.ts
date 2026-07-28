@@ -1153,3 +1153,51 @@ export async function getLinkedinAccountUsageTodayAction(input: {
 
   return usage;
 }
+
+export async function loadLinkedinRequestDashboardDataAction(input: {
+  currentUserId: string;
+  accountId: string | null;
+  dateSent: string | null;
+  todayIso: string;
+}) {
+  await assertAuthenticatedUserId(input.currentUserId);
+  
+  // 1. Fetch the requests list
+  const requests = await listMyLinkedinRequestsAction({
+    currentUserId: input.currentUserId,
+    limit: 10,
+  });
+
+  // 2. Fetch the backout statuses for the leads in the list
+  const leadIds = requests
+    .filter((r) => r.leadId)
+    .map((r) => r.leadId as string);
+  
+  let leadOutcomeByLeadId: Record<string, { statusLabel: string | null; isTerminal: boolean }> = {};
+  if (leadIds.length > 0) {
+    const outcomes = await getBackoutStatusForLeadIdsAction({
+      currentUserId: input.currentUserId,
+      leadIds,
+    });
+    
+    for (const [leadId, info] of Object.entries(outcomes.byLeadId)) {
+      leadOutcomeByLeadId[leadId] = { statusLabel: info?.statusLabel ?? null, isTerminal: Boolean(info?.isTerminal) };
+    }
+  }
+
+  // 3. Fetch today's usage for the selected account
+  let usedToday = 0;
+  if (input.accountId) {
+    usedToday = await getLinkedinAccountUsageTodayAction({
+      currentUserId: input.currentUserId,
+      accountId: input.accountId,
+      dateSent: input.todayIso,
+    });
+  }
+
+  return {
+    requests,
+    leadOutcomeByLeadId,
+    usedToday,
+  };
+}

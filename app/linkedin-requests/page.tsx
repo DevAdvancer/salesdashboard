@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/contexts/auth-context";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listMyLinkedinAccountsAction } from "@/app/actions/linkedin/accounts";
 import {
   checkLinkedinDuplicateAction,
@@ -28,6 +29,7 @@ import {
   listMyLinkedinRequestsAction,
   markLinkedinRequestAcceptedAction,
   withdrawLinkedinRequestAction,
+  loadLinkedinRequestDashboardDataAction,
 } from "@/app/actions/linkedin/requests";
 import type { LinkedinAccount, LinkedinRequest } from "@/lib/types";
 import { getErrorMessage } from "@/lib/utils";
@@ -112,19 +114,43 @@ function LinkedinRequestsContent() {
     ReturnType<typeof getLinkedinConnectionHistoryAction>
   > | null>(null);
   const [adding, setAdding] = useState(false);
-  const [loadingList, setLoadingList] = useState(false);
-  const [requests, setRequests] = useState<LinkedinRequest[]>([]);
   const [filterDate, setFilterDate] = useState<string>("");
-  const [filterStatus, setFilterStatus] = useState<
-    "all" | "sent" | "accepted" | "withdrawn"
-  >("all");
+  const [filterStatus, setFilterStatus] = useState<"all" | "sent" | "accepted" | "withdrawn">("all");
   const [filterUrl, setFilterUrl] = useState<string>("");
   const [appliedFilterUrl, setAppliedFilterUrl] = useState<string>("");
   const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
-  const [leadOutcomeByLeadId, setLeadOutcomeByLeadId] = useState<
-    Record<string, { statusLabel: string | null; isTerminal: boolean }>
-  >({});
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+
+  const today = todayDateInputValue();
+  const todayIso = useMemo(() => new Date(today).toISOString(), [today]);
+
+  const queryClient = useQueryClient();
+  const dashboardQuery = useQuery({
+    queryKey: ['linkedin-dashboard-data', user?.$id, selectedAccountId, todayIso, appliedFilterUrl],
+    queryFn: async () => {
+      if (!user || !serverSessionReady) return { requests: [], leadOutcomeByLeadId: {}, usedToday: 0 };
+      return await loadLinkedinRequestDashboardDataAction({
+        currentUserId: user.$id,
+        accountId: selectedAccountId || null,
+        dateSent: null, // list action expects null for 'all'
+        todayIso,
+      });
+    },
+    enabled: !!user && serverSessionReady,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const loadingList = dashboardQuery.isLoading || dashboardQuery.isFetching;
+  const requests = dashboardQuery.data?.requests || [];
+  const leadOutcomeByLeadId = dashboardQuery.data?.leadOutcomeByLeadId || {};
+  
+  const [localUsedToday, setLocalUsedToday] = useState(0);
+  
+  useEffect(() => {
+    if (dashboardQuery.data?.usedToday !== undefined) {
+      setLocalUsedToday(dashboardQuery.data.usedToday);
+    }
+  }, [dashboardQuery.data?.usedToday]);
 
   // --- Cooldown rate-limiter: prevents rapid double-clicks on any action ---
   const COOLDOWN_MS = 2000;
@@ -144,18 +170,18 @@ function LinkedinRequestsContent() {
     return false;
   }, [toast]);
 
+
+
   const selectedAccount = useMemo(
     () => accounts.find((a) => a.$id === selectedAccountId) ?? null,
     [accounts, selectedAccountId],
   );
 
-  const today = todayDateInputValue();
-  const todayIso = useMemo(() => new Date(today).toISOString(), [today]);
   const dailyLimit =
     typeof selectedAccount?.connectionLimit === "number"
       ? selectedAccount.connectionLimit
       : null;
-  const [usedToday, setUsedToday] = useState(0);
+  const usedToday = localUsedToday;
   const remainingToday =
     dailyLimit === null ? null : Math.max(dailyLimit - usedToday, 0);
 
@@ -179,68 +205,6 @@ function LinkedinRequestsContent() {
     }
   }, [selectedAccountId, toast, user]);
 
-  const loadRequests = useCallback(async () => {
-    if (!user) return;
-    try {
-      setLoadingList(true);
-      const next = await listMyLinkedinRequestsAction({
-        currentUserId: user.$id,
-        limit: 10,
-        searchQuery: appliedFilterUrl,
-      });
-      setRequests(next);
-      const leadIds = Array.from(
-        new Set(
-          next
-            .map((r) =>
-              typeof r.leadId === "string" && r.leadId ? r.leadId : null,
-            )
-            .filter((v): v is string => Boolean(v)),
-        ),
-      );
-      if (leadIds.length > 0) {
-        const status = await getBackoutStatusForLeadIdsAction({
-          currentUserId: user.$id,
-          leadIds,
-        });
-        const map: Record<
-          string,
-          { statusLabel: string | null; isTerminal: boolean }
-        > = {};
-        Object.entries(status.byLeadId).forEach(([leadId, info]) => {
-          map[leadId] = {
-            statusLabel: info?.statusLabel ?? null,
-            isTerminal: Boolean(info?.isTerminal),
-          };
-        });
-        setLeadOutcomeByLeadId(map);
-      } else {
-        setLeadOutcomeByLeadId({});
-      }
-      
-      if (selectedAccountId) {
-        try {
-          const usage = await getLinkedinAccountUsageTodayAction({
-            currentUserId: user.$id,
-            accountId: selectedAccountId,
-            dateSent: todayIso
-          });
-          setUsedToday(usage);
-        } catch {
-          setUsedToday(0);
-        }
-      } else {
-        setUsedToday(0);
-      }
-    } catch {
-      setRequests([]);
-      setLeadOutcomeByLeadId({});
-      setUsedToday(0);
-    } finally {
-      setLoadingList(false);
-    }
-  }, [user, appliedFilterUrl, selectedAccountId, todayIso]);
-
   useEffect(() => {
     // Gate on serverSessionReady so the crm_appwrite_jwt cookie is in place
     // before listMyLinkedinAccountsAction fires — otherwise createSessionClient
@@ -249,12 +213,7 @@ function LinkedinRequestsContent() {
     void loadAccounts();
   }, [loadAccounts, serverSessionReady, user]);
 
-  useEffect(() => {
-    // Same gate as loadAccounts — see comment above.
-    if (!user || !serverSessionReady) return;
-    setIsDuplicate(null);
-    void loadRequests();
-  }, [loadRequests, selectedAccountId, serverSessionReady, user]);
+
 
   const onCheck = async () => {
     if (!user) return;
@@ -409,7 +368,8 @@ function LinkedinRequestsContent() {
       setIsDuplicate(null);
       setColdCallEnabled(false);
       setColdCallPhone("");
-      await loadRequests();
+      setLocalUsedToday(prev => prev + 1);
+      void queryClient.invalidateQueries({ queryKey: ['linkedin-dashboard-data'] });
     } catch (error: unknown) {
       toast({
         title: "Failed to add",
@@ -437,14 +397,14 @@ function LinkedinRequestsContent() {
           "Marked as accepted. Create a lead within 7 days or withdraw it.",
         variant: "success",
       });
-      await loadRequests();
+      void queryClient.invalidateQueries({ queryKey: ['linkedin-dashboard-data'] });
     } catch (error: unknown) {
       toast({
         title: "Failed to update",
         description: getErrorMessage(error),
         variant: "destructive",
       });
-      await loadRequests();
+      void queryClient.invalidateQueries({ queryKey: ['linkedin-dashboard-data'] });
     } finally {
       setAcceptingId(null);
     }
@@ -493,7 +453,7 @@ function LinkedinRequestsContent() {
         description:
           "Request withdrawn. Others can send this URL for the same company now.",
       });
-      await loadRequests();
+      void queryClient.invalidateQueries({ queryKey: ['linkedin-dashboard-data'] });
     } catch (error: unknown) {
       toast({
         title: "Withdraw failed",
@@ -654,7 +614,7 @@ function LinkedinRequestsContent() {
             <CardTitle>Requests</CardTitle>
             <Button
               variant="outline"
-              onClick={() => void loadRequests()}
+              onClick={() => void queryClient.invalidateQueries({ queryKey: ['linkedin-dashboard-data'] })}
               disabled={loadingList || !user}>
               {loadingList ? "Refreshing..." : "Refresh"}
             </Button>
