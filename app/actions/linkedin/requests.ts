@@ -1125,3 +1125,31 @@ export async function runLinkedinAutoWithdrawAction(input: {
 
     return { evaluated, autoWithdrawn, errors, processedAt: nowIso };
 }
+
+export async function getLinkedinAccountUsageTodayAction(input: {
+  currentUserId: string;
+  accountId: string;
+  dateSent: string;
+}) {
+  await assertAuthenticatedUserId(input.currentUserId);
+  const dateSent = assertDateIso(input.dateSent);
+  const { databases } = await createAdminClient();
+
+  const response = await databases.listDocuments(
+    DATABASE_ID,
+    COLLECTIONS.LINKEDIN_REQUESTS,
+    [
+      Query.equal("accountId", input.accountId),
+      Query.equal("dateSent", dateSent),
+      Query.select(["$id", "isActive", "status"]),
+      Query.limit(500),
+    ],
+  );
+
+  const usage = (response.documents as unknown as LinkedinRequest[]).filter((doc) => {
+    const isActive = doc.isActive ?? true;
+    return isActive && doc.status !== "withdrawn";
+  }).length;
+
+  return usage;
+}

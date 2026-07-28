@@ -23,6 +23,7 @@ import {
   checkLinkedinDuplicateAction,
   createLinkedinRequestAction,
   getBackoutStatusForLeadIdsAction,
+  getLinkedinAccountUsageTodayAction,
   getLinkedinConnectionHistoryAction,
   listMyLinkedinRequestsAction,
   markLinkedinRequestAcceptedAction,
@@ -154,17 +155,7 @@ function LinkedinRequestsContent() {
     typeof selectedAccount?.connectionLimit === "number"
       ? selectedAccount.connectionLimit
       : null;
-  const usedToday = useMemo(() => {
-    return requests.filter((r) => {
-      const isActive = r.isActive !== false;
-      return (
-        isActive &&
-        r.status !== "withdrawn" &&
-        r.accountId === selectedAccountId &&
-        r.dateSent === todayIso
-      );
-    }).length;
-  }, [requests, selectedAccountId, todayIso]);
+  const [usedToday, setUsedToday] = useState(0);
   const remainingToday =
     dailyLimit === null ? null : Math.max(dailyLimit - usedToday, 0);
 
@@ -226,13 +217,29 @@ function LinkedinRequestsContent() {
       } else {
         setLeadOutcomeByLeadId({});
       }
+      
+      if (selectedAccountId) {
+        try {
+          const usage = await getLinkedinAccountUsageTodayAction({
+            currentUserId: user.$id,
+            accountId: selectedAccountId,
+            dateSent: todayIso
+          });
+          setUsedToday(usage);
+        } catch {
+          setUsedToday(0);
+        }
+      } else {
+        setUsedToday(0);
+      }
     } catch {
       setRequests([]);
       setLeadOutcomeByLeadId({});
+      setUsedToday(0);
     } finally {
       setLoadingList(false);
     }
-  }, [user, appliedFilterUrl]);
+  }, [user, appliedFilterUrl, selectedAccountId, todayIso]);
 
   useEffect(() => {
     // Gate on serverSessionReady so the crm_appwrite_jwt cookie is in place
