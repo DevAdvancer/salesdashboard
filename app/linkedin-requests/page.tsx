@@ -124,17 +124,28 @@ function LinkedinRequestsContent() {
   const today = todayDateInputValue();
   const todayIso = useMemo(() => new Date(today).toISOString(), [today]);
 
+  const selectedAccount = useMemo(
+    () => accounts.find((a) => a.$id === selectedAccountId) ?? null,
+    [accounts, selectedAccountId],
+  );
+
   const queryClient = useQueryClient();
   const dashboardQuery = useQuery({
-    queryKey: ['linkedin-dashboard-data', user?.$id, selectedAccountId, todayIso, appliedFilterUrl],
+    queryKey: ['linkedin-dashboard-data', user?.$id, selectedAccountId, todayIso, appliedFilterUrl, filterDate],
     queryFn: async () => {
       if (!user || !serverSessionReady) return { requests: [], leadOutcomeByLeadId: {}, usedToday: 0 };
+      
+      const accountLimit = typeof selectedAccount?.connectionLimit === "number" 
+        ? selectedAccount.connectionLimit 
+        : 100;
+
       return await loadLinkedinRequestDashboardDataAction({
         currentUserId: user.$id,
         accountId: selectedAccountId || null,
-        dateSent: null, // list action expects null for 'all'
+        dateSent: filterDate || null,
         todayIso,
         searchQuery: appliedFilterUrl || undefined,
+        limit: accountLimit,
       });
     },
     enabled: !!user && serverSessionReady,
@@ -170,13 +181,6 @@ function LinkedinRequestsContent() {
     lastActionAt.current[actionKey] = now;
     return false;
   }, [toast]);
-
-
-
-  const selectedAccount = useMemo(
-    () => accounts.find((a) => a.$id === selectedAccountId) ?? null,
-    [accounts, selectedAccountId],
-  );
 
   const dailyLimit =
     typeof selectedAccount?.connectionLimit === "number"
@@ -625,11 +629,20 @@ function LinkedinRequestsContent() {
           <div className="mb-4 grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
               <Label>Date</Label>
-              <DatePicker
-                value={filterDate}
-                onChange={setFilterDate}
-                placeholder="Any date"
-              />
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <DatePicker
+                    value={filterDate}
+                    onChange={setFilterDate}
+                    placeholder="Any date"
+                  />
+                </div>
+                {filterDate && (
+                  <Button variant="outline" onClick={() => setFilterDate("")}>
+                    Clear
+                  </Button>
+                )}
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Status</Label>

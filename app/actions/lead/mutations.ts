@@ -13,7 +13,7 @@ import { notifyDuplicateLeadUpdateAttemptAction } from "@/app/actions/lead-dupli
 import { normalizeLinkedinProfileUrl } from "@/lib/utils/linkedin";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import { recordLgHandoffAction } from "@/app/actions/lg-handoffs";
-import { markPriorNotInterestedRowsReopened, notInterestedLeadAction } from "@/lib/actions/lead/status";
+import { markPriorNotInterestedRowsReopened, notInterestedLeadAction, backoutLeadAction } from "@/lib/actions/lead/status";
 import { isAllowedLeadStatusTransition, normalizeLeadStatus } from "@/lib/utils/lead-status-workflow";
 import { REQUIRED_LEAD_FIELD_KEYS } from "@/lib/utils/required-lead-fields";
 import { expandIsoDateToStart, expandIsoDateToEnd } from "@/lib/utils/iso-date-range";
@@ -43,7 +43,8 @@ export async function restoreNotInterestedDuplicateLead(input: {
                 LEADS_COLLECTION_ID,
                 duplicateLeadId,
             ) as unknown as Lead;
-    if (!isNotInterestedStatus(existingLead.status)) {
+    const normalizedStatus = normalizeLeadStatus(existingLead.status);
+    if (normalizedStatus !== 'notinterested' && normalizedStatus !== 'backedout') {
         throw new LeadActionError('DUPLICATE_FIELD', 'A lead with this value already exists.', {
             meta: { existingLeadId: duplicateLeadId },
         });
@@ -151,19 +152,17 @@ export async function createLeadAction(ownerId: string, input: CreateLeadInput, 
         const validation = await validateLeadUniqueness(input.data);
         if (!validation.isValid) {
             if (validation.existingLeadId) {
-                const duplicateStatus = validation.existingLeadStatus;
-                const shouldRestoreNotInterested =
-                    isNotInterestedStatus(duplicateStatus) ||
-                    (!duplicateStatus &&
-                        isNotInterestedStatus(
-                            (
-                                await databases.getDocument(
-                                    DATABASE_ID,
-                                    LEADS_COLLECTION_ID,
-                                    validation.existingLeadId,
-                                ) as unknown as Lead
-                            ).status,
-                        ));
+                let actualDuplicateStatus = validation.existingLeadStatus;
+                if (!actualDuplicateStatus) {
+                    const doc = await databases.getDocument(
+                        DATABASE_ID,
+                        LEADS_COLLECTION_ID,
+                        validation.existingLeadId,
+                    ) as unknown as Lead;
+                    actualDuplicateStatus = doc.status;
+                }
+                const normalizedStatus = normalizeLeadStatus(actualDuplicateStatus);
+                const shouldRestoreNotInterested = normalizedStatus === 'notinterested' || normalizedStatus === 'backedout';
 
                 if (shouldRestoreNotInterested) {
                     return restoreNotInterestedDuplicateLead({
@@ -451,6 +450,11 @@ export async function updateLeadAction(leadId: string, data: Partial<LeadData>, 
         const targetStatus = (updatedData as any).status || currentLead.status;
         if (targetStatus === "Not Interested" && currentLead.status !== "Not Interested") {
             const result = await notInterestedLeadAction(leadId, actorId, actorName || actorDoc.name || actorDoc.$id);
+            return result.lead as unknown as Lead;
+        }
+
+        if (targetStatus === "Backed Out" && currentLead.status !== "Backed Out") {
+            const result = await backoutLeadAction(leadId, actorId, actorName || actorDoc.name || actorDoc.$id);
             return result.lead as unknown as Lead;
         }
 

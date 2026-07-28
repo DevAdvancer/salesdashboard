@@ -593,6 +593,7 @@ export async function listMyLinkedinRequestsAction(input: {
       currentUserId: string;
       limit?: number;
       searchQuery?: string;
+      dateSent?: string | null;
     }) {
     await assertAuthenticatedUserId(input.currentUserId);
     const user = await getAuthenticatedUserDoc();
@@ -605,6 +606,10 @@ export async function listMyLinkedinRequestsAction(input: {
       Query.orderDesc("dateSent"),
       Query.orderDesc("$createdAt"),
     ];
+
+    if (input.dateSent) {
+      queries.push(Query.equal("dateSent", assertDateIso(input.dateSent)));
+    }
 
     if (!input.searchQuery) {
       queries.push(Query.limit(Math.min(Math.max(input.limit ?? 10, 1), 500)));
@@ -1160,14 +1165,16 @@ export async function loadLinkedinRequestDashboardDataAction(input: {
   dateSent: string | null;
   todayIso: string;
   searchQuery?: string;
+  limit?: number;
 }) {
   await assertAuthenticatedUserId(input.currentUserId);
   
   // 1. Fetch the requests list
   const requests = await listMyLinkedinRequestsAction({
     currentUserId: input.currentUserId,
-    limit: input.searchQuery ? 100 : 10,
+    limit: input.limit ?? 100,
     searchQuery: input.searchQuery,
+    dateSent: input.dateSent,
   });
 
   // 2. Fetch the backout statuses for the leads in the list
