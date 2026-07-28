@@ -139,19 +139,8 @@ export async function logAuditAction(databases: Awaited<ReturnType<typeof create
     targetId?: string | null;
     metadata?: Record<string, unknown>;
     }) {
-    try {
-    await databases.createDocument(DATABASE_ID, "", ID.unique(), {
-      action: input.action,
-      actorId: input.actorId,
-      actorName: input.actorName,
-      targetId: input.targetId ?? null,
-      targetType: input.targetType,
-      metadata: input.metadata ? JSON.stringify(input.metadata) : null,
-      createdAt: new Date().toISOString(),
-    });
-    } catch {
+    // Audit logs were removed. We now synthesize logs from timestamps.
     return;
-    }
 }
 
 export function canManageLinkedinAccounts(user: User) {
