@@ -4,6 +4,7 @@ import { ID, Permission, Query, Role } from 'node-appwrite';
 import { createAdminClient, createSessionClient } from '@/lib/server/appwrite';
 import { assertAuthenticatedUserId, getAuthenticatedAccount } from '@/lib/server/current-user';
 import { invalidateDepartmentScopedUserIds } from '@/lib/server/department-user-cache';
+import logger from '@/lib/logger';
 import { CreateTeamLeadInput, CreateAgentInput, Department, UserRole, isValidDepartment } from '@/lib/types';
 import { COLLECTIONS } from '@/lib/constants/appwrite';
 import { normalizeEmail } from '@/lib/utils/user-hierarchy';
@@ -125,9 +126,7 @@ async function getCurrentUser() {
     const user = await account.get();
     return user;
   } catch (error: any) {
-    console.error('getCurrentUser error:', error?.message || error);
-    console.error('Error type:', error?.type);
-    console.error('Error code:', error?.code);
+    logger.error({ error, message: error?.message, type: error?.type, code: error?.code }, 'getCurrentUser error');
     return null;
   }
 }
@@ -138,7 +137,7 @@ async function getUserDoc(userId: string) {
         const doc = await databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, userId);
         return doc;
     } catch (error) {
-        console.error('getUserDoc error for userId:', userId, error);
+        logger.error({ userId, error }, 'getUserDoc error');
         return null;
     }
 }
@@ -153,7 +152,7 @@ async function logAuditAction(
     metadata?: any
 ) {
     if (!AUDIT_LOGS_COLLECTION_ID) {
-        console.warn('Audit logs collection ID not set, skipping log');
+        logger.warn('Audit logs collection ID not set, skipping log');
         return;
     }
     try {
@@ -177,7 +176,7 @@ async function logAuditAction(
             ]
         );
     } catch (error) {
-        console.error("Failed to log audit action:", error);
+        logger.error({ action, targetId, error }, "Failed to log audit action");
     }
 }
 
@@ -237,7 +236,7 @@ export async function createAdminAction(input: CreateAdminInput & { currentUserI
 
         return { success: true, userId };
     } catch (error: unknown) {
-        console.error("DB Creation failed, rolling back Auth User", error);
+        logger.error({ error, userId }, "DB Creation failed, rolling back Auth User");
         await users.delete(userId);
         throw new Error("Failed to create user profile: " + getErrorMessage(error));
     }
@@ -299,7 +298,7 @@ export async function createDeveloperAction(input: CreateAdminInput & { currentU
 
         return { success: true, userId };
     } catch (error: unknown) {
-        console.error("DB Creation failed, rolling back Auth User", error);
+        logger.error({ error, userId }, "DB Creation failed, rolling back Auth User");
         await users.delete(userId);
         throw new Error("Failed to create user profile: " + getErrorMessage(error));
     }
@@ -362,7 +361,7 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
 
         return { success: true };
     } catch (error: any) {
-        console.error("DB Creation failed, rolling back Auth User", error);
+        logger.error({ error, userId }, "DB Creation failed, rolling back Auth User");
         await users.delete(userId);
         throw new Error("Failed to create user profile: " + error.message);
     }
@@ -452,7 +451,7 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
 
         return { success: true };
     } catch (error: any) {
-        console.error("DB Creation failed, rolling back Auth User", error);
+        logger.error({ error, userId }, "DB Creation failed, rolling back Auth User");
         await users.delete(userId);
         throw new Error("Failed to create user profile: " + error.message);
     }
@@ -605,7 +604,7 @@ export async function updateUserAction(input: {
         return { success: true };
 
     } catch (error: any) {
-        console.error("Update failed", error);
+        logger.error({ error, userId }, "Update user failed");
         const errorMessage = error?.message || String(error);
         throw new Error("Failed to update user: " + errorMessage);
     }
@@ -658,10 +657,7 @@ export async function deleteUserAction(input: {
                         updates
                     );
                 } catch (e) {
-                    console.error(
-                        `Failed to update user ${String(doc.$id)} after delete:`,
-                        e
-                    );
+                    logger.error({ error: e, deletedUserId: userId, docId: doc.$id }, `Failed to update user after delete`);
                 }
             });
 
@@ -694,7 +690,7 @@ export async function deleteUserAction(input: {
 
         return { success: true };
     } catch (error: unknown) {
-        console.error("Delete failed", error);
+        logger.error({ error, userId }, "Delete user failed");
         const errorMessage = getErrorMessage(error);
         throw new Error("Failed to delete user: " + errorMessage);
     }
@@ -784,7 +780,7 @@ export async function setAgentActiveAction(input: {
                     );
                 }
             } catch (err) {
-                console.error("Failed to deactivate LinkedIn accounts for inactive user:", err);
+                logger.error({ error: err, userId }, "Failed to deactivate LinkedIn accounts for inactive user");
             }
         }
 

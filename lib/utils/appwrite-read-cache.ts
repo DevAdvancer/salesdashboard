@@ -30,6 +30,7 @@
  */
 
 import { bumpRequestCount } from "@/lib/server/appwrite-request-meter";
+import logger from "@/lib/logger";
 
 type Callable = (...args: unknown[]) => unknown;
 
@@ -180,6 +181,14 @@ export function createReadThroughDatabases<T extends object>(
           const cached = cache.get(key);
 
           if (cached && cached.expiresAt > now) {
+            logger.info({
+              type: 'database_read',
+              method: prop,
+              collectionId,
+              durationMs: 0,
+              namespace,
+              cacheHit: true
+            }, `Appwrite Read: ${prop} (Cache Hit)`);
             return Promise.resolve(cached.value);
           }
 
@@ -194,10 +203,30 @@ export function createReadThroughDatabases<T extends object>(
           // cost nothing on the wire and must stay uncounted.
           bumpRequestCount();
 
+          const start = Date.now();
           const request = Promise.resolve(method.apply(target, args))
             .then((value) => {
               cache.set(key, { expiresAt: Date.now() + ttlMs, value });
+              logger.info({
+                type: 'database_read',
+                method: prop,
+                collectionId,
+                durationMs: Date.now() - start,
+                namespace,
+                cacheHit: false
+              }, `Appwrite Read: ${prop}`);
               return value;
+            })
+            .catch((error) => {
+              logger.error({
+                error,
+                type: 'database_read',
+                method: prop,
+                collectionId,
+                durationMs: Date.now() - start,
+                namespace
+              }, `Appwrite Read Error: ${prop}`);
+              throw error;
             })
             .finally(() => {
               inFlight.delete(key);
@@ -211,7 +240,27 @@ export function createReadThroughDatabases<T extends object>(
       if (WRITE_METHODS.has(prop)) {
         return (...args: unknown[]) => {
           const collectionId = extractCollectionId(prop, args);
+          const start = Date.now();
           const promise = Promise.resolve(method.apply(target, args));
+
+          promise.then(() => {
+            logger.info({
+              type: 'database_write',
+              method: prop,
+              collectionId,
+              durationMs: Date.now() - start,
+              namespace
+            }, `Appwrite Write: ${prop}`);
+          }).catch((error) => {
+            logger.error({
+              error,
+              type: 'database_write',
+              method: prop,
+              collectionId,
+              durationMs: Date.now() - start,
+              namespace
+            }, `Appwrite Write Error: ${prop}`);
+          });
 
           // Surgical invalidation: only the affected collection drops out
           // of the cache. This applies to creates, updates, and deletes —

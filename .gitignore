@@ -44,3 +44,5 @@ output/
 
 # Security audit reports: contain unremediated findings, keep out of the repo
 CRM-Security-and-Request-Volume-Audit*.pdf
+
+.logs/

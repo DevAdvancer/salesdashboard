@@ -1,4 +1,8 @@
+import logger from '../logger';
+
 export function getAppwriteErrorMessage(error: unknown): string {
+  logger.error({ error }, 'Appwrite error occurred');
+  
   const message =
     typeof (error as { message?: unknown } | null)?.message === "string"
       ? ((error as { message: string }).message as string)
