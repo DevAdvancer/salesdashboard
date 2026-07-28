@@ -386,26 +386,9 @@ async function listNotInterestedEventsInRange(
 }
 
 async function listAuditLogsInRange(databases: any, range: WeeklyReportRange): Promise<AuditLogDocument[]> {
-  // The audit log collection stores the timestamp as `$createdAt` (the
-  // system field Appwrite always maintains). The writes elsewhere in
-  // the codebase use `createdAt` but the schema doesn't include that
-  // attribute, so queries against it return 0 results. Filter by
-  // `$createdAt` instead — it's set when the audit document is created,
-  // which is the same moment the action happened.
-  return listAllDocuments<AuditLogDocument>({
-    databases,
-    databaseId: DATABASE_ID,
-    collectionId: "",
-    queries: [
-      Query.equal("action", "LEAD_UPDATE"),
-      Query.equal("targetType", "LEAD"),
-      Query.greaterThanEqual("$createdAt", range.from),
-      Query.lessThanEqual("$createdAt", range.to),
-      Query.orderAsc("$id"),
-    ],
-    pageLimit: 100,
-    maxPages: 500,
-  });
+  // Audit logs are currently disabled and the collection ID is empty ("").
+  // Attempting to query an empty collection ID will throw an Appwrite exception, crashing the report.
+  return [];
 }
 
 async function listClientPaymentsUpdatedInRange(databases: any, range: WeeklyReportRange): Promise<ClientPaymentRecord[]> {

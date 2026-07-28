@@ -174,7 +174,7 @@ export function WeeklyReportDashboard({ user }: { user: User }) {
       {!loading &&
         report &&
         !singleMember &&
-        report.teams.filter((team) => Boolean(team.teamLead)).map((team) => (
+        report.teams.map((team) => (
           <Card key={team.teamLead?.$id ?? "unassigned"}>
             <CardHeader>
               <CardTitle>
