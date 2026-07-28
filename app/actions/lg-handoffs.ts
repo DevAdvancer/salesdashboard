@@ -145,7 +145,8 @@ export async function listLgHandoffsAction(dateFrom?: string, dateTo?: string): 
 
   try {
     const queries = [
-      Query.limit(5000),
+      Query.limit(200),
+      Query.orderDesc('$createdAt'),
       Query.select(['leadId', 'teamLeadId', 'leadGenerationId', 'handedOffAt', 'branchId']),
     ];
     if (dateFrom) queries.push(Query.greaterThanEqual('handedOffAt', dateFrom));
