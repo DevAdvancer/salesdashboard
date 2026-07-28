@@ -1159,13 +1159,15 @@ export async function loadLinkedinRequestDashboardDataAction(input: {
   accountId: string | null;
   dateSent: string | null;
   todayIso: string;
+  searchQuery?: string;
 }) {
   await assertAuthenticatedUserId(input.currentUserId);
   
   // 1. Fetch the requests list
   const requests = await listMyLinkedinRequestsAction({
     currentUserId: input.currentUserId,
-    limit: 10,
+    limit: input.searchQuery ? 100 : 10,
+    searchQuery: input.searchQuery,
   });
 
   // 2. Fetch the backout statuses for the leads in the list

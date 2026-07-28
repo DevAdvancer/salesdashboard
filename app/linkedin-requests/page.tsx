@@ -134,6 +134,7 @@ function LinkedinRequestsContent() {
         accountId: selectedAccountId || null,
         dateSent: null, // list action expects null for 'all'
         todayIso,
+        searchQuery: appliedFilterUrl || undefined,
       });
     },
     enabled: !!user && serverSessionReady,
