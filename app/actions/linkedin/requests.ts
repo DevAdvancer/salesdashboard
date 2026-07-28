@@ -429,8 +429,9 @@ export async function getLinkedinConnectionHistoryAction(input: {
     const requestsMissingLead = requests.filter(
             (r) => !requestToLeadId.has(r.$id),
           );
-    // AUDIT_LOGS removed, so we cannot link requests to leads via logs anymore.
-    // If request.leadId is missing, it remains missing.
+    // AUDIT_LOGS removed, so we synthesize request logs from their timestamps
+    const agentIds = Array.from(new Set(requests.map(r => r.agentId).filter(Boolean)));
+    const agentNameById = new Map<string, string>();
 
     const leadIds = Array.from(new Set(requestToLeadId.values()));
     const leadById = new Map<string, { leadId: string; status: string; isClosed: boolean }>();
@@ -460,11 +461,55 @@ export async function getLinkedinConnectionHistoryAction(input: {
             }
           }
         }
+      })(),
+      (async () => {
+        if (agentIds.length > 0) {
+          const chunkSize = 100;
+          for (let i = 0; i < agentIds.length; i += chunkSize) {
+            const chunk = agentIds.slice(i, i + chunkSize);
+            const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
+              Query.equal("$id", chunk),
+              Query.select(["$id", "name"]),
+              Query.limit(chunkSize),
+            ]);
+            for (const doc of response.documents as unknown as Array<{ $id: string; name?: unknown }>) {
+              agentNameById.set(doc.$id, typeof doc.name === "string" ? doc.name : "Unknown Agent");
+            }
+          }
+        }
       })()
     ]);
     const histories = await Promise.all(
             requests.map(async (req) => {
+              const agentName = agentNameById.get(req.agentId) || "Unknown Agent";
               const logs: any[] = [];
+              if (req.$createdAt || req.dateSent) {
+                logs.push({
+                  $id: `${req.$id}-created`,
+                  action: "REQUEST_CREATED",
+                  actorName: agentName,
+                  createdAt: req.$createdAt || req.dateSent,
+                  metadata: JSON.stringify({ status: "sent", changes: { dateSent: req.dateSent } })
+                });
+              }
+              if (req.acceptedAt) {
+                logs.push({
+                  $id: `${req.$id}-accepted`,
+                  action: "REQUEST_ACCEPTED",
+                  actorName: agentName,
+                  createdAt: req.acceptedAt,
+                  metadata: JSON.stringify({ status: "accepted" })
+                });
+              }
+              if (req.withdrawnAt) {
+                logs.push({
+                  $id: `${req.$id}-withdrawn`,
+                  action: "REQUEST_WITHDRAWN",
+                  actorName: agentName,
+                  createdAt: req.withdrawnAt,
+                  metadata: JSON.stringify({ status: "withdrawn" })
+                });
+              }
 
               const leadId = requestToLeadId.get(req.$id) ?? null;
               return {
