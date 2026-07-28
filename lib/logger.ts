@@ -5,10 +5,22 @@ const sourceToken = process.env.LOGFLARE_SOURCE_TOKEN || process.env.NEXT_PUBLIC
 
 const isEnabled = Boolean(apiKey && sourceToken);
 
+const generateId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+};
+
 export const logger = pino(
   {
     browser: {
       asObject: true
+    },
+    messageKey: 'event_message',
+    timestamp: () => `,"timestamp":"${new Date().toISOString()}"`,
+    mixin() {
+      return { id: generateId() };
     },
     level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
     base: {
@@ -30,4 +42,5 @@ export const logger = pino(
 );
 
 export default logger;
+
 
