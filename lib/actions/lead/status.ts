@@ -149,11 +149,13 @@ export async function backoutLeadAction(
   const nowIso = new Date().toISOString();
   let updatedDataJson = currentLead.data;
   try {
-    const leadData = JSON.parse(currentLead.data);
+    const leadData = JSON.parse(currentLead.data || "{}");
     if (!leadData.creatorId) {
       leadData.creatorId = currentLead.ownerId;
-      updatedDataJson = JSON.stringify(leadData);
     }
+    leadData.closedById = actorId;
+    leadData.closedByName = actorName;
+    updatedDataJson = JSON.stringify(leadData);
   } catch {}
 
   const updated = await databases.updateDocument(
@@ -271,11 +273,13 @@ export async function notInterestedLeadAction(
   const nowIso = new Date().toISOString();
   let updatedDataJson = currentLead.data;
   try {
-    const leadData = JSON.parse(currentLead.data);
+    const leadData = JSON.parse(currentLead.data || "{}");
     if (!leadData.creatorId) {
       leadData.creatorId = currentLead.ownerId;
-      updatedDataJson = JSON.stringify(leadData);
     }
+    leadData.closedById = actorId;
+    leadData.closedByName = actorName;
+    updatedDataJson = JSON.stringify(leadData);
   } catch {}
 
   const updated = await databases.updateDocument(
@@ -466,6 +470,14 @@ export async function closeLeadAction(
             permissions.push(...assignedHierarchyPerms);
         }
 
+        let updatedDataJson = currentLead.data;
+        try {
+            const parsed = JSON.parse(currentLead.data || "{}");
+            parsed.closedById = actorId;
+            parsed.closedByName = actorName;
+            updatedDataJson = JSON.stringify(parsed);
+        } catch {}
+
         const lead = await databases.updateDocument(
             DATABASE_ID,
             COLLECTIONS.LEADS,
@@ -474,6 +486,7 @@ export async function closeLeadAction(
                 isClosed: true,
                 closedAt: new Date().toISOString(),
                 status: closedStatus,
+                data: updatedDataJson,
                 ...(shouldAssignClosingAgent ? { assignedToId: actorId } : {}),
             },
             [...new Set(permissions)]

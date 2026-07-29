@@ -166,7 +166,7 @@ function HistoryContent() {
       const payment = paymentByLeadId[lead.$id];
       const status = payment?.status ?? "no_record";
       const personalDetails = payment?.personalDetails ?? {};
-      let closedByName = closedByMap[lead.$id] || "";
+      let closedByName = typeof data.closedByName === "string" ? data.closedByName : (closedByMap[lead.$id] || "");
       if (!closedByName) {
         closedByName = await fetchClosedByName(lead.$id);
         if (closedByName) {
@@ -594,7 +594,7 @@ function HistoryContent() {
                         {sourceName || source || "-"}
                       </td>
                       <td className="p-3 md:p-4 text-muted-foreground hidden md:table-cell">
-                        {closedByMap[lead.$id] || "N/A"}
+                        {typeof data.closedByName === "string" && data.closedByName ? data.closedByName : (closedByMap[lead.$id] || "N/A")}
                       </td>
                       <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">
                         {formatDate(lead.closedAt)}
