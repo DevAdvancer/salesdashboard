@@ -347,7 +347,7 @@ function LeadsContent() {
     pageSize: ITEMS_PER_PAGE,
   });
 
-  const queryClient = useQueryClient();  });
+  const queryClient = useQueryClient();
 
   // Dropdown data
   const assignableUsersQuery = useAssignableUsersQuery({
