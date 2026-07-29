@@ -6,7 +6,6 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listLeadsForExport, clearLeadReadCache } from "@/lib/services/lead-action-service";
 import { useLeadsQuery } from "@/lib/queries/leads/use-leads-query";
-import { useRealtimeCollection } from "@/lib/hooks/use-realtime-collection";
 import { useToast } from "@/components/ui/use-toast";
 import { queryKeys } from "@/lib/queries/keys";
 import { COLLECTIONS } from "@/lib/constants/appwrite";
@@ -348,11 +347,7 @@ function LeadsContent() {
     pageSize: ITEMS_PER_PAGE,
   });
 
-  const queryClient = useQueryClient();
-  useRealtimeCollection(COLLECTIONS.LEADS, () => {
-    clearLeadReadCache();
-    queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
-  });
+  const queryClient = useQueryClient();  });
 
   // Dropdown data
   const assignableUsersQuery = useAssignableUsersQuery({

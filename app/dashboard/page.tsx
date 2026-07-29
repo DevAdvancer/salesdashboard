@@ -200,22 +200,7 @@ function MainDashboard({
   const [handoffSummaries, setHandoffSummaries] = useState<TeamLeadAssignmentSummary[] | null>(null);
   const [handoffLoading, setHandoffLoading] = useState(isAdminLike);
 
-  // Live updates: when any lead changes anywhere (created, edited, closed by
-  // another user), bump this nonce so every fetch effect below re-runs with
-  // fresh data. The subscription clears the TTL cache first so the refetch
-  // hits the server, not the stale client-read cache. This is what makes an
-  // add by one user reflect on everyone else's dashboard without a refresh.
-  const [liveRefreshNonce, setLiveRefreshNonce] = useState(0);
-  const realtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useRealtimeCollection(COLLECTIONS.LEADS, () => {
-    // Debounce to prevent cascade: 1 lead edit was triggering 50 users × 6
-    // parallel refetches. Batch rapid-fire events into a single 30s refresh.
-    if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
-    realtimeDebounceRef.current = setTimeout(() => {
-      clearDashboardDataCache();
-      setLiveRefreshNonce((n) => n + 1);
-    }, 30_000);
-  });
+
 
   const isDashboardLoading =
     topMetricsLoading ||
@@ -279,7 +264,7 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, dateRange, liveRefreshNonce]);
+  }, [user, dateRange]);
 
   // ── Fetch KPI rows when range changes ─────────────────────────────────
   useEffect(() => {
@@ -314,7 +299,7 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, dateRange, liveRefreshNonce]);
+  }, [user, dateRange]);
 
   // ── Fetch LinkedIn KPI rows when range changes ─────────────────────────
   useEffect(() => {
@@ -349,7 +334,7 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, dateRange, liveRefreshNonce]);
+  }, [user, dateRange]);
 
   // ── Fetch holiday calendar (all dashboard viewers use this to disable
   // holiday selection and to exclude weekday holidays from KPI targets) ──
@@ -412,7 +397,7 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, isAdminLike, dateRange, liveRefreshNonce]);
+  }, [user, isAdminLike, dateRange]);
 
   // ── Fetch technical payments total for dashboard (all accessible technical payments in date range) ──
   useEffect(() => {
@@ -445,7 +430,7 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, isAdminLike, dateRange, liveRefreshNonce]);
+  }, [user, isAdminLike, dateRange]);
 
   // ── Fetch referral split (admin-like only, current month by closedAt) ───
   useEffect(() => {
@@ -483,7 +468,7 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, isAdminLike, dateRange, liveRefreshNonce]);
+  }, [user, isAdminLike, dateRange]);
 
   // ── Fetch LG handoff summaries (admin-like only) ──────────────────────
   useEffect(() => {
@@ -517,7 +502,7 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, isAdminLike, dateRange, liveRefreshNonce]);
+  }, [user, isAdminLike, dateRange]);
 
   // KPI section mode + target derived from range
   const kpiMode = (dateRange && isSingleDay(dateRange)) ? "daily" : "monthly";
@@ -755,16 +740,7 @@ function LeadGenerationDashboardContent() {
     loading: true,
   });
 
-  // Live updates: refresh the lead-gen stats when any lead changes anywhere.
-  const [lgRefreshNonce, setLgRefreshNonce] = useState(0);
-  const lgRealtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useRealtimeCollection(COLLECTIONS.LEADS, () => {
-    if (lgRealtimeDebounceRef.current) clearTimeout(lgRealtimeDebounceRef.current);
-    lgRealtimeDebounceRef.current = setTimeout(() => {
-      clearLeadReadCache();
-      setLgRefreshNonce((n) => n + 1);
-    }, 30_000);
-  });
+
 
   useEffect(() => {
     if (!user) return;
@@ -855,7 +831,7 @@ function LeadGenerationDashboardContent() {
     return () => {
       cancelled = true;
     };
-  }, [user, lgRefreshNonce]);
+  }, [user]);
 
   if (!user) {
     return (
