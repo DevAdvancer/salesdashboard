@@ -122,7 +122,7 @@
   --secondary:             var(--soft-cloud);
   --secondary-foreground:  var(--ink);
   --muted:                 var(--soft-cloud);
-  --muted-foreground:      var(--mute);
+  --muted-foreground:      var(--ash);
   --accent:                var(--soft-cloud);
   --accent-foreground:     var(--ink);
   --destructive:           var(--sale);
@@ -767,35 +767,5 @@
     animation: attention-pulse 2s ease-in-out infinite;
   }
 
-  /* Glassmorphism utilities */
-  .glass-panel {
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  }
-  html.dark .glass-panel, .dark .glass-panel {
-    background: rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  }
-  .glass-button {
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    transition: all 0.2s ease;
-  }
-  .glass-button:hover {
-    background: rgba(255, 255, 255, 0.2);
-    transform: translateY(-1px);
-  }
-  html.dark .glass-button, .dark .glass-button {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-  }
-  html.dark .glass-button:hover, .dark .glass-button:hover {
-    background: rgba(255, 255, 255, 0.1);
-  }
+  /* Removed glassmorphism utilities as per design updates */
 }

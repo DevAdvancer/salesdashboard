@@ -856,7 +856,7 @@ function LeadDetailContent() {
   return (
     <div className="container mx-auto">
       {/* Header + Action Buttons */}
-      <div className="sticky top-[72px] z-30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 p-4 -mx-4 sm:mx-0 rounded-3xl glass-panel border border-border/50 shadow-sm transition-all">
+      <div className="sticky top-[72px] z-30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 p-4 -mx-4 sm:mx-0 rounded-3xl bg-card border border-border/50 shadow-sm transition-all">
         <div id="tour-lead-header">
           <Button
             variant="outline"

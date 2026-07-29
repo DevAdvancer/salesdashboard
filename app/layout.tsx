@@ -38,12 +38,12 @@ export const metadata: Metadata = {
 const themeBootScript = `
 (() => {
   try {
-    const savedTheme = localStorage.getItem('salesdashboard-theme') || 'light';
+    const savedTheme = localStorage.getItem('salesdashboard-theme') || 'dark';
     document.documentElement.classList.toggle('dark', savedTheme === 'dark');
     document.documentElement.style.colorScheme = savedTheme === 'dark' ? 'dark' : 'light';
   } catch {
-    document.documentElement.classList.remove('dark');
-    document.documentElement.style.colorScheme = 'light';
+    document.documentElement.classList.add('dark');
+    document.documentElement.style.colorScheme = 'dark';
   }
 })();
 `;

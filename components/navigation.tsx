@@ -485,7 +485,7 @@ export function Navigation({
 
       {/* ── Sidebar ── */}
       <aside
-        className={`fixed top-0 left-0 h-full w-64 flex flex-col z-40 transition-all duration-300 lg:translate-x-0 glass-panel border-r border-border/50 ${isCollapsed ? "sidebar-collapsed lg:w-20" : "lg:w-64"} ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed top-0 left-0 h-full w-64 flex flex-col z-40 transition-all duration-300 lg:translate-x-0 bg-card border-r border-border/50 ${isCollapsed ? "sidebar-collapsed lg:w-20" : "lg:w-64"} ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}
         style={{
         }}>
         {/* Brand */}
