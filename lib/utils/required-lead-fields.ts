@@ -1,4 +1,5 @@
 import { isLinkedinProfileField } from "./lead-linkedin-field";
+import { isSourceExemptFromLinkedin, normalizeSource } from "./lead-source";
 
 /**
  * Server-enforced required lead fields. The server's
@@ -34,15 +35,14 @@ export function isServerRequiredLeadField(key: string): boolean {
  * that isn't a letter or digit.
  */
 export function normalizeLeadSource(value: unknown): string {
-  if (typeof value !== 'string') return '';
-  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  return normalizeSource(value);
 }
 
 /**
  * Whether the field should be marked as required in the UI: true if either
  * the form-config marks it required, or the server requires it — BUT LinkedIn
- * fields are exempt when the lead source is "referral" (the server allows
- * saving without LinkedIn for referral leads). The `source` param defaults to
+ * fields are exempt when the lead source is "referral" or "website" (the server allows
+ * saving without LinkedIn for these sources). The `source` param defaults to
  * an empty string so callers that don't pass it still get the safe default.
  *
  * The `field` param (optional) is used to detect LinkedIn fields even
@@ -54,17 +54,17 @@ export function shouldShowRequiredAsterisk(
   source: unknown = '',
   field?: { key: string; label: string },
 ): boolean {
-  const isReferral = normalizeLeadSource(source) === 'referral';
+  const isExemptSource = isSourceExemptFromLinkedin(source);
 
   // Check if this is a LinkedIn field (uses existing utility which handles legacy keys)
   const isLinkedinField = field
     ? isLinkedinProfileField(field)
     : fieldKey === 'linkedinProfileUrl' || fieldKey === 'linkedinProfile';
 
-  // Referral leads skip the LinkedIn asterisk — the server allows saving
-  // without a LinkedIn URL for referral source. This check runs BEFORE the
+  // Certain lead sources skip the LinkedIn asterisk — the server allows saving
+  // without a LinkedIn URL for those sources. This check runs BEFORE the
   // formConfigRequired guard so it overrides even when form-config says required.
-  if (isLinkedinField && isReferral) return false;
+  if (isLinkedinField && isExemptSource) return false;
 
   if (Boolean(formConfigRequired)) return true;
 

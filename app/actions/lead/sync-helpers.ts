@@ -1,5 +1,5 @@
 import { LeadData, CreateLeadInput, Department, Lead } from "@/lib/types";
-import { isReferralSource, normalizeSource } from "@/lib/utils/lead-source";
+import { isSourceExemptFromLinkedin, normalizeSource } from "@/lib/utils/lead-source";
 import { normalizeLinkedinProfileUrl } from "@/lib/utils/linkedin";
 import { normalizeLeadStatus } from "@/lib/utils/lead-status-workflow";
 import { REQUIRED_LEAD_FIELD_KEYS } from "@/lib/utils/required-lead-fields";
@@ -38,11 +38,11 @@ export function shouldIgnoreLinkedinDuplicate(doc: Record<string, unknown>, lead
 
 export function assertRequiredLeadData(data: LeadData) {
     const missing: Array<{ key: string; label: string }> = [];
-    const isReferral = isReferralSource(data.source);
+    const isExemptSource = isSourceExemptFromLinkedin(data.source);
     const linkedinKeys = ['linkedinProfileUrl', 'linkedinProfile'];
     for (const key of REQUIRED_LEAD_FIELD_KEYS) {
-        // Skip LinkedIn fields if source is referral
-        if (isReferral && linkedinKeys.includes(key)) {
+        // Skip LinkedIn fields if source is exempt (e.g. referral, website)
+        if (isExemptSource && linkedinKeys.includes(key)) {
             continue;
         }
 
