@@ -9,6 +9,8 @@ import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import { buildWorkingDayKpi, toDateKey } from "@/lib/utils/report-kpi";
 import type { ClientPaymentRecord, Department, Lead, PaymentStatus, User, UserRole } from "@/lib/types";
 import { getTechnicalPaymentsByLeadIdsAction } from "./technical-payments";
+import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
+import { computeAgentStatsForDate } from "@/lib/server/stats-aggregator";
 
 type WeeklyReportRange = { from: string; to: string };
 
@@ -486,12 +488,29 @@ export async function getWeeklyReportAction(input: {
   const scopedUsers = await listScopedUsers(databases, actor);
   const scopedUserIds = new Set(scopedUsers.map((user) => user.$id));
 
-  const [createdLeads, closedLeads, auditLogs, paymentRecords, notInterestedEvents, followupRecords] = await Promise.all([
-    listLeadsCreatedInRange(databases, range),
-    listClosedLeadsInRange(databases, range),
+  const stats = await listAllDocuments<any>({
+    databases,
+    databaseId: DATABASE_ID,
+    collectionId: COLLECTIONS.AGENT_DAILY_STATS,
+    queries: [
+      Query.greaterThanEqual("dateKey", range.from.slice(0, 10)),
+      Query.lessThanEqual("dateKey", range.to.slice(0, 10)),
+      Query.orderAsc("$id"),
+    ],
+    pageLimit: 100,
+    maxPages: 500,
+  });
+
+  const todayIso = getCurrentEasternIsoDate();
+  const fromIso = range.from.slice(0, 10);
+  const toIso = range.to.slice(0, 10);
+  if (fromIso <= todayIso && toIso >= todayIso) {
+    const todayStats = await computeAgentStatsForDate(todayIso);
+    stats.push(...todayStats);
+  }
+
+  const [auditLogs, followupRecords] = await Promise.all([
     listAuditLogsInRange(databases, range),
-    listClientPaymentsUpdatedInRange(databases, range),
-    listNotInterestedEventsInRange(databases, range),
     listFollowupPaymentsInRange(databases, range),
   ]);
 
@@ -512,26 +531,22 @@ export async function getWeeklyReportAction(input: {
     return created;
   };
 
-  createdLeads.forEach((lead) => {
-    const attributed = getAttributedUserId(lead);
-    if (!scopedUserIds.has(attributed)) return;
-    addMetrics(ensureMetrics(attributed), { leads: 1 });
-    if (isColdCallLead(lead.data)) {
-      addMetrics(ensureMetrics(attributed), { coldCalls: 1 });
+  stats.forEach((stat) => {
+    if (!scopedUserIds.has(stat.agentId)) return;
+    addMetrics(ensureMetrics(stat.agentId), {
+      leads: stat.leadsGenerated || 0,
+      closures: stat.leadsClosed || 0,
+      upfront: stat.upfrontRevenue || 0,
+      technicalUpfront: stat.technicalUpfrontRevenue || 0,
+      coldCalls: stat.coldCallsGenerated || 0,
+      notInterested: stat.notInterestedMarked || 0,
+    });
+    
+    const leadsGen = stat.leadsGenerated || 0;
+    const refsGen = stat.referralsGenerated || 0;
+    if (leadsGen - refsGen > 0) {
+      ensureLeadDays(stat.agentId).add(stat.dateKey);
     }
-    // Track the date the lead was created on, for per-day KPI counting.
-    // Referral leads are excluded so an inbound referral can't pad a
-    // agent's working-day hit rate — the same rule the Target Report
-    // uses for revenue attribution.
-    if (!isReferralLead(lead.data)) {
-      ensureLeadDays(attributed).add(toDateKey(new Date(lead.$createdAt)));
-    }
-  });
-
-  closedLeads.forEach((lead) => {
-    const attributed = getAttributedUserId(lead);
-    if (!scopedUserIds.has(attributed)) return;
-    addMetrics(ensureMetrics(attributed), { closures: 1 });
   });
 
   auditLogs.forEach((log) => {
@@ -539,48 +554,11 @@ export async function getWeeklyReportAction(input: {
     const metadata = parseAuditMetadata(log.metadata);
     if (!metadata || metadata.kind !== "FOLLOW_UP") return;
     const snapshot = (metadata.snapshot ?? null) as any;
-    // A "call" is counted whenever the agent saves a Follow-Up Plan with
-    // Next Action = Call, regardless of followUpStatus. This matches the
-    // operator's rule: scheduling a Call follow-up is the act that
-    // increments the Calls counter, not just completing one. Other
-    // scheduled follow-ups (with a future date) continue to count as
-    // generic follow-ups.
     if (snapshot && snapshot.nextAction === "Call") {
       addMetrics(ensureMetrics(log.actorId), { calls: 1 });
     } else if (snapshot && snapshot.nextFollowUpAt) {
       addMetrics(ensureMetrics(log.actorId), { followups: 1 });
     }
-  });
-
-  // Attribute not-interested marks to the agent who owned the lead
-  // BEFORE it was handed to the unassigned queue — the operator's rule
-  // is that the mark counts against the original owner's conversion.
-  // `previousAssignedToId` is the fallback when ownership was already
-  // ambiguous (e.g. the lead was in the unassigned queue at mark time
-  // because of an earlier retry).
-  notInterestedEvents.forEach((event) => {
-    const attributed = event.previousAssignedToId || event.previousOwnerId;
-    if (!attributed || !scopedUserIds.has(attributed)) return;
-    addMetrics(ensureMetrics(attributed), { notInterested: 1 });
-  });
-
-  const paymentLeadIds = Array.from(new Set(paymentRecords.map((record) => record.leadId).filter(Boolean)));
-  const paymentLeadMap = paymentLeadIds.length > 0 ? await listLeadsByIds(databases, paymentLeadIds) : new Map();
-
-  paymentRecords.forEach((record) => {
-    const lead = paymentLeadMap.get(record.leadId);
-    if (!lead) return;
-    const attributed = getAttributedUserId(lead);
-    if (!scopedUserIds.has(attributed)) return;
-
-    const updates = Array.isArray(record.updates) ? record.updates : [];
-    const sorted = updates.slice().sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
-    const firstPaid = sorted.find((update) => update && isPaidStatus(update.status as PaymentStatus));
-    if (!firstPaid) return;
-    if (firstPaid.createdAt < range.from || firstPaid.createdAt > range.to) return;
-    const upfrontAmount = Number(record.paymentPlan?.upfrontAmount ?? 0) || 0;
-    if (upfrontAmount <= 0) return;
-    addMetrics(ensureMetrics(attributed), { upfront: upfrontAmount });
   });
 
   followupRecords.forEach((record) => {
@@ -593,19 +571,6 @@ export async function getWeeklyReportAction(input: {
       addMetrics(ensureMetrics(createdById), { upfront: amount });
     }
   });
-
-  // Technical payments: sum amounts attributed by userId within the date range.
-  const techPayments = await getTechnicalPaymentsByLeadIdsAction(actor.$id, paymentLeadIds);
-  for (const payment of techPayments) {
-    const userId = payment.userId;
-    if (!scopedUserIds.has(userId)) continue;
-    const createdAt = payment.createdAt;
-    if (createdAt < range.from || createdAt > range.to) continue;
-    const amount = Number(payment.amount) || 0;
-    if (amount > 0) {
-      addMetrics(ensureMetrics(userId), { technicalUpfront: amount, upfront: amount });
-    }
-  }
 
   scopedUsers.forEach((user) => ensureMetrics(user.$id));
 

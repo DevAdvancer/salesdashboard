@@ -152,15 +152,13 @@ export function buildTargetReport(input: {
   monthKey: string;
   targets: MonthlyTarget[];
   assignmentsByTargetId: Record<string, MonthlyTargetAssignment[]>;
-  leads: Lead[];
-  paymentsByLeadId: Record<string, LeadPaymentSnapshot>;
   usersByAgentId: Map<string, User>;
-  /**
-   * Optional. Number of "Not Interested" marks per agent id, restricted
-   * to events in the selected month. When omitted, every agent's
-   * notInterestedCount falls back to 0.
-   */
-  notInterestedByOwnerId?: Record<string, number>;
+  agentStatsByUserId: Record<string, {
+    achieved: number;
+    leadCount: number;
+    referralExcludedCount: number;
+    notInterestedCount: number;
+  }>;
   /**
    * Optional. Sum of followup payments collected by each agent in the selected month.
    */
@@ -170,44 +168,11 @@ export function buildTargetReport(input: {
    */
   technicalPaymentsByAgentId?: Record<string, number>;
 }): TargetReportResult {
-  const { monthKey, targets, assignmentsByTargetId, leads, paymentsByLeadId, usersByAgentId } =
-    input;
-  const notInterestedByOwnerId = input.notInterestedByOwnerId ?? {};
+  const { targets, assignmentsByTargetId, usersByAgentId, agentStatsByUserId } = input;
   const followupsByAgentId = input.followupsByAgentId ?? {};
   const technicalPaymentsByAgentId = input.technicalPaymentsByAgentId ?? {};
 
-  // Pre-aggregate paid amounts per (owner, lead) so we can later
-  // break by agent.
-  const paidByAgentId = new Map<string, number>();
-  const leadCountByAgentId = new Map<string, number>();
-  const referralExcludedByAgentId = new Map<string, number>();
-
-  for (const lead of leads) {
-    const snapshot = toLeadSnapshot(lead);
-    const effectiveDate = snapshot.closedAt ?? snapshot.createdAt;
-    const leadMonth = toMonthKey(effectiveDate);
-    if (leadMonth !== monthKey) continue;
-    if (!snapshot.ownerId) continue;
-    // Only count leads whose owner is in the actor's readable agent set.
-    if (!usersByAgentId.has(snapshot.ownerId)) continue;
-
-    if (isReferralSource(snapshot.source)) {
-      referralExcludedByAgentId.set(
-        snapshot.ownerId,
-        (referralExcludedByAgentId.get(snapshot.ownerId) ?? 0) + 1,
-      );
-      continue;
-    }
-
-    const paid = resolvePaidAmount(paymentsByLeadId[lead.$id]);
-    if (paid > 0) {
-      paidByAgentId.set(snapshot.ownerId, (paidByAgentId.get(snapshot.ownerId) ?? 0) + paid);
-    }
-    leadCountByAgentId.set(
-      snapshot.ownerId,
-      (leadCountByAgentId.get(snapshot.ownerId) ?? 0) + 1,
-    );
-  }
+  // No longer looping over leads; using agentStatsByUserId directly.
 
   // Build per-TL rows.
   const rows: TargetReportTlRow[] = [];
@@ -231,7 +196,10 @@ export function buildTargetReport(input: {
       if (!usersByAgentId.has(agentId)) continue;
       resolvedAgentIds.add(agentId);
       const agent = usersByAgentId.get(agentId)!;
-      let achieved = paidByAgentId.get(agentId) ?? 0;
+      const stats = agentStatsByUserId[agentId] || {
+        achieved: 0, leadCount: 0, referralExcludedCount: 0, notInterestedCount: 0
+      };
+      let achieved = stats.achieved;
       achieved += followupsByAgentId[agentId] ?? 0;
       achieved += technicalPaymentsByAgentId[agentId] ?? 0;
       const assignment = assignmentsByAgent.get(agentId);
@@ -244,9 +212,9 @@ export function buildTargetReport(input: {
         target: agentTarget,
         achieved,
         percent: toPercent(achieved, agentTarget),
-        leadCount: leadCountByAgentId.get(agentId) ?? 0,
-        referralExcludedCount: referralExcludedByAgentId.get(agentId) ?? 0,
-        notInterestedCount: notInterestedByOwnerId[agentId] ?? 0,
+        leadCount: stats.leadCount,
+        referralExcludedCount: stats.referralExcludedCount,
+        notInterestedCount: stats.notInterestedCount,
       });
     }
 

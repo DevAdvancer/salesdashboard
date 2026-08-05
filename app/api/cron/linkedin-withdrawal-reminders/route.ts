@@ -90,20 +90,6 @@ async function autoWithdrawLinkedinRequest(
     withdrawnAt: nowIso,
   });
 
-  await databases.createDocument(DATABASE_ID, "", ID.unique(), {
-    action: 'LINKEDIN_REQUEST_AUTO_WITHDRAW',
-    actorId: 'system',
-    actorName: 'System',
-    targetId: request.$id,
-    targetType: 'linkedin_request',
-    metadata: JSON.stringify({
-      company: request.company,
-      targetUrl: request.targetUrl,
-      reason,
-      withdrawnAt: nowIso,
-    }),
-    createdAt: nowIso,
-  });
 
   await createGeneralChatMessage(
     databases,

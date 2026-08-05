@@ -84,7 +84,7 @@ describe("Linkedin reports team lead scoping", () => {
 
     expect(mockListDocuments).toHaveBeenCalledWith(
       expect.any(String),
-      LINKEDIN_REQUESTS_COLLECTION,
+      COLLECTIONS.LINKEDIN_DAILY_STATS,
       expect.arrayContaining([`equal:teamLeadId:"tl-1"`]),
     );
   });

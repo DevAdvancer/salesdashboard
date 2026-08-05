@@ -59,6 +59,9 @@ export const COLLECTIONS = {
   // sender's team). See app/actions/call-requests.ts.
   CALL_REQUESTS: process.env.NEXT_PUBLIC_APPWRITE_CALL_REQUESTS_COLLECTION_ID || 'call_requests',
   RESUME_PROFILES: process.env.NEXT_PUBLIC_APPWRITE_RESUME_PROFILES_COLLECTION_ID || 'resume_profiles',
+  // Daily pre-aggregated caches to prevent massive listAllDocuments reads
+  LINKEDIN_DAILY_STATS: process.env.NEXT_PUBLIC_APPWRITE_LINKEDIN_DAILY_STATS_COLLECTION_ID || 'linkedin_daily_stats',
+  AGENT_DAILY_STATS: process.env.NEXT_PUBLIC_APPWRITE_AGENT_DAILY_STATS_COLLECTION_ID || 'agent_daily_stats',
 };
 
 export const BUCKETS = {
