@@ -33,11 +33,31 @@ function getAuthorizationToken(request: NextRequest) {
   return match?.[1]?.trim() || null;
 }
 
-function isAuthorized(request: NextRequest) {
+function isAuthorized(request: NextRequest): { authorized: boolean; debug?: any } {
   const expected = process.env.CRON_SECRET;
-  if (!expected) return false;
-  const provided = getAuthorizationToken(request) ?? request.headers.get('x-cron-secret');
-  return Boolean(provided) && provided === expected;
+  const authHeader = request.headers.get('authorization');
+  const providedToken = getAuthorizationToken(request);
+  const providedHeader = request.headers.get('x-cron-secret');
+  const provided = providedToken ?? providedHeader;
+  
+  if (!expected) {
+    return { authorized: false, debug: { reason: 'No CRON_SECRET in env' } };
+  }
+  
+  const authorized = Boolean(provided) && provided === expected;
+  if (!authorized) {
+    return { 
+      authorized: false, 
+      debug: { 
+        reason: 'Mismatch', 
+        hasAuthHeader: !!authHeader,
+        providedLength: provided?.length,
+        expectedLength: expected?.length
+      } 
+    };
+  }
+  
+  return { authorized: true };
 }
 
 function getTodayStartIso(now: Date) {
@@ -109,9 +129,12 @@ async function autoWithdrawLinkedinRequest(
   );
 }
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = isAuthorized(request);
+  if (!auth.authorized) {
+    return NextResponse.json({ error: 'Unauthorized', debug: auth.debug }, { status: 401 });
   }
 
   // The scope has to be opened here. getRequestCount() reads the active
