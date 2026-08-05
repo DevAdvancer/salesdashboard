@@ -190,9 +190,14 @@ export async function listLeadAssignableAgentsAction(
         throw new Error('Permission denied');
     }
 
-    const roleQuery = actorDoc.role === 'lead_generation'
-        ? Query.equal('role', 'team_lead')
-        : Query.equal('role', 'agent');
+    let roleQuery;
+    if (actorDoc.role === 'lead_generation') {
+        roleQuery = Query.equal('role', 'team_lead');
+    } else if (actorDoc.role === 'admin' || actorDoc.role === 'developer') {
+        roleQuery = Query.equal('role', ['agent', 'team_lead']);
+    } else {
+        roleQuery = Query.equal('role', 'agent');
+    }
 
     const response = await databases.listDocuments(
         DATABASE_ID,

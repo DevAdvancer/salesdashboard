@@ -237,7 +237,11 @@ function LeadDetailContent() {
           "sales",
         );
         setAgents(
-          fetchedAgents.filter((candidate) => candidate.role === "agent"),
+          fetchedAgents.filter((candidate) =>
+            user.role === "admin" || user.role === "developer"
+              ? candidate.role === "agent" || candidate.role === "team_lead"
+              : candidate.role === "agent",
+          ),
         );
       }
     } catch (err: unknown) {
