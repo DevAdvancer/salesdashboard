@@ -175,52 +175,6 @@ async function runWithdrawalReminderSweep() {
       continue;
     }
 
-    const policy = getLinkedinReminderPolicy(requestDoc);
-    if (!policy) {
-      continue;
-    }
-
-    // The age/due window does not depend on how many reminders already went
-    // out today, so test it first and skip the dedup lookup for rows that are
-    // not due at all.
-    if (
-      !shouldSendLinkedinWithdrawalReminder({
-        request: requestDoc,
-        now,
-        remindersSentToday: 0,
-      })
-    ) {
-      continue;
-    }
-
-    const dedupKey = notificationDedupKey(
-      requestDoc.agentId,
-      policy.type,
-      requestDoc.$id,
-    );
-    const remindersSentToday = reminderCounts.get(dedupKey) ?? 0;
-
-    if (
-      !shouldSendLinkedinWithdrawalReminder({
-        request: requestDoc,
-        now,
-        remindersSentToday,
-      })
-    ) {
-      continue;
-    }
-
-    await createNotificationsForRecipients(databases, [
-      requestDoc.agentId,
-      requestDoc.teamLeadId,
-      ...adminRecipientIds,
-    ], {
-      ...buildLinkedinWithdrawalReminder(requestDoc),
-    });
-    // Keep the in-memory tally current so the per-day maximum still holds if
-    // this cron is ever moved to a schedule that runs more than once a day.
-    reminderCounts.set(dedupKey, remindersSentToday + 1);
-    remindersSent += 1;
   }
 
   return NextResponse.json({

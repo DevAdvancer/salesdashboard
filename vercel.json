@@ -5,6 +5,10 @@
       "schedule": "0 14 * * 1"
     },
     {
+      "path": "/api/cron/friday-withdrawal-warning",
+      "schedule": "0 21 * * 5"
+    },
+    {
       "path": "/api/cron/payment-reminders",
       "schedule": "0 5 * * *"
     },
