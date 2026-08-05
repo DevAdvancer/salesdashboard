@@ -116,17 +116,6 @@ async function autoWithdrawLinkedinRequest(
     `Linkedin URL available again: ${request.targetUrl} (${request.company}) was auto-withdrawn. Reason: ${reason}`,
   );
 
-  await createNotificationsForRecipients(
-    databases,
-    [request.agentId, request.teamLeadId, ...adminRecipientIds],
-    {
-      type: 'linkedin_auto_withdrawn',
-      title: 'Linkedin Auto-Withdrawn',
-      body: `Linkedin request for ${request.company} was auto-withdrawn. Reason: ${reason}`,
-      targetId: request.$id,
-      targetType: 'LINKEDIN_REQUEST',
-    }
-  );
 }
 
 export const dynamic = 'force-dynamic';
