@@ -1,17 +1,17 @@
 import { z } from 'zod';
 import { FormField } from '@/lib/types';
-import { normalizeLeadSource } from './required-lead-fields';
 import { isLinkedinProfileField } from './lead-linkedin-field';
+import { isSourceExemptFromLinkedin } from './lead-source';
 
 /**
  * Generate a source-aware Zod schema from form configuration
- * LinkedIn fields are optional when source is "referral"
+ * LinkedIn fields are optional when source is exempt (e.g. "referral", "website")
  */
 export function generateSourceAwareZodSchema(
   formConfig: FormField[],
   source: unknown = '',
 ): z.ZodObject<any> {
-  const isReferral = normalizeLeadSource(source) === 'referral';
+  const isExemptSource = isSourceExemptFromLinkedin(source);
   const schemaShape: Record<string, z.ZodTypeAny> = {};
 
   for (const field of formConfig) {
@@ -87,7 +87,7 @@ export function generateSourceAwareZodSchema(
     const isLinkedinField = isLinkedinProfileField(field);
 
     // Apply custom validation rules if specified — skip for LinkedIn on referral
-    if (field.validation && field.type === 'text' && !(isReferral && isLinkedinField)) {
+    if (field.validation && field.type === 'text' && !(isExemptSource && isLinkedinField)) {
       // For text fields, apply pattern and length validation
       // We need to cast since we know it's a ZodString at this point
       let textSchema = fieldSchema as z.ZodString;
@@ -117,7 +117,7 @@ export function generateSourceAwareZodSchema(
     }
 
     // Apply required/optional based on field configuration and source (Requirements 3.9, 11.1)
-    const isRequiredNormally = field.required && !(isReferral && isLinkedinField);
+    const isRequiredNormally = field.required && !(isExemptSource && isLinkedinField);
 
     if (isRequiredNormally) {
       // For required fields, ensure non-empty values
