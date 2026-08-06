@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { DynamicLeadForm } from "@/components/dynamic-lead-form";
 import { useToast } from "@/components/ui/use-toast";
-import { normalizeLeadSource } from "@/lib/utils/required-lead-fields";
+import { isSourceExemptFromLinkedin } from "@/lib/utils/lead-source";
 import {
   getLinkedinProfileDefaultValues,
   getLinkedinProfileValue,
@@ -229,10 +229,9 @@ export function LegacyNewLeadContent() {
       setDuplicateError(null);
 
       const rawLinkedinValue = getLinkedinProfileValue(data, formFields);
-      const isReferralLead =
-        normalizeLeadSource(data.source ?? data.sourceName) === "referral";
+      const isExempt = isSourceExemptFromLinkedin(data.source ?? data.sourceName);
 
-      if (!rawLinkedinValue && !isReferralLead) {
+      if (!rawLinkedinValue && !isExempt) {
         toast({
           title: "Missing LinkedIn profile link",
           description: "LinkedIn profile link is required.",
