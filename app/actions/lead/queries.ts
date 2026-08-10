@@ -178,10 +178,10 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
       queries.push(Query.equal('$id', filters.ids));
     }
 
-    // Filter by closed status (default to active leads)
+    // Filter by closed status (default to active leads unless includeClosed is true)
     if (filters.isClosed !== undefined) {
       queries.push(Query.equal('isClosed', filters.isClosed));
-    } else {
+    } else if (!filters.includeClosed) {
       queries.push(Query.equal('isClosed', false));
     }
 
@@ -191,6 +191,7 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
         : '';
     const shouldExcludeNotInterestedFromActiveList =
       (filters.isClosed === undefined || filters.isClosed === false) &&
+      !filters.includeClosed &&
       normalizedRequestedStatus !== 'notinterested';
 
     if (shouldExcludeNotInterestedFromActiveList) {

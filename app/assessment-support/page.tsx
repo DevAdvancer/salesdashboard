@@ -144,7 +144,7 @@ function AssessmentContent() {
     if (!user) return;
     try {
       setIsLoading(true);
-      const fetchedLeads = await listLeads({}, user.$id, user.role, user.branchIds);
+      const fetchedLeads = await listLeads({ includeClosed: true }, user.$id, user.role, user.branchIds);
       setLeads(fetchedLeads);
       setFilteredLeads(fetchedLeads);
       await loadAssessmentAttempts(fetchedLeads.map((lead) => lead.$id));

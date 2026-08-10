@@ -322,6 +322,7 @@ export interface LeadListFilters {
   closedAtTo?: string;
   searchQuery?: string;
   isClosed?: boolean;
+  includeClosed?: boolean;
   limit?: number;
   /** When true, restrict to leads owned by OR assigned to the requesting user. */
   mine?: boolean;

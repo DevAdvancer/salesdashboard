@@ -143,7 +143,7 @@ function InterviewContent() {
     if (!user) return;
     try {
       setIsLoading(true);
-      const fetchedLeads = await listLeads({}, user.$id, user.role, user.branchIds);
+      const fetchedLeads = await listLeads({ includeClosed: true }, user.$id, user.role, user.branchIds);
       setLeads(fetchedLeads);
       setFilteredLeads(fetchedLeads);
       await loadInterviewAttempts(fetchedLeads.map((lead) => lead.$id));
