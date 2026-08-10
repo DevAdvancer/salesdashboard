@@ -1,4 +1,5 @@
 'use server';
+import { unstable_cache } from "next/cache";
 import type { Databases } from 'node-appwrite';
 import { isReferralSource } from '@/lib/utils/lead-source';
 import { createAdminClient } from "@/lib/server/appwrite";
@@ -681,44 +682,54 @@ export async function loadLeadTargetProgressAction(input: {
     }
     }
 
-    const queries: string[] = [];
-    if (input.dateRange.from) {
-    queries.push(Query.greaterThanEqual('$createdAt', expandIsoDateToStart(input.dateRange.from)));
-    }
+    const getCachedLeadKpiData = unstable_cache(
+      async (fromIso: string | undefined, toIso: string | undefined) => {
+        const { databases } = await createAdminClient();
+        const queries: string[] = [];
+        if (fromIso) {
+          queries.push(Query.greaterThanEqual('$createdAt', expandIsoDateToStart(fromIso)));
+        }
+        if (toIso) {
+          queries.push(Query.lessThanEqual('$createdAt', expandIsoDateToEnd(toIso)));
+        }
+        queries.push(Query.orderDesc('$createdAt'));
+        queries.push(Query.orderDesc('$id'));
+        queries.push(Query.select(['$id', 'ownerId', 'assignedToId', 'data']));
+        
+        const allLeads = await listAllDocuments<Record<string, unknown>>({
+          databases,
+          databaseId: DATABASE_ID,
+          collectionId: LEADS_COLLECTION_ID,
+          queries,
+          pageLimit: 100,
+          maxPages: 500,
+        });
 
-    if (input.dateRange.to) {
-    queries.push(Query.lessThanEqual('$createdAt', expandIsoDateToEnd(input.dateRange.to)));
-    }
+        const niQueries: string[] = [];
+        if (fromIso) {
+          niQueries.push(Query.greaterThanEqual("markedAt", expandIsoDateToStart(fromIso)));
+        }
+        if (toIso) {
+          niQueries.push(Query.lessThanEqual("markedAt", expandIsoDateToEnd(toIso)));
+        }
+        niQueries.push(Query.select(['$id', 'previousAssignedToId', 'previousOwnerId', 'status']));
+        
+        const niEvents = await listAllDocuments<Record<string, unknown>>({
+          databases,
+          databaseId: DATABASE_ID,
+          collectionId: COLLECTIONS.NOT_INTERESTED_LEADS,
+          queries: niQueries,
+          pageLimit: 100,
+          maxPages: 500,
+        }).catch(() => []);
 
-    queries.push(Query.orderDesc('$createdAt'));
-    queries.push(Query.orderDesc('$id'));
-    queries.push(Query.select(['$id', 'ownerId', 'assignedToId', 'data']));
-    const allLeads = await listAllDocuments<Record<string, unknown>>({
-            databases,
-            databaseId: DATABASE_ID,
-            collectionId: LEADS_COLLECTION_ID,
-            queries,
-            pageLimit: 100,
-            maxPages: 500,
-          });
-    const niQueries: string[] = [];
-    if (input.dateRange.from) {
-    niQueries.push(Query.greaterThanEqual("markedAt", expandIsoDateToStart(input.dateRange.from)));
-    }
+        return { allLeads, niEvents };
+      },
+      ['lead-target-kpi-data-cache'],
+      { revalidate: 300 }
+    );
 
-    if (input.dateRange.to) {
-    niQueries.push(Query.lessThanEqual("markedAt", expandIsoDateToEnd(input.dateRange.to)));
-    }
-
-    niQueries.push(Query.select(['$id', 'userId']));
-    const niEvents = await listAllDocuments<Record<string, unknown>>({
-            databases,
-            databaseId: DATABASE_ID,
-            collectionId: COLLECTIONS.NOT_INTERESTED_LEADS,
-            queries: niQueries,
-            pageLimit: 100,
-            maxPages: 500,
-          }).catch(() => []);
+    const { allLeads, niEvents } = await getCachedLeadKpiData(input.dateRange.from, input.dateRange.to);
     const fromIso = input.dateRange.from;
     const toIso = input.dateRange.to ?? input.dateRange.from;
     const holidayDateKeys = fromIso && toIso

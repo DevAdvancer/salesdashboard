@@ -162,27 +162,35 @@ export async function loadLinkedinConnectionKpiAction(input: {
 
     const queries: string[] = [];
     if (input.dateRange.from) {
-      queries.push(Query.greaterThanEqual("dateSent", expandIsoDateToStart(input.dateRange.from)));
+      queries.push(Query.greaterThanEqual("dateKey", expandIsoDateToStart(input.dateRange.from).slice(0, 10)));
     }
 
     if (input.dateRange.to) {
-      queries.push(Query.lessThanEqual("dateSent", expandIsoDateToEnd(input.dateRange.to)));
+      queries.push(Query.lessThanEqual("dateKey", expandIsoDateToEnd(input.dateRange.to).slice(0, 10)));
     }
 
-    queries.push(Query.orderDesc("dateSent"));
-    // Removed Query.select to avoid Appwrite 400 error
-    const allRequests = await listAllDocuments<LinkedinRequest>({
+    const stats = await listAllDocuments<any>({
       databases,
       databaseId: DATABASE_ID,
-      collectionId: COLLECTIONS.LINKEDIN_REQUESTS,
+      collectionId: COLLECTIONS.LINKEDIN_DAILY_STATS,
       queries,
       pageLimit: 100,
-      maxPages: 500,
+      maxPages: 100,
     });
-    const activeRequests = allRequests.filter((doc) => {
-      const isActive = doc.isActive ?? true;
-      return isActive && doc.status !== "withdrawn";
-    });
+
+    const startDate = input.dateRange.from ? expandIsoDateToStart(input.dateRange.from).slice(0, 10) : "";
+    const endDate = input.dateRange.to ? expandIsoDateToEnd(input.dateRange.to).slice(0, 10) : (startDate || "");
+    const todayIso = getCurrentEasternIsoDate();
+    
+    if (startDate && startDate <= todayIso && endDate >= todayIso) {
+      const todayStats = await computeLinkedinStatsForDate(todayIso);
+      for (let i = stats.length - 1; i >= 0; i--) {
+        if (stats[i].dateKey === todayIso) {
+          stats.splice(i, 1);
+        }
+      }
+      stats.push(...todayStats);
+    }
     
     const fromIso = input.dateRange.from;
     const toIso = input.dateRange.to ?? input.dateRange.from;
@@ -218,7 +226,8 @@ export async function loadLinkedinConnectionKpiAction(input: {
     const userName = user?.name ?? "Unknown";
     
     // Calculate sent count for this account from active requests
-    const sentCount = activeRequests.filter((req) => req.accountId === account.$id).length;
+    const accountStats = stats.filter((s) => s.accountId === account.$id);
+    const sentCount = accountStats.reduce((sum, s) => sum + ((s.sent || 0) - (s.withdrawn || 0)), 0);
     const target = (account.connectionLimit ?? 0) * daysCount;
 
     const existing = userRowsMap.get(userId) ?? {
