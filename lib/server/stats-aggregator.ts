@@ -240,6 +240,7 @@ export async function computeAgentStatsForDate(dateKey: string) {
         agentId,
         teamLeadId: null,
         leadsGenerated: 0,
+        assignedLeadCount: 0,
         referralsGenerated: 0,
         coldCallsGenerated: 0,
         leadsClosed: 0,
@@ -258,16 +259,28 @@ export async function computeAgentStatsForDate(dateKey: string) {
   const normalizeSource = (v: any) => (typeof v === "string" ? v.trim().toLowerCase().replace(/[^a-z0-9]/g, "") : "");
 
   createdLeads.forEach(l => {
-    const id = getAttributed(l);
-    const row = getMap(id);
-    if (!row) return;
-    row.leadsGenerated += 1;
-    
     let data: any = {};
     try { data = JSON.parse(l.data); } catch {}
     const src = normalizeSource(data.sourceName ?? data.source);
-    if (src === "referral") row.referralsGenerated += 1;
-    if (src.includes("coldcall")) row.coldCallsGenerated += 1;
+    const isReferral = src === "referral" || src.includes("referral");
+    
+    let creatorId = data.creatorId || l.ownerId;
+    if (creatorId) {
+      const creatorRow = getMap(creatorId);
+      if (creatorRow) {
+        if (isReferral) creatorRow.referralsGenerated += 1;
+        else creatorRow.leadsGenerated += 1;
+        
+        if (src.includes("coldcall")) creatorRow.coldCallsGenerated += 1;
+      }
+    }
+    
+    if (l.assignedToId) {
+      const assigneeRow = getMap(l.assignedToId);
+      if (assigneeRow) {
+        assigneeRow.assignedLeadCount = (assigneeRow.assignedLeadCount || 0) + 1;
+      }
+    }
   });
 
   validClosed.forEach(l => {

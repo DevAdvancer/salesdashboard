@@ -19,6 +19,7 @@ import { markPriorNotInterestedRowsReopened, notInterestedLeadAction } from "@/l
 import { isAllowedLeadStatusTransition, normalizeLeadStatus } from "@/lib/utils/lead-status-workflow";
 import { REQUIRED_LEAD_FIELD_KEYS } from "@/lib/utils/required-lead-fields";
 import { expandIsoDateToStart, expandIsoDateToEnd } from "@/lib/utils/iso-date-range";
+import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import { workingDaysInRange, type KpiRow } from "@/lib/utils/dashboard-kpi";
 import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
 import { buildDepartmentScopeQuery, isDepartmentScopeInlineEnabled } from "@/lib/server/department-scope-query";
@@ -682,54 +683,6 @@ export async function loadLeadTargetProgressAction(input: {
     }
     }
 
-    const getCachedLeadKpiData = unstable_cache(
-      async (fromIso: string | undefined, toIso: string | undefined) => {
-        const { databases } = await createAdminClient();
-        const queries: string[] = [];
-        if (fromIso) {
-          queries.push(Query.greaterThanEqual('$createdAt', expandIsoDateToStart(fromIso)));
-        }
-        if (toIso) {
-          queries.push(Query.lessThanEqual('$createdAt', expandIsoDateToEnd(toIso)));
-        }
-        queries.push(Query.orderDesc('$createdAt'));
-        queries.push(Query.orderDesc('$id'));
-        queries.push(Query.select(['$id', 'ownerId', 'assignedToId', 'data']));
-        
-        const allLeads = await listAllDocuments<Record<string, unknown>>({
-          databases,
-          databaseId: DATABASE_ID,
-          collectionId: LEADS_COLLECTION_ID,
-          queries,
-          pageLimit: 100,
-          maxPages: 500,
-        });
-
-        const niQueries: string[] = [];
-        if (fromIso) {
-          niQueries.push(Query.greaterThanEqual("markedAt", expandIsoDateToStart(fromIso)));
-        }
-        if (toIso) {
-          niQueries.push(Query.lessThanEqual("markedAt", expandIsoDateToEnd(toIso)));
-        }
-        niQueries.push(Query.select(['$id', 'previousAssignedToId', 'previousOwnerId', 'status']));
-        
-        const niEvents = await listAllDocuments<Record<string, unknown>>({
-          databases,
-          databaseId: DATABASE_ID,
-          collectionId: COLLECTIONS.NOT_INTERESTED_LEADS,
-          queries: niQueries,
-          pageLimit: 100,
-          maxPages: 500,
-        }).catch(() => []);
-
-        return { allLeads, niEvents };
-      },
-      ['lead-target-kpi-data-cache'],
-      { revalidate: 300 }
-    );
-
-    const { allLeads, niEvents } = await getCachedLeadKpiData(input.dateRange.from, input.dateRange.to);
     const fromIso = input.dateRange.from;
     const toIso = input.dateRange.to ?? input.dateRange.from;
     const holidayDateKeys = fromIso && toIso
@@ -739,61 +692,142 @@ export async function loadLeadTargetProgressAction(input: {
     let target: number;
     let mode: "daily" | "monthly";
     if (singleDay) {
-    target = workingDaysInRange(fromIso!, toIso!, holidayDateKeys);
-    mode = "daily";
+      target = workingDaysInRange(fromIso!, toIso!, holidayDateKeys);
+      mode = "daily";
     } else if (fromIso && toIso) {
-    target = workingDaysInRange(fromIso, toIso, holidayDateKeys);
-    mode = "monthly";
+      target = workingDaysInRange(fromIso, toIso, holidayDateKeys);
+      mode = "monthly";
     } else {
-    const effectiveDate = toIso ?? new Date().toISOString().slice(0, 10);
-    target = daysInMonthLocal(effectiveDate);
-    mode = "monthly";
+      const effectiveDate = toIso ?? new Date().toISOString().slice(0, 10);
+      target = daysInMonthLocal(effectiveDate);
+      mode = "monthly";
+    }
+
+    // Delta Fetching Logic
+    const dateKeys: string[] = [];
+    const todayStr = getCurrentEasternIsoDate().slice(0, 10);
+    const startStr = (fromIso ?? todayStr.slice(0, 7) + "-01").slice(0, 10);
+    const endStr = (toIso ?? todayStr).slice(0, 10);
+    
+    let currentStr = startStr;
+    const pastDateKeys: string[] = [];
+    let includesTodayOrFuture = false;
+    
+    while (currentStr <= endStr) {
+      if (currentStr >= todayStr) {
+        includesTodayOrFuture = true;
+      } else {
+        pastDateKeys.push(currentStr);
+      }
+      const d = new Date(currentStr + "T12:00:00Z");
+      d.setUTCDate(d.getUTCDate() + 1);
+      currentStr = d.toISOString().slice(0, 10);
+    }
+
+    // 1. Fetch cache (AGENT_DAILY_STATS) for past days
+    let pastStats: any[] = [];
+    if (pastDateKeys.length > 0) {
+      const chunks = [];
+      for (let i = 0; i < pastDateKeys.length; i += 100) {
+        chunks.push(pastDateKeys.slice(i, i + 100));
+      }
+      const results = await Promise.all(chunks.map(chunk => 
+        listAllDocuments<any>({
+          databases,
+          databaseId: DATABASE_ID,
+          collectionId: COLLECTIONS.AGENT_DAILY_STATS,
+          queries: [Query.equal("dateKey", chunk)],
+          pageLimit: 100,
+          maxPages: 100,
+        })
+      ));
+      pastStats = results.flat();
+    }
+
+    // 2. Fetch delta for today/future
+    let todayCreatedLeads: any[] = [];
+    let todayNiEvents: any[] = [];
+    
+    if (includesTodayOrFuture || endStr >= todayStr) {
+      // We only need to fetch leads from today onwards up to endStr
+      const fetchStart = startStr >= todayStr ? startStr : todayStr;
+      const startIsoBound = expandIsoDateToStart(fetchStart);
+      const endIsoBound = expandIsoDateToEnd(endStr);
+      
+      todayCreatedLeads = await listAllDocuments<any>({
+        databases,
+        databaseId: DATABASE_ID,
+        collectionId: LEADS_COLLECTION_ID,
+        queries: [
+          Query.greaterThanEqual('$createdAt', startIsoBound),
+          Query.lessThanEqual('$createdAt', endIsoBound),
+          Query.select(['$id', 'ownerId', 'assignedToId', 'data'])
+        ],
+        pageLimit: 100,
+        maxPages: 200,
+      });
+
+      todayNiEvents = await listAllDocuments<any>({
+        databases,
+        databaseId: DATABASE_ID,
+        collectionId: COLLECTIONS.NOT_INTERESTED_LEADS,
+        queries: [
+          Query.greaterThanEqual("markedAt", startIsoBound),
+          Query.lessThanEqual("markedAt", endIsoBound),
+          Query.select(['$id', 'previousAssignedToId', 'previousOwnerId', 'status'])
+        ],
+        pageLimit: 100,
+        maxPages: 200,
+      }).catch(() => []);
     }
 
     const kpiRows = scopeUsers.map((user) => {
-            // Count leads created by this user (excluding referral sources):
-            const createdCount = allLeads.filter((lead) => {
-              let creatorId = lead.ownerId;
-              try {
-                const leadData = JSON.parse(lead.data as string);
-                if (leadData && leadData.creatorId) {
-                  creatorId = leadData.creatorId;
-                }
-              } catch {}
+      // Sum from cache
+      let cachedLeadCount = 0;
+      let cachedAssignedLeadCount = 0;
+      let cachedNiCount = 0;
+      
+      pastStats.forEach(s => {
+        if (s.agentId === user.$id) {
+          cachedLeadCount += (s.leadsGenerated || 0);
+          cachedAssignedLeadCount += (s.assignedLeadCount || 0);
+          cachedNiCount += (s.notInterestedMarked || 0);
+        }
+      });
 
-              if (creatorId !== user.$id) return false;
+      // Sum from delta
+      const deltaCreatedCount = todayCreatedLeads.filter((lead) => {
+        let creatorId = lead.ownerId;
+        try {
+          const leadData = JSON.parse(lead.data as string);
+          if (leadData && leadData.creatorId) creatorId = leadData.creatorId;
+        } catch {}
+        if (creatorId !== user.$id) return false;
+        try {
+          const leadData = JSON.parse(lead.data as string);
+          if (leadData && isReferralSource(leadData.source)) return false;
+        } catch {}
+        return true;
+      }).length;
 
-              // Exclude referral sources from KPI
-              try {
-                const leadData = JSON.parse(lead.data as string);
-                if (leadData && isReferralSource(leadData.source)) {
-                  return false;
-                }
-              } catch {}
+      const deltaAssignedCount = todayCreatedLeads.filter((lead) => lead.assignedToId === user.$id).length;
 
-              return true;
-            }).length;
+      const deltaNiCount = todayNiEvents.filter((event) => {
+        const attributed = event.previousAssignedToId || event.previousOwnerId;
+        return attributed === user.$id && (!event.status || event.status === "active");
+      }).length;
 
-            // Count leads assigned to this user:
-            const assignedCount = allLeads.filter((lead) => lead.assignedToId === user.$id).length;
-
-            // Count active Not Interested events attributed to this user:
-            const niCount = niEvents.filter((event) => {
-              const attributed = event.previousAssignedToId || event.previousOwnerId;
-              return attributed === user.$id && (!event.status || event.status === "active");
-            }).length;
-
-            return {
-              userId: user.$id,
-              userName: user.name,
-              userRole: user.role,
-              leadCount: createdCount,
-              assignedLeadCount: assignedCount,
-              notInterestedCount: niCount,
-              target,
-              mode,
-            };
-          });
+      return {
+        userId: user.$id,
+        userName: user.name,
+        userRole: user.role,
+        leadCount: cachedLeadCount + deltaCreatedCount,
+        assignedLeadCount: cachedAssignedLeadCount + deltaAssignedCount,
+        notInterestedCount: cachedNiCount + deltaNiCount,
+        target,
+        mode,
+      };
+    });
     kpiRows.sort((a, b) => {
     const aMet = a.leadCount >= a.target;
     const bMet = b.leadCount >= b.target;

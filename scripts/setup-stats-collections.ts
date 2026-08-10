@@ -66,6 +66,7 @@ async function setup() {
         await databases.createStringAttribute(DATABASE_ID, COLLECTIONS.AGENT_DAILY_STATS, "teamLeadId", 50, false);
         
         await databases.createIntegerAttribute(DATABASE_ID, COLLECTIONS.AGENT_DAILY_STATS, "leadsGenerated", false, 0, 9999999, 0);
+        await databases.createIntegerAttribute(DATABASE_ID, COLLECTIONS.AGENT_DAILY_STATS, "assignedLeadCount", false, 0, 9999999, 0);
         await databases.createIntegerAttribute(DATABASE_ID, COLLECTIONS.AGENT_DAILY_STATS, "referralsGenerated", false, 0, 9999999, 0);
         await databases.createIntegerAttribute(DATABASE_ID, COLLECTIONS.AGENT_DAILY_STATS, "coldCallsGenerated", false, 0, 9999999, 0);
         await databases.createIntegerAttribute(DATABASE_ID, COLLECTIONS.AGENT_DAILY_STATS, "leadsClosed", false, 0, 9999999, 0);
