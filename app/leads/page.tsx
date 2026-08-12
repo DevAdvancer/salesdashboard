@@ -215,8 +215,9 @@ function LeadsContent() {
     }
     if (urlOwner) next.ownerId = urlOwner;
     if (urlMine === "true") next.mine = true;
+    if (urlTeam) next.teamLeadId = urlTeam;
     return next;
-  }, [urlSearch, urlStatus, urlAssignedTo, urlOwner, urlMine, urlBranch, urlFrom, urlTo]);
+  }, [urlSearch, urlStatus, urlAssignedTo, urlOwner, urlMine, urlBranch, urlFrom, urlTo, urlTeam]);
 
   const canExportLeads = user ? isAdminLikeReadAllRole(user.role) : false;
   const isLeadGeneration = user?.role === "lead_generation";

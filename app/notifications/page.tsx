@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/lib/contexts/auth-context';
-import { listNotifications, markAllNotificationsRead, markNotificationRead } from '@/lib/services/sop-service';
+import { listNotifications, clearAllNotifications, markNotificationRead } from '@/lib/services/sop-service';
 import type { NotificationRecord } from '@/lib/types';
 
 export default function NotificationsPage() {
@@ -74,15 +74,15 @@ function NotificationsContent() {
 
   const unreadCount = notifications.filter((item) => !item.readAt).length;
 
-  const markAllRead = async () => {
+  const clearAll = async () => {
     if (!user) return;
     try {
       setMarkingAll(true);
-      await markAllNotificationsRead(user.$id);
+      await clearAllNotifications(user.$id);
       await loadNotifications();
     } catch (error) {
-      console.error('Failed to mark all notifications read:', error);
-      setError('You are not authorized to update these notifications.');
+      console.error('Failed to clear all notifications:', error);
+      setError('You are not authorized to delete these notifications.');
     } finally {
       setMarkingAll(false);
     }
@@ -105,11 +105,11 @@ function NotificationsContent() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={markAllRead}
+              onClick={clearAll}
               loading={markingAll}
-              disabled={loading || unreadCount === 0}
+              disabled={loading || notifications.length === 0}
             >
-              Mark All Read
+              Clear All
             </Button>
           </div>
         </CardHeader>

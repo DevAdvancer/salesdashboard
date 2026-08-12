@@ -542,7 +542,7 @@ export async function markNotificationReadAction(
   return doc as unknown as NotificationRecord;
 }
 
-export async function markAllNotificationsReadAction(actorId: string): Promise<{ updatedCount: number }> {
+export async function clearAllNotificationsAction(actorId: string): Promise<{ deletedCount: number }> {
   const actor = await getActor(actorId);
   ensureComponentAccess(actor.role, "notifications");
 
@@ -550,25 +550,23 @@ export async function markAllNotificationsReadAction(actorId: string): Promise<{
   const response = await databases.listDocuments(
     DATABASE_ID,
     COLLECTIONS.NOTIFICATIONS,
-    [Query.equal("recipientId", actor.$id), Query.orderDesc("createdAt"), Query.limit(2000)]
+    [Query.equal("recipientId", actor.$id), Query.limit(2000)]
   );
 
-  const unread = (response.documents as Array<{ $id: string; readAt?: unknown }>).filter((doc) => !doc.readAt);
-  if (unread.length === 0) {
-    return { updatedCount: 0 };
+  const docs = response.documents as Array<{ $id: string }>;
+  if (docs.length === 0) {
+    return { deletedCount: 0 };
   }
 
-  const readAt = new Date().toISOString();
-  let updatedCount = 0;
-  for (const doc of unread) {
-    await databases.updateDocument(
+  let deletedCount = 0;
+  for (const doc of docs) {
+    await databases.deleteDocument(
       DATABASE_ID,
       COLLECTIONS.NOTIFICATIONS,
-      doc.$id,
-      { readAt }
+      doc.$id
     );
-    updatedCount += 1;
+    deletedCount += 1;
   }
 
-  return { updatedCount };
+  return { deletedCount };
 }

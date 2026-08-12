@@ -181,7 +181,7 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
     // Filter by closed status (default to active leads unless includeClosed is true)
     if (filters.isClosed !== undefined) {
       queries.push(Query.equal('isClosed', filters.isClosed));
-    } else if (!filters.includeClosed) {
+    } else if (!filters.includeClosed && !filters.searchQuery) {
       queries.push(Query.equal('isClosed', false));
     }
 
@@ -192,6 +192,7 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
     const shouldExcludeNotInterestedFromActiveList =
       (filters.isClosed === undefined || filters.isClosed === false) &&
       !filters.includeClosed &&
+      !filters.searchQuery &&
       normalizedRequestedStatus !== 'notinterested';
 
     if (shouldExcludeNotInterestedFromActiveList) {
@@ -256,8 +257,8 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
       queries.push(Query.lessThanEqual('closedAt', to));
     }
 
-    // Order by creation date (newest first)
-    queries.push(Query.orderDesc('$createdAt'));
+    // Order by last updated date (newest first)
+    queries.push(Query.orderDesc('$updatedAt'));
     queries.push(Query.orderDesc('$id')); // Tie-breaker for cursor pagination
 
     // Pagination: clamp pageSize to a max of 100 to prevent abuse.

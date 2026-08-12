@@ -7,7 +7,7 @@ import {
   listNotificationsAction,
   listReviewQueueAction,
   listReviewTargetOptionsAction,
-  markAllNotificationsReadAction,
+  clearAllNotificationsAction,
   markNotificationReadAction,
   updateLeadFollowUpAction,
   updateReviewQueueStatusAction,
@@ -121,6 +121,6 @@ export function markNotificationRead(
   return markNotificationReadAction(actorId, notificationId).finally(() => clearClientReadCache('sop:listNotifications'));
 }
 
-export function markAllNotificationsRead(actorId: string): Promise<{ updatedCount: number }> {
-  return markAllNotificationsReadAction(actorId).finally(() => clearClientReadCache('sop:listNotifications'));
+export function clearAllNotifications(actorId: string): Promise<{ deletedCount: number }> {
+  return clearAllNotificationsAction(actorId).finally(() => clearClientReadCache('sop:listNotifications'));
 }

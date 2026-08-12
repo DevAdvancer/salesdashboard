@@ -735,7 +735,6 @@ export async function setAgentActiveAction(input: {
             ? { isActive: true }
             : {
                 isActive: false,
-                teamLeadId: null,
             };
 
         const schemaSafeUpdates = await filterUpdatesToExistingUserAttributes(databases, updates);
