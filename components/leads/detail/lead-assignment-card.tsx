@@ -122,7 +122,7 @@ export function LeadAssignmentCard({
               disabled={disabled}
               className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background pl-3 pr-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <span className={selectedAgent ? "" : "text-muted-foreground"}>
+              <span className={`truncate ${selectedAgent ? "" : "text-muted-foreground"}`}>
                 {selectedAgent
                   ? `${selectedAgent.name} (${formatRole(selectedAgent.role)})`
                   : "Select a user..."}

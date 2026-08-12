@@ -976,7 +976,11 @@ function LeadDetailContent() {
             leadData={leadData}
             setLeadData={setLeadData}
             user={user}
-            formFields={formFields}
+            formFields={
+              lead.isClosed 
+                ? [...formFields, ...closureFields, ...paymentPlanFields] 
+                : formFields
+            }
             isEditing={isEditing}
             fieldErrors={fieldErrors}
             onFieldChange={handleFieldChange}

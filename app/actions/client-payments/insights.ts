@@ -46,16 +46,18 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
                 .filter(Boolean)
             )
           );
-    const leadDocs = leadIds.length > 0
-              ? await listAllDocuments<any>({
-                  databases,
-                  databaseId: DATABASE_ID,
-                  collectionId: COLLECTIONS.LEADS,
-                  queries: [Query.equal("$id", leadIds)],
-                  pageLimit: 100,
-                  maxPages: 500,
-                })
-              : [];
+    const leadDocs: any[] = [];
+    for (let i = 0; i < leadIds.length; i += 100) {
+      const chunkDocs = await listAllDocuments<any>({
+        databases,
+        databaseId: DATABASE_ID,
+        collectionId: COLLECTIONS.LEADS,
+        queries: [Query.equal("$id", leadIds.slice(i, i + 100))],
+        pageLimit: 100,
+        maxPages: 500,
+      });
+      leadDocs.push(...chunkDocs);
+    }
     const leadDataMap = new Map<
             string,
             {
@@ -395,16 +397,18 @@ export async function listAdminClientHistoryRowsAction(actorId: string): Promise
                 .filter(Boolean),
             ),
           );
-    const leadDocs = leadIds.length > 0
-              ? await listAllDocuments<any>({
-                  databases,
-                  databaseId: DATABASE_ID,
-                  collectionId: COLLECTIONS.LEADS,
-                  queries: [Query.equal("$id", leadIds)],
-                  pageLimit: 100,
-                  maxPages: 500,
-                })
-              : [];
+    const leadDocs: any[] = [];
+    for (let i = 0; i < leadIds.length; i += 100) {
+      const chunkDocs = await listAllDocuments<any>({
+        databases,
+        databaseId: DATABASE_ID,
+        collectionId: COLLECTIONS.LEADS,
+        queries: [Query.equal("$id", leadIds.slice(i, i + 100))],
+        pageLimit: 100,
+        maxPages: 500,
+      });
+      leadDocs.push(...chunkDocs);
+    }
     const leadMap = new Map<string, Lead>();
     for (const leadDoc of leadDocs as any[]) {
     leadMap.set(leadDoc.$id, mapLeadDocumentToLead(leadDoc));
@@ -500,16 +504,18 @@ export async function listPaymentsReportAction(input: {
                 .filter(Boolean)
             )
           );
-    const leadDocs = leadIds.length > 0
-              ? await listAllDocuments<any>({
-                  databases,
-                  databaseId: DATABASE_ID,
-                  collectionId: COLLECTIONS.LEADS,
-                  queries: [Query.equal("$id", leadIds)],
-                  pageLimit: 100,
-                  maxPages: 500,
-                })
-              : [];
+    const leadDocs: any[] = [];
+    for (let i = 0; i < leadIds.length; i += 100) {
+      const chunkDocs = await listAllDocuments<any>({
+        databases,
+        databaseId: DATABASE_ID,
+        collectionId: COLLECTIONS.LEADS,
+        queries: [Query.equal("$id", leadIds.slice(i, i + 100))],
+        pageLimit: 100,
+        maxPages: 500,
+      });
+      leadDocs.push(...chunkDocs);
+    }
     const leadDataMap = new Map<string, string>();
     const leadLegalNameMap = new Map<string, string>();
     const leadAmountMap = new Map<string, number>();

@@ -311,8 +311,6 @@ export async function computeAgentStatsForDate(dateKey: string) {
   payments.forEach(p => {
     const lead = paymentLeads.get(p.leadId);
     if (!lead) return;
-    const row = getMap(getAttributed(lead));
-    if (!row) return;
     
     let updates = [];
     try { updates = JSON.parse(p.updates ?? p.updatesJson ?? "[]"); } catch {}
@@ -320,8 +318,16 @@ export async function computeAgentStatsForDate(dateKey: string) {
     
     const sorted = updates.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
     const firstPaid = sorted.find((u: any) => u && (u.status === "partially_paid" || u.status === "fully_paid"));
-    if (!firstPaid) return;
-    if (firstPaid.createdAt < startIso || firstPaid.createdAt > endIso) return;
+    const isPaid = p.status === "partially_paid" || p.status === "fully_paid";
+    
+    if (!firstPaid && !isPaid) return;
+    const paymentDateIso = firstPaid?.createdAt || p.createdAt;
+    
+    if (paymentDateIso < startIso || paymentDateIso > endIso) return;
+
+    const actorId = firstPaid?.actorId || p.updatedById || getAttributed(lead);
+    const row = getMap(actorId);
+    if (!row) return;
     
     let plan: any = {};
     try { plan = JSON.parse(p.paymentPlan ?? p.paymentPlanJson ?? "{}"); } catch {}
