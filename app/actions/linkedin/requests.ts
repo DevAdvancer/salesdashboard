@@ -1104,23 +1104,7 @@ export async function runLinkedinAutoWithdrawAction(input: {
 
       // Audit logs have been removed
 
-      // General chat notification
-      try {
-        await databases.createDocument(
-          DATABASE_ID,
-          COLLECTIONS.CHAT_MESSAGES,
-          ID.unique(),
-          {
-            channel: "general",
-            body: `Linkedin URL available again: ${doc.targetUrl} (${doc.company}) was auto-withdrawn. Reason: ${reason}`,
-            createdById: "system",
-            createdByName: "System",
-            createdAt: nowIso,
-          },
-        );
-      } catch {
-        // Chat message failure is non-fatal
-      }
+      // We no longer send a general chat message for auto-withdrawals to avoid spamming admins.
 
       autoWithdrawn += 1;
     } catch {

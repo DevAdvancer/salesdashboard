@@ -68,8 +68,8 @@ export function shouldSendLinkedinWithdrawalReminder({
 
   const ageDays = getAgeDays(policy.anchorIso, now);
   if (ageDays === null) return false;
-  if (ageDays < policy.remindAfterDays) return false;
-  if (ageDays >= policy.autoWithdrawAfterDays) return false;
+  // Fire the reminder exactly on the day it becomes due, so it only happens once.
+  if (ageDays !== policy.remindAfterDays) return false;
   if (remindersSentToday >= LINKEDIN_REMINDER_MAX_PER_DAY) return false;
 
   return true;

@@ -45,9 +45,12 @@ export async function listMyTeamAttendanceAction(input: {
     const agents = (agentsResponse.documents as unknown as User[])
             .filter((agent) => (agent as unknown as { isActive?: unknown }).isActive !== false)
             .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    const agentIds = agents.map((a) => a.$id);
+    agentIds.push(effectiveTeamLeadId);
+
     const attendanceResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
             Query.equal("dateKey", dateKey),
-            Query.equal("teamLeadId", effectiveTeamLeadId),
+            Query.equal("userId", agentIds),
             Query.select(["userId", "present", "presentAt", "absentNotifiedAt", "presentWithDelegateFlag", "delegateUserId"]),
             Query.limit(2000),
           ]);

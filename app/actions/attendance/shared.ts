@@ -168,6 +168,9 @@ export async function upsertAttendanceDoc(databases: Awaited<ReturnType<typeof c
     }
 
     if (existing) {
+    if (input.teamLeadId && existing.teamLeadId !== input.teamLeadId) {
+      input.patch = { ...input.patch, teamLeadId: input.teamLeadId };
+    }
     const updated = await databases.updateDocument(
       DATABASE_ID,
       COLLECTIONS.ATTENDANCE,

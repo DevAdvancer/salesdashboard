@@ -110,12 +110,17 @@ async function autoWithdrawLinkedinRequest(
     withdrawnAt: nowIso,
   });
 
-
-  await createGeneralChatMessage(
+  await createNotificationsForRecipients(
     databases,
-    `Linkedin URL available again: ${request.targetUrl} (${request.company}) was auto-withdrawn. Reason: ${reason}`,
+    [request.agentId, request.teamLeadId], // Not adminRecipientIds
+    {
+      type: 'linkedin_auto_withdrawn',
+      title: 'Linkedin Auto-Withdrawn',
+      body: `Linkedin request for ${request.company} was auto-withdrawn. Reason: ${reason}`,
+      targetId: request.$id,
+      targetType: 'LINKEDIN_REQUEST',
+    }
   );
-
 }
 
 export const dynamic = 'force-dynamic';
@@ -175,6 +180,53 @@ async function runWithdrawalReminderSweep() {
       continue;
     }
 
+    const policy = getLinkedinReminderPolicy(requestDoc);
+    if (!policy) {
+      continue;
+    }
+
+    // The age/due window does not depend on how many reminders already went
+    // out today, so test it first and skip the dedup lookup for rows that are
+    // not due at all.
+    if (
+      !shouldSendLinkedinWithdrawalReminder({
+        request: requestDoc,
+        now,
+        remindersSentToday: 0,
+      })
+    ) {
+      continue;
+    }
+
+    const dedupKey = notificationDedupKey(
+      requestDoc.agentId,
+      policy.type,
+      requestDoc.$id,
+    );
+    const remindersSentToday = reminderCounts.get(dedupKey) ?? 0;
+
+    if (
+      !shouldSendLinkedinWithdrawalReminder({
+        request: requestDoc,
+        now,
+        remindersSentToday,
+      })
+    ) {
+      continue;
+    }
+
+    await createNotificationsForRecipients(databases, [
+      requestDoc.agentId,
+      requestDoc.teamLeadId,
+      // No admin recipient IDs for individual reminders to reduce spam,
+      // but keeping the logic localized to the agent/TL.
+    ], {
+      ...buildLinkedinWithdrawalReminder(requestDoc),
+    });
+    
+    // Keep the in-memory tally current so the per-day maximum still holds
+    reminderCounts.set(dedupKey, remindersSentToday + 1);
+    remindersSent += 1;
   }
 
   return NextResponse.json({

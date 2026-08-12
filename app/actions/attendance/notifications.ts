@@ -65,7 +65,6 @@ export async function checkAndNotifyMyTeamAbsencesAction(input: {
       userId: agent.$id,
       teamLeadId: user.$id,
       patch: {
-        present: false,
         absentNotifiedAt: shouldNotify ? now.toISOString() : (existing?.absentNotifiedAt ?? null),
       },
     });
@@ -185,7 +184,6 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
         userId: teamLead.$id,
         teamLeadId: teamLead.$id,
         patch: {
-          present: false,
           absentNotifiedAt: now.toISOString(),
         },
         existing: teamLeadAttendance,
@@ -226,7 +224,6 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
             userId: agent.$id,
             teamLeadId: teamLead.$id,
             patch: {
-              present: false,
               absentNotifiedAt: shouldNotifyTeamLead ? now.toISOString() : (existing?.absentNotifiedAt ?? null),
               adminEscalatedAt: existing?.adminEscalatedAt ?? null,
             },

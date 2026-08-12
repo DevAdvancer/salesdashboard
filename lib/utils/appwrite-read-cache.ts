@@ -167,8 +167,8 @@ export function createReadThroughDatabases<T extends object>(
       if (READ_METHODS.has(prop)) {
         return (...args: unknown[]) => {
           const collectionId = extractCollectionId(prop, args);
-          if (!collectionId) {
-            // Unknown shape — fall through to the underlying SDK without
+          if (!collectionId || collectionId === "attendance" || collectionId === process.env.NEXT_PUBLIC_APPWRITE_ATTENDANCE_COLLECTION_ID) {
+            // Unknown shape or highly volatile collection — fall through to the underlying SDK without
             // caching rather than silently miss.
             return Promise.resolve(method.apply(target, args));
           }

@@ -1,5 +1,6 @@
 "use server";
 import { ID, Permission, Query, Role } from "node-appwrite";
+import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/server/appwrite";
 import { assertAuthenticatedUserId, getAuthenticatedUserDoc } from "@/lib/server/current-user";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
@@ -110,6 +111,9 @@ export async function assignAttendanceDelegateAction(input: {
       },
     });
 
+    revalidatePath("/attendance");
+    revalidatePath("/attendance-report");
+
     return updated;
     }
 
@@ -161,6 +165,9 @@ export async function assignAttendanceDelegateAction(input: {
         remark,
       },
     });
+
+    revalidatePath("/attendance");
+    revalidatePath("/attendance-report");
 
     return updated;
     }
