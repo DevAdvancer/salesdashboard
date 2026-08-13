@@ -92,10 +92,11 @@ export function listTeamLeadsForTarget(input: {
 
 export function listTeamAgentsForTarget(input: {
   actorId: string;
+  teamLeadId?: string;
 }): Promise<AgentOption[]> {
   return cacheClientRead(
     `${TARGET_REPORT_SCOPE_PREFIX}listTeamAgents`,
-    [input.actorId],
+    [input.actorId, input.teamLeadId ?? ""],
     () => listTeamAgentsForTargetAction(input),
     5 * 60 * 1000,
   );

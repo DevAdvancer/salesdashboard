@@ -17,6 +17,7 @@ import type { MonthlyTarget, User } from "@/lib/types";
 interface TlSplitFormProps {
   user: User;
   monthKey: string;
+  teamLeadId?: string;
   /** Notify the parent (dashboard) when the split was saved so it can
    *  refetch. */
   onSaved: () => void;
@@ -33,7 +34,7 @@ const currency = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
 
-export function TlSplitForm({ user, monthKey, onSaved }: TlSplitFormProps) {
+export function TlSplitForm({ user, monthKey, teamLeadId, onSaved }: TlSplitFormProps) {
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [target, setTarget] = useState<MonthlyTarget | null>(null);
   const [draft, setDraft] = useState<Record<string, number>>({});
@@ -45,13 +46,14 @@ export function TlSplitForm({ user, monthKey, onSaved }: TlSplitFormProps) {
     void (async () => {
       try {
         const [agentsList, targets] = await Promise.all([
-          listTeamAgentsForTarget({ actorId: user.$id }),
+          listTeamAgentsForTarget({ actorId: user.$id, teamLeadId }),
           listMonthlyTargets({ actorId: user.$id, monthKey }),
         ]);
         if (cancelled) return;
         setAgents(agentsList);
+        const tlToLookup = teamLeadId ?? user.$id;
         const myTarget =
-          targets.find((t) => t.teamLeadId === user.$id) ?? null;
+          targets.find((t) => t.teamLeadId === tlToLookup) ?? null;
         setTarget(myTarget);
         if (myTarget) {
           const assignments = await listMonthlyTargetAssignments({
@@ -76,7 +78,7 @@ export function TlSplitForm({ user, monthKey, onSaved }: TlSplitFormProps) {
     return () => {
       cancelled = true;
     };
-  }, [user.$id, monthKey, toast]);
+  }, [user.$id, monthKey, teamLeadId, toast]);
 
   const draftRows = useMemo<DraftRow[]>(() => {
     return agents.map((a) => ({

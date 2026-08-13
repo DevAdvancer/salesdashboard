@@ -646,7 +646,7 @@ export async function loadLeadTargetProgressAction(input: {
               user &&
               user.isActive !== false &&
               user.department === "sales" &&
-              (user.role === "agent" || user.role === "team_lead")
+              (user.role === "agent" || user.role === "team_lead" || user.role === "lead_generation")
             );
     let scopeUsers: Record<string, unknown>[] = [];
     if (input.role === "agent" || input.role === "lead_generation") {

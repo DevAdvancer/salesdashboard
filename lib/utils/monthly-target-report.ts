@@ -187,6 +187,11 @@ export function buildTargetReport(input: {
       target.teamLeadId,
       ...assignments.map((a) => a.agentId),
     ]);
+    for (const user of usersByAgentId.values()) {
+      if (user.teamLeadId === target.teamLeadId) {
+        teamAgentIds.add(user.$id);
+      }
+    }
 
     const agents: TargetReportAgentRow[] = [];
     let teamTarget = 0;

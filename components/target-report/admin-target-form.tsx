@@ -13,6 +13,7 @@ import {
 import type { TeamLeadOption } from "@/app/actions/monthly-targets";
 import type { User } from "@/lib/types";
 import { formatMonthKey } from "@/lib/utils/month-key";
+import { TlSplitForm } from "./tl-split-form";
 
 interface AdminTargetFormProps {
   user: User;
@@ -210,6 +211,11 @@ export function AdminTargetForm({ user, monthKey, onSaved }: AdminTargetFormProp
           </p>
         )}
       </CardContent>
+      {teamLeadId ? (
+        <div className="border-t">
+            <TlSplitForm user={user} monthKey={monthKey} teamLeadId={teamLeadId} onSaved={onSaved} />
+        </div>
+      ) : null}
     </Card>
   );
 }

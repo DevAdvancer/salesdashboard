@@ -408,7 +408,7 @@ export async function replaceMonthlyTargetAssignmentsAction(input: {
   assignments: Array<{ agentId: string; amount: number }>;
 }): Promise<MonthlyTargetAssignment[]> {
   const actor = await getActor(input.actorId);
-  if (actor.role !== "team_lead") {
+  if (actor.role !== "team_lead" && !isAdminLike(actor.role)) {
     throw new Error("Not authorized");
   }
 
@@ -417,7 +417,8 @@ export async function replaceMonthlyTargetAssignmentsAction(input: {
     .getDocument(DATABASE_ID, COLLECTIONS.MONTHLY_TARGETS, input.monthlyTargetId)
     .catch(() => null);
   if (!target) throw new Error("Target not found");
-  if (String(target.teamLeadId) !== actor.$id) {
+  const targetTeamLeadId = String(target.teamLeadId);
+  if (actor.role === "team_lead" && targetTeamLeadId !== actor.$id) {
     throw new Error("Not authorized");
   }
 
@@ -425,13 +426,16 @@ export async function replaceMonthlyTargetAssignmentsAction(input: {
   // agents from `teamAgents`, so any assignment the caller submits for
   // a resume agent is silently filtered out by the sanitization loop
   // below.
-  const teamAgents = await getAgentsByTeamLead(actor.$id, "sales");
+  const teamAgents = await getAgentsByTeamLead(targetTeamLeadId, "sales");
   const validAgentIds = new Set<string>(teamAgents.map((a) => a.$id));
-  if (actor.teamLeadId && !validAgentIds.has(actor.$id)) {
-    // Allow the TL to assign themselves too — but only if they are
-    // actually a TL (which they are). The TLs aren't usually listed by
-    // getAgentsByTeamLead, so we add them manually.
-    validAgentIds.add(actor.$id);
+  
+  // Allow assigning to the TL themselves (if they are a valid TL)
+  const targetTlUser = await getActor(targetTeamLeadId).catch(() => null);
+  if (targetTlUser && targetTlUser.role === "team_lead") {
+    validAgentIds.add(targetTeamLeadId);
+    if (!teamAgents.some(a => a.$id === targetTeamLeadId)) {
+        teamAgents.push(targetTlUser);
+    }
   }
 
   // Sanitize input: drop agents not in the TL's team, drop non-positive amounts.
@@ -488,7 +492,7 @@ export async function replaceMonthlyTargetAssignmentsAction(input: {
         ID.unique(),
         {
           monthlyTargetId: input.monthlyTargetId,
-          teamLeadId: actor.$id,
+          teamLeadId: targetTeamLeadId,
           agentId: next.agentId,
           agentName: next.agentName,
           amount: next.amount,
@@ -561,20 +565,29 @@ export interface AgentOption {
 
 export async function listTeamAgentsForTargetAction(input: {
   actorId: string;
+  teamLeadId?: string;
 }): Promise<AgentOption[]> {
   const actor = await getActor(input.actorId);
   if (actor.role !== "team_lead" && !isAdminLike(actor.role)) {
     throw new Error("Not authorized");
   }
-  if (actor.role === "team_lead") {
+  
+  if (actor.role === "team_lead" || (isAdminLike(actor.role) && input.teamLeadId)) {
+    const targetTlId = input.teamLeadId ?? actor.$id;
     // Sales-only — getAgentsByTeamLead with "sales" scope excludes
     // resume agents from the split-form dropdown.
-    const agents = await getAgentsByTeamLead(actor.$id, "sales");
-    return agents.map((a) => ({
+    const agents = await getAgentsByTeamLead(targetTlId, "sales");
+    const options = agents.map((a) => ({
       $id: a.$id,
       name: a.name,
       email: a.email,
     }));
+    
+    const targetTlUser = await getActor(targetTlId).catch(() => null);
+    if (targetTlUser && targetTlUser.role === "team_lead" && !options.some(o => o.$id === targetTlId)) {
+        options.unshift({ $id: targetTlUser.$id, name: targetTlUser.name, email: targetTlUser.email });
+    }
+    return options;
   }
   // Admin read-only: every agent in the system (sales-only).
   const { databases } = await createAdminClient();
