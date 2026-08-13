@@ -373,8 +373,6 @@ export type ComponentKey =
   | 'hierarchy'
   | 'work-queue'
   | 'reports'
-  | 'coaching-notes'
-  | 'review-queue'
   | 'notifications'
   | 'attendance'
   | 'attendance-report'

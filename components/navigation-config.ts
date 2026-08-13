@@ -87,8 +87,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'request-calls', label: 'Request Calls', href: '/request-calls', icon: appIcons.requestCalls },
   { key: 'work-queue', label: 'Work Queue', href: '/work-queue', icon: appIcons.workQueue },
   { key: 'reports', label: 'Reports', href: '/reports', icon: appIcons.reports },
-  { key: 'coaching-notes', label: 'Coaching Notes', href: '/coaching-notes', icon: appIcons.coachingNotes },
-  { key: 'review-queue', label: 'Review Queue', href: '/review-queue', icon: appIcons.reviewQueue },
+
   { key: 'linkedin-requests', label: 'Linkedin Request', href: '/linkedin-requests', icon: appIcons.linkedinRequests },
   { key: 'linkedin-account-management', label: 'Manage Linkedin IDs', href: '/linkedin-accounts', icon: appIcons.linkedinAccounts },
   { key: 'linkedin-reports', label: 'Linkedin Reports', href: '/linkedin-reports', icon: appIcons.linkedinReports },

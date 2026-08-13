@@ -17,8 +17,6 @@ export const COMPONENT_ACCESS: RoleAccessMap = {
   hierarchy: ['admin', 'developer', 'monitor', 'operations'],
   'work-queue': ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent'],
   reports: ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent'],
-  'coaching-notes': ['admin', 'developer', 'monitor', 'operations', 'team_lead'],
-  'review-queue': ['admin', 'developer', 'monitor', 'operations', 'team_lead'],
   notifications: ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent', 'lead_generation'],
   attendance: ['admin', 'developer', 'monitor', 'operations', 'team_lead'],
   'attendance-report': ['admin', 'developer', 'monitor', 'operations', 'team_lead'],

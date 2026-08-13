@@ -22,8 +22,6 @@ export type ComponentKey =
   | 'hierarchy'
   | 'work-queue'
   | 'reports'
-  | 'coaching-notes'
-  | 'review-queue'
   | 'notifications'
   | 'attendance'
   | 'attendance-report'
@@ -63,8 +61,6 @@ const SALES_ONLY_COMPONENTS = new Set<ComponentKey>([
   'hierarchy',
   'work-queue',
   'reports',
-  'coaching-notes',
-  'review-queue',
   'attendance-report',
   'lead-requests',
   'linkedin-requests',

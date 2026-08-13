@@ -13,8 +13,6 @@ export type ComponentKey =
   | 'hierarchy'
   | 'work-queue'
   | 'reports'
-  | 'coaching-notes'
-  | 'review-queue'
   | 'notifications'
   | 'attendance'
   | 'attendance-report'
@@ -50,8 +48,6 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'hierarchy', role: 'admin', allowed: true },
   { componentKey: 'work-queue', role: 'admin', allowed: true },
   { componentKey: 'reports', role: 'admin', allowed: true },
-  { componentKey: 'coaching-notes', role: 'admin', allowed: true },
-  { componentKey: 'review-queue', role: 'admin', allowed: true },
   { componentKey: 'notifications', role: 'admin', allowed: true },
   { componentKey: 'attendance', role: 'admin', allowed: true },
   { componentKey: 'attendance-report', role: 'admin', allowed: true },
@@ -75,8 +71,6 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'hierarchy', role: 'developer', allowed: true },
   { componentKey: 'work-queue', role: 'developer', allowed: true },
   { componentKey: 'reports', role: 'developer', allowed: true },
-  { componentKey: 'coaching-notes', role: 'developer', allowed: true },
-  { componentKey: 'review-queue', role: 'developer', allowed: true },
   { componentKey: 'notifications', role: 'developer', allowed: true },
   { componentKey: 'attendance', role: 'developer', allowed: true },
   { componentKey: 'attendance-report', role: 'developer', allowed: true },
@@ -100,8 +94,6 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'hierarchy', role: 'monitor', allowed: true },
   { componentKey: 'work-queue', role: 'monitor', allowed: true },
   { componentKey: 'reports', role: 'monitor', allowed: true },
-  { componentKey: 'coaching-notes', role: 'monitor', allowed: true },
-  { componentKey: 'review-queue', role: 'monitor', allowed: true },
   { componentKey: 'notifications', role: 'monitor', allowed: true },
   { componentKey: 'attendance', role: 'monitor', allowed: true },
   { componentKey: 'attendance-report', role: 'monitor', allowed: true },
@@ -125,8 +117,6 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'hierarchy', role: 'operations', allowed: true },
   { componentKey: 'work-queue', role: 'operations', allowed: true },
   { componentKey: 'reports', role: 'operations', allowed: true },
-  { componentKey: 'coaching-notes', role: 'operations', allowed: true },
-  { componentKey: 'review-queue', role: 'operations', allowed: true },
   { componentKey: 'notifications', role: 'operations', allowed: true },
   { componentKey: 'attendance', role: 'operations', allowed: true },
   { componentKey: 'attendance-report', role: 'operations', allowed: true },
@@ -154,8 +144,6 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'hierarchy', role: 'team_lead', allowed: false },
   { componentKey: 'work-queue', role: 'team_lead', allowed: true },
   { componentKey: 'reports', role: 'team_lead', allowed: false },
-  { componentKey: 'coaching-notes', role: 'team_lead', allowed: false },
-  { componentKey: 'review-queue', role: 'team_lead', allowed: true },
   { componentKey: 'notifications', role: 'team_lead', allowed: true },
   { componentKey: 'attendance', role: 'team_lead', allowed: true },
   { componentKey: 'attendance-report', role: 'team_lead', allowed: true },
@@ -180,8 +168,6 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'hierarchy', role: 'agent', allowed: false },
   { componentKey: 'work-queue', role: 'agent', allowed: true },
   { componentKey: 'reports', role: 'agent', allowed: true },
-  { componentKey: 'coaching-notes', role: 'agent', allowed: false },
-  { componentKey: 'review-queue', role: 'agent', allowed: false },
   { componentKey: 'notifications', role: 'agent', allowed: true },
   { componentKey: 'attendance', role: 'agent', allowed: false },
   { componentKey: 'attendance-report', role: 'agent', allowed: false },
@@ -206,8 +192,6 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'hierarchy', role: 'lead_generation', allowed: false },
   { componentKey: 'work-queue', role: 'lead_generation', allowed: false },
   { componentKey: 'reports', role: 'lead_generation', allowed: false },
-  { componentKey: 'coaching-notes', role: 'lead_generation', allowed: false },
-  { componentKey: 'review-queue', role: 'lead_generation', allowed: false },
   { componentKey: 'notifications', role: 'lead_generation', allowed: true },
   { componentKey: 'attendance', role: 'lead_generation', allowed: false },
   { componentKey: 'attendance-report', role: 'lead_generation', allowed: false },

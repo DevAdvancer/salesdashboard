@@ -163,49 +163,6 @@ export const collectionSchemas: Record<string, CollectionSchema> = {
     ],
   },
 
-  // ─── Coaching Notes ──────────────────────────────────────────────────────
-  coaching_notes: {
-    attributes: [
-      { key: 'targetUserId', type: 'string', required: true, size: 255 },
-      { key: 'targetUserName', type: 'string', required: false, size: 255 },
-      { key: 'authorId', type: 'string', required: true, size: 255 },
-      { key: 'authorName', type: 'string', required: true, size: 255 },
-      { key: 'note', type: 'string', required: true, size: 10000 },
-      { key: 'visibility', type: 'string', required: true, size: 50 },
-      { key: 'createdAt', type: 'datetime', required: true },
-      { key: 'updatedAt', type: 'datetime', required: false },
-    ],
-    indexes: [
-      { key: 'target_user_idx', type: 'key', attributes: ['targetUserId'] },
-      { key: 'author_idx', type: 'key', attributes: ['authorId'] },
-      { key: 'created_idx', type: 'key', attributes: ['createdAt'] },
-      { key: 'visibility_idx', type: 'key', attributes: ['visibility'] },
-    ],
-  },
-
-  // ─── Review Queue ────────────────────────────────────────────────────────
-  review_queue: {
-    attributes: [
-      { key: 'type', type: 'string', required: true, size: 100 },
-      { key: 'status', type: 'string', required: true, size: 50 },
-      { key: 'targetId', type: 'string', required: true, size: 255 },
-      { key: 'targetType', type: 'string', required: true, size: 100 },
-      { key: 'requestedById', type: 'string', required: true, size: 255 },
-      { key: 'requestedByName', type: 'string', required: true, size: 255 },
-      { key: 'assignedReviewerId', type: 'string', required: false, size: 255 },
-      { key: 'reason', type: 'string', required: false, size: 5000 },
-      { key: 'metadata', type: 'string', required: false, size: 20000 },
-      { key: 'createdAt', type: 'datetime', required: true },
-      { key: 'resolvedAt', type: 'datetime', required: false },
-    ],
-    indexes: [
-      { key: 'status_idx', type: 'key', attributes: ['status'] },
-      { key: 'type_idx', type: 'key', attributes: ['type'] },
-      { key: 'target_idx', type: 'key', attributes: ['targetId'] },
-      { key: 'reviewer_idx', type: 'key', attributes: ['assignedReviewerId'] },
-      { key: 'created_idx', type: 'key', attributes: ['createdAt'] },
-    ],
-  },
 
   // ─── Notifications ───────────────────────────────────────────────────────
   notifications: {

@@ -7,23 +7,12 @@ import { assertAuthenticatedUserId } from "@/lib/server/current-user";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { isRoleEligibleForComponent } from "@/lib/constants/component-access";
 import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
-import {
-  buildFormFieldTargetOptions,
-  buildLeadTargetOptions,
-  buildUserTargetOptions,
-  filterReviewTargetOptions,
-  type ReviewTargetOption,
-  type ReviewTargetType,
-} from "@/lib/utils/review-target-options";
 import type {
-  CoachingNote,
-  CoachingNoteVisibility,
   FormField,
   Lead,
   LeadNote,
   LeadNoteVisibility,
   NotificationRecord,
-  ReviewQueueItem,
   User,
   UserRole,
 } from "@/lib/types";
@@ -300,160 +289,6 @@ export async function createLeadNoteAction(input: {
     }
   );
   return doc as unknown as LeadNote;
-}
-
-export async function listCoachingNotesAction(actorId: string, targetUserId?: string): Promise<CoachingNote[]> {
-  const actor = await getActor(actorId);
-  ensureLeadershipRead(actor.role);
-
-  const queries = [Query.orderDesc("createdAt"), Query.limit(200)];
-  if (targetUserId) queries.push(Query.equal("targetUserId", targetUserId));
-
-  const { databases } = await createAdminClient();
-  const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.COACHING_NOTES, queries);
-  return response.documents as unknown as CoachingNote[];
-}
-
-export async function createCoachingNoteAction(input: {
-  actorId: string;
-  targetUserId: string;
-  targetUserName?: string | null;
-  note: string;
-  visibility: CoachingNoteVisibility;
-}): Promise<CoachingNote> {
-  const actor = await getActor(input.actorId);
-  ensureLeadershipMutation(actor.role);
-
-  const { databases } = await createAdminClient();
-  const doc = await databases.createDocument(
-    DATABASE_ID,
-    COLLECTIONS.COACHING_NOTES,
-    ID.unique(),
-    {
-      targetUserId: input.targetUserId,
-      targetUserName: input.targetUserName ?? null,
-      authorId: actor.$id,
-      authorName: actor.name,
-      note: input.note,
-      visibility: input.visibility,
-      createdAt: new Date().toISOString(),
-      updatedAt: null,
-    }
-  );
-  return doc as unknown as CoachingNote;
-}
-
-export async function listReviewQueueAction(actorId: string, status?: string): Promise<ReviewQueueItem[]> {
-  const actor = await getActor(actorId);
-  ensureComponentAccess(actor.role, "review-queue");
-
-  const queries = [Query.orderDesc("createdAt"), Query.limit(200)];
-  if (status) queries.push(Query.equal("status", status));
-
-  const { databases } = await createAdminClient();
-  const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.REVIEW_QUEUE, queries);
-  return response.documents as unknown as ReviewQueueItem[];
-}
-
-export async function listReviewTargetOptionsAction(input: {
-  actorId: string;
-  targetType: ReviewTargetType;
-  searchQuery?: string;
-}): Promise<ReviewTargetOption[]> {
-  const actor = await getActor(input.actorId);
-  ensureComponentAccess(actor.role, "review-queue");
-
-  const searchQuery = input.searchQuery?.trim() ?? "";
-  let options: ReviewTargetOption[] = [];
-
-  if (input.targetType === "LEAD" || input.targetType === "CLIENT") {
-    const leads = await listLeadsAction(
-      {
-        isClosed: input.targetType === "CLIENT",
-        searchQuery: searchQuery || undefined,
-      },
-      actor.$id,
-      actor.role,
-      actor.branchIds
-    );
-    options = buildLeadTargetOptions(leads.leads, input.targetType);
-  } else if (input.targetType === "USER") {
-    options = buildUserTargetOptions(await listVisibleReviewUsers(actor));
-  } else if (input.targetType === "FORM_FIELD") {
-    options = buildFormFieldTargetOptions(await listCurrentFormFields());
-  }
-
-  return filterReviewTargetOptions(options, searchQuery).slice(0, 50);
-}
-
-export async function createReviewQueueItemAction(input: {
-  actorId: string;
-  type: string;
-  targetId: string;
-  targetType: string;
-  assignedReviewerId?: string | null;
-  reason?: string | null;
-  metadata?: string | null;
-}): Promise<ReviewQueueItem> {
-  const actor = await getActor(input.actorId);
-  ensureComponentAccess(actor.role, "review-queue");
-
-  const { databases } = await createAdminClient();
-  const doc = await databases.createDocument(
-    DATABASE_ID,
-    COLLECTIONS.REVIEW_QUEUE,
-    ID.unique(),
-    {
-      type: input.type,
-      status: "open",
-      targetId: input.targetId,
-      targetType: input.targetType,
-      requestedById: actor.$id,
-      requestedByName: actor.name,
-      assignedReviewerId: input.assignedReviewerId ?? null,
-      reason: input.reason ?? null,
-      metadata: input.metadata ?? null,
-      createdAt: new Date().toISOString(),
-      resolvedAt: null,
-    }
-  );
-
-  if (input.assignedReviewerId) {
-    await createNotificationsForRecipients(
-      databases,
-      [input.assignedReviewerId],
-      {
-        type: "review_queue",
-        title: "Review assigned",
-        body: `${actor.name} assigned a ${input.targetType.toLowerCase()} review to you.`,
-        targetId: doc.$id,
-        targetType: "REVIEW_QUEUE",
-      }
-    );
-  }
-
-  return doc as unknown as ReviewQueueItem;
-}
-
-export async function updateReviewQueueStatusAction(
-  actorId: string,
-  itemId: string,
-  status: string
-): Promise<ReviewQueueItem> {
-  const actor = await getActor(actorId);
-  ensureLeadershipMutation(actor.role);
-
-  const { databases } = await createAdminClient();
-  const doc = await databases.updateDocument(
-    DATABASE_ID,
-    COLLECTIONS.REVIEW_QUEUE,
-    itemId,
-    {
-      status,
-      resolvedAt: status === "open" ? null : new Date().toISOString(),
-    }
-  );
-  return doc as unknown as ReviewQueueItem;
 }
 
 export async function listNotificationsAction(actorId: string): Promise<NotificationRecord[]> {

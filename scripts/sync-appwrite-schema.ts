@@ -254,6 +254,22 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'branch_idx', type: 'key', attributes: ['branchId'] },
     ],
   },
+  [COLLECTIONS.NOTIFICATIONS]: {
+    attributes: [
+      { key: 'recipientId', type: 'string', required: true, size: 255 },
+      { key: 'type', type: 'string', required: true, size: 100 },
+      { key: 'title', type: 'string', required: true, size: 255 },
+      { key: 'body', type: 'string', required: true, size: 2000 },
+      { key: 'targetId', type: 'string', required: false, size: 255 },
+      { key: 'targetType', type: 'string', required: false, size: 100 },
+      { key: 'readAt', type: 'datetime', required: false },
+      { key: 'createdAt', type: 'datetime', required: true },
+    ],
+    indexes: [
+      { key: 'recipient_idx', type: 'key', attributes: ['recipientId'] },
+      { key: 'created_at_idx', type: 'key', attributes: ['createdAt'] },
+    ],
+  },
 
   // ─── Pending Amounts ───────────────────────────────────────────────────────
   // Tracks the remaining (unpaid) balance on a client payment record,

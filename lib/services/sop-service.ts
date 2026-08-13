@@ -1,27 +1,17 @@
 import {
-  createCoachingNoteAction,
   createLeadNoteAction,
-  createReviewQueueItemAction,
-  listCoachingNotesAction,
   listLeadNotesAction,
   listNotificationsAction,
-  listReviewQueueAction,
-  listReviewTargetOptionsAction,
   clearAllNotificationsAction,
   markNotificationReadAction,
   updateLeadFollowUpAction,
-  updateReviewQueueStatusAction,
 } from '@/app/actions/sop';
 import { cacheClientRead, clearClientReadCache } from '@/lib/utils/client-read-cache';
-import type { ReviewTargetOption, ReviewTargetType } from '@/lib/utils/review-target-options';
 import type {
-  CoachingNote,
-  CoachingNoteVisibility,
   Lead,
   LeadNote,
   LeadNoteVisibility,
   NotificationRecord,
-  ReviewQueueItem,
 } from '@/lib/types';
 
 export interface UpdateLeadFollowUpInput {
@@ -52,57 +42,7 @@ export function createLeadNote(input: {
   return createLeadNoteAction(input).finally(() => clearClientReadCache('sop:listLeadNotes'));
 }
 
-export function listCoachingNotes(actorId: string, targetUserId?: string): Promise<CoachingNote[]> {
-  return cacheClientRead('sop:listCoachingNotes', [actorId, targetUserId], () =>
-    listCoachingNotesAction(actorId, targetUserId)
-  );
-}
 
-export function createCoachingNote(input: {
-  actorId: string;
-  targetUserId: string;
-  targetUserName?: string | null;
-  note: string;
-  visibility: CoachingNoteVisibility;
-}): Promise<CoachingNote> {
-  return createCoachingNoteAction(input).finally(() => clearClientReadCache('sop:listCoachingNotes'));
-}
-
-export function listReviewQueue(actorId: string, status?: string): Promise<ReviewQueueItem[]> {
-  return cacheClientRead('sop:listReviewQueue', [actorId, status], () =>
-    listReviewQueueAction(actorId, status)
-  );
-}
-
-export function listReviewTargetOptions(input: {
-  actorId: string;
-  targetType: ReviewTargetType;
-  searchQuery?: string;
-}): Promise<ReviewTargetOption[]> {
-  return cacheClientRead('sop:listReviewTargetOptions', [input], () =>
-    listReviewTargetOptionsAction(input)
-  );
-}
-
-export function createReviewQueueItem(input: {
-  actorId: string;
-  type: string;
-  targetId: string;
-  targetType: string;
-  assignedReviewerId?: string | null;
-  reason?: string | null;
-  metadata?: string | null;
-}): Promise<ReviewQueueItem> {
-  return createReviewQueueItemAction(input).finally(() => clearClientReadCache('sop:listReviewQueue'));
-}
-
-export function updateReviewQueueStatus(
-  actorId: string,
-  itemId: string,
-  status: string
-): Promise<ReviewQueueItem> {
-  return updateReviewQueueStatusAction(actorId, itemId, status).finally(() => clearClientReadCache('sop:listReviewQueue'));
-}
 
 export function listNotifications(
   actorId: string,

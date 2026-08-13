@@ -16,7 +16,6 @@ import {
 } from "@/lib/services/form-config-service";
 import { getCachedFormConfigAction } from "@/app/actions/form-config";
 import {
-  addClientPaymentUpdate,
   getClientPaymentRecord,
   upsertClientPaymentRecord,
   updateClientPersonalDetails,
@@ -49,7 +48,6 @@ import { ClientGeneralCard } from "@/components/client/detail/client-general-car
 import { ClientDetailCard } from "@/components/client/detail/client-detail-card";
 import { ClientPaymentCreateCard } from "@/components/client/detail/client-payment-create-card";
 import { ClientIntakeCard } from "@/components/client/detail/client-intake-card";
-import { ClientPaymentUpdateCard } from "@/components/client/detail/client-payment-update-card";
 import { ClientPaymentTimelineCard } from "@/components/client/detail/client-payment-timeline-card";
 import { logger } from '@/lib/utils/logger';
 
@@ -90,9 +88,6 @@ function HistoryDetailContent() {
   const [paymentRecord, setPaymentRecord] =
     useState<ClientPaymentRecord | null>(null);
   const [paymentLoading, setPaymentLoading] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("not_paid");
-  const [paymentNote, setPaymentNote] = useState("");
-  const [paymentSaving, setPaymentSaving] = useState(false);
   const [paymentInitSaving, setPaymentInitSaving] = useState(false);
   const [paymentInitPlanValues, setPaymentInitPlanValues] = useState<
     Record<string, unknown>
@@ -108,7 +103,6 @@ function HistoryDetailContent() {
     clientIntakeInitializedForRecord,
     setClientIntakeInitializedForRecord,
   ] = useState<string | null>(null);
-  const [editUpfrontAmount, setEditUpfrontAmount] = useState<string>("");
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -247,7 +241,6 @@ function HistoryDetailContent() {
         initialStatus: upfrontAmount > 0 ? "partially_paid" : "not_paid",
       });
       setPaymentRecord(created);
-      setPaymentStatus(created.status);
       toast({ title: "Success", description: "Payment record created." });
     } catch (err: unknown) {
       logger.error("Error creating payment record:", err);
@@ -271,8 +264,6 @@ function HistoryDetailContent() {
       const record = await getClientPaymentRecord(user.$id, leadId);
       setPaymentRecord(record);
       if (record) {
-        setPaymentStatus(record.status);
-        setEditUpfrontAmount(String(record.paymentPlan.upfrontAmount));
       }
       setClientIntakeInitializedForRecord(null);
       if (!record) {
@@ -512,75 +503,6 @@ function HistoryDetailContent() {
     }
   };
 
-  const handleAddPaymentUpdate = async () => {
-    if (!user) return;
-    if (!canEditClientPayments) return;
-    if (!paymentRecord) return;
-    const note = paymentNote.trim();
-    if (!note) {
-      toast({
-        title: "Note required",
-        description: "Please add a note while updating the payment.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      setPaymentSaving(true);
-      const newUpfront = Number(editUpfrontAmount);
-      let currentRecord = paymentRecord;
-
-      // If the user entered a new upfront value, also store it on the
-      // payment update as the "amount paid" — that way the running total
-      // of paid amounts (and the Upfront (collected) stat) reflects what
-      // they actually entered. The plan's upfrontAmount stays as the
-      // planned value when the entered value matches it; otherwise it
-      // becomes the new plan value AND the amount paid for this update.
-      const enteredAmount =
-        !isNaN(newUpfront) && newUpfront > 0 ? newUpfront : null;
-
-      if (
-        !isNaN(newUpfront) &&
-        newUpfront !== currentRecord.paymentPlan.upfrontAmount
-      ) {
-        currentRecord = await upsertClientPaymentRecord({
-          actorId: user.$id,
-          leadId,
-          personalDetails: currentRecord.personalDetails,
-          paymentPlan: {
-            ...currentRecord.paymentPlan,
-            upfrontAmount: newUpfront,
-          },
-        });
-      }
-
-      const updated = await addClientPaymentUpdate({
-        actorId: user.$id,
-        leadId,
-        status: paymentStatus,
-        note: note,
-        amount: enteredAmount,
-      });
-      setPaymentRecord(updated);
-      if (updated) {
-        setEditUpfrontAmount(String(updated.paymentPlan.upfrontAmount));
-      }
-      setPaymentNote("");
-      toast({ title: "Success", description: "Payment update saved." });
-      queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
-    } catch (err: unknown) {
-      logger.error("Error saving payment update:", err);
-      toast({
-        title: "Error",
-        description:
-          err instanceof Error ? err.message : "Failed to save payment update",
-        variant: "destructive",
-      });
-    } finally {
-      setPaymentSaving(false);
-    }
-  };
 
   if (authLoading || isLoading) {
     return (
@@ -664,18 +586,7 @@ function HistoryDetailContent() {
           )}
 
           {paymentRecord && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
-              <ClientPaymentUpdateCard
-                paymentStatus={paymentStatus}
-                setPaymentStatus={setPaymentStatus}
-                editUpfrontAmount={editUpfrontAmount}
-                setEditUpfrontAmount={setEditUpfrontAmount}
-                paymentNote={paymentNote}
-                setPaymentNote={setPaymentNote}
-                handleAddPaymentUpdate={handleAddPaymentUpdate}
-                paymentSaving={paymentSaving}
-                canEditClientPayments={canEditClientPayments}
-              />
+            <div className="mt-8">
               <ClientPaymentTimelineCard paymentRecord={paymentRecord} />
             </div>
           )}
