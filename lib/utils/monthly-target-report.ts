@@ -194,6 +194,15 @@ export function buildTargetReport(input: {
     }
 
     const agents: TargetReportAgentRow[] = [];
+    
+    let sumOfOthers = 0;
+    for (const [agentId, assignment] of assignmentsByAgent.entries()) {
+      if (agentId !== target.teamLeadId) {
+        sumOfOthers += assignment.amount;
+      }
+    }
+    const calculatedTlTarget = Math.max(0, target.totalAmount - sumOfOthers);
+
     let teamTarget = 0;
     let teamAchieved = 0;
 
@@ -208,7 +217,7 @@ export function buildTargetReport(input: {
       achieved += followupsByAgentId[agentId] ?? 0;
       achieved += technicalPaymentsByAgentId[agentId] ?? 0;
       const assignment = assignmentsByAgent.get(agentId);
-      const agentTarget = assignment?.amount ?? 0;
+      const agentTarget = agentId === target.teamLeadId ? calculatedTlTarget : (assignment?.amount ?? 0);
       teamTarget += agentTarget;
       teamAchieved += achieved;
       agents.push({

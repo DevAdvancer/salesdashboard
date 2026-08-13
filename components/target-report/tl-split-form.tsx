@@ -80,22 +80,26 @@ export function TlSplitForm({ user, monthKey, teamLeadId, onSaved }: TlSplitForm
     };
   }, [user.$id, monthKey, teamLeadId, toast]);
 
-  const draftRows = useMemo<DraftRow[]>(() => {
-    return agents.map((a) => ({
+  const tlId = teamLeadId ?? user.$id;
+
+  const agentsDraftRows = useMemo<DraftRow[]>(() => {
+    return agents.filter(a => a.$id !== tlId).map((a) => ({
       agentId: a.$id,
       amount: draft[a.$id] ?? 0,
     }));
-  }, [agents, draft]);
+  }, [agents, draft, tlId]);
 
-  const draftTotal = useMemo(
-    () => draftRows.reduce((sum, r) => sum + (Number.isFinite(r.amount) ? r.amount : 0), 0),
-    [draftRows],
+  const agentsTotal = useMemo(
+    () => agentsDraftRows.reduce((sum, r) => sum + (Number.isFinite(r.amount) ? r.amount : 0), 0),
+    [agentsDraftRows],
   );
 
   const teamTotal = target?.totalAmount ?? 0;
-  const balance = teamTotal - draftTotal;
+  const tlRemainder = Math.max(0, teamTotal - agentsTotal);
+  const overBy = Math.max(0, agentsTotal - teamTotal);
 
   const updateAmount = (agentId: string, value: string) => {
+    if (agentId === tlId) return; // TL is read-only
     const parsed = Number(value);
     setDraft((prev) => ({
       ...prev,
@@ -113,9 +117,13 @@ export function TlSplitForm({ user, monthKey, teamLeadId, onSaved }: TlSplitForm
       });
       return;
     }
-    const cleaned = draftRows
+    const cleaned = agentsDraftRows
       .map((r) => ({ agentId: r.agentId, amount: Math.max(0, Math.round(r.amount)) }))
       .filter((r) => r.amount > 0);
+    // Explicitly append the TL's remainder if it's > 0, so it's saved in the DB
+    if (tlRemainder > 0) {
+      cleaned.push({ agentId: tlId, amount: tlRemainder });
+    }
     try {
       setSaving(true);
       await replaceMonthlyTargetAssignments({
@@ -138,18 +146,19 @@ export function TlSplitForm({ user, monthKey, teamLeadId, onSaved }: TlSplitForm
 
   const distributeRemaining = () => {
     if (teamTotal <= 0) return;
-    const remaining = Math.max(0, teamTotal - draftTotal);
+    const remaining = Math.max(0, teamTotal - agentsTotal);
     if (remaining === 0) return;
-    if (agents.length === 0) return;
-    const share = Math.floor(remaining / agents.length);
+    const normalAgents = agents.filter(a => a.$id !== tlId);
+    if (normalAgents.length === 0) return;
+    const share = Math.floor(remaining / normalAgents.length);
     setDraft((prev) => {
       const next: Record<string, number> = { ...prev };
-      const leftover = remaining - share * agents.length;
-      for (const a of agents) {
+      const leftover = remaining - share * normalAgents.length;
+      for (const a of normalAgents) {
         next[a.$id] = (next[a.$id] ?? 0) + share;
       }
       if (leftover > 0) {
-        next[agents[0].$id] = (next[agents[0].$id] ?? 0) + leftover;
+        next[normalAgents[0].$id] = (next[normalAgents[0].$id] ?? 0) + leftover;
       }
       return next;
     });
@@ -180,21 +189,28 @@ export function TlSplitForm({ user, monthKey, teamLeadId, onSaved }: TlSplitForm
               </div>
               <div>
                 <div className="text-xs uppercase tracking-wider text-muted-foreground">
-                  Split total
+                  Agents total
                 </div>
-                <div className="font-semibold">{currency.format(draftTotal)}</div>
+                <div className="font-semibold">{currency.format(agentsTotal)}</div>
               </div>
               <div>
                 <div className="text-xs uppercase tracking-wider text-muted-foreground">
-                  {balance >= 0 ? "Remaining" : "Over by"}
+                  TL Remainder
                 </div>
-                <div
-                  className={`font-semibold ${
-                    balance < 0 ? "text-red-600" : "text-emerald-600"
-                  }`}>
-                  {currency.format(Math.abs(balance))}
+                <div className="font-semibold text-emerald-600">
+                  {currency.format(tlRemainder)}
                 </div>
               </div>
+              {overBy > 0 && (
+                <div>
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground">
+                    Over by
+                  </div>
+                  <div className="font-semibold text-red-600">
+                    {currency.format(overBy)}
+                  </div>
+                </div>
+              )}
               <div className="ml-auto flex items-center gap-2">
                 <Button
                   type="button"
@@ -226,14 +242,20 @@ export function TlSplitForm({ user, monthKey, teamLeadId, onSaved }: TlSplitForm
                         <div className="truncate text-xs text-muted-foreground">{a.email}</div>
                       </div>
                       <div className="w-40">
-                        <Input
-                          type="number"
-                          min={0}
-                          step={1}
-                          value={draft[a.$id] ?? 0}
-                          onChange={(e) => updateAmount(a.$id, e.target.value)}
-                          aria-label={`Target for ${a.name}`}
-                        />
+                        {a.$id === tlId ? (
+                          <div className="flex h-10 w-full items-center justify-end rounded-md border border-transparent px-3 py-2 text-sm font-semibold tabular-nums text-muted-foreground">
+                            {currency.format(tlRemainder)}
+                          </div>
+                        ) : (
+                          <Input
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={draft[a.$id] ?? 0}
+                            onChange={(e) => updateAmount(a.$id, e.target.value)}
+                            aria-label={`Target for ${a.name}`}
+                          />
+                        )}
                       </div>
                     </li>
                   ))}
