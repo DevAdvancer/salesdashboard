@@ -73,6 +73,7 @@ const SALES_ONLY_COMPONENTS = new Set<ComponentKey>([
   // exempt from the block via canCrossDashboards.
   'request-calls',
   'assigned-report',
+  'calendar',
 ]);
 
 function canCrossDashboards(role: NonNullable<ReturnType<typeof useAuth>['user']>['role']) {

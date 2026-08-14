@@ -779,6 +779,18 @@ export interface HolidayCalendarEntry {
   date: string;
   name: string;
   createdAt: string;
-  createdById?: string | null;
   createdByName?: string | null;
+}
+
+export interface CalendarEvent {
+  $id: string;
+  userId: string;
+  type: string;
+  candidateName: string;
+  notes?: string | null;
+  date: string; // ISO string
+  reminderEnabled?: boolean | null;
+  reminderSent?: boolean | null;
+  createdAt: string;
+  updatedAt?: string | null;
 }

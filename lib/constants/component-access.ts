@@ -61,6 +61,7 @@ export const COMPONENT_ACCESS: RoleAccessMap = {
   // Assigned Report — leadership-only view of lead assignments per team,
   // breaking down assignment source (admin vs lead gen vs self).
   'assigned-report': ['admin', 'developer', 'monitor', 'operations'],
+  calendar: ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent', 'lead_generation'],
 };
 
 export function isRoleEligibleForComponent(

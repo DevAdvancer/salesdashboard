@@ -60,6 +60,7 @@ export const COLLECTIONS = {
   // Daily pre-aggregated caches to prevent massive listAllDocuments reads
   LINKEDIN_DAILY_STATS: process.env.NEXT_PUBLIC_APPWRITE_LINKEDIN_DAILY_STATS_COLLECTION_ID || 'linkedin_daily_stats',
   AGENT_DAILY_STATS: process.env.NEXT_PUBLIC_APPWRITE_AGENT_DAILY_STATS_COLLECTION_ID || 'agent_daily_stats',
+  CALENDAR_EVENTS: process.env.NEXT_PUBLIC_APPWRITE_CALENDAR_EVENTS_COLLECTION_ID || 'calendar_events',
 };
 
 export const BUCKETS = {

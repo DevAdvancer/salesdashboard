@@ -72,6 +72,7 @@ export const appIcons = {
   resumeProfiles: FileText,
   resumeMarketing: TrendingUp,
   assignedReport: ClipboardCheck,
+  calendar: CalendarClock,
 } satisfies Record<string, AppIcon>;
 
 export const NAV_ITEMS: NavItem[] = [
@@ -107,4 +108,5 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'user-management', label: 'Users', href: '/users', icon: appIcons.users },
   { key: 'settings', label: 'Settings', href: '/settings', icon: appIcons.settings },
   { key: 'assigned-report', label: 'Assigned Report', href: '/assigned-report', icon: appIcons.assignedReport },
+  { key: 'calendar', label: 'Calendar', href: '/calendar', icon: appIcons.calendar },
 ];

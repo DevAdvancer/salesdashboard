@@ -426,6 +426,24 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'candidate_name_search_idx', type: 'fulltext', attributes: ['candidateName'] },
     ],
   },
+  [COLLECTIONS.CALENDAR_EVENTS]: {
+    attributes: [
+      { key: 'userId', type: 'string', required: true, size: 255 },
+      { key: 'type', type: 'string', required: true, size: 255 },
+      { key: 'candidateName', type: 'string', required: true, size: 255 },
+      { key: 'notes', type: 'string', required: false, size: 5000 },
+      { key: 'date', type: 'datetime', required: true },
+      { key: 'reminderEnabled', type: 'boolean', required: false, default: false },
+      { key: 'reminderSent', type: 'boolean', required: false, default: false },
+      { key: 'createdAt', type: 'datetime', required: true },
+      { key: 'updatedAt', type: 'datetime', required: false },
+    ],
+    indexes: [
+      { key: 'user_idx', type: 'key', attributes: ['userId'] },
+      { key: 'date_idx', type: 'key', attributes: ['date'] },
+      { key: 'reminder_idx', type: 'key', attributes: ['reminderEnabled', 'reminderSent'] },
+    ],
+  },
 };
 
 // Fields to remove (retired manager/assistant_manager fields, plus the

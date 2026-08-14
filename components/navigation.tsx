@@ -87,7 +87,7 @@ export function Navigation({
     : NAV_ITEMS.filter((item) => canAccess(item.key as ComponentKey));
 
   // Define section grouping
-  const agentItemKeys = new Set(["dashboard", "leads", "history", "request-calls", "work-queue"]);
+  const agentItemKeys = new Set(["dashboard", "leads", "calendar", "history", "request-calls", "work-queue"]);
   const attendanceItemKeys = new Set(["attendance", "attendance-report"]);
   const teamLeadItemKeys = new Set(["user-management", "reports", "assigned-report"]);
   const adminItemKeys = new Set(["branch-management", "hierarchy", "lead-requests", "settings"]);

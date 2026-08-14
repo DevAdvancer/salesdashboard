@@ -22,7 +22,8 @@ export type ComponentKey =
   | 'linkedin-reports'
   | 'target-report'
   | 'followups-payments'
-  | 'payments-report';
+  | 'payments-report'
+  | 'calendar';
 
 export type UserRole = 'admin' | 'developer' | 'team_lead' | 'agent' | 'lead_generation' | 'monitor' | 'operations';
 
@@ -209,4 +210,12 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'followups-payments', role: 'team_lead', allowed: true },
   { componentKey: 'followups-payments', role: 'agent', allowed: false },
   { componentKey: 'followups-payments', role: 'lead_generation', allowed: false },
+  // Calendar rules - sales only, open to all sales roles
+  { componentKey: 'calendar', role: 'admin', allowed: true },
+  { componentKey: 'calendar', role: 'developer', allowed: true },
+  { componentKey: 'calendar', role: 'monitor', allowed: true },
+  { componentKey: 'calendar', role: 'operations', allowed: true },
+  { componentKey: 'calendar', role: 'team_lead', allowed: true },
+  { componentKey: 'calendar', role: 'agent', allowed: true },
+  { componentKey: 'calendar', role: 'lead_generation', allowed: true },
 ];
