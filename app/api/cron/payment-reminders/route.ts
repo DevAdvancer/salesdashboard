@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const days = Number(process.env.PAYMENT_REMINDER_STALE_DAYS ?? "5");
+  const days = Number(process.env.PAYMENT_REMINDER_STALE_DAYS ?? "30");
   const staleMs = days * 24 * 60 * 60 * 1000;
   const now = new Date();
   const thresholdIso = new Date(now.getTime() - staleMs).toISOString();
