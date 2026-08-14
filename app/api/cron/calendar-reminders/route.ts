@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/server/appwrite";
 import { DATABASE_ID, COLLECTIONS } from "@/lib/constants/appwrite";
 import { Query, ID } from "node-appwrite";
-import { format } from "date-fns";
-import { toZonedTime } from "date-fns-tz";
+import { getTodayEst } from "@/lib/utils/est-date";
 
 // This cron job is scheduled to run daily at 9:00 AM EST (14:00 UTC during standard time / 13:00 UTC during DST)
 // We use 14:00 UTC in vercel.json. We can check if it's the correct day here if needed, but since it's cron we just process.
@@ -19,8 +18,7 @@ export async function GET(request: Request) {
     const { databases } = await createAdminClient();
 
     // Get today's date in EST
-    const nowEst = toZonedTime(new Date(), "America/New_York");
-    const todayStr = format(nowEst, "yyyy-MM-dd");
+    const todayStr = getTodayEst();
 
     // Fetch calendar events for today that have reminderEnabled = true and reminderSent = false
     const eventsResponse = await databases.listDocuments(

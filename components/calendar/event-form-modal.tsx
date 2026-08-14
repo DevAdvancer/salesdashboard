@@ -182,15 +182,14 @@ export function EventFormModal({
             />
           </div>
 
-          <div className="flex items-center space-x-2 pt-2">
+          <label className="flex items-center space-x-2 pt-2 cursor-pointer">
             <Switch
-              id="reminder"
               checked={reminderEnabled}
               onCheckedChange={setReminderEnabled}
               disabled={loading}
             />
-            <Label htmlFor="reminder">Enable 9:00 AM EST Reminder Notification</Label>
-          </div>
+            <span>Enable 9:00 AM EST Reminder Notification</span>
+          </label>
 
           <div className="flex justify-end gap-2 pt-4">
             <Button

@@ -40,7 +40,8 @@ export type ComponentKey =
   | 'resume-hierarchy'
   | 'request-calls'
   | 'call-requests'
-  | 'assigned-report';
+  | 'assigned-report'
+  | 'calendar';
 
 interface AccessControlContextType {
   canAccess: (componentKey: ComponentKey) => boolean;

@@ -23,7 +23,6 @@ export function mapHolidayCalendarDoc(doc: any): HolidayCalendarEntry {
     date: holidayDate,
     name: typeof doc.name === "string" ? doc.name : "Holiday",
     createdAt: typeof doc.createdAt === "string" ? doc.createdAt : "",
-    createdById: typeof doc.createdById === "string" ? doc.createdById : null,
     createdByName: typeof doc.createdByName === "string" ? doc.createdByName : null,
   };
 }
