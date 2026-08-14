@@ -215,7 +215,7 @@ export function buildTargetReport(input: {
       };
       let achieved = stats.achieved;
       achieved += followupsByAgentId[agentId] ?? 0;
-      achieved += technicalPaymentsByAgentId[agentId] ?? 0;
+      // technicalPaymentsByAgentId is already included in stats.achieved (via daily stats upfrontRevenue)
       const assignment = assignmentsByAgent.get(agentId);
       const agentTarget = agentId === target.teamLeadId ? calculatedTlTarget : (assignment?.amount ?? 0);
       teamTarget += agentTarget;

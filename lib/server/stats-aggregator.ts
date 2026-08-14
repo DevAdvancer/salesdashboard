@@ -316,23 +316,36 @@ export async function computeAgentStatsForDate(dateKey: string) {
     try { updates = JSON.parse(p.updates ?? p.updatesJson ?? "[]"); } catch {}
     if (!Array.isArray(updates)) updates = [];
     
-    const sorted = updates.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
-    const firstPaid = sorted.find((u: any) => u && (u.status === "partially_paid" || u.status === "fully_paid"));
-    const isPaid = p.status === "partially_paid" || p.status === "fully_paid";
+    let addedFromUpdates = false;
+    for (const u of updates) {
+      if (u && u.createdAt && u.createdAt >= startIso && u.createdAt <= endIso) {
+        if (u.status === "partially_paid" || u.status === "fully_paid") {
+          const actorId = u.actorId || p.updatedById || getAttributed(lead);
+          const row = getMap(actorId);
+          if (row) {
+            const amount = Number(u.amount) || 0;
+            if (amount > 0) row.upfrontRevenue += amount;
+            addedFromUpdates = true;
+          }
+        }
+      }
+    }
     
-    if (!firstPaid && !isPaid) return;
-    const paymentDateIso = firstPaid?.createdAt || p.createdAt;
-    
-    if (paymentDateIso < startIso || paymentDateIso > endIso) return;
-
-    const actorId = firstPaid?.actorId || p.updatedById || getAttributed(lead);
-    const row = getMap(actorId);
-    if (!row) return;
-    
-    let plan: any = {};
-    try { plan = JSON.parse(p.paymentPlan ?? p.paymentPlanJson ?? "{}"); } catch {}
-    const amount = Number(plan.upfrontAmount) || 0;
-    if (amount > 0) row.upfrontRevenue += amount;
+    if (!addedFromUpdates && (p.status === "partially_paid" || p.status === "fully_paid")) {
+      if (updates.length === 0) {
+        const paymentDateIso = p.createdAt;
+        if (paymentDateIso >= startIso && paymentDateIso <= endIso) {
+          const actorId = p.updatedById || getAttributed(lead);
+          const row = getMap(actorId);
+          if (row) {
+            let plan: any = {};
+            try { plan = JSON.parse(p.paymentPlan ?? p.paymentPlanJson ?? "{}"); } catch {}
+            const amount = Number(plan.upfrontAmount) || 0;
+            if (amount > 0) row.upfrontRevenue += amount;
+          }
+        }
+      }
+    }
   });
 
   techPayments.forEach(p => {
