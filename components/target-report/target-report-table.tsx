@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Card,
   CardContent,
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import type { TargetReportResult, TargetReportTlRow } from "@/lib/utils/monthly-target-report";
+import { AgentPaymentDetailDialog } from "./agent-payment-detail-dialog";
 
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -59,12 +61,17 @@ function TargetBar({ value }: { value: number | null }) {
   );
 }
 
-function TeamRow({ row }: { row: TargetReportTlRow }) {
+function TeamRow({ row, onAgentClick }: { row: TargetReportTlRow; onAgentClick?: (userId: string, userName: string) => void }) {
   return (
-    <TableRow>
+    <TableRow
+      className={onAgentClick ? "cursor-pointer hover:bg-muted/50 transition-colors" : ""}
+      onClick={onAgentClick ? () => onAgentClick(row.teamLeadId, row.teamLeadName) : undefined}
+    >
       <TableCell className="font-medium">
         <div className="flex flex-col">
-          <span>{row.teamLeadName}</span>
+          <span className={onAgentClick ? "underline-offset-2 hover:underline" : ""}>
+            {row.teamLeadName}
+          </span>
           {row.needsSplit ? (
             <span className="text-xs text-amber-600">
               Team total set — split across agents not yet configured.
@@ -102,9 +109,14 @@ function TeamRow({ row }: { row: TargetReportTlRow }) {
 export interface TargetReportTableProps {
   result: TargetReportResult;
   isAgent?: boolean;
+  monthKey?: string;
+  actorId?: string;
 }
 
-export function TargetReportTable({ result, isAgent }: TargetReportTableProps) {
+export function TargetReportTable({ result, isAgent, monthKey, actorId }: TargetReportTableProps) {
+  const [selectedAgent, setSelectedAgent] = useState<{ userId: string; userName: string } | null>(null);
+  const canDrillDown = !isAgent && !!monthKey && !!actorId;
+
   return (
     <div className="space-y-4">
       <div className={`grid gap-3 ${isAgent ? "md:grid-cols-3" : "md:grid-cols-4"}`}>
@@ -188,7 +200,13 @@ export function TargetReportTable({ result, isAgent }: TargetReportTableProps) {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  result.rows.map((row) => <TeamRow key={row.teamLeadId} row={row} />)
+                  result.rows.map((row) => (
+                    <TeamRow
+                      key={row.teamLeadId}
+                      row={row}
+                      onAgentClick={canDrillDown ? (id, name) => setSelectedAgent({ userId: id, userName: name }) : undefined}
+                    />
+                  ))
                 )}
               </TableBody>
             </Table>
@@ -229,10 +247,16 @@ export function TargetReportTable({ result, isAgent }: TargetReportTableProps) {
                           {row.agents.map((agent) => {
                             const b = badgeFor(agent.percent);
                             return (
-                              <TableRow key={agent.userId}>
+                              <TableRow
+                                key={agent.userId}
+                                className={canDrillDown ? "cursor-pointer hover:bg-muted/50 transition-colors" : ""}
+                                onClick={canDrillDown ? () => setSelectedAgent({ userId: agent.userId, userName: agent.userName }) : undefined}
+                              >
                                 <TableCell className="font-medium">
                                   <div className="flex flex-col">
-                                    <span>{agent.userName}</span>
+                                    <span className={canDrillDown ? "underline-offset-2 hover:underline" : ""}>
+                                      {agent.userName}
+                                    </span>
                                     <Badge variant={b.variant} className="self-start text-[10px]">
                                       {b.label}
                                     </Badge>
@@ -287,6 +311,15 @@ export function TargetReportTable({ result, isAgent }: TargetReportTableProps) {
           </CardContent>
         </Card>
       ) : null}
+
+      <AgentPaymentDetailDialog
+        open={!!selectedAgent}
+        onOpenChange={(open) => { if (!open) setSelectedAgent(null); }}
+        agentId={selectedAgent?.userId ?? ""}
+        agentName={selectedAgent?.userName ?? ""}
+        monthKey={monthKey ?? ""}
+        actorId={actorId ?? ""}
+      />
     </div>
   );
 }

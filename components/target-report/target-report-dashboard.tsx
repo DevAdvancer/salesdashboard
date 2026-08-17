@@ -116,7 +116,7 @@ export function TargetReportDashboard({ user }: TargetReportDashboardProps) {
       ) : payload ? (
         (() => {
           const result = isAgent ? filterTargetReportForAgent(payload.result, user.$id) : payload.result;
-          return <TargetReportTable result={result} isAgent={isAgent} />;
+          return <TargetReportTable result={result} isAgent={isAgent} monthKey={monthKey} actorId={user.$id} />;
         })()
       ) : null}
 
