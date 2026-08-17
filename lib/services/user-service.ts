@@ -128,7 +128,8 @@ export async function getAssignableUsers(
   creatorRole: UserRole,
   creatorBranchIds: string[],
   creatorId?: string,
-  departmentScope?: Department | 'all'
+  departmentScope?: Department | 'all',
+  includeInactive: boolean = false
 ): Promise<User[]> {
   // Build a stable cache key from the args that change the result.
   // branchIds is normalized (sorted) so [{a,b}] and [{b,a}] hit the same entry.
@@ -138,7 +139,9 @@ export async function getAssignableUsers(
     ':' +
     (creatorId || '') +
     ':' +
-    (departmentScope || 'all');
+    (departmentScope || 'all') +
+    ':' +
+    (includeInactive ? 'all' : 'active');
 
   return cached(cacheKey, 5 * 60 * 1000, async () => {
     if (creatorRole === 'agent' || creatorRole === 'lead_generation') return [];
@@ -221,7 +224,7 @@ export async function getAssignableUsers(
 
       const users = response.documents
         .map(mapDocToUser)
-        .filter((u) => u.isActive)
+        .filter((u) => includeInactive || u.isActive)
         .filter((u) => matchesDepartmentScope(u, departmentScope));
       return creatorId ? users.filter(u => u.$id !== creatorId) : users;
     } catch (error: unknown) {

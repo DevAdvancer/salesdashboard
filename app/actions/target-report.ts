@@ -129,7 +129,13 @@ export async function getTargetReportAction(input: {
   // Weekly Report enforces in `ensureSalesCrmAccess`.
   ensureSalesCrmAccess(actor);
 
-  // 1. Readable agent set (sales-only).
+  // 1. Targets + assignments.
+  const { targets, assignmentsByTargetId } = await listMonthlyTargetsWithAssignmentsAction({
+    actorId: actor.$id,
+    monthKey: input.monthKey,
+  });
+
+  // 2. Readable agent set (sales-only).
   let readableAgentIds: string[];
   if (actor.role === "agent" || actor.role === "lead_generation") {
     readableAgentIds = [actor.$id];
@@ -137,20 +143,25 @@ export async function getTargetReportAction(input: {
     // Sales-only — getAgentsByTeamLead with "sales" scope drops any
     // resume agent in the TL's team from the report.
     const agents = await getAgentsByTeamLead(actor.$id, "sales");
-    readableAgentIds = Array.from(new Set([actor.$id, ...agents.map((a) => a.$id)]));
+    const target = targets.find(t => t.teamLeadId === actor.$id);
+    const assignedIds = target ? (assignmentsByTargetId[target.$id]?.map(a => a.agentId) || []) : [];
+    readableAgentIds = Array.from(new Set([actor.$id, ...agents.map((a) => a.$id), ...assignedIds]));
   } else {
     // Admin-like: scope to sales so the team table never surfaces
     // resume TLs / agents.
     const all = await getAssignableUsers(actor.role, actor.branchIds ?? [], actor.$id, "sales");
-    readableAgentIds = all
-      .filter((u) => u.role === "agent" || u.role === "lead_generation" || u.role === "team_lead")
-      .map((u) => u.$id);
+    const assignedIds = Object.values(assignmentsByTargetId).flatMap(list => list.map(a => a.agentId));
+    readableAgentIds = Array.from(new Set([
+      ...all.filter((u) => u.role === "agent" || u.role === "lead_generation" || u.role === "team_lead").map((u) => u.$id),
+      ...assignedIds
+    ]));
   }
 
   // 2. Fetch daily stats for the agents
   const { from: monthFromIso, to: monthToIso } = monthBounds(input.monthKey);
   const monthStartIso = `${monthFromIso}T00:00:00.000Z`;
   const monthEndIso = `${monthToIso}T23:59:59.999Z`;
+  const todayIso = getCurrentEasternIsoDate();
 
   const agentStatsByUserId: Record<string, {
     achieved: number;
@@ -169,7 +180,16 @@ export async function getTargetReportAction(input: {
       queries: [
         Query.equal("agentId", chunk),
         Query.greaterThanEqual("dateKey", monthFromIso),
-        Query.lessThanEqual("dateKey", monthToIso),
+        // If today is in the range, strictly fetch until yesterday from cache to avoid double counting
+        // because we dynamically compute and add today's stats later.
+        Query.lessThanEqual(
+          "dateKey",
+          monthToIso >= todayIso ? (() => {
+            const d = new Date(todayIso);
+            d.setUTCDate(d.getUTCDate() - 1);
+            return d.toISOString().slice(0, 10);
+          })() : monthToIso
+        ),
         Query.orderAsc("$id"),
       ],
       pageLimit: 100,
@@ -191,7 +211,6 @@ export async function getTargetReportAction(input: {
     }
   }
 
-  const todayIso = getCurrentEasternIsoDate();
   if (monthFromIso <= todayIso && monthToIso >= todayIso) {
     const todayStats = await computeAgentStatsForDate(todayIso);
     for (const doc of todayStats) {
@@ -212,41 +231,38 @@ export async function getTargetReportAction(input: {
     }
   }
 
-  // 3. Targets + assignments.
-  const { targets, assignmentsByTargetId } = await listMonthlyTargetsWithAssignmentsAction({
-    actorId: actor.$id,
-    monthKey: input.monthKey,
-  });
+  // 3. Targets + assignments already fetched above.
 
   // 4c. Followup payments in the month window.
-  // We query all followup payments in this month, and if they have a createdById
-  // in our readableAgentIds and they are linked to an actual client lead (not a manual entry),
+  // We query all followup payments in this month, and if their target agent
+  // is in our readableAgentIds and they are linked to an actual client lead (not a manual entry),
   // we add their amount to that agent's followup total.
   const followupsByAgentId: Record<string, number> = {};
-  for (let i = 0; i < readableAgentIds.length; i += CHUNK) {
-    const chunk = readableAgentIds.slice(i, i + CHUNK);
-    const docs = await listAllDocuments<Record<string, unknown>>({
-      databases,
-      databaseId: DATABASE_ID,
-      collectionId: COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS,
-      queries: [
-        Query.equal("createdById", chunk),
-        Query.greaterThanEqual("date", monthFromIso),
-        Query.lessThanEqual("date", monthToIso),
-        Query.limit(CHUNK),
-      ],
-      pageLimit: CHUNK,
-      maxPages: 50,
-    });
-    for (const doc of docs) {
-      const createdById = typeof doc.createdById === "string" ? doc.createdById : "";
-      const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
-      const amount = typeof doc.amount === "number" ? doc.amount : 0;
-      
-      if (!createdById || !leadId || leadId.startsWith("manual_followup:")) continue;
-      
-      followupsByAgentId[createdById] = (followupsByAgentId[createdById] ?? 0) + amount;
-    }
+  const readableSet = new Set(readableAgentIds);
+  
+  const docs = await listAllDocuments<Record<string, unknown>>({
+    databases,
+    databaseId: DATABASE_ID,
+    collectionId: COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS,
+    queries: [
+      Query.greaterThanEqual("date", monthFromIso),
+      Query.lessThanEqual("date", monthToIso),
+    ],
+    maxPages: 100,
+  });
+
+  for (const doc of docs) {
+    const createdById = typeof doc.createdById === "string" ? doc.createdById : "";
+    const creditedAgentId = typeof doc.creditedAgentId === "string" && doc.creditedAgentId.trim() !== "" ? doc.creditedAgentId : null;
+    const targetAgentId = creditedAgentId || createdById;
+    
+    const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
+    const amount = typeof doc.amount === "number" ? doc.amount : 0;
+    
+    if (!targetAgentId || !leadId || !leadId.startsWith("manual_followup:")) continue;
+    if (!readableSet.has(targetAgentId)) continue;
+    
+    followupsByAgentId[targetAgentId] = (followupsByAgentId[targetAgentId] ?? 0) + amount;
   }
 
   // 4d. Technical payments in the month window.
@@ -258,18 +274,12 @@ export async function getTargetReportAction(input: {
 
   // 5. Build users map for the agent set so the report can show names.
   const usersByAgentId = new Map<string, User>();
-  if (actor.role === "team_lead") {
-    const self = await getUserByIdOrNull(actor.$id);
-    if (self) usersByAgentId.set(self.$id, self);
-    // Sales-only — same scope as the readable-agent set above.
-    const agents = await getAgentsByTeamLead(actor.$id, "sales");
-    for (const a of agents) usersByAgentId.set(a.$id, a);
-  } else if (actor.role === "agent" || actor.role === "lead_generation") {
+  if (actor.role === "agent" || actor.role === "lead_generation") {
     usersByAgentId.set(actor.$id, actor);
   } else {
-    // Admin: load every readable user doc. `readableAgentIds` was
-    // already filtered to sales by the helper above, so the loop
-    // cannot reintroduce resume users.
+    // Admin or Team Lead: load every readable user doc. `readableAgentIds` was
+    // already filtered to sales by the helper above, and may include historic 
+    // assignments, so we query them all from the database.
     for (let i = 0; i < readableAgentIds.length; i += CHUNK) {
       const chunk = readableAgentIds.slice(i, i + CHUNK);
       const docs = await listAllDocuments<UserDoc>({

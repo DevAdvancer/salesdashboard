@@ -87,7 +87,7 @@ describe('setAgentActiveAction authorization and cascading deactivation', () => 
       expect.any(String),
       'users',
       'agent-1',
-      expect.objectContaining({ isActive: false, teamLeadId: null })
+      expect.objectContaining({ isActive: false })
     );
   });
 

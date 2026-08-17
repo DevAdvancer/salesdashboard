@@ -520,6 +520,9 @@ export async function listPaymentsReportAction(input: {
     const leadLegalNameMap = new Map<string, string>();
     const leadAmountMap = new Map<string, number>();
     const leadClosedAtMap = new Map<string, string | null>();
+    const leadOwnerIdMap = new Map<string, string | null>();
+    const allAgentIds = new Set<string>();
+
     for (const lead of leadDocs as any[]) {
     let company = "";
     let legalName = "";
@@ -556,6 +559,27 @@ export async function listPaymentsReportAction(input: {
       lead.$id,
       typeof lead.closedAt === "string" ? lead.closedAt : null,
     );
+    const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : typeof lead.assignedToId === "string" ? lead.assignedToId : null;
+    leadOwnerIdMap.set(lead.$id, ownerId);
+    if (ownerId) allAgentIds.add(ownerId);
+    }
+
+    // Fetch user names
+    const userNameMap = new Map<string, string>();
+    const agentIdsArray = Array.from(allAgentIds);
+    for (let i = 0; i < agentIdsArray.length; i += 100) {
+      const chunkIds = agentIdsArray.slice(i, i + 100);
+      const userDocs = await listAllDocuments<any>({
+        databases,
+        databaseId: DATABASE_ID,
+        collectionId: COLLECTIONS.USERS,
+        queries: [Query.equal("$id", chunkIds), Query.select(["$id", "name"])],
+        pageLimit: 100,
+        maxPages: 5,
+      });
+      for (const u of userDocs) {
+        userNameMap.set(u.$id, u.name);
+      }
     }
 
     const normalizedFrom = toComparableIsoDate(input.dateFrom);
@@ -603,6 +627,8 @@ export async function listPaymentsReportAction(input: {
       leadId,
       company: leadDataMap.get(leadId) ?? "Unknown",
       legalName: leadLegalNameMap.get(leadId) ?? "",
+      agentId: leadOwnerIdMap.get(leadId) ?? null,
+      agentName: userNameMap.get(leadOwnerIdMap.get(leadId) || "") ?? null,
       closedAt,
       status,
       paymentPlan,

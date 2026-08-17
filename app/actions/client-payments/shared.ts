@@ -240,6 +240,8 @@ export interface PaymentsReportRow {
     leadId: string;
     company: string;
     legalName: string;
+    agentId: string | null;
+    agentName: string | null;
     closedAt: string | null;
     status: PaymentStatus;
     paymentPlan: ClientPaymentPlan;

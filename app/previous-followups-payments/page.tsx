@@ -58,6 +58,9 @@ export default function PreviousFollowupsPaymentsPage() {
     useState<PreviousFollowupsPayment | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  const [agentFilter, setAgentFilter] = useState<string>("all");
+  const [searchFilter, setSearchFilter] = useState("");
+
   const loadPayments = useCallback(async () => {
     if (!user || !serverSessionReady) {
       return;
@@ -87,10 +90,37 @@ export default function PreviousFollowupsPaymentsPage() {
     void loadPayments();
   }, [loadPayments, serverSessionReady, user]);
 
+  const uniqueAgents = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of payments) {
+      if (p.createdById && p.createdByName) {
+        map.set(p.createdById, p.createdByName);
+      }
+    }
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [payments]);
+
+  const filteredPayments = useMemo(() => {
+    let result = payments;
+    if (agentFilter !== "all") {
+      result = result.filter((p) => p.createdById === agentFilter);
+    }
+    if (searchFilter.trim()) {
+      const lower = searchFilter.toLowerCase().trim();
+      result = result.filter(
+        (p) =>
+          p.candidateName?.toLowerCase().includes(lower) ||
+          p.company?.toLowerCase().includes(lower) ||
+          p.remark?.toLowerCase().includes(lower)
+      );
+    }
+    return result;
+  }, [payments, agentFilter, searchFilter]);
+
   const thisMonthKey = getCurrentEasternMonthKey();
   const thisMonthPayments = useMemo(
-    () => payments.filter((payment) => payment.date.startsWith(thisMonthKey)),
-    [payments, thisMonthKey],
+    () => filteredPayments.filter((payment) => payment.date.startsWith(thisMonthKey)),
+    [filteredPayments, thisMonthKey],
   );
 
   const closeDialog = () => {
@@ -129,6 +159,7 @@ export default function PreviousFollowupsPaymentsPage() {
     remark?: string | null;
     status?: PaymentStatus;
     hasPaymentRecord?: boolean;
+    creditedAgentId?: string | null;
   }) {
     if (!user || !canMutate) {
       return;
@@ -146,6 +177,7 @@ export default function PreviousFollowupsPaymentsPage() {
           amount: payment.amount,
           date: payment.date,
           remark: payment.remark,
+          creditedAgentId: payment.creditedAgentId,
         });
         toast({
           title: "Payment updated",
@@ -160,6 +192,7 @@ export default function PreviousFollowupsPaymentsPage() {
           amount: payment.amount,
           date: payment.date,
           remark: payment.remark,
+          creditedAgentId: payment.creditedAgentId,
         });
         toast({
           title: "Payment added",
@@ -254,6 +287,34 @@ export default function PreviousFollowupsPaymentsPage() {
             )}
           </div>
 
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center w-full">
+              <div className="w-full sm:w-48">
+                <select
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  value={agentFilter}
+                  onChange={(e) => setAgentFilter(e.target.value)}
+                  disabled={isLoading}
+                >
+                  <option value="all">All Agents</option>
+                  {uniqueAgents.map(([id, name]) => (
+                    <option key={id} value={id}>{name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="w-full sm:w-64">
+                <input
+                  type="text"
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  placeholder="Search candidate, company, remark..."
+                  value={searchFilter}
+                  onChange={(e) => setSearchFilter(e.target.value)}
+                  disabled={isLoading}
+                />
+              </div>
+            </div>
+          </div>
+
         <div className="grid gap-6 md:grid-cols-4">
           <Card>
             <CardHeader className="pb-2">
@@ -263,12 +324,12 @@ export default function PreviousFollowupsPaymentsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {payments
+                {filteredPayments
                   .reduce((sum, p) => sum + p.amount, 0)
                   .toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground">
-                {payments.length} entries
+                {filteredPayments.length} entries
               </p>
             </CardContent>
           </Card>
@@ -279,7 +340,7 @@ export default function PreviousFollowupsPaymentsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-500">
-                {payments
+                {filteredPayments
                   .reduce((sum, p) => sum + p.amount, 0)
                   .toLocaleString()}
               </div>
@@ -313,7 +374,7 @@ export default function PreviousFollowupsPaymentsPage() {
               <Badge
                 variant="secondary"
                 className="text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-400">
-                {payments.length} Paid
+                {filteredPayments.length} Paid
               </Badge>
             </CardContent>
           </Card>
@@ -326,7 +387,7 @@ export default function PreviousFollowupsPaymentsPage() {
           </CardHeader>
           <CardContent>
             <FollowupsPaymentTable
-              payments={payments}
+              payments={filteredPayments}
               isLoading={isLoading}
               canEdit={canMutate}
               onEdit={(payment) => {

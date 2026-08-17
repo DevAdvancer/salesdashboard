@@ -356,6 +356,25 @@ export async function computeAgentStatsForDate(dateKey: string) {
     row.upfrontRevenue += amount;
   });
 
+  const agentIds = Array.from(map.keys());
+  if (agentIds.length > 0) {
+    const chunks = [];
+    for (let i = 0; i < agentIds.length; i += 100) chunks.push(agentIds.slice(i, i + 100));
+    await Promise.all(
+      chunks.map(async (chunk) => {
+        const docs = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
+          Query.equal("$id", chunk),
+          Query.select(["$id", "teamLeadId"]),
+          Query.limit(100),
+        ]);
+        docs.documents.forEach((d) => {
+          const row = map.get(d.$id);
+          if (row) row.teamLeadId = d.teamLeadId || null;
+        });
+      })
+    );
+  }
+
   return Array.from(map.values());
 }
 

@@ -308,12 +308,29 @@ export async function createPreviousFollowupsPaymentAction(input: {
   amount: number;
   date: string;
   remark?: string | null;
+  creditedAgentId?: string | null;
 }): Promise<PreviousFollowupsPayment> {
   const actor = await getActor(input.actorId);
   ensureComponentAccess(actor.role, "followups-payments");
   assertCanMutateFollowups(actor);
 
   const { databases } = await createAdminClient();
+
+  let finalCreatedById = actor.$id;
+  let finalCreatedByName = actor.name;
+
+  if (input.creditedAgentId && input.creditedAgentId !== actor.$id) {
+    if (actor.role === "admin" || actor.role === "developer" || actor.role === "operations" || actor.role === "team_lead") {
+      try {
+        const agentDoc = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, input.creditedAgentId);
+        finalCreatedById = agentDoc.$id;
+        finalCreatedByName = agentDoc.name;
+      } catch (err) {
+        console.error("Failed to fetch credited agent", err);
+      }
+    }
+  }
+
   const payload: Record<string, unknown> = {
     leadId: input.leadId?.trim() || makeManualLeadId(),
     company: normalizeCompany(input.company),
@@ -322,8 +339,8 @@ export async function createPreviousFollowupsPaymentAction(input: {
     date: input.date,
     status: FOLLOWUPS_PAYMENT_STATUS,
     createdAt: new Date().toISOString(),
-    createdById: actor.$id,
-    createdByName: actor.name,
+    createdById: finalCreatedById,
+    createdByName: finalCreatedByName,
   };
 
   const paymentRemark = input.remark?.trim();
@@ -350,6 +367,7 @@ export async function updatePreviousFollowupsPaymentAction(input: {
   amount?: number | null;
   date?: string | null;
   remark?: string | null;
+  creditedAgentId?: string | null;
 }): Promise<PreviousFollowupsPayment> {
   // #region debug-point C:action-entry
   await reportFollowupDebug(
@@ -375,12 +393,29 @@ export async function updatePreviousFollowupsPaymentAction(input: {
 
   const { databases } = await createAdminClient();
 
-  await databases.getDocument(DATABASE_ID, COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS, input.paymentId);
+  const existing = await databases.getDocument(DATABASE_ID, COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS, input.paymentId);
+
+  let finalCreatedById = existing.createdById;
+  let finalCreatedByName = existing.createdByName;
+
+  if (input.creditedAgentId && input.creditedAgentId !== existing.createdById) {
+    if (actor.role === "admin" || actor.role === "developer" || actor.role === "operations" || actor.role === "team_lead") {
+      try {
+        const agentDoc = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, input.creditedAgentId);
+        finalCreatedById = agentDoc.$id;
+        finalCreatedByName = agentDoc.name;
+      } catch (err) {
+        console.error("Failed to fetch credited agent", err);
+      }
+    }
+  }
 
   const payload: Record<string, unknown> = {
     updatedAt: new Date().toISOString(),
     updatedById: actor.$id,
     updatedByName: actor.name,
+    createdById: finalCreatedById,
+    createdByName: finalCreatedByName,
   };
 
   if (input.leadId !== undefined) payload.leadId = input.leadId?.trim() || makeManualLeadId();
@@ -485,4 +520,27 @@ export async function deletePreviousFollowupsPaymentAction(input: {
 
   const { databases } = await createAdminClient();
   await databases.deleteDocument(DATABASE_ID, COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS, input.paymentId);
+}
+
+export async function getCreditableAgentsAction(actorId: string): Promise<Array<{ id: string; name: string }>> {
+  const actor = await getActor(actorId);
+  
+  if (actor.role === "admin" || actor.role === "developer" || actor.role === "operations") {
+    const { getAllActiveUsers } = await import("@/lib/services/user-service");
+    const users = await getAllActiveUsers();
+    return users
+      .filter((u) => u.isActive && u.department === actor.department && (u.role === "agent" || u.role === "team_lead"))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((u) => ({ id: u.$id, name: u.name }));
+  } else if (actor.role === "team_lead") {
+    const { getAgentsByTeamLead } = await import("@/lib/services/user-service");
+    const agents = await getAgentsByTeamLead(actor.$id, actor.department);
+    return [
+      { id: actor.$id, name: actor.name },
+      ...agents.map((a) => ({ id: a.$id, name: a.name }))
+    ];
+  }
+
+  // Fallback for regular agents
+  return [{ id: actor.$id, name: actor.name }];
 }

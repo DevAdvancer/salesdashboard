@@ -564,7 +564,7 @@ export async function getWeeklyReportAction(input: {
   followupRecords.forEach((record) => {
     const createdById = record.createdById;
     if (!createdById || !scopedUserIds.has(createdById)) return;
-    if (!record.leadId || record.leadId.startsWith("manual_followup:")) return;
+    if (!record.leadId || !record.leadId.startsWith("manual_followup:")) return;
     
     const amount = Number(record.amount) || 0;
     if (amount > 0) {

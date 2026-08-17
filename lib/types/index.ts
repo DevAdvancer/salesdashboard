@@ -769,6 +769,7 @@ export interface PreviousFollowupsPayment {
   status: FollowupsPaymentStatus;
   createdAt: string;
   createdById?: string | null;
+  creditedAgentId?: string | null;
   createdByName?: string | null;
   updatedAt?: string | null;
   updatedById?: string | null;

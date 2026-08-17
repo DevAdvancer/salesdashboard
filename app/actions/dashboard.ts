@@ -74,6 +74,7 @@ export async function loadDashboardDataServerAction(
       branchIds,
       input.user.$id,
       input.departmentScope,
+      true
     );
     usersForInsights = [
       input.user,

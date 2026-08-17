@@ -64,6 +64,7 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
     const todayStr = getTodayEst();
     return { from: todayStr, to: todayStr };
   });
+  const [agentFilter, setAgentFilter] = useState<string>("all");
   const [companySearch, setCompanySearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -106,10 +107,23 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
     });
   }, [rows]);
 
+  const uniqueAgents = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of rows) {
+      if (r.agentId && r.agentName) {
+        map.set(r.agentId, r.agentName);
+      }
+    }
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [rows]);
+
   const filtered = useMemo(() => {
     let result = sorted;
     if (filter !== "all") {
       result = result.filter((r) => r.status === filter);
+    }
+    if (agentFilter !== "all") {
+      result = result.filter((r) => r.agentId === agentFilter);
     }
     if (companySearch.trim()) {
       const search = companySearch.toLowerCase().trim();
@@ -118,7 +132,7 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
       );
     }
     return result;
-  }, [sorted, filter, companySearch]);
+  }, [sorted, filter, agentFilter, companySearch]);
 
   const summary = useMemo(() => {
     let amountPaid = 0;
@@ -172,6 +186,19 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
                       {f.label}
                     </Button>
                   ))}
+                </div>
+                <div className="w-full sm:w-48">
+                  <select
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    value={agentFilter}
+                    onChange={(e) => setAgentFilter(e.target.value)}
+                    disabled={loading}
+                  >
+                    <option value="all">All Agents</option>
+                    {uniqueAgents.map(([id, name]) => (
+                      <option key={id} value={id}>{name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="relative min-w-[180px]">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -261,6 +288,7 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
                   <TableRow>
                     <TableHead>Company</TableHead>
                     <TableHead>Legal Name</TableHead>
+                    <TableHead>Agent</TableHead>
                     <TableHead className="text-right">Total</TableHead>
                     <TableHead className="text-right">Upfront</TableHead>
                     <TableHead className="text-right">Paid</TableHead>
@@ -315,6 +343,9 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
                         </TableCell>
                         <TableCell className="font-medium">
                           {row.legalName || "—"}
+                        </TableCell>
+                        <TableCell>
+                          {row.agentName || "—"}
                         </TableCell>
                         <TableCell className="text-right font-medium">
                           {currency.format(row.leadAmount)}
