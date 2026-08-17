@@ -114,18 +114,24 @@ export function TargetReportDashboard({ user }: TargetReportDashboardProps) {
           Loading target report…
         </div>
       ) : payload ? (
-        <TargetReportTable
-          result={isAgent ? filterTargetReportForAgent(payload.result, user.$id) : payload.result}
-        />
+        (() => {
+          const result = isAgent ? filterTargetReportForAgent(payload.result, user.$id) : payload.result;
+          return <TargetReportTable result={result} isAgent={isAgent} />;
+        })()
       ) : null}
 
       {payload ? (
-        <p className="text-xs text-muted-foreground">
-          {isAgent
-            ? `Showing your personal target for ${payload.monthLabel}. Your target: ${currency.format(payload.result.totals.target)}. Achieved: ${currency.format(payload.result.totals.achieved)}.`
-            : `Showing ${payload.monthLabel}. Team total: ${currency.format(payload.result.totals.target)}. Achieved: ${currency.format(payload.result.totals.achieved)}.`
-          }
-        </p>
+        (() => {
+          const result = isAgent ? filterTargetReportForAgent(payload.result, user.$id) : payload.result;
+          return (
+            <p className="text-xs text-muted-foreground">
+              {isAgent
+                ? `Showing your personal target for ${payload.monthLabel}. Your target: ${currency.format(result.totals.target)}. Achieved: ${currency.format(result.totals.achieved)}.`
+                : `Showing ${payload.monthLabel}. Team total: ${currency.format(result.totals.target)}. Achieved: ${currency.format(result.totals.achieved)}.`
+              }
+            </p>
+          );
+        })()
       ) : null}
     </div>
   );

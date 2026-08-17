@@ -101,16 +101,17 @@ function TeamRow({ row }: { row: TargetReportTlRow }) {
 
 export interface TargetReportTableProps {
   result: TargetReportResult;
+  isAgent?: boolean;
 }
 
-export function TargetReportTable({ result }: TargetReportTableProps) {
+export function TargetReportTable({ result, isAgent }: TargetReportTableProps) {
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className={`grid gap-3 ${isAgent ? "md:grid-cols-3" : "md:grid-cols-4"}`}>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Team Targets
+              {isAgent ? "Your Target" : "Team Targets"}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -145,21 +146,24 @@ export function TargetReportTable({ result }: TargetReportTableProps) {
             </p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Agents
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold tabular-nums">
-              {result.totals.agentCount}
-            </p>
-          </CardContent>
-        </Card>
+        {!isAgent && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Agents
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-semibold tabular-nums">
+                {result.totals.agentCount}
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
-      <Card>
+      {!isAgent && (
+        <Card>
         <CardHeader>
           <CardTitle className="text-base">Team breakdown</CardTitle>
         </CardHeader>
@@ -191,18 +195,23 @@ export function TargetReportTable({ result }: TargetReportTableProps) {
           </div>
         </CardContent>
       </Card>
+      )}
 
       {result.rows.some((row) => row.agents.length > 0) ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Per-agent breakdown</CardTitle>
+            <CardTitle className="text-base">
+              {isAgent ? "Your Performance" : "Per-agent breakdown"}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               {result.rows.map((row) =>
                 row.agents.length === 0 ? null : (
                   <div key={row.teamLeadId} className="space-y-2">
-                    <div className="text-sm font-semibold">{row.teamLeadName}</div>
+                    {!isAgent && (
+                      <div className="text-sm font-semibold">{row.teamLeadName}</div>
+                    )}
                     <div className="rounded-md border">
                       <Table>
                         <TableHeader>
