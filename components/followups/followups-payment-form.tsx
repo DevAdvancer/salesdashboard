@@ -33,6 +33,7 @@ export interface FollowupsPaymentFormValues {
   remark?: string | null;
   status?: PaymentStatus;
   hasPaymentRecord?: boolean;
+  creditedAgentId?: string | null;
 }
 
 interface FollowupsPaymentFormProps {
