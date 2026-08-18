@@ -595,6 +595,7 @@ describe('Lead Service', () => {
         leadId,
         {
           isClosed: false,
+          status: 'Reopened',
         },
         expect.arrayContaining([
           Permission.read(Role.user(mockManagerId)),
@@ -634,6 +635,7 @@ describe('Lead Service', () => {
       // closedAt should not be in the update (preserved)
       expect(updateData.closedAt).toBeUndefined();
       expect(updateData.isClosed).toBe(false);
+      expect(updateData.status).toBe('Reopened');
     });
 
     it('should restore agent update permissions when reopening', async () => {

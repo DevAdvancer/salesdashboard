@@ -29,6 +29,7 @@ const CANONICAL_STATUS_BY_NORMALIZED = new Map<string, string>([
   ["connectionaccepted", LEAD_STATUS_CONNECTION_ACCEPTED],
   ["interested", LEAD_STATUS_INTERESTED],
   ["notinterested", LEAD_STATUS_NOT_INTERESTED],
+  ["reopened", "Reopened"],
   ["pipeline", LEAD_STATUS_PIPELINE],
   ["pipelinefollowup", LEAD_STATUS_PIPELINE],
   ["signed", LEAD_STATUS_SIGNED_CLOSURE],
@@ -109,6 +110,14 @@ export function getLeadEditAllowedStatusesForRole(
   }
   if (normalized === "backedout") {
     return [LEAD_STATUS_BACKED_OUT, ...monitorOnlySuffix];
+  }
+  if (normalized === "reopened") {
+    return [
+      "Reopened",
+      ...LEAD_WORKFLOW_STATUSES,
+      LEAD_STATUS_SIGNED_CLOSURE,
+      ...monitorOnlySuffix,
+    ];
   }
 
   // LinkedIn / Leads are themselves monitor-only statuses. From either of

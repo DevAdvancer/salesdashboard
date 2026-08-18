@@ -44,4 +44,17 @@ describe("lead status workflow", () => {
       shouldRequireLeadFollowUpForStatus("Interested", "Interested"),
     ).toBe(false);
   });
+
+  it("allows transitions to all standard workflow statuses from Reopened", () => {
+    expect(getLeadEditAllowedStatuses("Reopened")).toEqual([
+      "Reopened",
+      "Interested",
+      "Not Interested",
+      "Pipeline / Follow up",
+      "Backed Out",
+      "Signed/Closure",
+      "LinkedIn",
+      "Leads",
+    ]);
+  });
 });

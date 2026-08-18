@@ -357,6 +357,7 @@ export async function reopenLead(
       leadId,
       {
         isClosed: false,
+        status: 'Reopened',
       },
       permissions
     );
