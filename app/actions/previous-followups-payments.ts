@@ -341,6 +341,7 @@ export async function createPreviousFollowupsPaymentAction(input: {
     createdAt: new Date().toISOString(),
     createdById: finalCreatedById,
     createdByName: finalCreatedByName,
+    creditedAgentId: input.creditedAgentId || null,
   };
 
   const paymentRemark = input.remark?.trim();
@@ -424,6 +425,7 @@ export async function updatePreviousFollowupsPaymentAction(input: {
   if (input.amount !== undefined) payload.amount = Math.floor(Number(input.amount) || 0);
   if (input.date !== undefined) payload.date = input.date;
   if (input.remark !== undefined) payload.paymentRemark = input.remark?.trim() || "";
+  if (input.creditedAgentId !== undefined) payload.creditedAgentId = input.creditedAgentId || null;
   payload.status = FOLLOWUPS_PAYMENT_STATUS;
 
   const doc = await updateFollowupsDocumentWithFallback(

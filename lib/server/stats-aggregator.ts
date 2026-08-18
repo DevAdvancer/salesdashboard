@@ -312,6 +312,12 @@ export async function computeAgentStatsForDate(dateKey: string) {
     const lead = paymentLeads.get(p.leadId);
     if (!lead) return;
     
+    const leadCreated = (lead.closedAt as string) || (lead.$createdAt as string) || (lead.createdAt as string);
+    const monthStartIso = `${dateKey.slice(0, 7)}-01T00:00:00.000Z`;
+    if (leadCreated && leadCreated < monthStartIso) {
+      return; // Payments for leads closed in previous months are followups, not upfront
+    }
+
     let updates = [];
     try { updates = JSON.parse(p.updates ?? p.updatesJson ?? "[]"); } catch {}
     if (!Array.isArray(updates)) updates = [];
@@ -320,7 +326,7 @@ export async function computeAgentStatsForDate(dateKey: string) {
     for (const u of updates) {
       if (u && u.createdAt && u.createdAt >= startIso && u.createdAt <= endIso) {
         if (u.status === "partially_paid" || u.status === "fully_paid") {
-          const actorId = u.actorId || p.updatedById || getAttributed(lead);
+          const actorId = getAttributed(lead);
           const row = getMap(actorId);
           if (row) {
             const amount = Number(u.amount) || 0;
@@ -335,7 +341,7 @@ export async function computeAgentStatsForDate(dateKey: string) {
       if (updates.length === 0) {
         const paymentDateIso = p.createdAt;
         if (paymentDateIso >= startIso && paymentDateIso <= endIso) {
-          const actorId = p.updatedById || getAttributed(lead);
+          const actorId = getAttributed(lead);
           const row = getMap(actorId);
           if (row) {
             let plan: any = {};

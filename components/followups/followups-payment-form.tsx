@@ -219,6 +219,7 @@ export function FollowupsPaymentForm({
       remark: remark || null,
       status: mode === "client" && selectedLeadId ? status : undefined,
       hasPaymentRecord,
+      creditedAgentId: creditedAgentId || null,
     });
   }
 

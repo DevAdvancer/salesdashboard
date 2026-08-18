@@ -147,7 +147,7 @@ export async function getTechnicalPaymentTotalsByUserAction(input: {
   const { databases } = await createAdminClient();
 
   // Build the actor's accessible user list
-  let scopedUserIds: string[];
+  let scopedUserIds: string[] | null = null; // null means all users
 
   if (actor.role === 'team_lead') {
     const agents = await listAllDocuments<any>({
@@ -163,16 +163,38 @@ export async function getTechnicalPaymentTotalsByUserAction(input: {
       maxPages: 100,
     });
     scopedUserIds = [actor.$id, ...agents.map((a: any) => a.$id)];
+  } else if (actor.role === 'admin' || actor.role === 'developer' || actor.role === 'monitor' || actor.role === 'operations') {
+    scopedUserIds = null;
   } else {
     scopedUserIds = [actor.$id];
   }
 
-  const payments = await listTechnicalPaymentsByUserIds(scopedUserIds);
+  let payments: any[] = [];
+  if (scopedUserIds === null) {
+    const queries = [
+      Query.orderDesc('createdAt'),
+      Query.limit(5000),
+    ];
+    if (input.dateFrom) queries.push(Query.greaterThanEqual('createdAt', input.dateFrom));
+    if (input.dateTo) queries.push(Query.lessThanEqual('createdAt', input.dateTo));
+    
+    // Instead of raw listDocuments which caps at 5000 and misses pagination if > 5000, 
+    // we use listAllDocuments for safety.
+    payments = await listAllDocuments<any>({
+      databases,
+      databaseId: DATABASE_ID,
+      collectionId: COLLECTIONS.TECHNICAL_PAYMENTS,
+      queries,
+      maxPages: 100,
+    });
+  } else {
+    payments = await listTechnicalPaymentsByUserIds(scopedUserIds, input.dateFrom, input.dateTo);
+  }
 
   const totals: Record<string, number> = {};
   for (const doc of payments) {
     const userId = doc.userId as string;
-    if (!scopedUserIds.includes(userId)) continue;
+    if (scopedUserIds !== null && !scopedUserIds.includes(userId)) continue;
     const createdAt = typeof doc.createdAt === 'string' ? doc.createdAt : '';
     if (input.dateFrom && createdAt < input.dateFrom) continue;
     if (input.dateTo && createdAt > input.dateTo) continue;

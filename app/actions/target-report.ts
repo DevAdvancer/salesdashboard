@@ -157,7 +157,7 @@ export async function getTargetReportAction(input: {
     ]));
   }
 
-  // 2. Fetch daily stats for the agents
+  // 2. Fetch daily stats for the agents (only for leads/referrals/NI counts)
   const { from: monthFromIso, to: monthToIso } = monthBounds(input.monthKey);
   const monthStartIso = `${monthFromIso}T00:00:00.000Z`;
   const monthEndIso = `${monthToIso}T23:59:59.999Z`;
@@ -180,8 +180,6 @@ export async function getTargetReportAction(input: {
       queries: [
         Query.equal("agentId", chunk),
         Query.greaterThanEqual("dateKey", monthFromIso),
-        // If today is in the range, strictly fetch until yesterday from cache to avoid double counting
-        // because we dynamically compute and add today's stats later.
         Query.lessThanEqual(
           "dateKey",
           monthToIso >= todayIso ? (() => {
@@ -204,7 +202,6 @@ export async function getTargetReportAction(input: {
           notInterestedCount: 0,
         };
       }
-      agentStatsByUserId[doc.agentId].achieved += doc.upfrontRevenue || 0;
       agentStatsByUserId[doc.agentId].leadCount += doc.leadsGenerated || 0;
       agentStatsByUserId[doc.agentId].referralExcludedCount += doc.referralsGenerated || 0;
       agentStatsByUserId[doc.agentId].notInterestedCount += doc.notInterestedMarked || 0;
@@ -223,7 +220,6 @@ export async function getTargetReportAction(input: {
             notInterestedCount: 0,
           };
         }
-        agentStatsByUserId[doc.agentId].achieved += doc.upfrontRevenue || 0;
         agentStatsByUserId[doc.agentId].leadCount += doc.leadsGenerated || 0;
         agentStatsByUserId[doc.agentId].referralExcludedCount += doc.referralsGenerated || 0;
         agentStatsByUserId[doc.agentId].notInterestedCount += doc.notInterestedMarked || 0;
@@ -231,12 +227,127 @@ export async function getTargetReportAction(input: {
     }
   }
 
-  // 3. Targets + assignments already fetched above.
+  // 4a. Dynamically calculate Upfront Client Payments for the month
+  const clientPayments = await listAllDocuments<Record<string, unknown>>({
+    databases,
+    databaseId: DATABASE_ID,
+    collectionId: COLLECTIONS.CLIENT_PAYMENTS,
+    queries: [
+      Query.greaterThanEqual("updatedAt", monthStartIso),
+      Query.lessThanEqual("updatedAt", monthEndIso),
+    ],
+    pageLimit: 100,
+    maxPages: 200,
+  });
+
+  const cpLeadIds = Array.from(new Set(clientPayments.map((p) => typeof p.leadId === "string" ? p.leadId : "").filter(Boolean)));
+  const cpLeadById = new Map<string, Record<string, unknown>>();
+  if (cpLeadIds.length > 0) {
+    for (let i = 0; i < cpLeadIds.length; i += CHUNK) {
+      const chunk = cpLeadIds.slice(i, i + CHUNK);
+      const ldocs = await listAllDocuments<Record<string, unknown>>({
+        databases,
+        databaseId: DATABASE_ID,
+        collectionId: COLLECTIONS.LEADS,
+        queries: [Query.equal("$id", chunk), Query.limit(CHUNK)],
+        pageLimit: CHUNK,
+        maxPages: 1,
+      });
+      for (const d of ldocs) cpLeadById.set(d.$id as string, d);
+    }
+  }
+
+  for (const cp of clientPayments) {
+    const leadId = cp.leadId as string;
+    const lead = cpLeadById.get(leadId);
+    if (!lead) continue;
+
+    const ownerId = lead.ownerId as string | undefined;
+    const assignedToId = lead.assignedToId as string | undefined;
+    const attributedTo = assignedToId || ownerId;
+
+    const leadCreated = (lead.closedAt as string) || (lead.$createdAt as string) || (lead.createdAt as string);
+    if (leadCreated && leadCreated < monthStartIso) {
+      continue; // Payments for leads closed in previous months are followups, not upfront
+    }
+
+    let updates: { createdAt?: string; amount?: number; status?: string; actorId?: string }[] = [];
+    try {
+      const raw = cp.updates ?? cp.updatesJson;
+      updates = JSON.parse(typeof raw === "string" ? raw : "[]");
+      if (!Array.isArray(updates)) updates = [];
+    } catch {
+      updates = [];
+    }
+
+    let totalForLead = 0;
+    const agentTotals = new Map<string, number>();
+
+    for (const u of updates) {
+      if (
+        u.createdAt &&
+        u.createdAt >= monthStartIso &&
+        u.createdAt <= monthEndIso &&
+        (u.status === "partially_paid" || u.status === "fully_paid")
+      ) {
+        if (attributedTo) {
+          const amount = Number(u.amount) || 0;
+          if (amount > 0) {
+            agentTotals.set(attributedTo, (agentTotals.get(attributedTo) ?? 0) + amount);
+            totalForLead += amount;
+          }
+        }
+      }
+    }
+
+    if (totalForLead === 0 && updates.length === 0) {
+      const createdAt = cp.createdAt as string | undefined;
+      if (
+        createdAt &&
+        createdAt >= monthStartIso &&
+        createdAt <= monthEndIso &&
+        ((cp.status as string) === "partially_paid" || (cp.status as string) === "fully_paid")
+      ) {
+        if (attributedTo) {
+          let plan: { upfrontAmount?: number } = {};
+          try {
+            plan = JSON.parse(typeof (cp.paymentPlan ?? cp.paymentPlanJson) === "string" ? (cp.paymentPlan ?? cp.paymentPlanJson) as string : "{}");
+          } catch { /* ignore */ }
+          const amount = Number(plan.upfrontAmount) || 0;
+          if (amount > 0) {
+            agentTotals.set(attributedTo, (agentTotals.get(attributedTo) ?? 0) + amount);
+          }
+        }
+      }
+    }
+
+    for (const [agentId, amount] of agentTotals.entries()) {
+      if (readableAgentIds.includes(agentId)) {
+        if (!agentStatsByUserId[agentId]) {
+          agentStatsByUserId[agentId] = { achieved: 0, leadCount: 0, referralExcludedCount: 0, notInterestedCount: 0 };
+        }
+        agentStatsByUserId[agentId].achieved += amount;
+      }
+    }
+  }
+
+  // 4b. Technical payments in the month window.
+  const technicalPaymentsByAgentId = await getTechnicalPaymentTotalsByUserAction({
+    actorId: actor.$id,
+    dateFrom: monthStartIso,
+    dateTo: monthEndIso,
+  });
+
+  for (const [agentId, amount] of Object.entries(technicalPaymentsByAgentId)) {
+    if (readableAgentIds.includes(agentId)) {
+      if (!agentStatsByUserId[agentId]) {
+        agentStatsByUserId[agentId] = { achieved: 0, leadCount: 0, referralExcludedCount: 0, notInterestedCount: 0 };
+      }
+      agentStatsByUserId[agentId].achieved += amount;
+    }
+  }
 
   // 4c. Followup payments in the month window.
-  // We query all followup payments in this month, and if their target agent
-  // is in our readableAgentIds and they are linked to an actual client lead (not a manual entry),
-  // we add their amount to that agent's followup total.
   const followupsByAgentId: Record<string, number> = {};
   const readableSet = new Set(readableAgentIds);
   
@@ -251,26 +362,57 @@ export async function getTargetReportAction(input: {
     maxPages: 100,
   });
 
+  // Collect lead IDs for non-manual followups
+  const followupLeadIds = Array.from(new Set(
+    docs
+      .map(d => typeof d.leadId === "string" ? d.leadId : "")
+      .filter(id => id && !id.startsWith("manual_followup:"))
+  ));
+  
+  const followupLeadById = new Map<string, Record<string, unknown>>();
+  if (followupLeadIds.length > 0) {
+    const CHUNK = 100;
+    for (let i = 0; i < followupLeadIds.length; i += CHUNK) {
+      const chunk = followupLeadIds.slice(i, i + CHUNK);
+      const ldocs = await listAllDocuments<Record<string, unknown>>({
+        databases,
+        databaseId: DATABASE_ID,
+        collectionId: COLLECTIONS.LEADS,
+        queries: [Query.equal("$id", chunk), Query.limit(CHUNK)],
+        pageLimit: CHUNK,
+        maxPages: 1,
+      });
+      for (const d of ldocs) followupLeadById.set(d.$id as string, d);
+    }
+  }
+
   for (const doc of docs) {
-    const createdById = typeof doc.createdById === "string" ? doc.createdById : "";
-    const creditedAgentId = typeof doc.creditedAgentId === "string" && doc.creditedAgentId.trim() !== "" ? doc.creditedAgentId : null;
-    const targetAgentId = creditedAgentId || createdById;
-    
     const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
     const amount = typeof doc.amount === "number" ? doc.amount : 0;
+    if (!leadId || amount <= 0) continue;
+
+    let targetAgentId = "";
+
+    const creditedAgentId = typeof doc.creditedAgentId === "string" && doc.creditedAgentId.trim() !== "" ? doc.creditedAgentId : null;
+
+    if (leadId.startsWith("manual_followup:")) {
+      const createdById = typeof doc.createdById === "string" ? doc.createdById : "";
+      targetAgentId = creditedAgentId || createdById;
+    } else {
+      const lead = followupLeadById.get(leadId);
+      if (lead) {
+        const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : "";
+        const assignedToId = typeof lead.assignedToId === "string" ? lead.assignedToId : "";
+        targetAgentId = creditedAgentId || assignedToId || ownerId;
+      }
+    }
     
-    if (!targetAgentId || !leadId || !leadId.startsWith("manual_followup:")) continue;
-    if (!readableSet.has(targetAgentId)) continue;
+    if (!targetAgentId || !readableSet.has(targetAgentId)) continue;
     
     followupsByAgentId[targetAgentId] = (followupsByAgentId[targetAgentId] ?? 0) + amount;
   }
 
-  // 4d. Technical payments in the month window.
-  const technicalPaymentsByAgentId = await getTechnicalPaymentTotalsByUserAction({
-    actorId: actor.$id,
-    dateFrom: monthStartIso,
-    dateTo: monthEndIso,
-  });
+
 
   // 5. Build users map for the agent set so the report can show names.
   const usersByAgentId = new Map<string, User>();

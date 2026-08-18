@@ -514,6 +514,29 @@ export async function getWeeklyReportAction(input: {
     listFollowupPaymentsInRange(databases, range),
   ]);
 
+  const followupLeadIds = Array.from(new Set(
+    followupRecords
+      .map(d => typeof d.leadId === "string" ? d.leadId : "")
+      .filter(id => id && !id.startsWith("manual_followup:"))
+  ));
+  
+  const followupLeadById = new Map<string, LeadDocument>();
+  if (followupLeadIds.length > 0) {
+    const CHUNK = 100;
+    for (let i = 0; i < followupLeadIds.length; i += CHUNK) {
+      const chunk = followupLeadIds.slice(i, i + CHUNK);
+      const ldocs = await listAllDocuments<LeadDocument>({
+        databases,
+        databaseId: DATABASE_ID,
+        collectionId: COLLECTIONS.LEADS,
+        queries: [Query.equal("$id", chunk), Query.limit(CHUNK)],
+        pageLimit: CHUNK,
+        maxPages: 1,
+      });
+      for (const d of ldocs) followupLeadById.set(d.$id, d);
+    }
+  }
+
   const metricsByUserId = new Map<string, WeeklyReportMetrics>();
   const leadDaysByUserId = new Map<string, Set<string>>();
   const ensureMetrics = (userId: string) => {
@@ -562,14 +585,29 @@ export async function getWeeklyReportAction(input: {
   });
 
   followupRecords.forEach((record) => {
-    const createdById = record.createdById;
-    if (!createdById || !scopedUserIds.has(createdById)) return;
-    if (!record.leadId || !record.leadId.startsWith("manual_followup:")) return;
-    
+    const leadId = typeof record.leadId === "string" ? record.leadId : "";
     const amount = Number(record.amount) || 0;
-    if (amount > 0) {
-      addMetrics(ensureMetrics(createdById), { upfront: amount });
+    if (!leadId || amount <= 0) return;
+
+    let targetAgentId = "";
+
+    const creditedAgentId = typeof record.creditedAgentId === "string" && record.creditedAgentId.trim() !== "" ? record.creditedAgentId : null;
+
+    if (leadId.startsWith("manual_followup:")) {
+      const createdById = typeof record.createdById === "string" ? record.createdById : "";
+      targetAgentId = creditedAgentId || createdById;
+    } else {
+      const lead = followupLeadById.get(leadId);
+      if (lead) {
+        const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : "";
+        const assignedToId = typeof lead.assignedToId === "string" ? lead.assignedToId : "";
+        targetAgentId = creditedAgentId || assignedToId || ownerId;
+      }
     }
+
+    if (!targetAgentId || !scopedUserIds.has(targetAgentId)) return;
+    
+    addMetrics(ensureMetrics(targetAgentId), { upfront: amount });
   });
 
   scopedUsers.forEach((user) => ensureMetrics(user.$id));

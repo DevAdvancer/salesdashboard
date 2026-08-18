@@ -321,6 +321,9 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'updatedAt', type: 'datetime', required: false },
       { key: 'updatedById', type: 'string', required: false, size: 255 },
       { key: 'updatedByName', type: 'string', required: false, size: 255 },
+      { key: 'createdById', type: 'string', required: false, size: 255 },
+      { key: 'createdByName', type: 'string', required: false, size: 255 },
+      { key: 'creditedAgentId', type: 'string', required: false, size: 255 },
     ],
     indexes: [
       { key: 'lead_idx', type: 'key', attributes: ['leadId'] },
