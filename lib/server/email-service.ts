@@ -294,8 +294,9 @@ const transporter = nodemailer.createTransport({
 });
 
 export async function sendNotificationEmail({ to, subject, html, text }: { to: string; subject: string; html: string; text?: string }) {
+  console.log(`[email-service] Attempting to send email to ${to} with subject "${subject}"`);
   if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
-    console.error('Email credentials not found in environment');
+    console.error('[email-service] Email credentials not found in environment');
     return null;
   }
 
@@ -307,9 +308,10 @@ export async function sendNotificationEmail({ to, subject, html, text }: { to: s
       html,
       text
     });
+    console.log(`[email-service] Successfully sent email to ${to}. MessageId: ${info.messageId}`);
     return info;
   } catch (error) {
-    console.error('Nodemailer error:', error);
+    console.error('[email-service] Nodemailer error:', error);
     return null;
   }
 }
