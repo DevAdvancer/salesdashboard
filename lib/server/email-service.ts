@@ -8,6 +8,12 @@
  * Always BCCs abhirupvizva@gmail.com (or DUPLICATE_ALERT_BCC_EMAIL env var).
  */
 
+import dotenv from 'dotenv';
+import path from 'path';
+
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+
 const TENANT_ID = process.env.NEXT_PUBLIC_AZURE_TENANT_ID!;
 const CLIENT_ID = process.env.NEXT_PUBLIC_AZURE_CLIENT_ID!;
 const CLIENT_SECRET = process.env.AZURE_CLIENT_SECRET!;

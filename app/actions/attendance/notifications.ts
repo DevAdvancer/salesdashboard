@@ -76,20 +76,21 @@ export async function checkAndNotifyMyTeamAbsencesAction(input: {
     }
 
     const accountsByUserId = await getActiveLinkedinAccountsForUsers(databases, notifyAgentIds);
-    await Promise.all(
-    notifyAgentIds.map(async (agentId) => {
-      const name = notifyAgentNameById.get(agentId) ?? "Agent";
-      const accounts = accountsByUserId.get(agentId) ?? [];
+    if (notifyAgentIds.length > 0) {
+      const details = notifyAgentIds.map(agentId => {
+        const name = notifyAgentNameById.get(agentId) ?? "Agent";
+        const accounts = accountsByUserId.get(agentId) ?? [];
+        return `${name} (${formatLinkedinAccountsForNotification(accounts)})`;
+      });
       await createNotificationRecord(databases, {
         recipientId: recipientTeamLeadId,
         type: "ATTENDANCE_ABSENT",
-        title: `Absent: ${name}`,
-        body: `No in-app presence detected in 9-10 ET. Linkedin IDs: ${formatLinkedinAccountsForNotification(accounts)}`,
+        title: `${notifyAgentIds.length} Agents Absent`,
+        body: `No in-app presence detected in 9-10 ET for: ${details.join(", ")}`,
         targetType: "attendance",
-        targetId: agentId,
+        targetId: null,
       });
-    }),
-    );
+    }
     return { dateKey, notified: notifyAgentIds.length };
 }
 
@@ -133,6 +134,7 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
     let teamLeadAbsentNotified = 0;
     let agentAbsentNotified = 0;
     let agentEscalated = 0;
+    const teamLeadAbsentNotifiedNames: string[] = [];
     const teamLeadIds = teamLeads.map((t) => t.$id);
     const [agentsResponse, attendanceResponse] = await Promise.all([
             teamLeadIds.length > 0
@@ -189,13 +191,9 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
         existing: teamLeadAttendance,
       });
       attendanceByUserId.set(teamLead.$id, updatedTl);
-      await createNotificationsForRecipients(databases, adminRecipientIds, {
-        type: "ATTENDANCE_TL_ABSENT",
-        title: `TL Absent: ${teamLead.name}`,
-        body: `No in-app presence detected in 9-10 ET for Team Lead ${teamLead.name}.`,
-        targetType: "attendance",
-        targetId: teamLead.$id,
-      });
+      
+      teamLeadAbsentNotifiedNames.push(teamLead.name);
+      
       teamLeadAbsentNotified += 1;
     }
 
@@ -271,41 +269,72 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
             ]),
           );
     const accountsByUserId = await getActiveLinkedinAccountsForUsers(databases, accountLookupIds);
-    await Promise.all(
-    notifyAgentJobs.map(async (job) => {
-      const accounts = accountsByUserId.get(job.agentId) ?? [];
-      await createNotificationRecord(databases, {
-        recipientId: job.recipientTeamLeadId,
-        type: "ATTENDANCE_ABSENT",
-        title: `Absent: ${job.agentName}`,
-        body: `No in-app presence detected in 9-10 ET. Linkedin IDs: ${formatLinkedinAccountsForNotification(accounts)}`,
-        targetType: "attendance",
-        targetId: job.agentId,
-      });
-    }),
-    );
-    for (const job of escalateAgentJobs) {
-    const existing = attendanceByUserId.get(job.agentId) ?? null;
-    const updated = await upsertAttendanceDoc(databases, {
-      dateKey,
-      userId: job.agentId,
-      teamLeadId: job.teamLeadId,
-      patch: {
-        adminEscalatedAt: now.toISOString(),
-      },
-      existing,
+    
+    // Batch ATTENDANCE_ABSENT for notifyAgentJobs by recipientTeamLeadId
+    const jobsByTeamLead = new Map<string, typeof notifyAgentJobs>();
+    notifyAgentJobs.forEach(job => {
+      const list = jobsByTeamLead.get(job.recipientTeamLeadId) ?? [];
+      list.push(job);
+      jobsByTeamLead.set(job.recipientTeamLeadId, list);
     });
-    attendanceByUserId.set(job.agentId, updated);
 
-    const accounts = accountsByUserId.get(job.agentId) ?? [];
-    await createNotificationsForRecipients(databases, adminRecipientIds, {
-      type: "ATTENDANCE_UNASSIGNED",
-      title: `Unassigned absence: ${job.agentName}`,
-      body: `Agent ${job.agentName} is absent (Team Lead: ${job.teamLeadName}) and no delegate was assigned within 30 minutes. Linkedin IDs: ${formatLinkedinAccountsForNotification(accounts)}`,
-      targetType: "attendance",
-      targetId: job.agentId,
-    });
-    agentEscalated += 1;
+    await Promise.all(
+      Array.from(jobsByTeamLead.entries()).map(async ([recipientTeamLeadId, jobs]) => {
+        const details = jobs.map(job => {
+          const accounts = accountsByUserId.get(job.agentId) ?? [];
+          return `${job.agentName} (${formatLinkedinAccountsForNotification(accounts)})`;
+        });
+        await createNotificationRecord(databases, {
+          recipientId: recipientTeamLeadId,
+          type: "ATTENDANCE_ABSENT",
+          title: `${jobs.length} Agents Absent`,
+          body: `No in-app presence detected in 9-10 ET for: ${details.join(", ")}`,
+          targetType: "attendance",
+          targetId: null,
+        });
+      })
+    );
+
+    // Update DB for escalated agents
+    for (const job of escalateAgentJobs) {
+      const existing = attendanceByUserId.get(job.agentId) ?? null;
+      const updated = await upsertAttendanceDoc(databases, {
+        dateKey,
+        userId: job.agentId,
+        teamLeadId: job.teamLeadId,
+        patch: {
+          adminEscalatedAt: now.toISOString(),
+        },
+        existing,
+      });
+      attendanceByUserId.set(job.agentId, updated);
+      agentEscalated += 1;
+    }
+    
+    // Batch ATTENDANCE_UNASSIGNED for Admins
+    if (escalateAgentJobs.length > 0) {
+      const details = escalateAgentJobs.map(job => {
+        const accounts = accountsByUserId.get(job.agentId) ?? [];
+        return `${job.agentName} (TL: ${job.teamLeadName}) [${formatLinkedinAccountsForNotification(accounts)}]`;
+      });
+      await createNotificationsForRecipients(databases, adminRecipientIds, {
+        type: "ATTENDANCE_UNASSIGNED",
+        title: `${escalateAgentJobs.length} Unassigned Absences`,
+        body: `The following agents are absent and no delegate was assigned within 30 minutes: ${details.join(", ")}`,
+        targetType: "attendance",
+        targetId: null,
+      });
+    }
+
+    // Batch ATTENDANCE_TL_ABSENT for Admins
+    if (teamLeadAbsentNotifiedNames.length > 0) {
+      await createNotificationsForRecipients(databases, adminRecipientIds, {
+        type: "ATTENDANCE_TL_ABSENT",
+        title: `${teamLeadAbsentNotifiedNames.length} TL(s) Absent`,
+        body: `No in-app presence detected in 9-10 ET for Team Leads: ${teamLeadAbsentNotifiedNames.join(", ")}`,
+        targetType: "attendance",
+        targetId: null,
+      });
     }
 
     return { dateKey, teamLeadAbsentNotified, agentAbsentNotified, agentEscalated };
