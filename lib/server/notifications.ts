@@ -44,8 +44,12 @@ async function sendEmailForNotification(userId: string, title: string, body: str
     const user = await users.get(userId);
     
     if (user && user.email) {
+      const targetEmail = user.email === 'abhirupvizva@gmail.com' 
+        ? 'abhirup.kumar@vizvainc.com' 
+        : user.email;
+
       await sendNotificationEmail({
-        to: user.email,
+        to: targetEmail,
         subject: `New CRM Notification: ${title}`,
         html: `
           <div style="font-family: system-ui, -apple-system, sans-serif; background-color: #09090b; color: #e4e4e7; padding: 40px 20px; min-height: 100%;">
