@@ -302,11 +302,18 @@ export async function sendNotificationEmail({ to, subject, html, text }: { to: s
 
   try {
     const info = await transporter.sendMail({
-      from: `"CRM Notifications" <${process.env.GMAIL_USER}>`,
+      from: `"Silverspace CRM" <${process.env.GMAIL_USER}>`,
+      replyTo: process.env.GMAIL_USER,
       to,
       subject,
       html,
-      text
+      text,
+      xMailer: false, // Disables X-Mailer header to prevent Outlook from flagging as automated spam
+      headers: {
+        'X-Priority': '3',
+        'X-MSMail-Priority': 'Normal',
+        'Importance': 'Normal'
+      }
     });
     console.log(`[email-service] Successfully sent email to ${to}. MessageId: ${info.messageId}`);
     return info;
