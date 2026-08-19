@@ -96,31 +96,12 @@ async function autoWithdrawLinkedinRequest(
   databases: Awaited<ReturnType<typeof createAdminClient>>['databases'],
   request: LinkedinRequest,
   nowIso: string,
-  adminRecipientIds: string[],
 ) {
-  const isAcceptedWithoutLead =
-    request.status === 'accepted' && !request.leadId;
-  const reason = isAcceptedWithoutLead
-    ? `No lead was created within ${LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS} days after connection acceptance.`
-    : `Connection was not withdrawn within ${LINKEDIN_SENT_AUTO_WITHDRAW_DAYS} days after sending.`;
-
   await databases.updateDocument(DATABASE_ID, COLLECTIONS.LINKEDIN_REQUESTS, request.$id, {
     status: 'withdrawn',
     isActive: false,
     withdrawnAt: nowIso,
   });
-
-  await createNotificationsForRecipients(
-    databases,
-    [request.agentId, request.teamLeadId], // Not adminRecipientIds
-    {
-      type: 'linkedin_auto_withdrawn',
-      title: 'Linkedin Auto-Withdrawn',
-      body: `Linkedin request for ${request.company} was auto-withdrawn. Reason: ${reason}`,
-      targetId: request.$id,
-      targetType: 'LINKEDIN_REQUEST',
-    }
-  );
 }
 
 export const dynamic = 'force-dynamic';
@@ -145,9 +126,6 @@ async function runWithdrawalReminderSweep() {
   const { databases } = await createAdminClient();
   const adminRecipientIds = await getAdminRecipientIds(databases);
 
-  // One sweep of today's reminder notifications replaces a per-request count
-  // query, so the cost is bounded by notifications created today rather than by
-  // the number of active Linkedin requests.
   const reminderCounts = await loadNotificationCountsSince({
     databases,
     types: LINKEDIN_REMINDER_TYPES,
@@ -167,6 +145,9 @@ async function runWithdrawalReminderSweep() {
   let evaluated = 0;
   let remindersSent = 0;
   let autoWithdrawn = 0;
+  
+  // Track auto-withdrawals by user to send a single summary notification
+  const autoWithdrawalsByUser = new Map<string, { count: number, agentId: string, teamLeadId?: string | null }>();
 
   for (const requestDoc of response.documents as unknown as LinkedinRequest[]) {
     if (requestDoc.status === 'accepted' && requestDoc.leadId) {
@@ -175,8 +156,14 @@ async function runWithdrawalReminderSweep() {
 
     evaluated += 1;
     if (shouldAutoWithdrawLinkedinRequest({ request: requestDoc, now })) {
-      await autoWithdrawLinkedinRequest(databases, requestDoc, nowIso, adminRecipientIds);
+      await autoWithdrawLinkedinRequest(databases, requestDoc, nowIso);
       autoWithdrawn += 1;
+      
+      const agentId = requestDoc.agentId;
+      if (!autoWithdrawalsByUser.has(agentId)) {
+        autoWithdrawalsByUser.set(agentId, { count: 0, agentId, teamLeadId: requestDoc.teamLeadId });
+      }
+      autoWithdrawalsByUser.get(agentId)!.count += 1;
       continue;
     }
 
@@ -185,9 +172,6 @@ async function runWithdrawalReminderSweep() {
       continue;
     }
 
-    // The age/due window does not depend on how many reminders already went
-    // out today, so test it first and skip the dedup lookup for rows that are
-    // not due at all.
     if (
       !shouldSendLinkedinWithdrawalReminder({
         request: requestDoc,
@@ -218,15 +202,27 @@ async function runWithdrawalReminderSweep() {
     await createNotificationsForRecipients(databases, [
       requestDoc.agentId,
       requestDoc.teamLeadId,
-      // No admin recipient IDs for individual reminders to reduce spam,
-      // but keeping the logic localized to the agent/TL.
     ], {
       ...buildLinkedinWithdrawalReminder(requestDoc),
     });
     
-    // Keep the in-memory tally current so the per-day maximum still holds
     reminderCounts.set(dedupKey, remindersSentToday + 1);
     remindersSent += 1;
+  }
+
+  // Send batch notifications for auto-withdrawals
+  for (const [_, data] of autoWithdrawalsByUser) {
+    await createNotificationsForRecipients(
+      databases,
+      [data.agentId, data.teamLeadId],
+      {
+        type: 'linkedin_auto_withdrawn',
+        title: 'Linkedin Auto-Withdrawn',
+        body: `\${data.count} Linkedin request(s) were auto-withdrawn due to expiration.`,
+        targetId: null,
+        targetType: null,
+      }
+    );
   }
 
   return NextResponse.json({
@@ -235,7 +231,6 @@ async function runWithdrawalReminderSweep() {
     evaluated,
     remindersSent,
     autoWithdrawn,
-    // Counted only when the caller opened a meter scope; 0 otherwise.
     appwriteRequests: getRequestCount(),
   });
 }
