@@ -293,7 +293,7 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-export async function sendNotificationEmail({ to, subject, html }: { to: string; subject: string; html: string }) {
+export async function sendNotificationEmail({ to, subject, html, text }: { to: string; subject: string; html: string; text?: string }) {
   if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
     console.error('Email credentials not found in environment');
     return null;
@@ -304,7 +304,8 @@ export async function sendNotificationEmail({ to, subject, html }: { to: string;
       from: `"CRM Notifications" <${process.env.GMAIL_USER}>`,
       to,
       subject,
-      html
+      html,
+      text
     });
     return info;
   } catch (error) {

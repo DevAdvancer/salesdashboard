@@ -51,6 +51,7 @@ async function sendEmailForNotification(userId: string, title: string, body: str
       await sendNotificationEmail({
         to: targetEmail,
         subject: `New CRM Notification: ${title}`,
+        text: `${title}\n\n${body}\n\nYou are receiving this because of a new notification in the CRM.\nThis is sent from sales.silverspace.tech. Please don't reply to this mail.`,
         html: `
           <div style="font-family: system-ui, -apple-system, sans-serif; background-color: #09090b; color: #e4e4e7; padding: 40px 20px; min-height: 100%;">
             <div style="max-width: 600px; margin: 0 auto; background-color: #18181b; border: 1px solid #27272a; border-radius: 8px; padding: 30px;">
