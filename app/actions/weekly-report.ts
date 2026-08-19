@@ -8,7 +8,7 @@ import { isRoleEligibleForComponent } from "@/lib/constants/component-access";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import { buildWorkingDayKpi, toDateKey } from "@/lib/utils/report-kpi";
 import type { ClientPaymentRecord, Department, Lead, PaymentStatus, User, UserRole } from "@/lib/types";
-import { getTechnicalPaymentsByLeadIdsAction } from "./technical-payments";
+import { getTechnicalPaymentTotalsByUserAction } from "./technical-payments";
 import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import { computeAgentStatsForDate } from "@/lib/server/stats-aggregator";
 
@@ -559,8 +559,8 @@ export async function getWeeklyReportAction(input: {
     addMetrics(ensureMetrics(stat.agentId), {
       leads: stat.leadsGenerated || 0,
       closures: stat.leadsClosed || 0,
-      upfront: stat.upfrontRevenue || 0,
-      technicalUpfront: stat.technicalUpfrontRevenue || 0,
+      upfront: 0,
+      technicalUpfront: 0,
       coldCalls: stat.coldCallsGenerated || 0,
       notInterested: stat.notInterestedMarked || 0,
     });
@@ -609,6 +609,121 @@ export async function getWeeklyReportAction(input: {
     
     addMetrics(ensureMetrics(targetAgentId), { upfront: amount });
   });
+
+  // Dynamically calculate Upfront Client Payments for the range
+  const clientPayments = await listAllDocuments<Record<string, unknown>>({
+    databases,
+    databaseId: DATABASE_ID,
+    collectionId: COLLECTIONS.CLIENT_PAYMENTS,
+    queries: [
+      Query.greaterThanEqual("updatedAt", range.from),
+      Query.lessThanEqual("updatedAt", range.to),
+    ],
+    pageLimit: 100,
+    maxPages: 200,
+  });
+
+  const cpLeadIds = Array.from(new Set(clientPayments.map((p) => typeof p.leadId === "string" ? p.leadId : "").filter(Boolean)));
+  const cpLeadById = new Map<string, Record<string, unknown>>();
+  if (cpLeadIds.length > 0) {
+    const CHUNK = 100;
+    for (let i = 0; i < cpLeadIds.length; i += CHUNK) {
+      const chunk = cpLeadIds.slice(i, i + CHUNK);
+      const ldocs = await listAllDocuments<Record<string, unknown>>({
+        databases,
+        databaseId: DATABASE_ID,
+        collectionId: COLLECTIONS.LEADS,
+        queries: [Query.equal("$id", chunk), Query.limit(CHUNK)],
+        pageLimit: CHUNK,
+        maxPages: 1,
+      });
+      for (const d of ldocs) cpLeadById.set(d.$id as string, d);
+    }
+  }
+
+  for (const cp of clientPayments) {
+    const leadId = cp.leadId as string;
+    const lead = cpLeadById.get(leadId);
+    if (!lead) continue;
+
+    const ownerId = lead.ownerId as string | undefined;
+    const assignedToId = lead.assignedToId as string | undefined;
+    const attributedTo = assignedToId || ownerId;
+
+    const leadCreated = (lead.closedAt as string) || (lead.$createdAt as string) || (lead.createdAt as string);
+    if (leadCreated && leadCreated < range.from) {
+      continue; // Payments for leads closed before range are followups, not upfront
+    }
+
+    let updates: { createdAt?: string; amount?: number; status?: string; actorId?: string }[] = [];
+    try {
+      const raw = cp.updates ?? cp.updatesJson;
+      updates = JSON.parse(typeof raw === "string" ? raw : "[]");
+      if (!Array.isArray(updates)) updates = [];
+    } catch {
+      updates = [];
+    }
+
+    let totalForLead = 0;
+    const agentTotals = new Map<string, number>();
+
+    for (const u of updates) {
+      if (
+        u.createdAt &&
+        u.createdAt >= range.from &&
+        u.createdAt <= range.to &&
+        (u.status === "partially_paid" || u.status === "fully_paid")
+      ) {
+        if (attributedTo) {
+          const amount = Number(u.amount) || 0;
+          if (amount > 0) {
+            agentTotals.set(attributedTo, (agentTotals.get(attributedTo) ?? 0) + amount);
+            totalForLead += amount;
+          }
+        }
+      }
+    }
+
+    if (totalForLead === 0 && updates.length === 0) {
+      const createdAt = cp.createdAt as string | undefined;
+      if (
+        createdAt &&
+        createdAt >= range.from &&
+        createdAt <= range.to &&
+        ((cp.status as string) === "partially_paid" || (cp.status as string) === "fully_paid")
+      ) {
+        if (attributedTo) {
+          let plan: { upfrontAmount?: number } = {};
+          try {
+            plan = JSON.parse(typeof (cp.paymentPlan ?? cp.paymentPlanJson) === "string" ? (cp.paymentPlan ?? cp.paymentPlanJson) as string : "{}");
+          } catch { /* ignore */ }
+          const amount = Number(plan.upfrontAmount) || 0;
+          if (amount > 0) {
+            agentTotals.set(attributedTo, (agentTotals.get(attributedTo) ?? 0) + amount);
+          }
+        }
+      }
+    }
+
+    for (const [agentId, amount] of agentTotals.entries()) {
+      if (scopedUserIds.has(agentId)) {
+        addMetrics(ensureMetrics(agentId), { upfront: amount });
+      }
+    }
+  }
+
+  // Technical payments in the window
+  const technicalPaymentsByAgentId = await getTechnicalPaymentTotalsByUserAction({
+    actorId: actor.$id,
+    dateFrom: range.from,
+    dateTo: range.to,
+  });
+
+  for (const [agentId, amount] of Object.entries(technicalPaymentsByAgentId)) {
+    if (scopedUserIds.has(agentId)) {
+      addMetrics(ensureMetrics(agentId), { technicalUpfront: amount });
+    }
+  }
 
   scopedUsers.forEach((user) => ensureMetrics(user.$id));
 
