@@ -32,7 +32,7 @@ export async function createNotificationRecord(
     }
   );
 
-  sendEmailForNotification(input.recipientId, input.title, input.body).catch(console.error);
+  await sendEmailForNotification(input.recipientId, input.title, input.body).catch(console.error);
 
   return record;
 }
