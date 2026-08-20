@@ -302,7 +302,7 @@ export async function sendNotificationEmail({ to, subject, html, text }: { to: s
 
   try {
     const info = await transporter.sendMail({
-      from: `"Silverspace CRM" <${process.env.GMAIL_USER}>`,
+      from: process.env.GMAIL_USER,
       replyTo: process.env.GMAIL_USER,
       to,
       subject,
