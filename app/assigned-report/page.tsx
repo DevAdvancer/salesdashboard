@@ -109,7 +109,7 @@ function AssignedReportContent() {
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Assigned Report</h1>
           <p className="text-muted-foreground">
-            Track leads assigned by admin or lead generation and their closed counts across teams.
+            Track all leads assigned, and their breakdown by source (Admin, Lead Gen) and closed counts.
           </p>
         </div>
         

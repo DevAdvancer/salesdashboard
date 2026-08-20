@@ -41,7 +41,8 @@ export type ComponentKey =
   | 'request-calls'
   | 'call-requests'
   | 'assigned-report'
-  | 'calendar';
+  | 'calendar'
+  | 'team-report';
 
 interface AccessControlContextType {
   canAccess: (componentKey: ComponentKey) => boolean;

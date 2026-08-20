@@ -57,6 +57,7 @@ export const appIcons = {
   attendanceReport: ClipboardList,
   chat: MessageSquare,
   settings: Settings,
+  teamReport: FileSpreadsheet,
   linkedinRequests: Link2,
   linkedinAccounts: UserCog,
   linkedinReports: ChartColumn,
@@ -88,6 +89,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'request-calls', label: 'Request Calls', href: '/request-calls', icon: appIcons.requestCalls },
   { key: 'work-queue', label: 'Work Queue', href: '/work-queue', icon: appIcons.workQueue },
   { key: 'reports', label: 'Reports', href: '/reports', icon: appIcons.reports },
+  { key: 'team-report', label: 'Team Report', href: '/team-report', icon: appIcons.teamReport },
 
   { key: 'linkedin-requests', label: 'Linkedin Request', href: '/linkedin-requests', icon: appIcons.linkedinRequests },
   { key: 'linkedin-account-management', label: 'Manage Linkedin IDs', href: '/linkedin-accounts', icon: appIcons.linkedinAccounts },

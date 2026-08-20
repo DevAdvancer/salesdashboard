@@ -118,8 +118,7 @@ export function WeeklyReportDashboard({ user }: { user: User }) {
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            Leads are counted by assigned agent. Calls are completed follow-ups. Upfront is counted when payment status
-            first becomes partially/fully paid in the selected range.
+            Leads are counted by assigned agent. Calls are completed follow-ups.
           </p>
         </CardContent>
       </Card>
@@ -157,7 +156,6 @@ export function WeeklyReportDashboard({ user }: { user: User }) {
             ["Closures", singleMember.totals.closures],
             ["Cold Calls", singleMember.totals.coldCalls],
             ["Not Interested", singleMember.totals.notInterested],
-            ["Upfront", currency.format(singleMember.totals.upfront)],
           ].map(([label, value]) => (
             <Card key={label}>
               <CardHeader className="pb-2">
@@ -174,8 +172,8 @@ export function WeeklyReportDashboard({ user }: { user: User }) {
       {!loading &&
         report &&
         !singleMember &&
-        report.teams.map((team) => (
-          <Card key={team.teamLead?.$id ?? "unassigned"}>
+        report.teams.map((team, idx) => (
+          <Card key={`${team.teamLead?.$id ?? "unassigned"}-${idx}`}>
             <CardHeader>
               <CardTitle>
                 {team.teamLead ? `Team: ${team.teamLead.name}` : "Team: Unassigned"}
@@ -193,7 +191,6 @@ export function WeeklyReportDashboard({ user }: { user: User }) {
                     <TableHead>Cold Calls</TableHead>
                     <TableHead>Not Interested</TableHead>
                     <TableHead>KPI</TableHead>
-                    <TableHead className="text-right">Upfront</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -207,7 +204,6 @@ export function WeeklyReportDashboard({ user }: { user: User }) {
                       <TableCell>{member.metrics.coldCalls}</TableCell>
                       <TableCell>{member.metrics.notInterested}</TableCell>
                       <TableCell><KpiBadge kpi={member.metrics.kpi} /></TableCell>
-                      <TableCell className="text-right">{currency.format(member.metrics.upfront)}</TableCell>
                     </TableRow>
                   ))}
                   <TableRow className="cursor-default bg-[var(--surface-1)] hover:bg-[var(--surface-1)]">
@@ -219,7 +215,6 @@ export function WeeklyReportDashboard({ user }: { user: User }) {
                     <TableCell className="font-semibold">{team.totals.coldCalls}</TableCell>
                     <TableCell className="font-semibold">{team.totals.notInterested}</TableCell>
                     <TableCell><KpiBadge kpi={team.totals.kpi} /></TableCell>
-                    <TableCell className="text-right font-semibold">{currency.format(team.totals.upfront)}</TableCell>
                   </TableRow>
                 </TableBody>
               </Table>

@@ -48,7 +48,7 @@ export async function listAllUsersForLinkedinAction(input: {
             Query.orderAsc("name"),
           ]);
     return (response.documents as unknown as User[]).filter(
-    (u) => (u.department ?? "sales") === "sales" && u.isActive !== false,
+    (u) => (u.department ?? "sales") === "sales",
     );
 }
 
@@ -79,6 +79,6 @@ export async function listAgentsForTeamLeadLinkedinAction(input: {
             Query.orderAsc("name"),
           ]);
     return (response.documents as unknown as User[]).filter(
-    (u) => (u.department ?? "sales") === "sales" && u.isActive !== false,
+    (u) => (u.department ?? "sales") === "sales",
     );
 }

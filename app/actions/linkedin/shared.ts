@@ -298,7 +298,6 @@ export async function resolveScopeUsersForLinkedin(input: {
     const isKpiEligible = (user: User | null | undefined): user is User =>
             Boolean(
               user &&
-              user.isActive !== false &&
               (user.department ?? "sales") === "sales" &&
               (user.role === "agent" || user.role === "team_lead" || user.role === "lead_generation"),
             );

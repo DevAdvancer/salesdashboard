@@ -485,6 +485,14 @@ export async function getWeeklyReportAction(input: {
   const range: WeeklyReportRange = { from: input.from, to: input.to };
 
   const { databases } = await createAdminClient();
+
+  const branchesResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.BRANCHES, [
+    Query.select(["$id", "name"]),
+    Query.limit(100),
+  ]);
+  const branchMap = new Map<string, string>();
+  (branchesResponse.documents as any[]).forEach((b) => branchMap.set(b.$id, b.name));
+
   const scopedUsers = await listScopedUsers(databases, actor);
   const scopedUserIds = new Set(scopedUsers.map((user) => user.$id));
 
@@ -760,28 +768,52 @@ export async function getWeeklyReportAction(input: {
   const seenMembers = new Set<string>();
 
   for (const teamLead of teamLeads) {
-    const members = scopedUsers
+    const teamMembers = scopedUsers
       .filter((user) => user.$id === teamLead.$id || user.teamLeadId === teamLead.$id)
       .filter((user) => user.role === "team_lead" || user.role === "agent" || user.role === "lead_generation")
-      .sort((a, b) => String(a.name).localeCompare(String(b.name)))
-      .map((user) => {
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+    const agentsByBranch = new Map<string, User[]>();
+    teamMembers.forEach((user) => {
+      const branchId = (user.branchIds && user.branchIds.length > 0) ? user.branchIds[0] : (user.branchId || "unassigned");
+      const existing = agentsByBranch.get(branchId) || [];
+      existing.push(user);
+      agentsByBranch.set(branchId, existing);
+    });
+
+    if (agentsByBranch.size === 0) {
+      agentsByBranch.set("unassigned", []);
+    }
+
+    for (const [branchId, branchUsers] of agentsByBranch.entries()) {
+      const branchName = branchMap.get(branchId) || "Unassigned Branch";
+      const suffix = agentsByBranch.size > 1 || branchId !== "unassigned" ? ` - ${branchName}` : "";
+
+      const members = branchUsers.map((user) => {
         seenMembers.add(user.$id);
         return buildMember(user.$id);
       });
 
-    const totals: WeeklyReportMetrics = {
-      calls: 0,
-      leads: 0,
-      followups: 0,
-      closures: 0,
-      upfront: 0,
-      coldCalls: 0,
-      notInterested: 0,
-      technicalUpfront: 0,
-      kpi: combineKpi(members),
-    };
-    members.forEach((member) => addMetrics(totals, member.metrics));
-    teams.push({ teamLead, members, totals });
+      const totals: WeeklyReportMetrics = {
+        calls: 0,
+        leads: 0,
+        followups: 0,
+        closures: 0,
+        upfront: 0,
+        coldCalls: 0,
+        notInterested: 0,
+        technicalUpfront: 0,
+        kpi: combineKpi(members),
+      };
+      members.forEach((member) => addMetrics(totals, member.metrics));
+      
+      const tlWithSuffix = {
+        ...teamLead,
+        name: `${teamLead.name}${suffix}`,
+      };
+
+      teams.push({ teamLead: tlWithSuffix, members, totals });
+    }
   }
 
 

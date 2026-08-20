@@ -89,7 +89,7 @@ export function Navigation({
   // Define section grouping
   const agentItemKeys = new Set(["dashboard", "leads", "calendar", "history", "request-calls", "work-queue"]);
   const attendanceItemKeys = new Set(["attendance", "attendance-report"]);
-  const teamLeadItemKeys = new Set(["user-management", "reports", "assigned-report"]);
+  const teamLeadItemKeys = new Set(["user-management", "reports", "assigned-report", "team-report"]);
   const adminItemKeys = new Set(["branch-management", "hierarchy", "lead-requests", "settings"]);
   const technicalItemKeys = new Set(["mock", "interview-support", "assessment-support"]);
   const linkedinItemKeys = new Set(["linkedin-requests", "linkedin-account-management", "linkedin-reports"]);

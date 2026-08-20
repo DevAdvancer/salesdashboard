@@ -244,63 +244,79 @@ export function TargetReportTable({ result, isAgent, monthKey, actorId }: Target
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {row.agents.map((agent) => {
-                            const b = badgeFor(agent.percent);
-                            return (
-                              <TableRow
-                                key={agent.userId}
-                                className={canDrillDown ? "cursor-pointer hover:bg-muted/50 transition-colors" : ""}
-                                onClick={canDrillDown ? () => setSelectedAgent({ userId: agent.userId, userName: agent.userName }) : undefined}
-                              >
-                                <TableCell className="font-medium">
-                                  <div className="flex flex-col">
-                                    <span className={canDrillDown ? "underline-offset-2 hover:underline" : ""}>
-                                      {agent.userName}
-                                    </span>
-                                    <Badge variant={b.variant} className="self-start text-[10px]">
-                                      {b.label}
-                                    </Badge>
-                                  </div>
-                                </TableCell>
-                                <TableCell className="text-right tabular-nums">
-                                  {agent.target > 0 ? currency.format(agent.target) : "—"}
-                                </TableCell>
-                                <TableCell className="text-right tabular-nums">
-                                  {currency.format(agent.achieved)}
-                                </TableCell>
-                                <TableCell className="w-[200px]">
-                                  <div className="flex flex-col gap-1">
-                                    <TargetBar value={agent.percent} />
-                                    <span className="text-xs text-muted-foreground">
-                                      {agent.percent === null
-                                        ? "—"
-                                        : percent.format(agent.percent)}
-                                    </span>
-                                  </div>
-                                </TableCell>
-                                <TableCell className="text-right tabular-nums">
-                                  {agent.leadCount}
-                                </TableCell>
-                                <TableCell
-                                  className="text-right tabular-nums"
-                                  title={
-                                    agent.notInterestedCount > 0
-                                      ? `${agent.notInterestedCount} lead${agent.notInterestedCount === 1 ? "" : "s"} marked Not Interested in this month`
-                                      : "No leads marked Not Interested in this month"
-                                  }
+                          {(() => {
+                            let lastBranch = "";
+                            const tableRows: React.ReactNode[] = [];
+                            row.agents.forEach((agent) => {
+                              const bName = (agent as any).branchName || "";
+                              if (bName && bName !== lastBranch) {
+                                lastBranch = bName;
+                                tableRows.push(
+                                  <TableRow key={`branch-${bName}`} className="bg-muted/30 hover:bg-muted/30">
+                                    <TableCell colSpan={7} className="font-semibold text-xs py-1.5 text-muted-foreground uppercase">
+                                      {bName}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              }
+                              const b = badgeFor(agent.percent);
+                              tableRows.push(
+                                <TableRow
+                                  key={agent.userId}
+                                  className={canDrillDown ? "cursor-pointer hover:bg-muted/50 transition-colors" : ""}
+                                  onClick={canDrillDown ? () => setSelectedAgent({ userId: agent.userId, userName: agent.userName }) : undefined}
                                 >
-                                  {agent.notInterestedCount > 0
-                                    ? agent.notInterestedCount
-                                    : <span className="text-muted-foreground">0</span>}
-                                </TableCell>
-                                <TableCell className="text-right tabular-nums text-xs text-muted-foreground">
-                                  {agent.referralExcludedCount > 0
-                                    ? agent.referralExcludedCount
-                                    : "—"}
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
+                                  <TableCell className="font-medium">
+                                    <div className="flex flex-col">
+                                      <span className={canDrillDown ? "underline-offset-2 hover:underline" : ""}>
+                                        {agent.userName}
+                                      </span>
+                                      <Badge variant={b.variant} className="self-start text-[10px]">
+                                        {b.label}
+                                      </Badge>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-right tabular-nums">
+                                    {agent.target > 0 ? currency.format(agent.target) : "—"}
+                                  </TableCell>
+                                  <TableCell className="text-right tabular-nums">
+                                    {currency.format(agent.achieved)}
+                                  </TableCell>
+                                  <TableCell className="w-[200px]">
+                                    <div className="flex flex-col gap-1">
+                                      <TargetBar value={agent.percent} />
+                                      <span className="text-xs text-muted-foreground">
+                                        {agent.percent === null
+                                          ? "—"
+                                          : percent.format(agent.percent)}
+                                      </span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-right tabular-nums">
+                                    {agent.leadCount}
+                                  </TableCell>
+                                  <TableCell
+                                    className="text-right tabular-nums"
+                                    title={
+                                      agent.notInterestedCount > 0
+                                        ? `${agent.notInterestedCount} lead${agent.notInterestedCount === 1 ? "" : "s"} marked Not Interested in this month`
+                                        : "No leads marked Not Interested in this month"
+                                    }
+                                  >
+                                    {agent.notInterestedCount > 0
+                                      ? agent.notInterestedCount
+                                      : <span className="text-muted-foreground">0</span>}
+                                  </TableCell>
+                                  <TableCell className="text-right tabular-nums text-xs text-muted-foreground">
+                                    {agent.referralExcludedCount > 0
+                                      ? agent.referralExcludedCount
+                                      : "—"}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            });
+                            return tableRows;
+                          })()}
                         </TableBody>
                       </Table>
                     </div>

@@ -167,6 +167,7 @@ export function buildTargetReport(input: {
    * Optional. Sum of technical payments collected by each agent in the selected month.
    */
   technicalPaymentsByAgentId?: Record<string, number>;
+  branchMap?: Map<string, string>;
 }): TargetReportResult {
   const { targets, assignmentsByTargetId, usersByAgentId, agentStatsByUserId } = input;
   const followupsByAgentId = input.followupsByAgentId ?? {};
@@ -215,6 +216,10 @@ export function buildTargetReport(input: {
       const agentTarget = agentId === target.teamLeadId ? calculatedTlTarget : (assignment?.amount ?? 0);
       teamTarget += agentTarget;
       teamAchieved += achieved;
+      
+      const branchId = (agent.branchIds && agent.branchIds.length > 0) ? agent.branchIds[0] : (agent.branchId || "unassigned");
+      const branchName = input.branchMap?.get(branchId) || "Unassigned Branch";
+
       agents.push({
         userId: agentId,
         userName: agent.name,
@@ -224,10 +229,16 @@ export function buildTargetReport(input: {
         leadCount: stats.leadCount,
         referralExcludedCount: stats.referralExcludedCount,
         notInterestedCount: stats.notInterestedCount,
-      });
+        branchName,
+      } as TargetReportAgentRow & { branchName: string });
     }
 
-    agents.sort((a, b) => b.achieved - a.achieved || a.userName.localeCompare(b.userName));
+    agents.sort((a, b) => {
+      const branchA = (a as any).branchName || "";
+      const branchB = (b as any).branchName || "";
+      if (branchA !== branchB) return branchA.localeCompare(branchB);
+      return b.achieved - a.achieved || a.userName.localeCompare(b.userName);
+    });
 
     // If no assignments were entered but a team total exists, surface
     // that number as a fallback so the percent still makes sense.
@@ -243,6 +254,7 @@ export function buildTargetReport(input: {
       agents,
       needsSplit,
     });
+
   }
 
   rows.sort((a, b) => b.achieved - a.achieved || a.teamLeadName.localeCompare(b.teamLeadName));

@@ -392,7 +392,8 @@ export type ComponentKey =
   | 'request-calls'
   | 'call-requests'
   | 'assigned-report'
-  | 'calendar';
+  | 'calendar'
+  | 'team-report';
 
 export interface AccessRule {
   $id?: string;

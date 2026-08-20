@@ -447,6 +447,18 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'reminder_idx', type: 'key', attributes: ['reminderEnabled', 'reminderSent'] },
     ],
   },
+  [COLLECTIONS.TEAM_REPORTS]: {
+    attributes: [
+      { key: 'companyName', type: 'string', required: true, size: 255 },
+      { key: 'reportDate', type: 'string', required: true, size: 20 },
+      { key: 'data', type: 'string', required: true, size: 50000 },
+      { key: 'createdAt', type: 'datetime', required: true },
+    ],
+    indexes: [
+      { key: 'company_idx', type: 'key', attributes: ['companyName'] },
+      { key: 'date_idx', type: 'key', attributes: ['reportDate'] },
+    ],
+  },
 };
 
 // Fields to remove (retired manager/assistant_manager fields, plus the

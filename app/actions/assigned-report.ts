@@ -51,7 +51,6 @@ export async function getAssignedReportData(userId: string, dateFrom?: string, d
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.USERS,
     queries: [
-      Query.equal('isActive', true),
       Query.or([
         Query.equal('department', 'sales'),
         Query.equal('role', ['admin', 'developer', 'monitor', 'operations'])
@@ -167,19 +166,24 @@ export async function getAssignedReportData(userId: string, dateFrom?: string, d
     const isByAdmin = isLeadershipRole(ownerRole);
     const isByLeadGen = ownerRole === 'lead_generation';
 
-    // Only count leads assigned by Admin or Lead Gen
-    if (!isByAdmin && !isByLeadGen) continue;
-
+    // Count all leads for this agent, classify them by ownerRole if applicable.
     const teamSummary = summaries.get(teamLeadId);
     const memberSummary = memberSummaries.get(assignedUser);
 
-    // Removed teamSummary manual increments to prevent phantom leads
-
     if (memberSummary) {
-      memberSummary.totalLeads++;
-      if (isByAdmin) memberSummary.byAdmin++;
-      if (isByLeadGen) memberSummary.byLeadGen++;
-      if (lead.isClosed) memberSummary.closedCount++;
+      if (isByAdmin) {
+        memberSummary.byAdmin++;
+        memberSummary.totalLeads++;
+      } else if (isByLeadGen) {
+        memberSummary.byLeadGen++;
+        memberSummary.totalLeads++;
+      }
+      // If it's by an agent, we simply ignore it for this report
+      // so that Total Leads only reflects those assigned by Admin or Lead Gen.
+      
+      if (isByAdmin || isByLeadGen) {
+        if (lead.isClosed) memberSummary.closedCount++;
+      }
     }
   }
 

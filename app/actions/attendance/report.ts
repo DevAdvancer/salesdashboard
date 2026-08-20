@@ -94,7 +94,6 @@ export async function getAttendanceReportAction(input: {
       Query.limit(2000),
     ]);
     const allTLs = (teamLeadsResponse.documents as unknown as User[])
-      .filter((tl) => (tl as unknown as { isActive?: unknown }).isActive !== false)
       .filter((tl) => matchesDepartmentScope(tl, input.departmentScope ?? "sales"))
       .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
@@ -133,7 +132,6 @@ export async function getAttendanceReportAction(input: {
             Query.limit(5000),
           ]) : { documents: [] as unknown[] };
     const allAgents = (allAgentsResponse.documents as unknown as User[])
-            .filter((a) => (a as unknown as { isActive?: unknown }).isActive !== false)
             .filter((a) => matchesDepartmentScope(a, input.departmentScope ?? "sales"))
             .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
     const allAgentAttendanceResponse = teamLeadIds.length > 0 ? await databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
@@ -144,6 +142,14 @@ export async function getAttendanceReportAction(input: {
             Query.limit(5000),
           ]) : { documents: [] as unknown[] };
     const allAgentAttRecords = allAgentAttendanceResponse.documents as unknown as AttendanceRecord[];
+
+    const branchesResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.BRANCHES, [
+      Query.select(["$id", "name"]),
+      Query.limit(100),
+    ]);
+    const branchMap = new Map<string, string>();
+    (branchesResponse.documents as any[]).forEach((b) => branchMap.set(b.$id, b.name));
+
     const allAttendanceDocs = [...allTlAttRecords, ...allAgentAttRecords];
     const allDelegateIds = new Set<string>();
     allAttendanceDocs.forEach((doc) => {
@@ -192,90 +198,109 @@ export async function getAttendanceReportAction(input: {
     existing.push(agent);
     agentsByTlId.set(agent.teamLeadId, existing);
     });
-    const teams = teamLeads.map((tl) => {
+    const teams = teamLeads.flatMap((tl) => {
             const tlAttRecords = tlAttendanceByUserId.get(tl.$id) || [];
             const latestTlAtt = tlAttRecords.length > 0 ? tlAttRecords.sort((a,b) => b.dateKey.localeCompare(a.dateKey))[0] : null;
             const tlDelegateUserId = latestTlAtt?.delegateUserId ?? null;
             const tlDelegateName = tlDelegateUserId ? delegateById.get(tlDelegateUserId)?.name ?? null : null;
 
             const agents = agentsByTlId.get(tl.$id) || [];
+            
+            // Group agents by branch
+            const agentsByBranch = new Map<string, typeof agents>();
+            agents.forEach((agent) => {
+              const branchId = (agent.branchIds && agent.branchIds.length > 0) ? agent.branchIds[0] : (agent.branchId || "unassigned");
+              const existing = agentsByBranch.get(branchId) || [];
+              existing.push(agent);
+              agentsByBranch.set(branchId, existing);
+            });
+            
+            // If TL has no agents, show them in an unassigned branch
+            if (agentsByBranch.size === 0) {
+              agentsByBranch.set("unassigned", []);
+            }
 
-            const agentRows = agents.map((agent) => {
-              const attRecords = agentAttendanceByUserId.get(agent.$id) ?? [];
-              const latestAtt = attRecords.length > 0 ? attRecords.sort((a,b) => b.dateKey.localeCompare(a.dateKey))[0] : null;
-              const presentDays = attRecords.filter(r => r.present).length;
-              const isRange = startDateKey !== endDateKey;
+            return Array.from(agentsByBranch.entries()).map(([branchId, branchAgents]) => {
+              const branchName = branchMap.get(branchId) || "Unassigned Branch";
+              const teamNameSuffix = agentsByBranch.size > 1 || branchId !== "unassigned" ? ` - ${branchName}` : "";
 
-              const delegateCounts = new Map<string, number>();
-              for (const r of attRecords) {
-                const id = r.delegateUserId;
-                if (typeof id === "string" && id.trim().length > 0) {
-                  delegateCounts.set(id, (delegateCounts.get(id) || 0) + 1);
+              const agentRows = branchAgents.map((agent) => {
+                const attRecords = agentAttendanceByUserId.get(agent.$id) ?? [];
+                const latestAtt = attRecords.length > 0 ? attRecords.sort((a,b) => b.dateKey.localeCompare(a.dateKey))[0] : null;
+                const presentDays = attRecords.filter(r => r.present).length;
+                const isRange = startDateKey !== endDateKey;
+
+                const delegateCounts = new Map<string, number>();
+                for (const r of attRecords) {
+                  const id = r.delegateUserId;
+                  if (typeof id === "string" && id.trim().length > 0) {
+                    delegateCounts.set(id, (delegateCounts.get(id) || 0) + 1);
+                  }
                 }
-              }
-              const delegateNameStr = delegateCounts.size > 0 
-                ? Array.from(delegateCounts.entries())
-                  .map(([id, count]) => {
-                    const name = delegateById.get(id)?.name;
-                    if (!name) return null;
-                    return isRange ? `${name} (${count})` : name;
-                  })
-                  .filter(Boolean)
-                  .join(", ")
-                : null;
+                const delegateNameStr = delegateCounts.size > 0 
+                  ? Array.from(delegateCounts.entries())
+                    .map(([id, count]) => {
+                      const name = delegateById.get(id)?.name;
+                      if (!name) return null;
+                      return isRange ? `${name} (${count})` : name;
+                    })
+                    .filter(Boolean)
+                    .join(", ")
+                  : null;
 
-              const assignedByCounts = new Map<string, number>();
-              for (const r of attRecords) {
-                const id = r.assignedById;
-                if (typeof id === "string" && id.trim().length > 0) {
-                  assignedByCounts.set(id, (assignedByCounts.get(id) || 0) + 1);
+                const assignedByCounts = new Map<string, number>();
+                for (const r of attRecords) {
+                  const id = r.assignedById;
+                  if (typeof id === "string" && id.trim().length > 0) {
+                    assignedByCounts.set(id, (assignedByCounts.get(id) || 0) + 1);
+                  }
                 }
-              }
-              const assignedByNameStr = assignedByCounts.size > 0 
-                ? Array.from(assignedByCounts.entries())
-                  .map(([id, count]) => {
-                    const name = delegateById.get(id)?.name;
-                    if (!name) return null;
-                    return isRange ? `${name} (${count})` : name;
-                  })
-                  .filter(Boolean)
-                  .join(", ")
-                : null;
+                const assignedByNameStr = assignedByCounts.size > 0 
+                  ? Array.from(assignedByCounts.entries())
+                    .map(([id, count]) => {
+                      const name = delegateById.get(id)?.name;
+                      if (!name) return null;
+                      return isRange ? `${name} (${count})` : name;
+                    })
+                    .filter(Boolean)
+                    .join(", ")
+                  : null;
 
-              const accounts = accountsByUserId.get(agent.$id) ?? [];
+                const accounts = accountsByUserId.get(agent.$id) ?? [];
+                return {
+                  userId: agent.$id,
+                  userName: agent.name,
+                  role: agent.role,
+                  present: latestAtt?.present === true,
+                  presentAt: latestAtt?.presentAt ?? null,
+                  presentWithDelegateFlag: latestAtt?.presentWithDelegateFlag === true,
+                  presentDays,
+                  totalRecords: attRecords.length,
+                  delegateUserId: latestAtt?.delegateUserId ?? null,
+                  delegateUserName: delegateNameStr,
+                  assignedById: latestAtt?.assignedById ?? null,
+                  assignedByName: assignedByNameStr,
+                  linkedinAccounts: accounts.map((a) => ({
+                    id: a.$id,
+                    company: a.company,
+                    idName: a.idName,
+                    accountType: a.accountType,
+                  })),
+                };
+              });
+
               return {
-                userId: agent.$id,
-                userName: agent.name,
-                role: agent.role,
-                present: latestAtt?.present === true,
-                presentAt: latestAtt?.presentAt ?? null,
-                presentWithDelegateFlag: latestAtt?.presentWithDelegateFlag === true,
-                presentDays,
-                totalRecords: attRecords.length,
-                delegateUserId: latestAtt?.delegateUserId ?? null,
-                delegateUserName: delegateNameStr,
-                assignedById: latestAtt?.assignedById ?? null,
-                assignedByName: assignedByNameStr,
-                linkedinAccounts: accounts.map((a) => ({
-                  id: a.$id,
-                  company: a.company,
-                  idName: a.idName,
-                  accountType: a.accountType,
-                })),
+                teamLeadId: `${tl.$id}_${branchId}`,
+                teamLeadName: `${tl.name}${teamNameSuffix}`,
+                teamLeadPresent: latestTlAtt?.present === true,
+                teamLeadPresentAt: latestTlAtt?.presentAt ?? null,
+                teamLeadPresentDays: tlAttRecords.filter(r => r.present).length,
+                teamLeadTotalRecords: tlAttRecords.length,
+                teamLeadDelegateUserId: tlDelegateUserId,
+                teamLeadDelegateName: tlDelegateName,
+                agents: agentRows,
               };
             });
-
-            return {
-              teamLeadId: tl.$id,
-              teamLeadName: tl.name,
-              teamLeadPresent: latestTlAtt?.present === true,
-              teamLeadPresentAt: latestTlAtt?.presentAt ?? null,
-              teamLeadPresentDays: tlAttRecords.filter(r => r.present).length,
-              teamLeadTotalRecords: tlAttRecords.length,
-              teamLeadDelegateUserId: tlDelegateUserId,
-              teamLeadDelegateName: tlDelegateName,
-              agents: agentRows,
-            };
           });
     return { startDateKey, endDateKey, teams, allTeamLeadOptions };
 }

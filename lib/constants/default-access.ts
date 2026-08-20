@@ -23,7 +23,8 @@ export type ComponentKey =
   | 'target-report'
   | 'followups-payments'
   | 'payments-report'
-  | 'calendar';
+  | 'calendar'
+  | 'team-report';
 
 export type UserRole = 'admin' | 'developer' | 'team_lead' | 'agent' | 'lead_generation' | 'monitor' | 'operations';
 

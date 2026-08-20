@@ -149,7 +149,7 @@ export async function getTargetReportAction(input: {
   } else {
     // Admin-like: scope to sales so the team table never surfaces
     // resume TLs / agents.
-    const all = await getAssignableUsers(actor.role, actor.branchIds ?? [], actor.$id, "sales");
+    const all = await getAssignableUsers(actor.role, actor.branchIds ?? [], actor.$id, "sales", true);
     const assignedIds = Object.values(assignmentsByTargetId).flatMap(list => list.map(a => a.agentId));
     readableAgentIds = Array.from(new Set([
       ...all.filter((u) => u.role === "agent" || u.role === "lead_generation" || u.role === "team_lead").map((u) => u.$id),
@@ -449,14 +449,22 @@ export async function getTargetReportAction(input: {
     }
   }
 
+  const branchesResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.BRANCHES, [
+    Query.select(["$id", "name"]),
+    Query.limit(100),
+  ]);
+  const branchMap = new Map<string, string>();
+  (branchesResponse.documents as any[]).forEach((b) => branchMap.set(b.$id, b.name));
+
   const result = buildTargetReport({
     monthKey: input.monthKey,
     targets,
     assignmentsByTargetId,
-    agentStatsByUserId,
     usersByAgentId,
+    agentStatsByUserId,
     followupsByAgentId,
     technicalPaymentsByAgentId,
+    branchMap,
   });
 
   const { from, to } = monthBounds(input.monthKey);

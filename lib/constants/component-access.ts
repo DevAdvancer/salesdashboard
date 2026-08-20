@@ -62,6 +62,7 @@ export const COMPONENT_ACCESS: RoleAccessMap = {
   // breaking down assignment source (admin vs lead gen vs self).
   'assigned-report': ['admin', 'developer', 'monitor', 'operations'],
   calendar: ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent', 'lead_generation'],
+  'team-report': ['admin', 'developer'],
 };
 
 export function isRoleEligibleForComponent(
