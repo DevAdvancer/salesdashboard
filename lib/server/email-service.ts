@@ -294,31 +294,75 @@ const transporter = nodemailer.createTransport({
 });
 
 export async function sendNotificationEmail({ to, subject, html, text }: { to: string; subject: string; html: string; text?: string }) {
-  console.log(`[email-service] Attempting to send email to ${to} with subject "${subject}"`);
-  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
-    console.error('[email-service] Email credentials not found in environment');
+  console.log(`[email-service] Attempting to send email to ${to} via Microsoft Graph API with subject "${subject}"`);
+  
+  if (!TENANT_ID || !CLIENT_ID || !CLIENT_SECRET) {
+    console.error('[email-service] Azure credentials not configured, falling back to nodemailer...');
+    // Fallback to nodemailer if Graph is not configured
+    if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) return null;
+    try {
+      return await transporter.sendMail({
+        from: `"Silverspace CRM" <${process.env.GMAIL_USER}>`,
+        replyTo: process.env.GMAIL_USER,
+        to,
+        subject,
+        html,
+        text,
+        xMailer: false,
+      });
+    } catch (e) {
+      return null;
+    }
+  }
+
+  let token: string;
+  try {
+    token = await getGraphAccessToken();
+  } catch (err) {
+    console.error('[email-service] Could not acquire Graph token for notification:', err);
     return null;
   }
 
-  try {
-    const info = await transporter.sendMail({
-      from: `"Silverspace CRM" <${process.env.GMAIL_USER}>`,
-      replyTo: process.env.GMAIL_USER,
-      to,
+  // Use a known reliable mailbox in the tenant as the sender for system notifications
+  const senderEmail = 'abhirup.kumar@vizvainc.com';
+
+  const mailPayload = {
+    message: {
       subject,
-      html,
-      text,
-      xMailer: false, // Disables X-Mailer header to prevent Outlook from flagging as automated spam
-      headers: {
-        'X-Priority': '3',
-        'X-MSMail-Priority': 'Normal',
-        'Importance': 'Normal'
-      }
-    });
-    console.log(`[email-service] Successfully sent email to ${to}. MessageId: ${info.messageId}`);
-    return info;
-  } catch (error) {
-    console.error('[email-service] Nodemailer error:', error);
+      body: {
+        contentType: 'HTML',
+        content: html, // Graph API prefers HTML if both exist, we'll just send HTML for system alerts
+      },
+      toRecipients: [
+        { emailAddress: { address: to } }
+      ],
+    },
+    saveToSentItems: false,
+  };
+
+  try {
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(senderEmail)}/sendMail`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(mailPayload),
+      },
+    );
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error(`[email-service] Graph sendMail failed for notification: ${res.status} ${errorText}`);
+      return null;
+    }
+    
+    console.log(`[email-service] Successfully sent Graph email from ${senderEmail} to ${to}.`);
+    return { success: true };
+  } catch (err) {
+    console.error('[email-service] Error sending Graph notification email:', err);
     return null;
   }
 }
