@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DatePicker } from "@/components/ui/date-picker";
 import { saveTeamReportAction, getTeamReportAction, getLatestTeamReportAction } from "@/app/actions/team-reports";
 import { Trash2, Plus } from "lucide-react";
 
@@ -38,11 +39,12 @@ export function TeamReportGenerator({ currentUserId, companies }: TeamReportGene
     uscDaily: 0,
     h1bDaily: 0,
     nonIt: 0,
-    refund: 0,
+    refundDaily: 0,
     baseGcMonthly: 0,
     baseUscMonthly: 0,
     baseH1bMonthly: 0,
     baseUpfrontMonth: 0,
+    baseRefundMonth: 0,
     reps: INITIAL_REPS_LIST.map(name => ({ name, closures: 0, upfront: 0 }))
   });
 
@@ -53,7 +55,8 @@ export function TeamReportGenerator({ currentUserId, companies }: TeamReportGene
   const uscMonthly = data.baseUscMonthly + (Number(data.uscDaily) || 0);
   const h1bMonthly = data.baseH1bMonthly + (Number(data.h1bDaily) || 0);
   const upfrontMonth = data.baseUpfrontMonth + upfrontToday;
-  const upfrontAfterRefund = upfrontMonth - (Number(data.refund) || 0);
+  const refundMonth = data.baseRefundMonth + (Number(data.refundDaily) || 0);
+  const upfrontAfterRefund = upfrontMonth - refundMonth;
 
   // Load data when company or date changes
   useEffect(() => {
@@ -78,12 +81,13 @@ export function TeamReportGenerator({ currentUserId, companies }: TeamReportGene
             uscDaily: parsed.uscDaily || 0,
             h1bDaily: parsed.h1bDaily || 0,
             nonIt: parsed.nonIt || 0,
-            refund: parsed.refund || 0,
-            // Fallback for legacy format that didn't have base fields
-            baseGcMonthly: parsed.baseGcMonthly !== undefined ? parsed.baseGcMonthly : (parsed.gcMonthly - (parsed.gcDaily || 0)) || 0,
-            baseUscMonthly: parsed.baseUscMonthly !== undefined ? parsed.baseUscMonthly : (parsed.uscMonthly - (parsed.uscDaily || 0)) || 0,
-            baseH1bMonthly: parsed.baseH1bMonthly !== undefined ? parsed.baseH1bMonthly : (parsed.h1bMonthly - (parsed.h1bDaily || 0)) || 0,
-            baseUpfrontMonth: parsed.baseUpfrontMonth !== undefined ? parsed.baseUpfrontMonth : (parsed.upfrontMonth - (parsed.reps?.reduce((a: any, r: any) => a + (r.upfront || 0), 0) || 0)) || 0,
+            refundDaily: parsed.refundDaily || 0,
+            // Prioritize deriving base from the saved monthly total (to gracefully handle manual DB edits), fallback to saved base
+            baseRefundMonth: parsed.refundMonth !== undefined ? (parsed.refundMonth - (parsed.refundDaily || 0)) : (parsed.baseRefundMonth || 0),
+            baseGcMonthly: parsed.gcMonthly !== undefined ? (parsed.gcMonthly - (parsed.gcDaily || 0)) : (parsed.baseGcMonthly || 0),
+            baseUscMonthly: parsed.uscMonthly !== undefined ? (parsed.uscMonthly - (parsed.uscDaily || 0)) : (parsed.baseUscMonthly || 0),
+            baseH1bMonthly: parsed.h1bMonthly !== undefined ? (parsed.h1bMonthly - (parsed.h1bDaily || 0)) : (parsed.baseH1bMonthly || 0),
+            baseUpfrontMonth: parsed.upfrontMonth !== undefined ? (parsed.upfrontMonth - (parsed.reps?.reduce((a: any, r: any) => a + (r.upfront || 0), 0) || 0)) : (parsed.baseUpfrontMonth || 0),
             reps: parsed.reps || INITIAL_REPS_LIST.map(name => ({ name, closures: 0, upfront: 0 }))
           });
         } else {
@@ -102,10 +106,11 @@ export function TeamReportGenerator({ currentUserId, companies }: TeamReportGene
             // Carry over totals to use as "bases" if in the same month.
             // If the old record had `baseGcMonthly`, we sum it with `gcDaily` to get its final daily total.
             // If it's a legacy record without `baseGcMonthly`, we just use `gcMonthly`.
-            const prevGcMonthly = parsed.baseGcMonthly !== undefined ? parsed.baseGcMonthly + (parsed.gcDaily || 0) : (parsed.gcMonthly || 0);
-            const prevUscMonthly = parsed.baseUscMonthly !== undefined ? parsed.baseUscMonthly + (parsed.uscDaily || 0) : (parsed.uscMonthly || 0);
-            const prevH1bMonthly = parsed.baseH1bMonthly !== undefined ? parsed.baseH1bMonthly + (parsed.h1bDaily || 0) : (parsed.h1bMonthly || 0);
-            const prevUpfrontMonth = parsed.baseUpfrontMonth !== undefined ? parsed.baseUpfrontMonth + (parsed.reps?.reduce((a: any, r: any) => a + (r.upfront || 0), 0) || 0) : (parsed.upfrontMonth || 0);
+            const prevGcMonthly = parsed.gcMonthly !== undefined ? parsed.gcMonthly : (parsed.baseGcMonthly !== undefined ? parsed.baseGcMonthly + (parsed.gcDaily || 0) : 0);
+            const prevUscMonthly = parsed.uscMonthly !== undefined ? parsed.uscMonthly : (parsed.baseUscMonthly !== undefined ? parsed.baseUscMonthly + (parsed.uscDaily || 0) : 0);
+            const prevH1bMonthly = parsed.h1bMonthly !== undefined ? parsed.h1bMonthly : (parsed.baseH1bMonthly !== undefined ? parsed.baseH1bMonthly + (parsed.h1bDaily || 0) : 0);
+            const prevUpfrontMonth = parsed.upfrontMonth !== undefined ? parsed.upfrontMonth : (parsed.baseUpfrontMonth !== undefined ? parsed.baseUpfrontMonth + (parsed.reps?.reduce((a: any, r: any) => a + (r.upfront || 0), 0) || 0) : 0);
+            const prevRefundMonth = parsed.refundMonth !== undefined ? parsed.refundMonth : (parsed.baseRefundMonth !== undefined ? parsed.baseRefundMonth + (parsed.refundDaily || 0) : (parsed.refund || 0));
 
             setData({
               leads: 0,
@@ -115,7 +120,8 @@ export function TeamReportGenerator({ currentUserId, companies }: TeamReportGene
               uscDaily: 0,
               h1bDaily: 0,
               nonIt: 0,
-              refund: isSameMonth ? (parsed.refund || 0) : 0,
+              refundDaily: 0,
+              baseRefundMonth: isSameMonth ? prevRefundMonth : 0,
               baseGcMonthly: isSameMonth ? prevGcMonthly : 0,
               baseUscMonthly: isSameMonth ? prevUscMonthly : 0,
               baseH1bMonthly: isSameMonth ? prevH1bMonthly : 0,
@@ -125,13 +131,14 @@ export function TeamReportGenerator({ currentUserId, companies }: TeamReportGene
           } else {
             // Completely fresh
             setData({
-              leads: 0, connected: 0, pipeline: 0, gcDaily: 0, uscDaily: 0, h1bDaily: 0, nonIt: 0, refund: 0,
-              baseGcMonthly: 0, baseUscMonthly: 0, baseH1bMonthly: 0, baseUpfrontMonth: 0,
+              leads: 0, connected: 0, pipeline: 0, gcDaily: 0, uscDaily: 0, h1bDaily: 0, nonIt: 0, refundDaily: 0,
+              baseGcMonthly: 0, baseUscMonthly: 0, baseH1bMonthly: 0, baseUpfrontMonth: 0, baseRefundMonth: 0,
               reps: INITIAL_REPS_LIST.map(name => ({ name, closures: 0, upfront: 0 }))
             });
           }
         }
       } catch (err) {
+        console.error("Failed to load report data:", err);
         toast({ title: "Error", description: "Failed to load report data", variant: "destructive" });
       } finally {
         setIsLoading(false);
@@ -192,11 +199,11 @@ export function TeamReportGenerator({ currentUserId, companies }: TeamReportGene
     out += `Closures today:- ${closuresToday}\n`;
     out += `Upfront today:- $${upfrontToday}\n`;
     out += `Upfront this month:- $${upfrontMonth}\n`;
-    out += `Refund till date:-$${data.refund}\n`;
+    out += `Refund till date:-$${refundMonth}\n`;
     out += `Total Upfront after Refund:-$${upfrontAfterRefund}`;
 
     return out;
-  }, [company, date, data, closuresToday, upfrontToday, gcMonthly, uscMonthly, h1bMonthly, upfrontMonth, upfrontAfterRefund]);
+  }, [company, date, data, closuresToday, upfrontToday, gcMonthly, uscMonthly, h1bMonthly, upfrontMonth, refundMonth, upfrontAfterRefund]);
 
   useEffect(() => {
     setPreview(buildReport());
@@ -211,6 +218,7 @@ export function TeamReportGenerator({ currentUserId, companies }: TeamReportGene
         uscMonthly,
         h1bMonthly,
         upfrontMonth,
+        refundMonth,
         upfrontAfterRefund
       };
 
@@ -261,7 +269,7 @@ export function TeamReportGenerator({ currentUserId, companies }: TeamReportGene
             </div>
             <div className="space-y-2">
               <Label>Date</Label>
-              <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
+              <DatePicker value={date} onChange={setDate} />
             </div>
           </CardContent>
         </Card>
@@ -279,9 +287,13 @@ export function TeamReportGenerator({ currentUserId, companies }: TeamReportGene
               <Label>Connected</Label>
               <Input type="number" value={data.connected} onChange={e => updateField("connected", parseFloat(e.target.value))} />
             </div>
-            <div className="space-y-2 col-span-2">
+            <div className="space-y-2">
               <Label>Pipeline</Label>
               <Input type="number" value={data.pipeline} onChange={e => updateField("pipeline", parseFloat(e.target.value))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Refund today ($)</Label>
+              <Input type="number" value={data.refundDaily} onChange={e => updateField("refundDaily", parseFloat(e.target.value))} />
             </div>
           </CardContent>
         </Card>
@@ -387,8 +399,8 @@ export function TeamReportGenerator({ currentUserId, companies }: TeamReportGene
               <Input type="number" value={upfrontMonth} readOnly className="bg-muted font-medium" />
             </div>
             <div className="space-y-2">
-              <Label>Refund till date ($)</Label>
-              <Input type="number" value={data.refund} onChange={e => updateField("refund", parseFloat(e.target.value))} />
+              <Label className="flex justify-between">Refund till date ($) <span className="text-muted-foreground text-[10px] uppercase bg-muted px-1 rounded">Auto</span></Label>
+              <Input type="number" value={refundMonth} readOnly className="bg-muted font-medium" />
             </div>
             <div className="space-y-2 col-span-2">
               <Label className="flex justify-between">Total upfront after refund ($) <span className="text-muted-foreground text-[10px] uppercase bg-muted px-1 rounded">Auto</span></Label>

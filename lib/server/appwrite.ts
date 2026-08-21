@@ -11,6 +11,7 @@ const adminDatabaseCacheStores = createAppwriteReadCacheStores();
 const sessionDatabaseCacheStores = createAppwriteReadCacheStores();
 
 function namespaceForSecret(prefix: string, value: string) {
+  // Trigger cache reset
   return `${prefix}:${createHash("sha256").update(value).digest("hex").slice(0, 24)}`;
 }
 

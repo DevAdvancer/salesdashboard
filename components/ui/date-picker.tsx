@@ -238,6 +238,7 @@ export function DatePicker({
   const { open, setOpen, ref } = usePopover()
   const [visibleMonth, setVisibleMonth] = React.useState(() => getMonthStart(value))
   const [popperPosition, setPopperPosition] = React.useState<'right' | 'left'>('right')
+  const [verticalPosition, setVerticalPosition] = React.useState<'bottom' | 'top'>('bottom')
 
   React.useEffect(() => {
     if (open) {
@@ -249,12 +250,20 @@ export function DatePicker({
         const calendarWidth = 18 // Approximate width in rem
         const spaceLeft = buttonRect.left
         const spaceRight = window.innerWidth - buttonRect.right
+        const spaceBelow = window.innerHeight - buttonRect.bottom
 
         // If less space on the right, position left
         if (spaceRight < calendarWidth * 16 && spaceLeft > calendarWidth * 16) {
           setPopperPosition('left')
         } else {
           setPopperPosition('right')
+        }
+
+        // If less space below, position top
+        if (spaceBelow < 380 && buttonRect.top > 380) {
+          setVerticalPosition('top')
+        } else {
+          setVerticalPosition('bottom')
         }
       }
     }
@@ -284,8 +293,9 @@ export function DatePicker({
 
       {open && (
         <div className={cn(
-          "absolute z-50 mt-2 w-[18rem] rounded-2xl border border-border bg-popover p-4 text-popover-foreground shadow-xl",
-          popperPosition === 'right' ? 'right-0' : 'left-0'
+          "absolute z-50 w-[18rem] rounded-2xl border border-border bg-popover p-4 text-popover-foreground shadow-xl",
+          popperPosition === 'right' ? 'right-0' : 'left-0',
+          verticalPosition === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
         )}>
           <div className="mb-3 flex items-center justify-between gap-2">
             <button
@@ -358,36 +368,39 @@ export function DateRangePicker({
   const { open, setOpen, ref } = usePopover()
   const [visibleMonth, setVisibleMonth] = React.useState(() => getMonthStart(value.from ?? value.to))
   const [popperPosition, setPopperPosition] = React.useState<'right' | 'left'>('right')
+  const [verticalPosition, setVerticalPosition] = React.useState<'bottom' | 'top'>('bottom')
   const disabledDateSet = React.useMemo(() => new Set(disabledDates), [disabledDates])
 
   React.useEffect(() => {
     if (open) {
       setVisibleMonth(getMonthStart(value.from ?? value.to))
 
-      // If align is fixed, use it directly.
-      if (align === 'left') {
-        setPopperPosition('left')
-        return
-      }
-      if (align === 'right') {
-        setPopperPosition('right')
-        return
-      }
+      let finalPopperPosition: 'left' | 'right' = align === 'smart' ? 'right' : align
 
-      // Smart: check if the calendar would go off-screen
       if (typeof document !== 'undefined' && ref.current) {
         const buttonRect = ref.current.getBoundingClientRect()
-        const calendarWidth = 36 // Approximate width in rem
-        const spaceLeft = buttonRect.left
-        const spaceRight = window.innerWidth - buttonRect.right
+        
+        // Smart: check if the calendar would go off-screen
+        if (align === 'smart') {
+          const calendarWidth = 36 // Approximate width in rem
+          const spaceLeft = buttonRect.left
+          const spaceRight = window.innerWidth - buttonRect.right
 
-        // If less space on the right, position left
-        if (spaceRight < calendarWidth * 16 && spaceLeft > calendarWidth * 16) {
-          setPopperPosition('right')
+          // If less space on the right, position left
+          if (spaceRight < calendarWidth * 16 && spaceLeft > calendarWidth * 16) {
+            finalPopperPosition = 'left'
+          }
+        }
+        
+        const spaceBelow = window.innerHeight - buttonRect.bottom
+        if (spaceBelow < 380 && buttonRect.top > 380) {
+          setVerticalPosition('top')
         } else {
-          setPopperPosition('left')
+          setVerticalPosition('bottom')
         }
       }
+      
+      setPopperPosition(finalPopperPosition)
     }
   }, [open, value.from, value.to, ref, align])
 
@@ -431,8 +444,9 @@ export function DateRangePicker({
 
       {open && (
         <div className={cn(
-          "absolute z-50 mt-2 w-[min(36rem,calc(100vw-1rem))] rounded-2xl border border-border bg-popover p-4 text-popover-foreground shadow-xl lg:w-[min(42rem,calc(100vw-2rem))]",
-          popperPosition === 'right' ? 'right-0' : 'left-0'
+          "absolute z-50 w-[min(36rem,calc(100vw-1rem))] rounded-2xl border border-border bg-popover p-4 text-popover-foreground shadow-xl lg:w-[min(42rem,calc(100vw-2rem))]",
+          popperPosition === 'right' ? 'right-0' : 'left-0',
+          verticalPosition === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
         )}>
           <div className="mb-3 flex items-center justify-between gap-2">
             <button
