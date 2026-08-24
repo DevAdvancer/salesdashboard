@@ -116,7 +116,7 @@ export function EditUserDialog({
                   className="mt-1"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Changing this updates the user's Appwrite login email.
+                  Changing this updates the user&apos;s Appwrite login email.
                 </p>
               </div>
             )}

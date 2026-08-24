@@ -41,7 +41,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
             <CardHeader>
               <CardTitle>Something went wrong</CardTitle>
               <CardDescription>
-                Something didn't load correctly. Please refresh to check, and if the issue is not solved, please contact support.
+                Something didn&apos;t load correctly. Please refresh to check, and if the issue is not solved, please contact support.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

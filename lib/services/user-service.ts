@@ -23,6 +23,7 @@ function matchesDepartmentScope(user: User, departmentScope?: Department | 'all'
 /**
  * Map an Appwrite document to a User object
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapDocToUser(doc: any): User {
   return {
     $id: doc.$id,
@@ -310,8 +311,9 @@ export async function getUserById(userId: string): Promise<User> {
     );
     return mapDocToUser(userDoc);
   } catch (error: unknown) {
-    const code = typeof (error as any)?.code === 'number' ? (error as any).code : null;
-    const message = typeof (error as any)?.message === 'string' ? (error instanceof Error ? error.message : String(error)) : String(error);
+    const err = error as Record<string, unknown>;
+    const code = typeof err?.code === 'number' ? err.code : null;
+    const message = typeof err?.message === 'string' ? (error instanceof Error ? error.message : String(error)) : String(error);
 
     if (code === 404 || message.toLowerCase().includes('could not be found') || message.toLowerCase().includes('not found')) {
       throw new Error(`User not found: ${userId}`);
@@ -337,8 +339,9 @@ export async function getUserByIdOrNull(userId: string): Promise<User | null> {
     );
     return mapDocToUser(userDoc);
   } catch (error: unknown) {
-    const code = typeof (error as any)?.code === 'number' ? (error as any).code : null;
-    const message = typeof (error as any)?.message === 'string' ? (error instanceof Error ? error.message : String(error)) : String(error);
+    const err = error as Record<string, unknown>;
+    const code = typeof err?.code === 'number' ? err.code : null;
+    const message = typeof err?.message === 'string' ? (error instanceof Error ? error.message : String(error)) : String(error);
     const normalizedMessage = message.toLowerCase();
 
     if (code === 404 || normalizedMessage.includes('could not be found') || normalizedMessage.includes('not found')) {
@@ -387,6 +390,7 @@ export async function getUsersByIds(ids: string[]): Promise<Map<string, User>> {
           Query.equal('$id', chunk),
           Query.limit(chunk.length),
         ])
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .catch(() => ({ documents: [] as any[] }))
     )
   );

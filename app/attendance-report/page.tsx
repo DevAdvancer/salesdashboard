@@ -374,3 +374,4 @@ function AgentReportRow({ agent, isRange }: { agent: AgentRow; isRange: boolean 
     </tr>
   );
 }
+

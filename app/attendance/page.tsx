@@ -727,7 +727,7 @@ function AttendanceContent() {
                           {row.linkedinAccounts.length === 0
                             ? "—"
                             : row.linkedinAccounts
-                                .map((a) => `${a.company}: ${a.idName}`)
+                                .map((a: any) => `${a.company}: ${a.idName}`)
                                 .join(", ")}
                         </td>
                       </tr>

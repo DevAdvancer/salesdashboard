@@ -307,7 +307,7 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
         // DO NOT fetch all leads. Fetch in batches until we fulfill the requested page.
         const targetCount = pageSize;
         const startOffset = (page - 1) * pageSize;
-        let accumulatedLeads: Lead[] = [];
+        const accumulatedLeads: Lead[] = [];
         let cursor: string | undefined = undefined;
         let hasMore = true;
         let batchCount = 0;

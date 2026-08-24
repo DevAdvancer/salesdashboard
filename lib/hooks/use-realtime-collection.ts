@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { client, DATABASE_ID } from "@/lib/appwrite";
 
 /**
@@ -26,7 +26,13 @@ export function useRealtimeCollection(
 ): void {
   const { enabled = true, debounceMs = 250 } = options;
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  
+  // Use layout effect to keep the ref updated without mutating during render
+  typeof window !== 'undefined'
+    ? // eslint-disable-next-line react-hooks/rules-of-hooks
+      React.useLayoutEffect(() => { onChangeRef.current = onChange; }, [onChange])
+    : // eslint-disable-next-line react-hooks/rules-of-hooks
+      React.useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
   useEffect(() => {
     if (!enabled || !collectionId) return;

@@ -167,7 +167,6 @@ export async function getAssignedReportData(userId: string, dateFrom?: string, d
     const isByLeadGen = ownerRole === 'lead_generation';
 
     // Count all leads for this agent, classify them by ownerRole if applicable.
-    const teamSummary = summaries.get(teamLeadId);
     const memberSummary = memberSummaries.get(assignedUser);
 
     if (memberSummary) {

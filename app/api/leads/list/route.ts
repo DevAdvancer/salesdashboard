@@ -6,7 +6,9 @@ export async function POST(req: NextRequest) {
   try {
     const text = await req.text();
     const body = text ? JSON.parse(text) : {};
-    let { filters = {}, userId, role, branchIds, options = {} } = body;
+    const filters = body.filters || {};
+    const options = body.options || {};
+    let { userId, role, branchIds } = body;
     
     if (!userId) {
       const userDoc = await getAuthenticatedUserDoc();

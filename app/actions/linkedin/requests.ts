@@ -1166,7 +1166,7 @@ export async function loadLinkedinRequestDashboardDataAction(input: {
     .filter((r) => r.leadId)
     .map((r) => r.leadId as string);
   
-  let leadOutcomeByLeadId: Record<string, { statusLabel: string | null; isTerminal: boolean }> = {};
+  const leadOutcomeByLeadId: Record<string, { statusLabel: string | null; isTerminal: boolean }> = {};
   if (leadIds.length > 0) {
     const outcomes = await getBackoutStatusForLeadIdsAction({
       currentUserId: input.currentUserId,

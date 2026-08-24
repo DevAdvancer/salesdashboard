@@ -1,5 +1,6 @@
 export const logger = {
   info: (...args: unknown[]) => {
+    // eslint-disable-next-line no-console
     console.log(new Date().toISOString(), '[INFO]', ...args);
   },
   warn: (...args: unknown[]) => {
@@ -10,6 +11,7 @@ export const logger = {
   },
   debug: (...args: unknown[]) => {
     if (process.env.NODE_ENV !== 'production') {
+      // eslint-disable-next-line no-console
       console.debug(new Date().toISOString(), '[DEBUG]', ...args);
     }
   }

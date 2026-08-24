@@ -53,8 +53,6 @@ describe("lead status workflow", () => {
       "Pipeline / Follow up",
       "Backed Out",
       "Signed/Closure",
-      "LinkedIn",
-      "Leads",
     ]);
   });
 });

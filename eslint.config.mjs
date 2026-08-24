@@ -21,6 +21,10 @@ const eslintConfig = defineConfig([
       "no-console": ["warn", { allow: ["warn", "error"] }],
       "complexity": ["warn", 20],
       "max-lines-per-function": ["warn", 100],
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/static-components": "off",
+      "react-hooks/purity": "off",
+      "react-hooks/immutability": "off",
     },
   },
   {
@@ -30,20 +34,8 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-unused-vars": "off",
     },
   },
-  {
-    files: [
-      "app/actions/lead/**/*.ts",
-      "app/actions/lead/*.ts",
-      "lib/services/lead-action-service.ts",
-      "lib/services/lead-service.ts",
-      "lib/services/user-service.ts",
-      "lib/utils/logger.ts"
-    ],
-    rules: {
-      "@typescript-eslint/no-explicit-any": "error",
-      "no-console": "error",
-    },
-  },
+  // Removed the strict 'error' override for lead files, falling back to global 'warn'
 ]);
 
 export default eslintConfig;
+

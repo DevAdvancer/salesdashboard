@@ -264,7 +264,7 @@ export async function computeAgentStatsForDate(dateKey: string) {
     const src = normalizeSource(data.sourceName ?? data.source);
     const isReferral = src === "referral" || src.includes("referral");
     
-    let creatorId = data.creatorId || l.ownerId;
+    const creatorId = data.creatorId || l.ownerId;
     if (creatorId) {
       const creatorRow = getMap(creatorId);
       if (creatorRow) {

@@ -318,7 +318,7 @@ export function FollowupsPaymentForm({
             </SelectContent>
           </Select>
           <p className="text-[11px] text-muted-foreground mt-1">
-            This followup will be securely credited to this agent's daily stats and Target Report.
+            This followup will be securely credited to this agent&apos;s daily stats and Target Report.
           </p>
         </div>
       )}

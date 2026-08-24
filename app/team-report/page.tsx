@@ -21,7 +21,7 @@ export default async function TeamReportPage() {
     <div className="container mx-auto py-8">
       <h1 className="text-2xl font-bold mb-6">Team Report Generator</h1>
       <p className="text-muted-foreground mb-8">
-        Fill in today's numbers, then copy the formatted report. Data is saved automatically.
+        Fill in today&apos;s numbers, then copy the formatted report. Data is saved automatically.
       </p>
       
       <Suspense fallback={<div>Loading generator...</div>}>
