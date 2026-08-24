@@ -175,6 +175,12 @@ export function LeadInfoCard({
             </>
           );
         }
+
+        const isDropdownWithOther = field.options?.includes("Other");
+        const isCustomValue = isDropdownWithOther && Boolean(value) && !field.options?.includes(value as string);
+        const dropdownValue = isCustomValue ? "Other" : value;
+        const showOtherInput = isDropdownWithOther && (value === "Other" || isCustomValue);
+
         return (
           <>
             <select
@@ -183,8 +189,11 @@ export function LeadInfoCard({
               className={`flex h-10 w-full rounded-2xl border ${
                 fieldError ? "border-red-500" : "border-transparent"
               } bg-[var(--input)] px-4 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ink)] focus-visible:ring-offset-0 focus-visible:border-[var(--ink)]`}
-              value={value}
-              onChange={(e) => onFieldChange(field.key, e.target.value)}
+              value={dropdownValue}
+              onChange={(e) => {
+                const newVal = e.target.value;
+                onFieldChange(field.key, newVal);
+              }}
               disabled={isReadOnly}>
               <option value="">Select {field.label}</option>
               {field.options?.map((option) => (
@@ -193,6 +202,17 @@ export function LeadInfoCard({
                 </option>
               ))}
             </select>
+            {showOtherInput && (
+              <Input
+                id={`${field.key}-other`}
+                type="text"
+                placeholder={`Specify ${field.label}`}
+                value={value === "Other" ? "" : value}
+                onChange={(e) => onFieldChange(field.key, e.target.value || "Other")}
+                disabled={isReadOnly}
+                className={`mt-2 ${fieldError ? "border-red-500" : ""}`}
+              />
+            )}
             {fieldError && (
               <p className="text-sm text-red-500 mt-1">{fieldError}</p>
             )}

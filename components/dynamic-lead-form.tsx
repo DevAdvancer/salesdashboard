@@ -226,6 +226,23 @@ export function DynamicLeadForm({
       ...data,
       ...(assignedToId ? { assignedToId } : {}),
     };
+
+    let hasError = false;
+    for (const field of effectiveConfig) {
+      if (field.type === "dropdown" && submissionData[field.key] === "Other") {
+        const otherKey = `${field.key}Other`;
+        const otherVal = (typeof submissionData[otherKey] === "string" ? submissionData[otherKey] as string : "").trim();
+        if (!otherVal) {
+          setError(otherKey, { type: "manual", message: `Please specify ${field.label.toLowerCase()}` });
+          hasError = true;
+        } else {
+          submissionData[field.key] = otherVal;
+        }
+      }
+    }
+
+    if (hasError) return;
+
     await onSubmit(submissionData);
   };
 
@@ -304,6 +321,10 @@ export function DynamicLeadForm({
           isMonitor,
         );
         const isSourceField = field.key === "source" || field.key === "sourceName";
+        const showOtherInput = fieldValue === "Other";
+        const otherError = errors[`${field.key}Other`];
+        const otherErrorMessage = otherError?.message as string | undefined;
+
         return (
           <div key={field.id} className="space-y-2">
             <Label htmlFor={field.key}>
@@ -334,6 +355,25 @@ export function DynamicLeadForm({
             </select>
             {errorMessage && (
               <p className="text-sm text-red-500">{errorMessage}</p>
+            )}
+            
+            {showOtherInput && (
+              <div className="mt-2 space-y-2">
+                <Input
+                  id={`${field.key}Other`}
+                  type="text"
+                  placeholder={`Specify ${field.label}`}
+                  {...register(`${field.key}Other`, {
+                    onChange: () => {
+                      clearErrors(`${field.key}Other`);
+                    },
+                  })}
+                  className={otherError ? "border-red-500" : ""}
+                />
+                {otherErrorMessage && (
+                  <p className="text-sm text-red-500">{otherErrorMessage}</p>
+                )}
+              </div>
             )}
           </div>
         );
