@@ -222,7 +222,7 @@ export function DynamicLeadForm({
 
   const handleFormSubmit = async (data: Record<string, unknown>) => {
     // Inject assignedToId into the submitted data (Requirement 4.2, 4.3, 4.4)
-    const submissionData = {
+    const submissionData: Record<string, unknown> = {
       ...data,
       ...(assignedToId ? { assignedToId } : {}),
     };
