@@ -241,8 +241,9 @@ export async function getAssignableUsers(
 export async function getAgentsByTeamLead(
   teamLeadId: string,
   departmentScope?: Department | 'all',
+  includeInactive: boolean = false,
 ): Promise<User[]> {
-  return cached(`users:agents:${teamLeadId}:${departmentScope || 'all'}`, 5 * 60 * 1000, async () => {
+  return cached(`users:agents:${teamLeadId}:${departmentScope || 'all'}:${includeInactive}`, 5 * 60 * 1000, async () => {
     try {
       const response = await databases.listDocuments(
         DATABASE_ID,
@@ -267,7 +268,8 @@ export async function getAgentsByTeamLead(
       );
       return response.documents
         .map(mapDocToUser)
-        .filter((user) => matchesDepartmentScope(user, departmentScope));
+        .filter((user) => matchesDepartmentScope(user, departmentScope))
+        .filter((user) => includeInactive || user.isActive);
     } catch (error: unknown) {
       logger.error('Error fetching agents by team lead:', error);
       throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to fetch agents by team lead');
@@ -594,6 +596,7 @@ export async function getSubordinates(userId: string): Promise<User[]> {
 export async function getTeamLeads(
   branchIds?: string[],
   departmentScope?: Department | 'all',
+  includeInactive: boolean = false,
 ): Promise<User[]> {
   try {
     const queries = [Query.equal('role', 'team_lead')];
@@ -614,7 +617,8 @@ export async function getTeamLeads(
     );
     return response.documents
       .map(mapDocToUser)
-      .filter((user) => matchesDepartmentScope(user, departmentScope));
+      .filter((user) => matchesDepartmentScope(user, departmentScope))
+      .filter((user) => includeInactive || user.isActive);
   } catch (error: unknown) {
     logger.error('Error fetching team leads:', error);
     throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to fetch team leads');

@@ -243,10 +243,12 @@ function HistoryContent() {
     role: user?.role ?? "agent",
     branchIds: user?.branchIds,
     departmentScope: "sales",
+    includeInactive: true,
   });
   const teamAgentsQuery = useTeamAgentsQuery({
     teamLeadId: user?.$id ?? "",
     departmentScope: "sales",
+    includeInactive: true,
   });
 
   const canFilterByAgent = user?.role === "admin" || user?.role === "team_lead" || user?.role === "monitor" || user?.role === "operations";

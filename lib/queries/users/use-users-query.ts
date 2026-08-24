@@ -34,17 +34,19 @@ export function useAssignableUsersQuery({
   role,
   branchIds,
   departmentScope,
+  includeInactive,
 }: {
   userId: string;
   role: UserRole;
   branchIds?: string[];
   departmentScope?: Department | "all";
+  includeInactive?: boolean;
 }) {
   const scope = buildScope(userId, role);
   return useQuery<User[]>({
-    queryKey: queryKeys.users.assignable(scope),
+    queryKey: queryKeys.users.assignable(scope, includeInactive),
     queryFn: () =>
-      getAssignableUsers(role, branchIds ?? [], userId, departmentScope),
+      getAssignableUsers(role, branchIds ?? [], userId, departmentScope, includeInactive),
     enabled: Boolean(userId),
     staleTime: FIVE_MINUTES,
   });
@@ -55,16 +57,18 @@ export function useTeamLeadsQuery({
   role,
   branchIds,
   departmentScope,
+  includeInactive,
 }: {
   userId: string;
   role: UserRole;
   branchIds?: string[];
   departmentScope?: Department | "all";
+  includeInactive?: boolean;
 }) {
   const scope = buildScope(userId, role);
   return useQuery<User[]>({
-    queryKey: queryKeys.users.teamLeads(scope),
-    queryFn: () => getTeamLeads(branchIds, departmentScope),
+    queryKey: queryKeys.users.teamLeads(scope, includeInactive),
+    queryFn: () => getTeamLeads(branchIds, departmentScope, includeInactive),
     enabled: Boolean(userId),
     staleTime: FIVE_MINUTES,
   });
@@ -73,13 +77,15 @@ export function useTeamLeadsQuery({
 export function useTeamAgentsQuery({
   teamLeadId,
   departmentScope,
+  includeInactive,
 }: {
   teamLeadId: string;
   departmentScope?: Department | "all";
+  includeInactive?: boolean;
 }) {
   return useQuery<User[]>({
-    queryKey: queryKeys.users.teamAgents(teamLeadId),
-    queryFn: () => getAgentsByTeamLead(teamLeadId, departmentScope),
+    queryKey: queryKeys.users.teamAgents(teamLeadId, includeInactive),
+    queryFn: () => getAgentsByTeamLead(teamLeadId, departmentScope, includeInactive),
     enabled: Boolean(teamLeadId),
     staleTime: FIVE_MINUTES,
   });

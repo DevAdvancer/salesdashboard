@@ -356,16 +356,19 @@ function LeadsContent() {
     role: user?.role ?? "agent",
     branchIds: user?.branchIds,
     departmentScope: "sales",
+    includeInactive: true,
   });
   const teamAgentsQuery = useTeamAgentsQuery({
     teamLeadId: user?.$id ?? "",
     departmentScope: "sales",
+    includeInactive: true,
   });
   const teamLeadsQuery = useTeamLeadsQuery({
     userId: user?.$id ?? "",
     role: user?.role ?? "agent",
     branchIds: user?.branchIds,
     departmentScope: "sales",
+    includeInactive: true,
   });
   const branchesQuery = useBranchesQuery();
   const formConfigQuery = useLeadFormConfigQuery();

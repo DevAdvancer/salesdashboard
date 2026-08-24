@@ -29,10 +29,10 @@ export const queryKeys = {
   },
   users: {
     all: ["users"] as const,
-    assignable: (scope: string) => ["users", "assignable", scope] as const,
-    teamAgents: (teamLeadId: string) =>
-      ["users", "teamAgents", teamLeadId] as const,
-    teamLeads: (scope: string) => ["users", "teamLeads", scope] as const,
+    assignable: (scope: string, includeInactive?: boolean) => ["users", "assignable", scope, includeInactive ?? false] as const,
+    teamAgents: (teamLeadId: string, includeInactive?: boolean) =>
+      ["users", "teamAgents", teamLeadId, includeInactive ?? false] as const,
+    teamLeads: (scope: string, includeInactive?: boolean) => ["users", "teamLeads", scope, includeInactive ?? false] as const,
     list: (scope: string, page: number, pageSize: number) =>
       ["users", "list", scope, page, pageSize] as const,
   },
