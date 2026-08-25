@@ -27,6 +27,8 @@ export async function getActor(userId: string): Promise<User> {
     teamLeadId: doc.teamLeadId || null,
     branchIds: doc.branchIds || [],
     branchId: doc.branchId || null,
+    department: doc.department === "resume" ? "resume" : "sales",
+    isActive: doc.isActive ?? true,
     $createdAt: doc.$createdAt,
     $updatedAt: doc.$updatedAt,
     } as User;

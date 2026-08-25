@@ -50,6 +50,7 @@ async function getActor(userId: string): Promise<User> {
       // sales-only, so the value is read here so callers can use it to
       // filter the readable TL / agent set.
       department: doc.department === "resume" ? "resume" : "sales",
+      isActive: doc.isActive ?? true,
       $createdAt: doc.$createdAt,
       $updatedAt: doc.$updatedAt,
     } as User;

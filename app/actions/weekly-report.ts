@@ -83,6 +83,7 @@ type UserDocument = {
   branchIds?: string[];
   branchId?: string | null;
   department?: string;
+  isActive?: boolean;
   $createdAt: string;
   $updatedAt: string;
 };
@@ -123,6 +124,7 @@ function mapUser(doc: UserDocument): User {
     branchIds: doc.branchIds || [],
     branchId: doc.branchId || null,
     department,
+    isActive: doc.isActive ?? true,
     $createdAt: doc.$createdAt,
     $updatedAt: doc.$updatedAt,
   };
@@ -479,22 +481,22 @@ export async function getWeeklyReportAction(input: {
   to: string;
 }): Promise<WeeklyReportResult> {
   const actor = await getActor(input.actorId);
-  ensureSalesCrmAccess(actor);
-  ensureComponentAccess(actor.role, "reports");
+    ensureSalesCrmAccess(actor);
+    ensureComponentAccess(actor.role, "reports");
 
-  const range: WeeklyReportRange = { from: input.from, to: input.to };
+    const range: WeeklyReportRange = { from: input.from, to: input.to };
 
-  const { databases } = await createAdminClient();
+    const { databases } = await createAdminClient();
 
-  const branchesResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.BRANCHES, [
-    Query.select(["$id", "name"]),
-    Query.limit(100),
-  ]);
-  const branchMap = new Map<string, string>();
-  (branchesResponse.documents as any[]).forEach((b) => branchMap.set(b.$id, b.name));
+    const branchesResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.BRANCHES, [
+      Query.select(["$id", "name"]),
+      Query.limit(100),
+    ]);
+    const branchMap = new Map<string, string>();
+    (branchesResponse.documents as any[]).forEach((b) => branchMap.set(b.$id, b.name));
 
-  const scopedUsers = await listScopedUsers(databases, actor);
-  const scopedUserIds = new Set(scopedUsers.map((user) => user.$id));
+    const scopedUsers = await listScopedUsers(databases, actor);
+    const scopedUserIds = new Set(scopedUsers.map((user) => user.$id));
 
   const stats = await listAllDocuments<any>({
     databases,

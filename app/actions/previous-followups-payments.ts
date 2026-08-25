@@ -246,6 +246,7 @@ async function getActor(userId: string): Promise<User> {
     branchIds: doc.branchIds || [],
     branchId: doc.branchId || null,
     department: (doc.department as User["department"]) || "sales",
+    isActive: doc.isActive ?? true,
     $createdAt: doc.$createdAt,
     $updatedAt: doc.$updatedAt,
   };
