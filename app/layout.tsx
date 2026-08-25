@@ -45,6 +45,15 @@ const themeBootScript = `
     document.documentElement.classList.add('dark');
     document.documentElement.style.colorScheme = 'dark';
   }
+  
+  // Suppress Appwrite Realtime SDK noise when background tabs disconnect
+  const originalConsoleError = console.error;
+  console.error = function(...args) {
+    if (typeof args[0] === 'string' && args[0].includes('Realtime got disconnected. Reconnect will be attempted')) {
+      return;
+    }
+    originalConsoleError.apply(console, args);
+  };
 })();
 `;
 

@@ -9,6 +9,7 @@ import {
 } from "@/app/actions/user";
 import { listBranches } from "@/lib/services/branch-service";
 import { invalidateUsersCache } from "@/lib/services/user-service";
+import { useIsVisible } from "@/lib/hooks/use-is-visible";
 import { User, Branch, UserRole, Department } from "@/lib/types";
 import { client, databases } from "@/lib/appwrite";
 
@@ -41,6 +42,7 @@ export function useUserManagement() {
   const [error, setError] = useState<string | null>(null);
 
   const { confirm, ConfirmDialog } = useConfirmDialog();
+  const isVisible = useIsVisible();
 
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
@@ -216,7 +218,7 @@ export function useUserManagement() {
   }, [user, fetchUsers, fetchTeamLeadsOnly]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isVisible) return;
 
     const databaseId = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
     const collectionId = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
@@ -242,7 +244,7 @@ export function useUserManagement() {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       unsubscribe();
     };
-  }, [user, fetchUsers]);
+  }, [user, fetchUsers, isVisible]);
 
   useEffect(() => {
     async function loadTeamLeads() {

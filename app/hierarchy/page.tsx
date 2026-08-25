@@ -23,6 +23,8 @@ import {
   sortUsersForHierarchy,
 } from '@/components/hierarchy/hierarchy-tree';
 
+import { useIsVisible } from '@/lib/hooks/use-is-visible';
+
 export default function HierarchyPage() {
   return (
     <ProtectedRoute componentKey="hierarchy">
@@ -34,6 +36,7 @@ export default function HierarchyPage() {
 function HierarchyContent() {
   const { user, isAdmin, isTeamLead, isMonitor } = useAuth();
   const canReadAllHierarchy = isAdmin || isMonitor;
+  const isVisible = useIsVisible();
   const [users, setUsers] = useState<User[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -106,7 +109,7 @@ function HierarchyContent() {
   }, [loadData]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isVisible) return;
 
     const databaseId = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
     const collectionId = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
@@ -132,7 +135,7 @@ function HierarchyContent() {
       }
       unsubscribe();
     };
-  }, [user, loadData]);
+  }, [user, loadData, isVisible]);
 
   if (isLoading) {
     return (

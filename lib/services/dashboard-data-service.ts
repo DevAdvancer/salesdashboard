@@ -254,43 +254,29 @@ export async function loadDashboardTopMetrics(
     DASHBOARD_TOP_METRICS_SCOPE,
     [input.userId, input.role, branchIds, dateFrom ?? "", dateTo ?? ""],
     async () => {
-      // 1. Active (created in range) + closed (closed in range) counts. These
-      //    two tiles are date-of-lead based and stay unchanged.
-      const [active, closed] = await Promise.all([
-        listLeads(
-          { isClosed: false, dateFrom, dateTo },
-          input.userId,
-          input.role,
-          input.branchIds,
-        ),
-        listLeads(
-          { isClosed: true, closedAtFrom: dateFrom, closedAtTo: dateTo },
-          input.userId,
-          input.role,
-          input.branchIds,
-        ),
-      ]);
-      const closedInRange = filterClosedLeadsInDateRange(
-        closed,
-        dateFrom ?? "",
-        dateTo ?? "",
-      ).filter(isVisibleClientLead);
-
-      // 2. Support-email counts are based on their own send timestamp against the
-      //    range, then they check which leads the user is allowed to see.
       const dateFromIso = expandIsoDateToStart(dateFrom ?? "");
       const dateToIso = expandIsoDateToEnd(dateTo ?? "");
-      const attempts = await loadDashboardAttemptCounts(
+
+      const [counts, attempts] = await Promise.all([
+        import("@/app/actions/dashboard-metrics").then(m => m.getDashboardTopMetricsCountsAction(
+          input.userId,
+          input.role,
+          input.branchIds,
+          dateFrom,
+          dateTo
+        )),
+        loadDashboardAttemptCounts(
           input.userId,
           input.role,
           input.branchIds,
           dateFromIso,
           dateToIso,
-      );
+        )
+      ]);
 
       return {
-        activeLeads: active.length,
-        closedLeads: closedInRange.length,
+        activeLeads: counts.activeLeads,
+        closedLeads: counts.closedLeads,
         createdMocks: attempts.createdMocks,
         createdInterviewSupport: attempts.createdInterviewSupport,
         createdAssessmentSupport: attempts.createdAssessmentSupport,

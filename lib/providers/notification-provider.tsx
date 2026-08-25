@@ -57,6 +57,8 @@ function showBrowserNotification(title: string, body: string, url?: string) {
   }
 }
 
+import { useIsVisible } from "@/lib/hooks/use-is-visible";
+
 export function NotificationProvider({
   children,
 }: {
@@ -64,6 +66,7 @@ export function NotificationProvider({
 }) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const isVisible = useIsVisible();
 
   // Request browser notification permissions once on mount
   useEffect(() => {
@@ -73,7 +76,7 @@ export function NotificationProvider({
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isVisible) return;
 
     const unsubscribe = client.subscribe(
       [

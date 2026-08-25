@@ -231,3 +231,13 @@ Vercel is the primary target (`vercel.json` supplies the cron schedule). A [Dock
 - **Do not commit or push** unless asked. When you do commit, plain messages only, no AI attribution trailers.
 - **Verify before claiming done.** `bun run lint` and `bun run test` at minimum; run the dev server for UI changes.
 - **When behavior spans layers**, check whether the change is needed in the service, the action, the access constants, and the tests. This codebase's most common defect is updating one of the four.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

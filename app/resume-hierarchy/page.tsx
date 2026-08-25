@@ -14,6 +14,7 @@ import { Branch, User } from '@/lib/types';
 import { User as UserIcon } from 'lucide-react';
 import { listBranches } from '@/lib/services/branch-service';
 import { client, databases } from '@/lib/appwrite';
+import { useIsVisible } from '@/lib/hooks/use-is-visible';
 import { getAllActiveUsers, getUsersByBranches } from '@/lib/services/user-service';
 import {
   TreeNode,
@@ -35,6 +36,7 @@ function ResumeHierarchyContent() {
   // The resume page is only reachable for Resume-team members and the
   // leadership roles. Both groups should see the full Resume tree.
   const canReadAllHierarchy = isAdmin || isMonitor;
+  const isVisible = useIsVisible();
   const [users, setUsers] = useState<User[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -104,7 +106,7 @@ function ResumeHierarchyContent() {
   }, [loadData]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isVisible) return;
 
     const databaseId = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
     const collectionId = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
@@ -130,7 +132,7 @@ function ResumeHierarchyContent() {
       }
       unsubscribe();
     };
-  }, [user, loadData]);
+  }, [user, loadData, isVisible]);
 
   if (isLoading) {
     return (

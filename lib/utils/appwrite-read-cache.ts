@@ -181,7 +181,7 @@ export function createReadThroughDatabases<T extends object>(
           const cached = cache.get(key);
 
           if (cached && cached.expiresAt > now) {
-            logger.info({
+            logger.debug({
               type: 'database_read',
               method: prop,
               collectionId,
@@ -207,7 +207,7 @@ export function createReadThroughDatabases<T extends object>(
           const request = Promise.resolve(method.apply(target, args))
             .then((value) => {
               cache.set(key, { expiresAt: Date.now() + ttlMs, value });
-              logger.info({
+              logger.debug({
                 type: 'database_read',
                 method: prop,
                 collectionId,
@@ -244,7 +244,7 @@ export function createReadThroughDatabases<T extends object>(
           const promise = Promise.resolve(method.apply(target, args));
 
           promise.then(() => {
-            logger.info({
+            logger.debug({
               type: 'database_write',
               method: prop,
               collectionId,

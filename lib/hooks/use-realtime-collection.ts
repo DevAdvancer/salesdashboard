@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef } from "react";
 import { client, DATABASE_ID } from "@/lib/appwrite";
+import { useIsVisible } from "@/lib/hooks/use-is-visible";
 
 /**
  * Subscribe to Appwrite realtime events for one collection and run a
@@ -26,6 +27,7 @@ export function useRealtimeCollection(
 ): void {
   const { enabled = true, debounceMs = 250 } = options;
   const onChangeRef = useRef(onChange);
+  const isVisible = useIsVisible();
   
   // Use layout effect to keep the ref updated without mutating during render
   typeof window !== 'undefined'
@@ -35,7 +37,7 @@ export function useRealtimeCollection(
       React.useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
   useEffect(() => {
-    if (!enabled || !collectionId) return;
+    if (!enabled || !collectionId || !isVisible) return;
 
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const scheduleChange = () => {
@@ -54,5 +56,5 @@ export function useRealtimeCollection(
       if (debounceTimer) clearTimeout(debounceTimer);
       unsubscribe();
     };
-  }, [collectionId, enabled, debounceMs]);
+  }, [collectionId, enabled, debounceMs, isVisible]);
 }

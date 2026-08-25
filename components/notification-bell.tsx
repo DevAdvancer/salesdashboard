@@ -14,6 +14,7 @@ import { getLatestNotifications } from '@/lib/utils/notifications';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 import { showBrowserNotification, playNotificationSound, primeNotificationPermission } from '@/lib/utils/notification-sound';
+import { useIsVisible } from '@/lib/hooks/use-is-visible';
 
 const NOTIFICATION_FALLBACK_POLL_MS = 15 * 60 * 1000;
 const NOTIFICATION_FORCE_REFRESH_COOLDOWN_MS = 5000;
@@ -35,6 +36,7 @@ export function NotificationBell({ className }: { className?: string }) {
   const { user } = useAuth();
   const { canAccess, isLoading: accessLoading } = useAccess();
   const { toast } = useToast();
+  const isVisible = useIsVisible();
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -152,7 +154,7 @@ export function NotificationBell({ className }: { className?: string }) {
   }, [canSeeNotifications, forceLoad, load]);
 
   useEffect(() => {
-    if (!user || !canSeeNotifications) return;
+    if (!user || !canSeeNotifications || !isVisible) return;
 
     const unsubscribe = client.subscribe(
       `databases.${DATABASE_ID}.collections.${COLLECTIONS.NOTIFICATIONS}.documents`,
@@ -167,7 +169,7 @@ export function NotificationBell({ className }: { className?: string }) {
     return () => {
       unsubscribe();
     };
-  }, [canSeeNotifications, load, user]);
+  }, [canSeeNotifications, load, user, isVisible]);
 
   if (!canSeeNotifications) {
     return null;
