@@ -180,7 +180,8 @@ export async function checkAndNotifyAdminAttendanceEscalationsAction(input: {
     for (const teamLead of teamLeads) {
     const teamLeadAttendance = attendanceByUserId.get(teamLead.$id) ?? null;
     const teamLeadIsPresent = teamLeadAttendance?.present === true;
-    if (!teamLeadIsPresent && !teamLeadAttendance?.absentNotifiedAt) {
+    const isLeadGenTL = teamLead.$id === "6a7f6f240000aee049cf" || teamLead.name.toLowerCase().includes("lead generation");
+    if (!teamLeadIsPresent && !teamLeadAttendance?.absentNotifiedAt && !isLeadGenTL) {
       const updatedTl = await upsertAttendanceDoc(databases, {
         dateKey,
         userId: teamLead.$id,

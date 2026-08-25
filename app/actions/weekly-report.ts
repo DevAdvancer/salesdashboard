@@ -767,6 +767,8 @@ export async function getWeeklyReportAction(input: {
     .filter((user) => user.role === "team_lead")
     .sort((a, b) => String(a.name).localeCompare(String(b.name)));
 
+  console.log(`DEBUG getWeeklyReportAction: scopedUsers length = ${scopedUsers.length}, teamLeads length = ${teamLeads.length}`);
+
   const seenMembers = new Set<string>();
 
   for (const teamLead of teamLeads) {
@@ -822,8 +824,11 @@ export async function getWeeklyReportAction(input: {
 
   if (actor.role === "team_lead") {
     const only = teams.filter((team) => team.teamLead?.$id === actor.$id);
-    return { range, teams: only.length > 0 ? only : teams.slice(0, 1) };
+    const result = { range, teams: only.length > 0 ? only : teams.slice(0, 1) };
+    console.log("DEBUG getWeeklyReportAction: returning for team_lead, teams length =", result.teams.length);
+    return result;
   }
 
+  console.log("DEBUG getWeeklyReportAction: returning, teams length =", teams.length);
   return { range, teams };
 }
