@@ -210,40 +210,52 @@ function LeadDetailContent() {
     if (!user || !lead) return;
 
     try {
+      let fetchedAgents: User[] = [];
+      let finalAgents: User[] = [];
+
       if (lead.ownerId === user.$id) {
-        const fetchedAgents = await listLeadAssignableAgents(
+        fetchedAgents = await listLeadAssignableAgents(
           lead.$id,
           user.$id,
         );
-        setAgents(
-          fetchedAgents.filter((candidate) =>
-            user.role === "lead_generation"
+        finalAgents = fetchedAgents.filter((candidate) =>
+          user.role === "admin" || user.role === "developer"
+            ? candidate.role === "agent" || candidate.role === "team_lead"
+            : user.role === "lead_generation"
               ? candidate.role === "team_lead"
-              : candidate.role === "agent",
-          ),
+              : candidate.role === "agent"
         );
-        return;
-      }
-
-      if (
+      } else if (
         user.role === "team_lead" ||
         user.role === "admin" ||
         user.role === "developer"
       ) {
-        const fetchedAgents = await getAssignableUsers(
+        fetchedAgents = await getAssignableUsers(
           user.role,
           user.branchIds || [],
           user.$id,
           "sales",
         );
-        setAgents(
-          fetchedAgents.filter((candidate) =>
-            user.role === "admin" || user.role === "developer"
-              ? candidate.role === "agent" || candidate.role === "team_lead"
-              : candidate.role === "agent",
-          ),
+        finalAgents = fetchedAgents.filter((candidate) =>
+          user.role === "admin" || user.role === "developer"
+            ? candidate.role === "agent" || candidate.role === "team_lead"
+            : candidate.role === "agent",
         );
       }
+
+      // Ensure the current user is in the list if they are the assignee or have rights to take the lead
+      if (
+        user.role === "admin" ||
+        user.role === "developer" ||
+        user.role === "team_lead" ||
+        lead.assignedToId === user.$id
+      ) {
+        if (!finalAgents.some((a) => a.$id === user.$id)) {
+          finalAgents.push(user);
+        }
+      }
+
+      setAgents(finalAgents);
     } catch (err: unknown) {
       logger.error("Error loading agents:", err);
     }
