@@ -24,7 +24,7 @@ export async function getDashboardTopMetricsCountsAction(
 
   const visibilityQueries: string[] = [];
   
-  let salesUserIds = isAdminLikeReadAllRole(userRole)
+  const salesUserIds = isAdminLikeReadAllRole(userRole)
     ? await getDepartmentScopedUserIds(databases, "sales")
     : null;
 
@@ -98,8 +98,8 @@ export async function getDashboardTopMetricsCountsAction(
     databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS, closedQueries),
   ]);
   
-  let activeCount = activeResult.total;
-  let closedCount = closedResult.total;
+  const activeCount = activeResult.total;
+  const closedCount = closedResult.total;
 
   return { activeLeads: activeCount, closedLeads: closedCount };
 }

@@ -94,7 +94,7 @@ export async function getAttendanceReportAction(input: {
       Query.limit(2000),
     ]);
     const allTLs = (teamLeadsResponse.documents as unknown as User[])
-      .filter((tl) => matchesDepartmentScope(tl, input.departmentScope ?? "sales"))
+      .filter((tl) => tl.isActive !== false).filter((tl) => matchesDepartmentScope(tl, input.departmentScope ?? "sales"))
       .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
     allTeamLeadOptions = allTLs.map((tl) => ({ userId: tl.$id, userName: tl.name }));
@@ -132,7 +132,7 @@ export async function getAttendanceReportAction(input: {
             Query.limit(5000),
           ]) : { documents: [] as unknown[] };
     const allAgents = (allAgentsResponse.documents as unknown as User[])
-            .filter((a) => matchesDepartmentScope(a, input.departmentScope ?? "sales"))
+            .filter((a) => a.isActive !== false).filter((a) => matchesDepartmentScope(a, input.departmentScope ?? "sales"))
             .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
     const allAgentAttendanceResponse = teamLeadIds.length > 0 ? await databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
             Query.equal("teamLeadId", teamLeadIds),

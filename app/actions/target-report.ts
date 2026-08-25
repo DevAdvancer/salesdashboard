@@ -149,7 +149,7 @@ export async function getTargetReportAction(input: {
   } else {
     // Admin-like: scope to sales so the team table never surfaces
     // resume TLs / agents.
-    const all = await getAssignableUsers(actor.role, actor.branchIds ?? [], actor.$id, "sales", true);
+    const all = await getAssignableUsers(actor.role, actor.branchIds ?? [], actor.$id, "sales", false);
     const assignedIds = Object.values(assignmentsByTargetId).flatMap(list => list.map(a => a.agentId));
     readableAgentIds = Array.from(new Set([
       ...all.filter((u) => u.role === "agent" || u.role === "lead_generation" || u.role === "team_lead").map((u) => u.$id),

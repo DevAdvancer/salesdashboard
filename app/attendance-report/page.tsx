@@ -117,8 +117,6 @@ function AttendanceReportContent() {
     loadReport();
   }, [loadReport]);
 
-  if (!user) return null;
-
   // Summary counts
   const summary = useMemo(() => {
     if (!report) return null;
@@ -142,6 +140,8 @@ function AttendanceReportContent() {
     }
     return { totalAgents, presentAgents, absentAgents, withDelegate, tlPresent, tlAbsent };
   }, [report]);
+
+  if (!user) return null;
 
   return (
     <div className="container mx-auto">

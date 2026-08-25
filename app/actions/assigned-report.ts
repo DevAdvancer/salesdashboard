@@ -46,7 +46,7 @@ export async function getAssignedReportData(userId: string, dateFrom?: string, d
   }
 
   // Load all relevant users
-  const users = await listAllDocuments<{ $id: string; name: string; role: UserRole; teamLeadId: string | null; department?: string }>({
+  const users = await listAllDocuments<{ $id: string; name: string; role: UserRole; teamLeadId: string | null; department?: string; isActive?: boolean }>({
     databases,
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.USERS,
@@ -55,17 +55,19 @@ export async function getAssignedReportData(userId: string, dateFrom?: string, d
         Query.equal('department', 'sales'),
         Query.equal('role', ['admin', 'developer', 'monitor', 'operations'])
       ]),
-      Query.select(['$id', 'name', 'role', 'teamLeadId', 'department'])
+      Query.select(['$id', 'name', 'role', 'teamLeadId', 'department', 'isActive'])
     ],
     pageLimit: 100,
     maxPages: 100,
   });
 
+  const activeUsers = users.filter(u => u.isActive !== false);
+
   const userMap = new Map<string, {name: string, role: UserRole, teamLeadId: string | null}>();
   const teamMap = new Map<string, string[]>();
   const teamLeadNames = new Map<string, string>();
 
-  for (const user of users) {
+  for (const user of activeUsers) {
     userMap.set(user.$id, { name: user.name, role: user.role, teamLeadId: user.teamLeadId });
     if (user.role === 'team_lead') {
       if (!teamMap.has(user.$id)) {

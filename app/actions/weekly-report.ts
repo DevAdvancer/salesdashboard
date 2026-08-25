@@ -275,7 +275,7 @@ async function listTeamLeadAgents(databases: any, teamLeadId: string): Promise<U
 
   return docs
     .map(mapUser)
-    .filter((user) => normalizeDepartment(user.department) === "sales")
+    .filter((user) => user.isActive).filter((user) => normalizeDepartment(user.department) === "sales")
     .sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
 
@@ -303,7 +303,7 @@ async function listScopedUsers(databases: any, actor: User): Promise<User[]> {
 
   return docs
     .map(mapUser)
-    .filter((user) => normalizeDepartment(user.department) === "sales")
+    .filter((user) => user.isActive).filter((user) => normalizeDepartment(user.department) === "sales")
     .sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
 

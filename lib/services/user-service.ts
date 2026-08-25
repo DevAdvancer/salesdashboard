@@ -57,7 +57,7 @@ export async function getUsersByBranch(branchId: string): Promise<User[]> {
         ])
       ]
     );
-    return response.documents.map(mapDocToUser);
+    return response.documents.map(mapDocToUser).filter(u => u.isActive);
   } catch (error: unknown) {
     logger.error('Error fetching users by branch:', error);
     throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to fetch users by branch');
@@ -84,7 +84,7 @@ export async function getUsersByBranches(branchIds: string[]): Promise<User[]> {
         ])
       ]
     );
-    return response.documents.map(mapDocToUser);
+    return response.documents.map(mapDocToUser).filter(u => u.isActive);
   } catch (error: unknown) {
     logger.error('Error fetching users by branches:', error);
     throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to fetch users by branches');
@@ -438,7 +438,7 @@ export async function getAllAgents(): Promise<User[]> {
       USERS_COLLECTION_ID,
       [Query.equal('role', 'agent')]
     );
-    return response.documents.map(mapDocToUser);
+    return response.documents.map(mapDocToUser).filter(u => u.isActive);
   } catch (error: unknown) {
     logger.error('Error fetching all agents:', error);
     throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to fetch all agents');
