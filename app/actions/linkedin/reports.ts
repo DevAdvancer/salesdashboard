@@ -42,7 +42,13 @@ export async function getLinkedinWeeklyReportAction(input: {
   ];
 
   if (effectiveTeamLeadId && effectiveTeamLeadId !== "all") {
-    queries.unshift(Query.equal("teamLeadId", effectiveTeamLeadId));
+    const agents = await getAgentsByTeamLead(effectiveTeamLeadId, "sales", true);
+    const allowedAgentIds = agents.map(a => a.$id);
+    if (allowedAgentIds.length === 0) {
+      return { startDate: input.startDate, endDate: input.endDate, rows: [] };
+    }
+    const safeAgentIds = allowedAgentIds.slice(0, 100);
+    queries.unshift(Query.equal("agentId", safeAgentIds));
   }
 
   const stats = await listAllDocuments<any>({

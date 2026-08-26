@@ -358,12 +358,12 @@ function LinkedinReportsContent() {
   }, [loadAccounts, loadAgents]);
 
   useEffect(() => {
-    if (teamLeadId !== lastLoadedTeamLeadRef.current) {
+    // Only load on initial mount when teamLeadId is first resolved
+    if (lastLoadedTeamLeadRef.current === null && teamLeadId) {
       lastLoadedTeamLeadRef.current = teamLeadId;
       void loadReport();
     }
   }, [teamLeadId, loadReport]);
-
 
   const totals = useMemo(() => {
     return rows.reduce(
@@ -434,7 +434,7 @@ function LinkedinReportsContent() {
 
           <div className="flex flex-wrap items-center gap-2">
             <Button onClick={loadReport} disabled={loading || !teamLeadId}>
-              {loading ? "Loading..." : "Refresh"}
+              {loading ? "Applying..." : "Apply"}
             </Button>
             <Button variant="outline" onClick={handleExport} disabled={exporting || loading || !teamLeadId}>
               {exporting ? "Exporting..." : "Export CSV"}

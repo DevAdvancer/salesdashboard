@@ -268,18 +268,21 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
     const page = wantExport ? 1 : Math.max(1, options?.page ?? 1);
     const pageSize = wantExport ? 10000 : Math.min(100, Math.max(1, options?.pageSize ?? 20));
 
-    // We can now use Appwrite native fulltext search since we added the `data_search_idx` index.
+    // We split the search query into individual words and use Query.contains for each.
+    // This provides a powerful AND search, which works better for full names (e.g. "John Doe")
+    // than Appwrite's default fulltext search which may act as an OR search or fail across JSON keys.
     if (filters.searchQuery) {
       let queryStr = filters.searchQuery.trim();
       let visaStatusMatch: string | null = null;
       if (queryStr.toLowerCase().startsWith('visastatus:')) {
         visaStatusMatch = queryStr.slice('visastatus:'.length).trim();
-        // Visa status search is specific and might not use fulltext efficiently 
-        // since it's just one word. But we can still search the whole JSON string
         queryStr = visaStatusMatch;
       }
       if (queryStr) {
-        queries.push(Query.search('data', queryStr));
+        const words = queryStr.split(/\s+/).filter(w => w.length > 0);
+        for (const word of words) {
+          queries.push(Query.contains('data', word));
+        }
       }
     }
 

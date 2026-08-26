@@ -218,7 +218,7 @@ export function buildTargetReport(input: {
       teamAchieved += achieved;
       
       const branchId = (agent.branchIds && agent.branchIds.length > 0) ? agent.branchIds[0] : (agent.branchId || "unassigned");
-      const branchName = input.branchMap?.get(branchId) || "Unassigned Branch";
+      const branchName = input.branchMap?.get(branchId) || "";
 
       agents.push({
         userId: agentId,

@@ -226,7 +226,10 @@ export async function listCallRequestsAction(searchQuery?: string): Promise<Call
       );
       all = response.documents as unknown as CallRequestDocument[];
     } else {
-      queries.push(Query.search('clientName', searchQuery.trim()));
+      const words = searchQuery.trim().split(/\s+/).filter(w => w.length > 0);
+      for (const word of words) {
+        queries.push(Query.contains('clientName', word));
+      }
       queries.push(Query.limit(100)); // allow up to 100 search results
       const response = await databases.listDocuments(
         DATABASE_ID,
@@ -272,7 +275,10 @@ export async function listMyCallRequestsAction(searchQuery?: string): Promise<Ca
       );
       return response.documents as unknown as CallRequestDocument[];
     } else {
-      queries.push(Query.search('clientName', searchQuery.trim()));
+      const words = searchQuery.trim().split(/\s+/).filter(w => w.length > 0);
+      for (const word of words) {
+        queries.push(Query.contains('clientName', word));
+      }
       queries.push(Query.limit(100));
       const response = await databases.listDocuments(
         DATABASE_ID,

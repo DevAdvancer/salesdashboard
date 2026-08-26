@@ -98,8 +98,8 @@ export const LeadRow = memo(
           </td>
         )}
         <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">
-          {lead.$createdAt
-            ? new Date(lead.$createdAt).toLocaleDateString()
+          {lead.$updatedAt
+            ? new Date(lead.$updatedAt).toLocaleDateString()
             : "N/A"}
         </td>
         <td className="p-3 md:p-4">
@@ -117,7 +117,7 @@ export const LeadRow = memo(
   (prev, next) =>
     prev.lead.$id === next.lead.$id &&
     prev.lead.status === next.lead.status &&
-    prev.lead.$createdAt === next.lead.$createdAt &&
+    prev.lead.$updatedAt === next.lead.$updatedAt &&
     prev.lead.data === next.lead.data &&
     prev.lead.ownerId === next.lead.ownerId &&
     prev.lead.assignedToId === next.lead.assignedToId &&
@@ -192,7 +192,7 @@ export function LeadTable({
                     </th>
                   )}
                   <th className="p-3 md:p-4 font-semibold hidden sm:table-cell">
-                    Created
+                    Last Updated
                   </th>
                   <th className="p-3 md:p-4 font-semibold">Actions</th>
                 </tr>

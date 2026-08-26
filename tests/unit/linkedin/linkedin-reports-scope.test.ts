@@ -20,6 +20,10 @@ jest.mock("@/lib/server/appwrite", () => ({
   createAdminClient: () => mockCreateAdminClient(),
 }));
 
+jest.mock("@/lib/services/user-service", () => ({
+  getAgentsByTeamLead: jest.fn().mockResolvedValue([{ $id: "tl-1" }]),
+}));
+
 jest.mock("node-appwrite", () => ({
   Query: {
     equal: jest.fn((key, value) => `equal:${key}:${JSON.stringify(value)}`),
@@ -85,7 +89,7 @@ describe("Linkedin reports team lead scoping", () => {
     expect(mockListDocuments).toHaveBeenCalledWith(
       expect.any(String),
       COLLECTIONS.LINKEDIN_DAILY_STATS,
-      expect.arrayContaining([`equal:teamLeadId:"tl-1"`]),
+      expect.arrayContaining([`equal:agentId:["tl-1"]`]),
     );
   });
 

@@ -502,21 +502,35 @@ function LeadsContent() {
         )
       );
       const allNeededIds = new Set<string>();
-      for (const id of ownerIds) if (!owners.has(id)) allNeededIds.add(id);
+      for (const id of ownerIds) {
+        if (id === user.$id) continue;
+        if (!owners.has(id)) allNeededIds.add(id);
+      }
       for (const id of assignedIds) {
+        if (id === user.$id) continue;
         if (assignedUsers.has(id)) continue;
         if (agents.some((a) => a.$id === id)) continue;
         allNeededIds.add(id);
       }
-      if (allNeededIds.size === 0) return;
-      const fetched = await getUsersByIds(Array.from(allNeededIds));
+      
+      const fetched = allNeededIds.size > 0 ? await getUsersByIds(Array.from(allNeededIds)) : new Map();
       const ownerMap = new Map<string, User>();
       const assignedMap = new Map<string, User>();
+      
       for (const id of ownerIds) {
+        if (id === user.$id) {
+          ownerMap.set(id, user);
+          continue;
+        }
         const u = fetched.get(id);
         ownerMap.set(id, u ?? deletedUserPlaceholder(id));
       }
+      
       for (const id of assignedIds) {
+        if (id === user.$id) {
+          assignedMap.set(id, user);
+          continue;
+        }
         const cached =
           assignedUsers.get(id) ?? agents.find((a) => a.$id === id);
         if (cached) {
@@ -526,6 +540,7 @@ function LeadsContent() {
         const u = fetched.get(id);
         assignedMap.set(id, u ?? deletedUserPlaceholder(id));
       }
+      
       if (ownerMap.size > 0) {
         setOwners((prev) => new Map([...prev, ...ownerMap]));
       }

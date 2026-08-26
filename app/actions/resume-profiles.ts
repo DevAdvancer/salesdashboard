@@ -173,8 +173,10 @@ export async function listResumeProfilesAction(
     }
 
     if (options.search) {
-      // Basic fallback since multiple contains or fulltext might be restricted without indexes
-      queries.push(Query.contains('candidateName', options.search));
+      const words = options.search.trim().split(/\s+/).filter(w => w.length > 0);
+      for (const word of words) {
+        queries.push(Query.contains('candidateName', word));
+      }
     }
 
     queries.push(Query.orderDesc('stageUpdatedAt'));
