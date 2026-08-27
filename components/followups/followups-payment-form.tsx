@@ -96,7 +96,7 @@ export function FollowupsPaymentForm({
             if (agents.length > 0 && !agents.find(a => a.id === user?.$id)) {
               setCreditedAgentId("none");
             } else if (agents.find(a => a.id === user?.$id)) {
-              setCreditedAgentId(user!.$id);
+              setCreditedAgentId(mode === "client" ? "none" : user!.$id);
             }
           } else {
              const selected = payment.creditedAgentId;
@@ -313,16 +313,16 @@ export function FollowupsPaymentForm({
                 {creditedAgentId === "none"
                   ? mode === "client"
                     ? "None (Lead Owner)"
-                    : "None (Myself)"
+                    : "Select Agent"
                   : creditableAgents.find((a) => a.id === creditedAgentId)?.name ||
                     creditedAgentId ||
                     "Select Agent"}
               </span>
             </SelectTrigger>
             <SelectContent className="max-h-60 overflow-y-auto">
-              <SelectItem value="none">
-                {mode === "client" ? "None (Lead Owner)" : "None (Myself)"}
-              </SelectItem>
+              {mode === "client" && (
+                <SelectItem value="none">None (Lead Owner)</SelectItem>
+              )}
               {creditableAgents.map((a) => (
                 <SelectItem key={a.id} value={a.id}>
                   {a.name}

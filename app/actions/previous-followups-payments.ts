@@ -532,10 +532,12 @@ export async function getCreditableAgentsAction(actorId: string): Promise<Array<
   if (actor.role === "admin" || actor.role === "developer" || actor.role === "operations") {
     const { getAllActiveUsers } = await import("@/lib/services/user-service");
     const users = await getAllActiveUsers();
-    return users
+    const agents = users
       .filter((u) => u.isActive && u.department === actor.department && (u.role === "agent" || u.role === "team_lead"))
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((u) => ({ id: u.$id, name: u.name }));
+      
+    return [{ id: actor.$id, name: `${actor.name} (Me)` }, ...agents];
   } else if (actor.role === "team_lead") {
     const { getAgentsByTeamLead } = await import("@/lib/services/user-service");
     const agents = await getAgentsByTeamLead(actor.$id, actor.department);
