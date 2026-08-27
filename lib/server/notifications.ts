@@ -68,7 +68,7 @@ async function sendEmailForNotification(userId: string, title: string, body: str
       });
     }
   } catch (err) {
-    console.error(`Failed to dispatch email notification to ${userId}:`, err);
+    console.error('Failed to dispatch email notification to', userId, ':', err);
   }
 }
 
@@ -87,7 +87,7 @@ export async function createNotificationsForRecipients(
         ...input,
         recipientId,
       }).catch((error) => {
-        console.error(`Failed to create notification for ${recipientId}:`, error);
+        console.error('Failed to create notification for', recipientId, ':', error);
         return null;
       })
     )
