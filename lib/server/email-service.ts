@@ -214,9 +214,9 @@ export async function sendDuplicateAlertEmail(
     return;
   }
 
-  // Filter out the acting user from recipients
+  // Filter out the acting user and the dummy email from recipients
   const toEmails = input.recipientEmails.filter(
-    (e) => e.toLowerCase() !== input.actorEmail.toLowerCase(),
+    (e) => e.toLowerCase() !== input.actorEmail.toLowerCase() && e.toLowerCase() !== 'teamlead@silverspaceinc.com',
   );
 
   if (toEmails.length === 0) {

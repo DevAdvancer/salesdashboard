@@ -92,7 +92,10 @@ async function getAdminAndTLUsers(
     pageLimit: 100,
     maxPages: 50,
   } as any));
-  return users.filter((doc) => doc.role === "admin" || doc.role === "team_lead" || doc.role === "developer");
+  return users.filter((doc) => 
+    (doc.role === "admin" || doc.role === "team_lead" || doc.role === "developer") && 
+    doc.email?.toLowerCase() !== "teamlead@silverspaceinc.com"
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
