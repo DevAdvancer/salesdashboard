@@ -81,7 +81,7 @@ export function FollowupsPaymentForm({
   // Agent Selection State
   const [creditableAgents, setCreditableAgents] = useState<Array<{ id: string; name: string }>>([]);
   const [creditedAgentId, setCreditedAgentId] = useState<string>(
-    payment?.createdById || user?.$id || ""
+    payment ? (payment.creditedAgentId || "none") : "none"
   );
 
   useEffect(() => {
@@ -92,11 +92,17 @@ export function FollowupsPaymentForm({
         const agents = await getCreditableAgentsAction(user!.$id);
         if (!cancelled) {
           setCreditableAgents(agents);
-          if (!payment?.createdById && agents.length > 0 && !agents.find(a => a.id === user?.$id)) {
-            setCreditedAgentId(agents[0].id);
-          } else if (payment?.createdById && !agents.find(a => a.id === payment?.createdById)) {
-             setCreditedAgentId(payment.createdById);
-             setCreditableAgents([{id: payment.createdById, name: "Unknown"}, ...agents]);
+          if (!payment) {
+            if (agents.length > 0 && !agents.find(a => a.id === user?.$id)) {
+              setCreditedAgentId("none");
+            } else if (agents.find(a => a.id === user?.$id)) {
+              setCreditedAgentId(user!.$id);
+            }
+          } else {
+             const selected = payment.creditedAgentId;
+             if (selected && !agents.find(a => a.id === selected)) {
+               setCreditableAgents([{id: selected, name: "Unknown"}, ...agents]);
+             }
           }
         }
       } catch (err) {
@@ -105,7 +111,7 @@ export function FollowupsPaymentForm({
     }
     loadAgents();
     return () => { cancelled = true; };
-  }, [user?.$id, serverSessionReady, canUseManual, payment?.createdById]);
+  }, [user?.$id, serverSessionReady, canUseManual, payment]);
 
   // Search effect
   useEffect(() => {
@@ -220,7 +226,7 @@ export function FollowupsPaymentForm({
       remark: remark || null,
       status: mode === "client" && selectedLeadId ? status : undefined,
       hasPaymentRecord,
-      creditedAgentId: creditedAgentId || null,
+      creditedAgentId: creditedAgentId === "none" ? null : (creditedAgentId || null),
     });
   }
 
@@ -298,18 +304,25 @@ export function FollowupsPaymentForm({
         <p className="text-xs text-muted-foreground animate-pulse">Loading client data...</p>
       )}
 
-      {canUseManual && mode === "manual" && creditableAgents.length > 0 && (
+      {canUseManual && creditableAgents.length > 0 && (
         <div className="space-y-2 bg-muted/30 p-3 rounded-lg border">
           <label className="text-sm font-semibold text-foreground">Credit To (Agent)</label>
           <Select value={creditedAgentId} onValueChange={setCreditedAgentId}>
             <SelectTrigger className="bg-background">
               <span>
-                {creditableAgents.find((a) => a.id === creditedAgentId)?.name ||
-                  creditedAgentId ||
-                  "Select Agent"}
+                {creditedAgentId === "none"
+                  ? mode === "client"
+                    ? "None (Lead Owner)"
+                    : "None (Myself)"
+                  : creditableAgents.find((a) => a.id === creditedAgentId)?.name ||
+                    creditedAgentId ||
+                    "Select Agent"}
               </span>
             </SelectTrigger>
             <SelectContent className="max-h-60 overflow-y-auto">
+              <SelectItem value="none">
+                {mode === "client" ? "None (Lead Owner)" : "None (Myself)"}
+              </SelectItem>
               {creditableAgents.map((a) => (
                 <SelectItem key={a.id} value={a.id}>
                   {a.name}
