@@ -200,6 +200,16 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
       queries.push(Query.notEqual('status', 'Not-Interested'));
     }
 
+    if (filters.excludeClientStatuses) {
+      queries.push(Query.notEqual('status', 'Backout'));
+      queries.push(Query.notEqual('status', 'Backed Out'));
+      queries.push(Query.notEqual('status', 'Backedout'));
+      queries.push(Query.notEqual('status', 'Backed out'));
+      queries.push(Query.notEqual('status', 'Not-Interested'));
+      queries.push(Query.notEqual('status', 'Not Interested'));
+    }
+
+
     // Apply status filter
     if (filters.status) {
       const statusText = typeof filters.status === 'string' ? filters.status : '';

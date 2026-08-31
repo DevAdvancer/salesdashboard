@@ -342,6 +342,7 @@ export interface LeadListFilters {
   limit?: number;
   /** When true, restrict to leads owned by OR assigned to the requesting user. */
   mine?: boolean;
+  excludeClientStatuses?: boolean;
 }
 
 // Form configuration types

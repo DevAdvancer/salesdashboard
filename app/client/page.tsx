@@ -70,6 +70,7 @@ function HistoryContent() {
       searchQuery: appliedSearch,
       dateFrom: appliedDateRange.from,
       dateTo: appliedDateRange.to,
+      excludeClientStatuses: true,
     },
     page: currentPage,
     pageSize: ITEMS_PER_PAGE,
