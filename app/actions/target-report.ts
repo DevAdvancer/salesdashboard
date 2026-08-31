@@ -227,6 +227,75 @@ export async function getTargetReportAction(input: {
     }
   }
 
+  // 4c. Followup payments in the month window.
+  const followupsByAgentId: Record<string, number> = {};
+  const readableSet = new Set(readableAgentIds);
+  
+  const docs = await listAllDocuments<Record<string, unknown>>({
+    databases,
+    databaseId: DATABASE_ID,
+    collectionId: COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS,
+    queries: [
+      Query.greaterThanEqual("date", monthFromIso),
+      Query.lessThanEqual("date", monthToIso),
+    ],
+    maxPages: 100,
+  });
+
+  // Collect lead IDs for non-manual followups
+  const followupLeadIds = Array.from(new Set(
+    docs
+      .map(d => typeof d.leadId === "string" ? d.leadId : "")
+      .filter(id => id && !id.startsWith("manual_followup:"))
+  ));
+  
+  const followupLeadById = new Map<string, Record<string, unknown>>();
+  if (followupLeadIds.length > 0) {
+    const CHUNK = 100;
+    for (let i = 0; i < followupLeadIds.length; i += CHUNK) {
+      const chunk = followupLeadIds.slice(i, i + CHUNK);
+      const ldocs = await listAllDocuments<Record<string, unknown>>({
+        databases,
+        databaseId: DATABASE_ID,
+        collectionId: COLLECTIONS.LEADS,
+        queries: [Query.equal("$id", chunk), Query.limit(CHUNK)],
+        pageLimit: CHUNK,
+        maxPages: 1,
+      });
+      for (const d of ldocs) followupLeadById.set(d.$id as string, d);
+    }
+  }
+
+  for (const doc of docs) {
+    const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
+    const amount = typeof doc.amount === "number" ? doc.amount : 0;
+    if (!leadId || amount <= 0) continue;
+
+    let targetAgentId = "";
+
+    const creditedAgentId = typeof doc.creditedAgentId === "string" && doc.creditedAgentId.trim() !== "" ? doc.creditedAgentId : null;
+
+    if (leadId.startsWith("manual_followup:")) {
+      const createdById = typeof doc.createdById === "string" ? doc.createdById : "";
+      targetAgentId = creditedAgentId || createdById;
+    } else {
+      const lead = followupLeadById.get(leadId);
+      if (lead) {
+        const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : "";
+        const assignedToId = typeof lead.assignedToId === "string" ? lead.assignedToId : "";
+        targetAgentId = creditedAgentId || assignedToId || ownerId;
+      }
+    }
+    
+    if (!targetAgentId || !readableSet.has(targetAgentId)) continue;
+    
+    followupsByAgentId[targetAgentId] = (followupsByAgentId[targetAgentId] ?? 0) + amount;
+  }
+
+
+
+
+
   // 4a. Dynamically calculate Upfront Client Payments for the month
   const clientPayments = await listAllDocuments<Record<string, unknown>>({
     databases,
@@ -321,8 +390,16 @@ export async function getTargetReportAction(input: {
       }
     }
 
-    for (const [agentId, amount] of agentTotals.entries()) {
-      if (readableAgentIds.includes(agentId)) {
+    // Deduct followups
+    const followupsForThisLead = docs
+      .filter((doc) => doc.leadId === leadId)
+      .reduce((sum, doc) => sum + (Number(doc.amount) || 0), 0);
+
+    for (let [agentId, amount] of agentTotals.entries()) {
+      amount -= followupsForThisLead;
+      if (amount < 0) amount = 0;
+      
+      if (amount > 0 && readableAgentIds.includes(agentId)) {
         if (!agentStatsByUserId[agentId]) {
           agentStatsByUserId[agentId] = { achieved: 0, leadCount: 0, referralExcludedCount: 0, notInterestedCount: 0 };
         }
@@ -347,74 +424,7 @@ export async function getTargetReportAction(input: {
     }
   }
 
-  // 4c. Followup payments in the month window.
-  const followupsByAgentId: Record<string, number> = {};
-  const readableSet = new Set(readableAgentIds);
-  
-  const docs = await listAllDocuments<Record<string, unknown>>({
-    databases,
-    databaseId: DATABASE_ID,
-    collectionId: COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS,
-    queries: [
-      Query.greaterThanEqual("date", monthFromIso),
-      Query.lessThanEqual("date", monthToIso),
-    ],
-    maxPages: 100,
-  });
-
-  // Collect lead IDs for non-manual followups
-  const followupLeadIds = Array.from(new Set(
-    docs
-      .map(d => typeof d.leadId === "string" ? d.leadId : "")
-      .filter(id => id && !id.startsWith("manual_followup:"))
-  ));
-  
-  const followupLeadById = new Map<string, Record<string, unknown>>();
-  if (followupLeadIds.length > 0) {
-    const CHUNK = 100;
-    for (let i = 0; i < followupLeadIds.length; i += CHUNK) {
-      const chunk = followupLeadIds.slice(i, i + CHUNK);
-      const ldocs = await listAllDocuments<Record<string, unknown>>({
-        databases,
-        databaseId: DATABASE_ID,
-        collectionId: COLLECTIONS.LEADS,
-        queries: [Query.equal("$id", chunk), Query.limit(CHUNK)],
-        pageLimit: CHUNK,
-        maxPages: 1,
-      });
-      for (const d of ldocs) followupLeadById.set(d.$id as string, d);
-    }
-  }
-
-  for (const doc of docs) {
-    const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
-    const amount = typeof doc.amount === "number" ? doc.amount : 0;
-    if (!leadId || amount <= 0) continue;
-
-    let targetAgentId = "";
-
-    const creditedAgentId = typeof doc.creditedAgentId === "string" && doc.creditedAgentId.trim() !== "" ? doc.creditedAgentId : null;
-
-    if (leadId.startsWith("manual_followup:")) {
-      const createdById = typeof doc.createdById === "string" ? doc.createdById : "";
-      targetAgentId = creditedAgentId || createdById;
-    } else {
-      const lead = followupLeadById.get(leadId);
-      if (lead) {
-        const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : "";
-        const assignedToId = typeof lead.assignedToId === "string" ? lead.assignedToId : "";
-        targetAgentId = creditedAgentId || assignedToId || ownerId;
-      }
-    }
-    
-    if (!targetAgentId || !readableSet.has(targetAgentId)) continue;
-    
-    followupsByAgentId[targetAgentId] = (followupsByAgentId[targetAgentId] ?? 0) + amount;
-  }
-
-
-
-  // 5. Build users map for the agent set so the report can show names.
+    // 5. Build users map for the agent set so the report can show names.
   const usersByAgentId = new Map<string, User>();
   if (actor.role === "agent" || actor.role === "lead_generation") {
     usersByAgentId.set(actor.$id, actor);

@@ -156,6 +156,79 @@ export async function getAgentPaymentDetailsAction(input: {
   const monthStartIso = `${monthFromIso}T00:00:00.000Z`;
   const monthEndIso = `${monthToIso}T23:59:59.999Z`;
 
+  // ── 3.  Followup payments ─────────────────────────────────────────────
+  const followupDetails: AgentPaymentDetail[] = [];
+  const followupDocs = await listAllDocuments<Record<string, unknown>>({
+    databases,
+    databaseId: DATABASE_ID,
+    collectionId: COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS,
+    queries: [
+      Query.greaterThanEqual("date", monthFromIso),
+      Query.lessThanEqual("date", monthToIso),
+    ],
+    pageLimit: 100,
+    maxPages: 100,
+  });
+
+  // Batch-fetch lead data for non-manual followup payments
+  const followupLeadIds = Array.from(new Set(
+    followupDocs
+      .map((p) => typeof p.leadId === "string" ? p.leadId : "")
+      .filter(id => id && !id.startsWith("manual_followup:"))
+  ));
+  
+  const followupLeadById = new Map<string, Record<string, unknown>>();
+  if (followupLeadIds.length > 0) {
+    const CHUNK = 100;
+    for (let i = 0; i < followupLeadIds.length; i += CHUNK) {
+      const chunk = followupLeadIds.slice(i, i + CHUNK);
+      const ldocs = await listAllDocuments<Record<string, unknown>>({
+        databases,
+        databaseId: DATABASE_ID,
+        collectionId: COLLECTIONS.LEADS,
+        queries: [Query.equal("$id", chunk), Query.limit(CHUNK)],
+        pageLimit: CHUNK,
+        maxPages: 1,
+      });
+      for (const d of ldocs) followupLeadById.set(d.$id as string, d);
+    }
+  }
+
+  for (const doc of followupDocs) {
+    const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
+    const amount = typeof doc.amount === "number" ? doc.amount : 0;
+    if (!leadId || amount <= 0) continue;
+
+    let targetAgentId = "";
+    let candidateName = typeof doc.candidateName === "string" && doc.candidateName.trim() ? doc.candidateName.trim() : "Unknown";
+
+    const creditedAgentId = typeof doc.creditedAgentId === "string" && doc.creditedAgentId.trim() !== "" ? doc.creditedAgentId : null;
+
+    if (leadId.startsWith("manual_followup:")) {
+      const createdById = typeof doc.createdById === "string" ? doc.createdById : "";
+      targetAgentId = creditedAgentId || createdById;
+    } else {
+      const lead = followupLeadById.get(leadId);
+      if (lead) {
+        const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : "";
+        const assignedToId = typeof lead.assignedToId === "string" ? lead.assignedToId : "";
+        // If a specific agent was credited in the followup, honor it! Otherwise fallback to the lead's agent.
+        targetAgentId = creditedAgentId || assignedToId || ownerId;
+        candidateName = parseLeadName(lead);
+      }
+    }
+
+    if (!targetAgentId) continue;
+    if (targetAgentId !== input.agentId) continue;
+
+    followupDetails.push({
+      candidateName,
+      amount,
+      leadId,
+      category: "followup",
+    });
+  }
+
   // ── 1.  Upfront client payments ───────────────────────────────────────
   // We need leads owned by / assigned to this agent, then their client
   // payments with updates falling in the month window.
@@ -252,6 +325,14 @@ export async function getAgentPaymentDetailsAction(input: {
       }
     }
 
+    // Deduct followups
+    const followupsForThisLead = followupDocs
+      .filter((doc) => doc.leadId === leadId)
+      .reduce((sum, doc) => sum + (Number(doc.amount) || 0), 0);
+
+    totalForLead -= followupsForThisLead;
+    if (totalForLead < 0) totalForLead = 0;
+
     if (totalForLead > 0) {
       upfrontDetails.push({
         candidateName: parseLeadName(lead),
@@ -306,79 +387,6 @@ export async function getAgentPaymentDetailsAction(input: {
       amount,
       leadId: leadId || "",
       category: "technical",
-    });
-  }
-
-  // ── 3.  Followup payments ─────────────────────────────────────────────
-  const followupDetails: AgentPaymentDetail[] = [];
-  const followupDocs = await listAllDocuments<Record<string, unknown>>({
-    databases,
-    databaseId: DATABASE_ID,
-    collectionId: COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS,
-    queries: [
-      Query.greaterThanEqual("date", monthFromIso),
-      Query.lessThanEqual("date", monthToIso),
-    ],
-    pageLimit: 100,
-    maxPages: 100,
-  });
-
-  // Batch-fetch lead data for non-manual followup payments
-  const followupLeadIds = Array.from(new Set(
-    followupDocs
-      .map((p) => typeof p.leadId === "string" ? p.leadId : "")
-      .filter(id => id && !id.startsWith("manual_followup:"))
-  ));
-  
-  const followupLeadById = new Map<string, Record<string, unknown>>();
-  if (followupLeadIds.length > 0) {
-    const CHUNK = 100;
-    for (let i = 0; i < followupLeadIds.length; i += CHUNK) {
-      const chunk = followupLeadIds.slice(i, i + CHUNK);
-      const ldocs = await listAllDocuments<Record<string, unknown>>({
-        databases,
-        databaseId: DATABASE_ID,
-        collectionId: COLLECTIONS.LEADS,
-        queries: [Query.equal("$id", chunk), Query.limit(CHUNK)],
-        pageLimit: CHUNK,
-        maxPages: 1,
-      });
-      for (const d of ldocs) followupLeadById.set(d.$id as string, d);
-    }
-  }
-
-  for (const doc of followupDocs) {
-    const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
-    const amount = typeof doc.amount === "number" ? doc.amount : 0;
-    if (!leadId || amount <= 0) continue;
-
-    let targetAgentId = "";
-    let candidateName = typeof doc.candidateName === "string" && doc.candidateName.trim() ? doc.candidateName.trim() : "Unknown";
-
-    const creditedAgentId = typeof doc.creditedAgentId === "string" && doc.creditedAgentId.trim() !== "" ? doc.creditedAgentId : null;
-
-    if (leadId.startsWith("manual_followup:")) {
-      const createdById = typeof doc.createdById === "string" ? doc.createdById : "";
-      targetAgentId = creditedAgentId || createdById;
-    } else {
-      const lead = followupLeadById.get(leadId);
-      if (lead) {
-        const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : "";
-        const assignedToId = typeof lead.assignedToId === "string" ? lead.assignedToId : "";
-        // If a specific agent was credited in the followup, honor it! Otherwise fallback to the lead's agent.
-        targetAgentId = creditedAgentId || assignedToId || ownerId;
-        candidateName = parseLeadName(lead);
-      }
-    }
-
-    if (!targetAgentId) continue;
-    if (targetAgentId !== input.agentId) continue;
-
-    followupDetails.push({
-      candidateName,
-      amount,
-      leadId,
-      category: "followup",
     });
   }
 
