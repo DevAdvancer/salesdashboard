@@ -27,6 +27,7 @@ import {
   listResumeProfilesAction,
   getResumeProfileOptionsAction,
 } from '@/app/actions/resume-profiles';
+import { formatEasternDateTime } from '@/lib/utils/eastern-date';
 import { useRealtimeCollection } from "@/lib/hooks/use-realtime-collection";
 import { COLLECTIONS } from "@/lib/appwrite";
 
@@ -39,13 +40,13 @@ interface ResumeProfilesClientProps {
 }
 
 const STAGE_BADGE: Record<string, string> = {
-  '1. Draft': 'bg-secondary text-secondary-foreground border border-border',
-  '2. Sent': 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800',
-  '3. Modification /Approval (candidate/client)':
+  'Draft & Approval': 'bg-secondary text-secondary-foreground border border-border',
+  'Sent': 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800',
+  'Modification /Approval (candidate/client)':
     'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
-  '4. Marketing':
+  'Marketing':
     'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
-  '5. Doc Missing (Not calculated in the timeline)':
+  'Doc Missing (Not calculated in the timeline)':
     'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border border-red-200 dark:border-red-800',
 };
 
@@ -224,6 +225,7 @@ export function ResumeProfilesClient({
               <tr className="border-b bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 <th className="px-4 py-3">Candidate</th>
                 <th className="px-4 py-3">Stage</th>
+                <th className="px-4 py-3">Compliance</th>
                 <th className="px-4 py-3">Technology</th>
                 <th className="px-4 py-3">USA Arrival</th>
                 <th className="px-4 py-3">Visa Status</th>
@@ -235,7 +237,7 @@ export function ResumeProfilesClient({
             <tbody className="divide-y divide-border">
               {profiles.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground text-sm">
+                  <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground text-sm">
                     {initialData.total === 0
                       ? 'No resume profiles found. Click "Create Profile" to get started.'
                       : 'No profiles match the selected filters.'}
@@ -247,12 +249,26 @@ export function ResumeProfilesClient({
                     STAGE_BADGE[p.stage] ?? 'bg-secondary text-secondary-foreground border border-border';
                   const isBusy = busyId === p.$id;
 
-                  const hasCpt = p.cpt?.toUpperCase() === 'YES';
-                  const hasOpt = p.opt?.toUpperCase() === 'YES';
-                  const hasStem = p.stemOpt?.toUpperCase() === 'YES';
+                  let parsedData: any = {};
+                  try { if (p.data) parsedData = JSON.parse(p.data); } catch {}
+                  
+                  const cptVal = parsedData.cpt || p.cpt;
+                  const optVal = parsedData.opt || p.opt;
+                  const stemOptVal = parsedData.stemOpt || p.stemOpt;
+                  const techVal = parsedData.technology || p.technology;
+                  const usaArrVal = parsedData.usaArrival || p.usaArrival;
+
+                  const hasCpt = cptVal?.toUpperCase() === 'YES';
+                  const hasOpt = optVal?.toUpperCase() === 'YES';
+                  const hasStem = stemOptVal?.toUpperCase() === 'YES';
+
+                  let complianceColor = "text-muted-foreground";
+                  if (p.complianceStatus === 'approved') complianceColor = "text-emerald-600 font-medium";
+                  if (p.complianceStatus === 'rejected') complianceColor = "text-red-600 font-medium";
+                  if (p.complianceStatus === 'pending') complianceColor = "text-amber-600 font-medium";
 
                   return (
-                    <tr key={p.$id} className="hover:bg-muted/30 transition-colors">
+                    <tr key={p.$id} className="group hover:bg-muted/30 transition-colors">
                       <td className="px-4 py-3.5 font-medium text-foreground">
                         <Link
                           href={`/resume/${p.$id}`}
@@ -263,28 +279,22 @@ export function ResumeProfilesClient({
                         </Link>
                       </td>
                       <td className="px-4 py-3.5">
-                        <select
-                          disabled={isBusy}
-                          value={p.stage}
-                          onChange={(e) => handleQuickStageChange(p.$id, e.target.value)}
-                          className={`rounded-full px-2.5 py-1 text-xs font-semibold focus:outline-none cursor-pointer border ${badgeClass}`}
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold border ${badgeClass}`}
                         >
-                          {RESUME_PROFILE_STAGES.map((st) => (
-                            <option
-                              key={st}
-                              value={st}
-                              className="bg-background text-foreground text-xs"
-                            >
-                              {formatStageLabel(st)}
-                            </option>
-                          ))}
-                        </select>
+                          {formatStageLabel(p.stage)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs ${complianceColor} capitalize`}>
+                          {p.complianceStatus || 'pending'}
+                        </span>
                       </td>
                       <td className="px-4 py-3.5 text-muted-foreground">
-                        {p.technology || '—'}
+                        {techVal || '—'}
                       </td>
                       <td className="px-4 py-3.5 text-muted-foreground">
-                        {p.usaArrival || '—'}
+                        {usaArrVal || '—'}
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="flex flex-wrap gap-1">
@@ -319,16 +329,8 @@ export function ResumeProfilesClient({
                         <div className="flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5 opacity-70" />
                           {p.stageUpdatedAt
-                            ? new Date(p.stageUpdatedAt).toLocaleDateString([], {
-                                month: 'short',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })
-                            : new Date(p.createdAt).toLocaleDateString([], {
-                                month: 'short',
-                                day: 'numeric',
-                              })}
+                            ? formatEasternDateTime(p.stageUpdatedAt)
+                            : formatEasternDateTime(p.createdAt)}
                         </div>
                       </td>
                       <td className="px-4 py-3.5 text-right">

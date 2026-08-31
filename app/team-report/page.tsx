@@ -3,9 +3,6 @@ import { getAuthenticatedUserDoc } from "@/lib/server/current-user";
 import { TeamReportGenerator } from "@/components/team-report/team-report-generator";
 import { Suspense } from "react";
 
-export const metadata = {
-  title: "Team Report Generator - CRM",
-};
 
 export default async function TeamReportPage() {
   const user = await getAuthenticatedUserDoc();

@@ -87,14 +87,15 @@ export function Navigation({
     : NAV_ITEMS.filter((item) => canAccess(item.key as ComponentKey));
 
   // Define section grouping
-  const agentItemKeys = new Set(["dashboard", "leads", "calendar", "history", "request-calls", "work-queue"]);
+  const agentItemKeys = new Set(["dashboard", "leads", "calendar", "history", "work-queue"]);
   const attendanceItemKeys = new Set(["attendance", "attendance-report"]);
   const teamLeadItemKeys = new Set(["user-management", "reports", "assigned-report", "team-report"]);
   const adminItemKeys = new Set(["branch-management", "hierarchy", "lead-requests", "settings"]);
   const technicalItemKeys = new Set(["mock", "interview-support", "assessment-support"]);
   const linkedinItemKeys = new Set(["linkedin-requests", "linkedin-account-management", "linkedin-reports"]);
   const paymentsItemKeys = new Set(["payments-report", "target-report", "technical-payments", "followups-payments"]);
-  const resumeItemKeys = new Set(["resume-dashboard", "resume-profiles", "resume-marketing", "call-requests", "resume-hierarchy"]);
+  const resumeItemKeys = new Set(["resume-dashboard", "resume-profiles", "resume-marketing", "call-requests", "resume-hierarchy", "resume-reports", "compliance-dashboard"]);
+  const salesResumeItemKeys = new Set(["request-calls", "my-call-requests"]);
 
   // Resume-team members get a slim sidebar: the Resume Dashboard, the
   // Resume Team chat, and (for the resume team lead) User Management so
@@ -326,48 +327,56 @@ export function Navigation({
       itemsForUser.find((item) => item.key === "resume-hierarchy") ?? null;
     const resumeCallsItem =
       itemsForUser.find((item) => item.key === "call-requests") ?? null;
+    const resumeReportsItem =
+      itemsForUser.find((item) => item.key === "resume-reports") ?? null;
+    const complianceDashboardItem =
+      itemsForUser.find((item) => item.key === "compliance-dashboard") ?? null;
     const resumeUserMgmtItem =
       itemsForUser.find((item) => item.key === "user-management") ?? null;
     const settingsItem =
       itemsForUser.find((item) => item.key === "settings") ?? null;
 
-    if (resumeDashboardItem || resumeProfilesItem || resumeCallsItem || resumeMarketingItem) {
+    if (resumeDashboardItem || resumeReportsItem) {
       renderedItems.push(
-        <div key="section-resume-workspace">
-          {renderSectionHeader("Resume Workspace")}
+        <div key="section-resume-dashboard">
+          {renderSectionHeader("Dashboard & Reports")}
           {resumeDashboardItem && renderNavButton(resumeDashboardItem)}
+          {resumeReportsItem && renderNavButton(resumeReportsItem)}
+        </div>
+      );
+    }
+
+    if (resumeProfilesItem || resumeCallsItem || resumeMarketingItem || complianceDashboardItem) {
+      renderedItems.push(
+        <div key="section-resume-operations">
+          {renderSectionHeader("Operations")}
           {resumeCallsItem && renderNavButton(resumeCallsItem)}
           {resumeProfilesItem && renderNavButton(resumeProfilesItem)}
+          {complianceDashboardItem && renderNavButton(complianceDashboardItem)}
           {resumeMarketingItem && renderNavButton(resumeMarketingItem)}
         </div>
       );
     }
 
-    if (resumeHierarchyItem) {
+    if (chatSection) {
       renderedItems.push(
-        <div key="section-resume-hierarchy">
-          {renderSectionHeader("Resume Structure")}
-          {renderNavButton(resumeHierarchyItem)}
+        <div key="section-resume-chat">
+          {renderSectionHeader("Communication")}
+          {chatSection}
         </div>
       );
     }
-
-    renderedItems.push(
-      <div key="section-resume-chat">
-        {renderSectionHeader("Chatting")}
-        {chatSection}
-      </div>
-    );
 
     let resumeManagementTitle = "System Tools";
     if (user.role === "admin" || user.role === "developer" || user.role === "operations" || user.role === "monitor") {
       resumeManagementTitle = "Management";
     }
 
-    if (resumeUserMgmtItem || settingsItem) {
+    if (resumeHierarchyItem || resumeUserMgmtItem || settingsItem) {
       renderedItems.push(
         <div key="section-resume-management">
           {renderSectionHeader(resumeManagementTitle)}
+          {resumeHierarchyItem && renderNavButton(resumeHierarchyItem)}
           {resumeUserMgmtItem && renderNavButton(resumeUserMgmtItem)}
           {settingsItem && renderNavButton(settingsItem)}
         </div>
@@ -408,6 +417,17 @@ export function Navigation({
         <div key="section-attendance">
           {renderSectionHeader("Attendance")}
           {renderCollapsibleSection("Attendance", CalendarIcon, attendanceItems, attendanceOpen, setAttendanceOpen)}
+        </div>
+      );
+    }
+
+    // 1c. Resume Section (Sales CRM)
+    const salesResumeItems = itemsForUser.filter((item) => salesResumeItemKeys.has(item.key));
+    if (salesResumeItems.length > 0) {
+      renderedItems.push(
+        <div key="section-sales-resume">
+          {renderSectionHeader("Resume")}
+          {salesResumeItems.map(renderNavButton)}
         </div>
       );
     }
@@ -497,19 +517,19 @@ export function Navigation({
               style={{ marginBottom: "0.625rem" }}
             />
             <div className={isCollapsed ? "lg:sr-only" : ""}>
-              <h1
-                style={{
-                  fontFamily:
-                    "'Bebas Neue', 'Anton', 'Arial Narrow', Arial, sans-serif",
-                  fontWeight: 400,
-                  fontSize: "1.5rem",
-                  color: "var(--foreground)",
-                  lineHeight: 1.2,
-                  margin: 0,
-                  textTransform: "uppercase",
-                }}>
-                {activeDashboard === "resume" ? "RESUMEHUB CRM" : "SalesHub CRM"}
-              </h1>
+                <h1
+                  style={{
+                    fontFamily: "'Bebas Neue', var(--font-bebas-neue), 'Inter', sans-serif",
+                    fontSize: "1.2rem",
+                    fontWeight: 700,
+                    letterSpacing: "0.04em",
+                    color: "var(--foreground)",
+                    lineHeight: 1.2,
+                    margin: 0,
+                    textTransform: "uppercase",
+                  }}>
+                CRM HUB | Silverspace Inc.
+                </h1>
               <p
                 style={{
                   fontSize: "0.6875rem",

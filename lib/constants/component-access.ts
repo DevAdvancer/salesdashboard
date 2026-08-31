@@ -9,7 +9,7 @@ export const COMPONENT_ACCESS: RoleAccessMap = {
   history: ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent'],
   'user-management': ['admin', 'developer', 'monitor', 'operations', 'team_lead'],
   'field-management': [],
-  settings: ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent', 'lead_generation'],
+  settings: ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent', 'lead_generation', 'compliance'],
   'branch-management': ['admin', 'developer', 'monitor', 'operations'],
   mock: ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent'],
   'assessment-support': ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent'],
@@ -53,6 +53,7 @@ export const COMPONENT_ACCESS: RoleAccessMap = {
   // can view. Resume-team members are blocked by SALES_ONLY_COMPONENTS
   // in AccessControlProvider regardless of role.
   'request-calls': ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent'],
+  'my-call-requests': ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent'],
   // Empty by design — `call-requests` (the Resume "Calls" page) opens
   // only via the department short-circuit in AccessControlProvider
   // .canAccess (resume team members + leadership). Sales-team members
@@ -63,6 +64,8 @@ export const COMPONENT_ACCESS: RoleAccessMap = {
   'assigned-report': ['admin', 'developer', 'monitor', 'operations'],
   calendar: ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent', 'lead_generation'],
   'team-report': ['admin', 'developer'],
+  'compliance-dashboard': [],
+  'resume-reports': [],
 };
 
 export function isRoleEligibleForComponent(

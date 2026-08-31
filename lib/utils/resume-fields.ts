@@ -6,6 +6,7 @@ export interface EducationEntry {
   type: string;
   otherType: string;
   institution: string;
+  location: string;
   startDate: string;
   endDate: string;
   isPresent: boolean;
@@ -16,6 +17,7 @@ export interface TimelineEntry {
   jobRole: string;
   startDate: string;
   endDate: string;
+  isPresent: boolean;
   location: string;
 }
 
@@ -43,6 +45,7 @@ export function emptyEducationEntry(): EducationEntry {
     type: '',
     otherType: '',
     institution: '',
+    location: '',
     startDate: '',
     endDate: '',
     isPresent: false,
@@ -55,6 +58,7 @@ export function emptyTimelineEntry(): TimelineEntry {
     jobRole: '',
     startDate: '',
     endDate: '',
+    isPresent: false,
     location: '',
   };
 }
@@ -114,7 +118,13 @@ export function parseEducation(raw: string | null | undefined): ParsedEducation 
     try {
       const parsed = JSON.parse(trimmed);
       if (Array.isArray(parsed) && parsed.every(isEducationEntry)) {
-        return { entries: parsed, legacyText: '' };
+        // Backfill location for old entries that don't have it
+        const entries = parsed.map((e: any) => ({
+          ...emptyEducationEntry(),
+          ...e,
+          location: e.location ?? '',
+        }));
+        return { entries, legacyText: '' };
       }
     } catch {
       // Ignored
@@ -134,7 +144,13 @@ export function parseTimeline(raw: string | null | undefined): ParsedTimeline {
     try {
       const parsed = JSON.parse(trimmed);
       if (Array.isArray(parsed) && parsed.every(isTimelineEntry)) {
-        return { entries: parsed, legacyText: '' };
+        // Backfill isPresent for old entries that don't have it
+        const entries = parsed.map((e: any) => ({
+          ...emptyTimelineEntry(),
+          ...e,
+          isPresent: e.isPresent ?? false,
+        }));
+        return { entries, legacyText: '' };
       }
     } catch {
       // fall through to legacy handling
@@ -150,6 +166,7 @@ export function serializeEducation(entries: EducationEntry[]): string | null {
       type: e.type.trim(),
       otherType: e.otherType.trim(),
       institution: e.institution.trim(),
+      location: (e.location || '').trim(),
       startDate: e.startDate.trim(),
       endDate: e.isPresent ? '' : e.endDate.trim(),
       isPresent: e.isPresent,
@@ -165,7 +182,8 @@ export function serializeTimeline(entries: TimelineEntry[]): string | null {
       client: e.client.trim(),
       jobRole: e.jobRole.trim(),
       startDate: e.startDate.trim(),
-      endDate: e.endDate.trim(),
+      endDate: e.isPresent ? '' : e.endDate.trim(),
+      isPresent: e.isPresent,
       location: e.location.trim(),
     }))
     .filter((e) => !isTimelineEntryEmpty(e));

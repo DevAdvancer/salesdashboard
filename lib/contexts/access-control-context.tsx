@@ -42,7 +42,10 @@ export type ComponentKey =
   | 'call-requests'
   | 'assigned-report'
   | 'calendar'
-  | 'team-report';
+  | 'team-report'
+  | 'compliance-dashboard'
+  | 'resume-reports'
+  | 'my-call-requests';
 
 interface AccessControlContextType {
   canAccess: (componentKey: ComponentKey) => boolean;
@@ -74,6 +77,7 @@ const SALES_ONLY_COMPONENTS = new Set<ComponentKey>([
   // resume-team members never raise call requests. Leadership roles are
   // exempt from the block via canCrossDashboards.
   'request-calls',
+  'my-call-requests',
   'assigned-report',
   'calendar',
 ]);
@@ -108,6 +112,14 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
       return false;
     }
 
+    // Explicit restriction for compliance role
+    if (user.role === 'compliance') {
+      if (componentKey === 'compliance-dashboard' || componentKey === 'settings') {
+        return true;
+      }
+      return false;
+    }
+
     // Department-aware component: only the resume team and the leadership
     // roles (admin / developer / monitor / operations) can see the resume
     // dashboard. Sales-team members are blocked here regardless of role
@@ -116,9 +128,22 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
     if (
       componentKey === 'resume-dashboard' ||
       componentKey === 'resume-profiles' ||
-      componentKey === 'resume-marketing'
+      componentKey === 'resume-marketing' ||
+      componentKey === 'resume-reports'
     ) {
       if (user.department === 'resume') return true;
+      if (
+        user.role === 'admin' ||
+        user.role === 'developer' ||
+        user.role === 'monitor' ||
+        user.role === 'operations'
+      ) {
+        return true;
+      }
+      return false;
+    }
+
+    if (componentKey === 'compliance-dashboard') {
       if (
         user.role === 'admin' ||
         user.role === 'developer' ||

@@ -24,9 +24,12 @@ export type ComponentKey =
   | 'followups-payments'
   | 'payments-report'
   | 'calendar'
-  | 'team-report';
+  | 'team-report'
+  | 'compliance-dashboard'
+  | 'resume-reports'
+  | 'my-call-requests';
 
-export type UserRole = 'admin' | 'developer' | 'team_lead' | 'agent' | 'lead_generation' | 'monitor' | 'operations';
+export type UserRole = 'admin' | 'developer' | 'team_lead' | 'agent' | 'lead_generation' | 'monitor' | 'operations' | 'compliance';
 
 export interface AccessRule {
   componentKey: ComponentKey;

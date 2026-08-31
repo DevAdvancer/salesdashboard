@@ -68,7 +68,7 @@ export function useUserManagement() {
   const [availableTeamLeads, setAvailableTeamLeads] = useState<User[]>([]);
 
   const [createRole, setCreateRole] = useState<
-    "admin" | "developer" | "team_lead" | "agent" | "lead_generation" | "monitor" | "operations"
+    "admin" | "developer" | "team_lead" | "agent" | "lead_generation" | "monitor" | "operations" | "compliance"
   >("team_lead");
 
   useEffect(() => {
@@ -83,6 +83,7 @@ export function useUserManagement() {
   const canCreateLeadGeneration = isAdmin || isDeveloper || isTeamLead;
   const canCreateMonitor = isAdmin || isDeveloper;
   const canCreateOperations = isAdmin || isDeveloper;
+  const canCreateCompliance = isAdmin || isDeveloper;
   const canCreate =
     canCreateAdmin ||
     canCreateDeveloper ||
@@ -90,7 +91,8 @@ export function useUserManagement() {
     canCreateAgent ||
     canCreateLeadGeneration ||
     canCreateMonitor ||
-    canCreateOperations;
+    canCreateOperations ||
+    canCreateCompliance;
 
   useEffect(() => {
     if (searchParams.get("action") === "create" && canCreate) {
@@ -302,6 +304,7 @@ export function useUserManagement() {
       createRole !== "developer" &&
       createRole !== "monitor" &&
       createRole !== "operations" &&
+      createRole !== "compliance" &&
       selectedBranchIds.length === 0
     ) {
       errs.branches = "At least one branch must be selected";
@@ -489,6 +492,7 @@ export function useUserManagement() {
           if (
             createRole !== "monitor" &&
             createRole !== "operations" &&
+            createRole !== "compliance" &&
             !isResumeTarget &&
             !selectedTeamLeadId
           ) {
@@ -504,8 +508,9 @@ export function useUserManagement() {
             role:
               createRole === "lead_generation" ? "lead_generation" :
               createRole === "monitor" ? "monitor" :
-              createRole === "operations" ? "operations" : "agent",
-            teamLeadId: (createRole === "monitor" || createRole === "operations") ? undefined : selectedTeamLeadId || undefined,
+              createRole === "operations" ? "operations" :
+              createRole === "compliance" ? "compliance" : "agent",
+            teamLeadId: (createRole === "monitor" || createRole === "operations" || createRole === "compliance") ? undefined : selectedTeamLeadId || undefined,
             branchIds: selectedBranchIds,
             department: createDepartment,
             currentUserId: user.$id,
@@ -607,7 +612,7 @@ export function useUserManagement() {
     editEmail, setEditEmail, editDepartment, setEditDepartment,
     formErrors, availableTeamLeads, createRole, setCreateRole,
     canCreateAdmin, canCreateDeveloper, canCreateTeamLead, canCreateAgent,
-    canCreateLeadGeneration, canCreateMonitor, canCreateOperations, canCreate,
+    canCreateLeadGeneration, canCreateMonitor, canCreateOperations, canCreateCompliance, canCreate,
     availableBranches, toggleBranch, handleEdit, handleUpdateUser,
     handleDeleteUser, handleSetAgentActive, handleCreate, resetForm,
     filteredUsers, teamLeadOptions

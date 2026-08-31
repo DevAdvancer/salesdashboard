@@ -22,7 +22,7 @@ interface CreateUserDialogProps {
   setFormPassword: (password: string) => void;
   formErrors: Record<string, string>;
   createRole: string;
-  setCreateRole: (role: "admin" | "developer" | "team_lead" | "agent" | "lead_generation" | "monitor" | "operations") => void;
+  setCreateRole: (role: "admin" | "developer" | "team_lead" | "agent" | "lead_generation" | "monitor" | "operations" | "compliance") => void;
   canCreateAdmin: boolean;
   canCreateDeveloper: boolean;
   canCreateTeamLead: boolean;
@@ -30,6 +30,7 @@ interface CreateUserDialogProps {
   canCreateLeadGeneration: boolean;
   canCreateMonitor: boolean;
   canCreateOperations: boolean;
+  canCreateCompliance: boolean;
   isAdmin: boolean;
   isDeveloper: boolean;
   isTeamLead: boolean;
@@ -69,6 +70,7 @@ export function CreateUserDialog({
   canCreateLeadGeneration,
   canCreateMonitor,
   canCreateOperations,
+  canCreateCompliance,
   isAdmin,
   isDeveloper,
   isTeamLead,
@@ -324,6 +326,15 @@ export function CreateUserDialog({
                     onClick={() => setCreateRole("operations")}
                     size="sm">
                     Operations
+                  </Button>
+                )}
+                {canCreateCompliance && (
+                  <Button
+                    type="button"
+                    variant={createRole === "compliance" ? "default" : "outline"}
+                    onClick={() => setCreateRole("compliance")}
+                    size="sm">
+                    Compliance
                   </Button>
                 )}
               </div>

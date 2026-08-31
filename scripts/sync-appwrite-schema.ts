@@ -362,7 +362,7 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
         type: 'enum',
         required: false,
         default: 'not_called',
-        values: ['not_called', 'pending_documents', 'call_done'],
+        values: ['not_called', 'pending_documents', 'call_done', 'moved_to_marketing'],
       },
       { key: 'requestedById', type: 'string', required: true, size: 255 },
       { key: 'requestedByName', type: 'string', required: true, size: 255 },
@@ -389,21 +389,7 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'callRequestId', type: 'string', required: false, size: 255 },
       { key: 'leadId', type: 'string', required: false, size: 255 },
       { key: 'candidateName', type: 'string', required: true, size: 255 },
-      { key: 'technology', type: 'string', required: false, size: 255 },
-      { key: 'usaArrival', type: 'string', required: false, size: 255 },
-      { key: 'bachelors', type: 'string', required: false, size: 255 },
-      { key: 'masters', type: 'string', required: false, size: 255 },
-      { key: 'cpt', type: 'string', required: false, size: 20 },
-      { key: 'cptDetails', type: 'string', required: false, size: 1000 },
-      { key: 'opt', type: 'string', required: false, size: 20 },
-      { key: 'optDetails', type: 'string', required: false, size: 1000 },
-      { key: 'stemOpt', type: 'string', required: false, size: 20 },
-      { key: 'stemOptDetails', type: 'string', required: false, size: 1000 },
-      { key: 'experience', type: 'string', required: false, size: 2000 },
       { key: 'data', type: 'string', required: false, size: 500000 },
-      { key: 'missingDocs', type: 'string', required: false, size: 1500 },
-      { key: 'resumeTimeline', type: 'string', required: false, size: 2500 },
-      { key: 'remarks', type: 'string', required: false, size: 2000 },
       {
         key: 'stage',
         type: 'string',
@@ -420,6 +406,12 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'stageUpdatedAt', type: 'datetime', required: false },
       { key: 'lastAlertStage', type: 'string', required: false, size: 255 },
       { key: 'lastAlertAt', type: 'datetime', required: false },
+      { key: 'movedToMarketing', type: 'boolean', required: false },
+      { key: 'marketingMovedAt', type: 'datetime', required: false },
+      { key: 'complianceStatus', type: 'string', size: 50, required: false },
+      { key: 'complianceApprovedAt', type: 'datetime', required: false },
+      { key: 'complianceApprovedById', type: 'string', size: 50, required: false },
+      { key: 'complianceNotes', type: 'string', size: 5000, required: false },
     ],
     indexes: [
       { key: 'stage_idx', type: 'key', attributes: ['stage'] },
@@ -427,6 +419,7 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'call_req_idx', type: 'key', attributes: ['callRequestId'] },
       { key: 'stage_updated_idx', type: 'key', attributes: ['stageUpdatedAt'] },
       { key: 'candidate_name_search_idx', type: 'fulltext', attributes: ['candidateName'] },
+        { key: 'compliance_status_idx', type: 'key', attributes: ['complianceStatus'] },
     ],
   },
   [COLLECTIONS.CALENDAR_EVENTS]: {
@@ -468,7 +461,23 @@ const deprecatedFields = ['managerId', 'managerIds', 'assistantManagerId', 'assi
 // Per-collection fields to remove (scoped by collectionId)
 const deprecatedFieldsByCollection: Record<string, string[]> = {
   [COLLECTIONS.LEADS]: ['branchIds'],
-  [COLLECTIONS.RESUME_PROFILES]: ['indiaExperience'],
+  [COLLECTIONS.RESUME_PROFILES]: [
+    'indiaExperience',
+    'technology',
+    'usaArrival',
+    'bachelors',
+    'masters',
+    'cpt',
+    'cptDetails',
+    'opt',
+    'optDetails',
+    'stemOpt',
+    'stemOptDetails',
+    'experience',
+    'missingDocs',
+    'resumeTimeline',
+    'remarks'
+  ],
 };
 
 async function syncAttr(

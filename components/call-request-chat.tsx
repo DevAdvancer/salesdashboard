@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/use-toast";
+import { formatEasternDateTime } from "@/lib/utils/eastern-date";
 import { useAuth } from "@/lib/contexts/auth-context";
 import type { CallRequestChatMessage } from "@/lib/types";
 import { postCallRequestMessageAction } from "@/app/actions/call-requests";
@@ -115,7 +117,7 @@ export function CallRequestChat({
                           isMine ? "text-primary-foreground/80" : "text-muted-foreground"
                         }`}
                       >
-                        {new Date(m.createdAt).toLocaleString()}
+                        {formatEasternDateTime(m.createdAt)}
                       </p>
                     </div>
                     <p className="mt-1 whitespace-pre-wrap text-sm">{m.body}</p>

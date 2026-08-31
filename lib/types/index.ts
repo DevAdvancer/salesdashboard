@@ -1,7 +1,7 @@
 // User types
-export type UserRole = 'admin' | 'developer' | 'team_lead' | 'agent' | 'lead_generation' | 'monitor' | 'operations';
+export type UserRole = 'admin' | 'developer' | 'team_lead' | 'agent' | 'lead_generation' | 'monitor' | 'operations' | 'compliance';
 
-export const VALID_ROLES: UserRole[] = ['admin', 'developer', 'team_lead', 'agent', 'lead_generation', 'monitor', 'operations'];
+export const VALID_ROLES: UserRole[] = ['admin', 'developer', 'team_lead', 'agent', 'lead_generation', 'monitor', 'operations', 'compliance'];
 
 export function isValidRole(value: string): value is UserRole {
   return VALID_ROLES.includes(value as UserRole);
@@ -56,7 +56,7 @@ export interface CreateAgentInput {
   name: string;
   email: string;
   password: string;
-  role?: Extract<UserRole, 'agent' | 'lead_generation' | 'monitor' | 'operations'>;
+  role?: Extract<UserRole, 'agent' | 'lead_generation' | 'monitor' | 'operations' | 'compliance'>;
   department?: Department;
   teamLeadId?: string;
   branchIds: string[];
@@ -180,12 +180,13 @@ export type LeadRequestStatus = 'pending' | 'moved' | 'rejected';
 // call_done. The per-request chat is stored as a JSON array on the document —
 // each message is tagged with the sender's team so the same thread renders
 // "Sales" and "Resume" sides. System lines (status changes) use team 'system'.
-export type CallRequestStatus = 'not_called' | 'pending_documents' | 'call_done';
+export type CallRequestStatus = 'not_called' | 'pending_documents' | 'call_done' | 'moved_to_marketing';
 
 export const CALL_REQUEST_STATUSES: CallRequestStatus[] = [
   'not_called',
   'pending_documents',
   'call_done',
+  'moved_to_marketing',
 ];
 
 export function isValidCallRequestStatus(value: string): value is CallRequestStatus {
@@ -231,19 +232,30 @@ export interface CallRequest {
 }
 
 export type ResumeProfileStage =
-  | '1. Draft'
-  | '2. Sent'
-  | '3. Modification /Approval (candidate/client)'
-  | '4. Marketing'
-  | '5. Doc Missing (Not calculated in the timeline)';
+  | 'Draft & Approval'
+  | 'Sent'
+  | 'Modification /Approval (candidate/client)'
+  | 'Doc Missing (Not calculated in the timeline)';
 
 export const RESUME_PROFILE_STAGES: ResumeProfileStage[] = [
-  '1. Draft',
-  '2. Sent',
-  '3. Modification /Approval (candidate/client)',
-  '4. Marketing',
-  '5. Doc Missing (Not calculated in the timeline)',
+  'Draft & Approval',
+  'Sent',
+  'Modification /Approval (candidate/client)',
+  'Doc Missing (Not calculated in the timeline)',
 ];
+
+export type ResumeProfileDataValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | string[]
+  | number[]
+  | Record<string, unknown>
+  | unknown[];
+
+export type ResumeProfileData = Record<string, ResumeProfileDataValue>;
 
 export interface ResumeProfile {
   $id: string;
@@ -278,6 +290,10 @@ export interface ResumeProfile {
   /** True once promoted to the Marketing page (analogous to a lead's isClosed). */
   movedToMarketing?: boolean | null;
   marketingMovedAt?: string | null;
+  complianceStatus?: 'pending' | 'approved' | 'rejected' | string | null;
+  complianceApprovedAt?: string | null;
+  complianceApprovedById?: string | null;
+  complianceNotes?: string | null;
   $createdAt?: string;
   $updatedAt?: string;
 }
@@ -393,7 +409,10 @@ export type ComponentKey =
   | 'call-requests'
   | 'assigned-report'
   | 'calendar'
-  | 'team-report';
+  | 'team-report'
+  | 'compliance-dashboard'
+  | 'resume-reports'
+  | 'my-call-requests';
 
 export interface AccessRule {
   $id?: string;

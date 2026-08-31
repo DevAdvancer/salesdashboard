@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Check, ExternalLink } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAccess } from '@/lib/contexts/access-control-context';
@@ -15,6 +16,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 import { showBrowserNotification, playNotificationSound, primeNotificationPermission } from '@/lib/utils/notification-sound';
 import { useIsVisible } from '@/lib/hooks/use-is-visible';
+import { getNotificationUrl } from '@/lib/utils/notification-link';
 
 const NOTIFICATION_FALLBACK_POLL_MS = 15 * 60 * 1000;
 const NOTIFICATION_FORCE_REFRESH_COOLDOWN_MS = 5000;
@@ -240,30 +242,47 @@ export function NotificationBell({ className }: { className?: string }) {
             ) : visibleNotifications.length === 0 ? (
               <p className="p-3 text-sm text-muted-foreground">No notifications yet.</p>
             ) : (
-              visibleNotifications.map((notification) => (
-                <div key={notification.$id} className="px-3 py-2 hover:bg-muted/50">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{notification.title}</p>
-                      <p className="line-clamp-2 text-xs text-muted-foreground">{notification.body}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {notification.type} / {formatNotificationTime(notification.createdAt)}
-                      </p>
-                    </div>
-                    {!notification.readAt && (
-                      <button
-                        type="button"
-                        aria-label="Mark notification read"
-                        title="Mark read"
-                        onClick={() => markRead(notification.$id)}
-                        className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
-                      >
-                        <Check className="h-3.5 w-3.5" />
-                      </button>
-                    )}
+              visibleNotifications.map((notification) => {
+                const url = getNotificationUrl(notification.targetId, notification.targetType);
+                const content = (
+                  <div className="min-w-0">
+                    <p className={cn("truncate text-sm font-medium", url && "text-primary group-hover:underline")}>
+                      {notification.title}
+                    </p>
+                    <p className="line-clamp-2 text-xs text-muted-foreground">{notification.body}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {notification.type} / {formatNotificationTime(notification.createdAt)}
+                    </p>
                   </div>
-                </div>
-              ))
+                );
+
+                return (
+                  <div key={notification.$id} className="px-3 py-2 hover:bg-muted/50 group">
+                    <div className="flex items-start justify-between gap-3">
+                      {url ? (
+                        <Link href={url} className="flex-1" onClick={() => setOpen(false)}>
+                          {content}
+                        </Link>
+                      ) : (
+                        <div className="flex-1">
+                          {content}
+                        </div>
+                      )}
+                      {!notification.readAt && (
+                        <button
+                          type="button"
+                          aria-label="Mark notification read"
+                          title="Mark read"
+                          onClick={() => markRead(notification.$id)}
+                          className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>

@@ -32,7 +32,10 @@ function HomeContent() {
         // activeDashboard respects user.department for non-leadership users
         // and the user's in-app choice for leadership roles (admin/developer/
         // monitor/operations). So a single source of truth here is enough.
-        const target = activeDashboard === 'resume' ? '/resume-dashboard' : '/dashboard';
+        let target = '/dashboard';
+        if (activeDashboard === 'resume') {
+          target = user.role === 'compliance' ? '/compliance-dashboard' : '/resume-dashboard';
+        }
         window.location.replace(target);
       } else {
         window.location.replace('/login');

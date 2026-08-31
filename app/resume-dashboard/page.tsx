@@ -6,31 +6,67 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Button } from "@/components/ui/button";
-import { appIcons } from "@/components/navigation-config";
-import { Users, Clock, TrendingUp, FileText } from "lucide-react";
-import { getResumeDashboardStatsAction } from "@/app/actions/resume-profiles";
+import { DashboardDateRange } from "@/components/dashboard/dashboard-date-range";
+import { getTodayEst, getMonthStartEst } from "@/lib/utils/est-date";
+import type { DateRange } from "@/lib/utils/dashboard-kpi";
+import { getResumeDashboardDataAction, type ResumeDashboardData } from "@/app/actions/resume-dashboard";
+import { ResumeTopMetrics } from "@/components/resume-dashboard/resume-top-metrics";
+import { ResumeCharts } from "@/components/resume-dashboard/resume-charts";
+import { ResumeKpiTable } from "@/components/resume-dashboard/resume-kpi-table";
+import { ResumeRecentActivity } from "@/components/resume-dashboard/resume-recent-activity";
 
 function ResumeDashboardContent() {
   const { user, isAdmin, isMonitor, isOperations, activeDashboard } = useAuth();
   const router = useRouter();
-  const [stats, setStats] = useState({ totalTeamMembers: 0, resumesReviewed: 0, inProgress: 0, thisWeek: 0 });
-  const [loading, setLoading] = useState(true);
 
-  // Belt-and-suspenders guard: ProtectedRoute gates by componentKey, but a
-  // sales-only user (someone who can't switch dashboards and isn't in
-  // leadership) must not see this page even if canAccess ever drifts.
-  // Admin / Monitor / Operations are intentionally allowed — they oversee
-  // both teams and can preview either dashboard from a single login.
+  // Guard
   const canBeOnResumeView = isAdmin || isMonitor || isOperations || activeDashboard === "resume";
 
-  useEffect(() => {
-    if (user && canBeOnResumeView) {
-      getResumeDashboardStatsAction().then(data => {
-        setStats(data);
-        setLoading(false);
-      });
+  // State
+  const [dateRange, setDateRange] = useState<DateRange>(() => {
+    if (typeof window === "undefined") return { from: getTodayEst(), to: getTodayEst() };
+    const savedFilter = window.localStorage.getItem('resume_dashboard_date_filter');
+    const today = getTodayEst();
+    if (savedFilter === 'month') {
+      return { from: getMonthStartEst(new Date()), to: today };
     }
-  }, [user, canBeOnResumeView]);
+    return { from: today, to: today };
+  });
+
+  const [dashboardData, setDashboardData] = useState<ResumeDashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const handleDateRangeChange = (newRange: DateRange) => {
+    setDateRange(newRange);
+    if (newRange.from && newRange.to && newRange.from === newRange.to) {
+      localStorage.setItem('resume_dashboard_date_filter', 'today');
+    } else {
+      localStorage.setItem('resume_dashboard_date_filter', 'month');
+    }
+  };
+
+  useEffect(() => {
+    if (user && canBeOnResumeView && dateRange) {
+      let cancelled = false;
+      setLoading(true);
+      
+      getResumeDashboardDataAction(dateRange)
+        .then(data => {
+          if (!cancelled) {
+            setDashboardData(data);
+            setLoading(false);
+          }
+        })
+        .catch(err => {
+          console.error("Failed to load resume dashboard data", err);
+          if (!cancelled) setLoading(false);
+        });
+
+      return () => {
+        cancelled = true;
+      };
+    }
+  }, [user, canBeOnResumeView, dateRange]);
 
   if (user && !canBeOnResumeView) {
     return (
@@ -38,15 +74,11 @@ function ResumeDashboardContent() {
         <CardHeader>
           <CardTitle>Access denied</CardTitle>
           <CardDescription>
-            You don&apos;t have access to this dashboard. Returning you to the
-            sales dashboard…
+            You don't have access to this dashboard. Returning you to the sales dashboard...
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button
-            variant="outline"
-            onClick={() => router.replace("/dashboard")}
-          >
+          <Button variant="outline" onClick={() => router.replace("/dashboard")}>
             Go to Sales Dashboard
           </Button>
         </CardContent>
@@ -56,85 +88,34 @@ function ResumeDashboardContent() {
 
   if (!user) return null;
 
-  const ResumeIcon = appIcons.resumeDashboard ?? FileText;
-  const TeamIcon = Users;
-  const InProgressIcon = Clock;
-  const WeeklyIcon = TrendingUp;
-
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold">Resume Dashboard</h1>
-        <p className="text-muted-foreground mt-1">
-          Welcome back, {user.name}
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold">Resume Dashboard</h1>
+          <p className="text-muted-foreground mt-1">
+            Welcome back, {user.name}
+          </p>
+        </div>
+        
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <DashboardDateRange
+            value={dateRange}
+            onChange={handleDateRangeChange}
+          />
+        </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Resumes Reviewed</CardTitle>
-            <ResumeIcon className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{loading ? "—" : stats.resumesReviewed}</div>
-            <p className="text-xs text-muted-foreground mt-1">Total</p>
-          </CardContent>
-        </Card>
+      <ResumeTopMetrics metrics={dashboardData?.topMetrics} loading={loading} />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">In Progress</CardTitle>
-            <InProgressIcon className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{loading ? "—" : stats.inProgress}</div>
-            <p className="text-xs text-muted-foreground mt-1">Currently active</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Team Members</CardTitle>
-            <TeamIcon className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{loading ? "—" : stats.totalTeamMembers}</div>
-            <p className="text-xs text-muted-foreground mt-1">Resume team</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">This Week</CardTitle>
-            <WeeklyIcon className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{loading ? "—" : stats.thisWeek}</div>
-            <p className="text-xs text-muted-foreground mt-1">Since Monday</p>
-          </CardContent>
-        </Card>
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2">
+        <ResumeCharts stageDistribution={dashboardData?.stageDistribution} loading={loading} />
+        <ResumeRecentActivity activities={dashboardData?.recentActivities} loading={loading} />
+      </div>
+      <div className="mt-6">
+        <ResumeKpiTable kpiRows={dashboardData?.kpiRows} loading={loading} />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Welcome, {user.name}!</CardTitle>
-          <CardDescription>
-            You are logged in as a {user.role.replace(/_/g, " ")} on the Resume team.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <p>
-            <strong>Email:</strong> {user.email}
-          </p>
-          <p>
-            <strong>Role:</strong> {user.role.replace(/_/g, " ")}
-          </p>
-          <p>
-            <strong>Department:</strong> {user.department}
-          </p>
-        </CardContent>
-      </Card>
     </div>
   );
 }

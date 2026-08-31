@@ -387,10 +387,10 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
     }
 
     const role: UserRole = agentInput.role ?? 'agent';
-    if (role !== 'agent' && role !== 'lead_generation' && role !== 'monitor' && role !== 'operations') {
+    if (role !== 'agent' && role !== 'lead_generation' && role !== 'monitor' && role !== 'operations' && role !== 'compliance') {
         throw new Error('Invalid role for createAgentAction');
     }
-    if ((role === 'monitor' || role === 'operations') && callerDoc.role !== 'admin' && callerDoc.role !== 'developer') {
+    if ((role === 'monitor' || role === 'operations' || role === 'compliance') && callerDoc.role !== 'admin' && callerDoc.role !== 'developer') {
         throw new Error('Permission denied: Only admins and developers can create this role');
     }
 
@@ -399,8 +399,8 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
     const userId = ID.unique();
 
     const isTeamLead = callerDoc.role === 'team_lead';
-    const teamLeadId = role === 'monitor' || role === 'operations' ? null : (isTeamLead ? callerDoc.$id : (agentInput.teamLeadId || null));
-    if (!teamLeadId && role !== 'monitor' && role !== 'operations' && callerDoc.role !== 'admin' && callerDoc.role !== 'developer') {
+    const teamLeadId = role === 'monitor' || role === 'operations' || role === 'compliance' ? null : (isTeamLead ? callerDoc.$id : (agentInput.teamLeadId || null));
+    if (!teamLeadId && role !== 'monitor' && role !== 'operations' && role !== 'compliance' && callerDoc.role !== 'admin' && callerDoc.role !== 'developer') {
         throw new Error("Agents must be assigned to a Team Lead");
     }
 

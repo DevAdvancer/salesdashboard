@@ -170,6 +170,10 @@ export async function listResumeProfilesAction(
 
     if (options.stage && options.stage !== 'all') {
       queries.push(Query.equal('stage', options.stage));
+    } else {
+      // By default, exclude profiles that have been moved to Marketing
+      queries.push(Query.notEqual('stage', '4. Marketing'));
+      queries.push(Query.notEqual('stage', 'Marketing'));
     }
 
     if (options.search) {
@@ -294,24 +298,14 @@ export interface CreateResumeProfileInput {
   callRequestId?: string | null;
   leadId?: string | null;
   candidateName: string;
-  technology?: string | null;
-  usaArrival?: string | null;
-  bachelors?: string | null;
-  masters?: string | null;
-  cpt?: string | null;
-  cptDetails?: string | null;
-  opt?: string | null;
-  optDetails?: string | null;
-  stemOpt?: string | null;
-  stemOptDetails?: string | null;
-  experience?: string | null;
-  data?: string | null;
-  missingDocs?: string | null;
-  resumeTimeline?: string | null;
-  remarks?: string | null;
   stage?: ResumeProfileStage | string;
   assignedToId?: string | null;
   assignedToName?: string | null;
+  data?: Record<string, any>; // Will be serialized into the JSON blob
+}
+
+export interface UpdateResumeProfileInput extends Partial<CreateResumeProfileInput> {
+  $id: string;
 }
 
 /**
@@ -346,28 +340,17 @@ export async function createResumeProfileAction(input: CreateResumeProfileInput)
     callRequestId: input.callRequestId ?? null,
     leadId: input.leadId ?? null,
     candidateName: input.candidateName.trim(),
-    technology: input.technology?.trim() ?? null,
-    usaArrival: input.usaArrival?.trim() ?? null,
-    bachelors: input.bachelors?.trim() ?? null,
-    masters: input.masters?.trim() ?? null,
-    cpt: input.cpt?.trim() ?? null,
-    cptDetails: input.cptDetails?.trim() ?? null,
-    opt: input.opt?.trim() ?? null,
-    optDetails: input.optDetails?.trim() ?? null,
-    stemOpt: input.stemOpt?.trim() ?? null,
-    stemOptDetails: input.stemOptDetails?.trim() ?? null,
-    experience: input.experience?.trim() ?? null,
-    data: input.data?.trim() ?? null,
-    missingDocs: input.missingDocs?.trim() ?? null,
-    resumeTimeline: input.resumeTimeline?.trim() ?? null,
-    remarks: input.remarks?.trim() ?? null,
     stage,
     assignedToId: canExplicitlyCreate ? (input.assignedToId ?? null) : null,
     assignedToName: canExplicitlyCreate ? (input.assignedToName ?? null) : null,
     createdBy: actor.$id,
     createdByName: actor.name,
     createdAt: now,
+    updatedAt: now,
     stageUpdatedAt: now,
+    movedToMarketing: false,
+    complianceStatus: 'pending',
+    data: input.data ? JSON.stringify(input.data) : null,
   };
 
   const created = await databases.createDocument(
@@ -453,21 +436,6 @@ export async function updateResumeProfileAction(input: UpdateResumeProfileInput)
     'callRequestId',
     'leadId',
     'candidateName',
-    'technology',
-    'usaArrival',
-    'bachelors',
-    'masters',
-    'cpt',
-    'cptDetails',
-    'opt',
-    'optDetails',
-    'stemOpt',
-    'stemOptDetails',
-    'experience',
-    'data',
-    'missingDocs',
-    'resumeTimeline',
-    'remarks',
     'assignedToId',
     'assignedToName',
   ];
@@ -479,12 +447,28 @@ export async function updateResumeProfileAction(input: UpdateResumeProfileInput)
     }
   }
 
+  if (input.data !== undefined) {
+    let existingData: Record<string, any> = {};
+    if (existing.data) {
+      try {
+        existingData = JSON.parse(existing.data);
+      } catch (e) {
+        console.warn('Failed to parse existing profile data', e);
+      }
+    }
+    const mergedData = { ...existingData, ...input.data };
+    updates.data = Object.keys(mergedData).length > 0 ? JSON.stringify(mergedData) : null;
+  }
+
   const stageChanged = input.stage !== undefined && input.stage !== existing.stage;
   if (stageChanged && input.stage) {
     updates.stage = input.stage;
     updates.stageUpdatedAt = new Date().toISOString();
     updates.lastAlertStage = null;
     updates.lastAlertAt = null;
+    updates.complianceStatus = 'pending';
+    updates.complianceApprovedAt = null;
+    updates.complianceApprovedById = null;
   }
 
   const updated = await databases.updateDocument(
@@ -674,4 +658,110 @@ export async function listMarketingProfilesAction(): Promise<ResumeProfileDocume
     console.error('listMarketingProfilesAction error:', error);
     return [];
   }
+}
+
+export async function updateComplianceNotesAction(
+  id: string,
+  notes: string
+): Promise<ResumeProfileDocument> {
+  const actor = await getAuthenticatedUserDoc();
+  if (!actor || actor.role !== 'compliance') {
+    throw new Error('Only compliance users can update notes');
+  }
+
+  const { databases } = await createAdminClient();
+  const existing = await databases.getDocument(DATABASE_ID, COLLECTIONS.RESUME_PROFILES, id);
+  
+  let dataObj: Record<string, any> = {};
+  if (existing.data) {
+    try {
+      dataObj = JSON.parse(existing.data);
+    } catch (e) {
+      console.warn('Failed to parse profile data', e);
+    }
+  }
+  
+  dataObj.remarks = notes;
+  
+  const updated = await databases.updateDocument(
+    DATABASE_ID,
+    COLLECTIONS.RESUME_PROFILES,
+    id,
+    {
+      data: JSON.stringify(dataObj),
+      updatedAt: new Date().toISOString(),
+    }
+  );
+
+  // Send notification
+  const recipientIds = new Set<string>();
+  if (existing.ownerId && existing.ownerId !== actor.$id) recipientIds.add(existing.ownerId);
+  if (existing.assignedToId && existing.assignedToId !== actor.$id) recipientIds.add(existing.assignedToId);
+
+  if (recipientIds.size > 0) {
+    await createNotificationsForRecipients(
+      databases,
+      Array.from(recipientIds),
+      {
+        title: 'Compliance added notes',
+        body: `Compliance added notes to ${existing.candidateName}'s resume profile.`,
+        targetId: id,
+        targetType: 'resume_profile',
+        type: 'compliance_notes_updated',
+      }
+    );
+  }
+
+  return updated as unknown as ResumeProfileDocument;
+}
+
+export async function updateComplianceStatusAction(
+  id: string,
+  status: 'approved' | 'rejected'
+): Promise<ResumeProfileDocument> {
+  const actor = await getAuthenticatedUserDoc();
+  if (!actor || actor.role !== 'compliance') {
+    throw new Error('Only compliance users can update compliance status');
+  }
+
+  const { databases } = await createAdminClient();
+  const existing = await databases.getDocument(DATABASE_ID, COLLECTIONS.RESUME_PROFILES, id);
+
+  if (existing.complianceStatus === status) {
+    return existing as unknown as ResumeProfileDocument;
+  }
+
+  const now = new Date().toISOString();
+  const updated = await databases.updateDocument(
+    DATABASE_ID,
+    COLLECTIONS.RESUME_PROFILES,
+    id,
+    {
+      complianceStatus: status,
+      complianceApprovedAt: status === 'approved' ? now : null,
+      complianceApprovedById: status === 'approved' ? actor.$id : null,
+      updatedAt: now,
+    }
+  );
+
+  // Send notification
+  const recipientIds = new Set<string>();
+  if (existing.ownerId && existing.ownerId !== actor.$id) recipientIds.add(existing.ownerId);
+  if (existing.assignedToId && existing.assignedToId !== actor.$id) recipientIds.add(existing.assignedToId);
+
+  if (recipientIds.size > 0) {
+    await createNotificationsForRecipients(
+      databases,
+      Array.from(recipientIds),
+      {
+        title: `Resume Profile ${status === 'approved' ? 'Approved' : 'Rejected'}`,
+        body: `Compliance has ${status} the resume profile for ${existing.candidateName}.`,
+        targetId: id,
+        targetType: 'resume_profile',
+        type: `compliance_status_${status}`,
+      }
+    );
+  }
+
+  return updated as unknown as ResumeProfileDocument;
 }

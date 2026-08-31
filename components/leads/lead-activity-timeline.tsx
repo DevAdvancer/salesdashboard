@@ -6,15 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getAuditLogs } from '@/lib/services/audit-service';
 import type { AuditLog } from '@/lib/types';
 import type { Lead } from '@/lib/types';
+import { formatEasternDateTime } from '@/lib/utils/eastern-date';
 
 interface LeadActivityTimelineProps {
   lead: Lead;
 }
 
-function formatDate(value?: string | null) {
-  if (!value) return 'N/A';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'N/A' : date.toLocaleString();
+function formatDate(isoString: string | null | undefined): string {
+  if (!isoString) return 'N/A';
+  return formatEasternDateTime(isoString);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

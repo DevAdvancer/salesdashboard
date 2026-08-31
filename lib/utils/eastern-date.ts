@@ -51,3 +51,20 @@ export function formatEasternCalendarDate(value: string | null | undefined): str
     year: "numeric",
   }).format(date);
 }
+
+export function formatEasternDateTime(value: string | Date | null | undefined): string {
+  if (!value) return "N/A";
+  
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: EASTERN_TIME_ZONE,
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(date);
+}

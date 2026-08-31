@@ -32,6 +32,7 @@ export function isResumeSide(user: User): boolean {
     user.role === 'admin' ||
     user.role === 'developer' ||
     user.role === 'monitor' ||
-    user.role === 'operations'
+    user.role === 'operations' ||
+    user.role === 'compliance'
   );
 }

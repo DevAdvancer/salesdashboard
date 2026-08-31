@@ -62,6 +62,7 @@ export function UserTable({
       case "lead_generation": return "Lead Generation";
       case "monitor": return "Monitor";
       case "operations": return "Operations";
+      case "compliance": return "Compliance";
       default: return role;
     }
   };

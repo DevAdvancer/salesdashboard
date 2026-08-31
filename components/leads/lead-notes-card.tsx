@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
+import { formatEasternDateTime } from '@/lib/utils/eastern-date';
 import { createLeadNote, listLeadNotes } from '@/lib/services/sop-service';
 import type { LeadNote, LeadNoteVisibility, User } from '@/lib/types';
 
@@ -105,12 +106,12 @@ export function LeadNotesCard({ leadId, user }: LeadNotesCardProps) {
             notes.map((note) => (
               <div key={note.$id} className="rounded-md border border-border p-3">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium">{note.authorName}</p>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm">{note.authorName}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {formatEasternDateTime(note.createdAt)}
+                    </span>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(note.createdAt).toLocaleString()}
-                  </p>
                 </div>
                 <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{note.body}</p>
               </div>

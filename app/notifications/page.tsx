@@ -9,6 +9,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { listNotifications, clearAllNotifications, markNotificationRead } from '@/lib/services/sop-service';
 import type { NotificationRecord } from '@/lib/types';
+import Link from 'next/link';
+import { getNotificationUrl } from '@/lib/utils/notification-link';
+import { cn } from '@/lib/utils';
 
 export default function NotificationsPage() {
   return (
@@ -122,29 +125,47 @@ function NotificationsContent() {
             </p>
           ) : notifications.length === 0 ? (
             <p className="text-sm text-muted-foreground">No notifications yet.</p>
-          ) : notifications.map((notification) => (
-            <div key={notification.$id} className="rounded-md border border-border p-3">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="text-sm font-medium">{notification.title}</p>
-                  <p className="text-sm text-muted-foreground">{notification.body}</p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {notification.type} / {new Date(notification.createdAt).toLocaleString()}
-                  </p>
-                </div>
-                {!notification.readAt && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => read(notification.$id)}
-                    loading={isMarking(notification.$id)}
-                  >
-                    Mark read
-                  </Button>
-                )}
+          ) : notifications.map((notification) => {
+            const url = getNotificationUrl(notification.targetId, notification.targetType);
+            const content = (
+              <div>
+                <p className={cn("text-sm font-medium", url && "text-primary group-hover:underline")}>
+                  {notification.title}
+                </p>
+                <p className="text-sm text-muted-foreground">{notification.body}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {notification.type} / {new Date(notification.createdAt).toLocaleString()}
+                </p>
               </div>
-            </div>
-          ))}
+            );
+
+            return (
+              <div key={notification.$id} className="rounded-md border border-border p-3 hover:bg-muted/50 group transition-colors">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  {url ? (
+                    <Link href={url} className="flex-1">
+                      {content}
+                    </Link>
+                  ) : (
+                    <div className="flex-1">
+                      {content}
+                    </div>
+                  )}
+                  {!notification.readAt && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0"
+                      onClick={() => read(notification.$id)}
+                      loading={isMarking(notification.$id)}
+                    >
+                      Mark read
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
     </div>

@@ -86,21 +86,23 @@ export function EditUserDialog({
             {isAdmin && (
               <div>
                 <Label>Role</Label>
-                <select
-                  className="w-full h-10 pl-3 pr-8 rounded-md border border-input bg-background"
-                  value={editRole || ""}
-                  onChange={(e) => setEditRole(e.target.value as UserRole)}
-                >
-                  {(isAdmin || isDeveloper) && <option value="admin">Admin</option>}
-                  {(isAdmin || isDeveloper) && <option value="developer">Developer</option>}
-                  {(isAdmin || isDeveloper) && <option value="monitor">Monitor</option>}
-                  {(isAdmin || isDeveloper) && <option value="operations">Operations</option>}
-                  <option value="team_lead">Team Lead</option>
-                  <option value="agent">Agent</option>
-                  {editDepartment !== "resume" && (
-                    <option value="lead_generation">Lead Generation</option>
-                  )}
-                </select>
+                  <select
+                    id="edit-role"
+                    value={editRole || ""}
+                    onChange={(e) => setEditRole(e.target.value as any)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {(isAdmin || isDeveloper) && <option value="admin">Admin</option>}
+                    {(isAdmin || isDeveloper) && <option value="developer">Developer</option>}
+                    {(isAdmin || isDeveloper) && <option value="monitor">Monitor</option>}
+                    {(isAdmin || isDeveloper) && <option value="operations">Operations</option>}
+                    <option value="team_lead">Team Lead</option>
+                    <option value="agent">Agent</option>
+                    {(isAdmin || isDeveloper) && <option value="compliance">Compliance</option>}
+                    {editDepartment !== "resume" && (
+                      <option value="lead_generation">Lead Generation</option>
+                    )}
+                  </select>
               </div>
             )}
 

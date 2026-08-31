@@ -31,6 +31,8 @@
     "backfill:lg-handoffs:apply": "tsx scripts/backfill-lg-handoffs.ts -- --apply",
     "migrate:company-names": "tsx scripts/migrate-company-names.ts",
     "migrate:company-names:apply": "tsx scripts/migrate-company-names.ts -- --apply",
+    "migrate:resume-profiles": "tsx scripts/migrate-resume-profiles-to-data.ts",
+    "migrate:resume-profiles:apply": "tsx scripts/migrate-resume-profiles-to-data.ts :apply",
     "create:followups-collection": "tsx scripts/create-followups-collection.ts"
   },
   "dependencies": {

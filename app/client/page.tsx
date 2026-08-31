@@ -574,7 +574,7 @@ function HistoryContent() {
                   return (
                     <tr
                       key={lead.$id}
-                      className="border-b border-border hover:bg-accent/50 cursor-pointer transition-colors"
+                      className="border-b last:border-0 border-border hover:bg-accent/50 cursor-pointer transition-colors"
                       onClick={() => router.push(`/client/${lead.$id}`)}>
                       <td className="p-3 md:p-4">
                         {firstName} {lastName}

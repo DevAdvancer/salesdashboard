@@ -32,10 +32,12 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema),
   });
 
-  // Resume-department users (and leadership previewing the resume view) must
-  // land on /resume-dashboard — /dashboard is a sales-only route that would
-  // trip the permission guard for them.
-  const homePath = activeDashboard === 'resume' ? '/resume-dashboard' : '/dashboard';
+  let homePath = '/dashboard';
+  if (user?.role === 'compliance') {
+    homePath = '/compliance-dashboard';
+  } else if (activeDashboard === 'resume') {
+    homePath = '/resume-dashboard';
+  }
 
   // Redirect to the active dashboard if already authenticated
   useEffect(() => {
@@ -50,10 +52,19 @@ export default function LoginPage() {
       const loggedInUser = await login(data.email, data.password);
       // Route by the freshly-resolved user's department. `user`/`activeDashboard`
       // from context are still stale in this closure right after login, so we
-      // derive the target from the returned doc. Non-leadership resume users
-      // land on /resume-dashboard; everyone else on /dashboard.
-      const target =
-        loggedInUser?.department === 'resume' ? '/resume-dashboard' : '/dashboard';
+      // derive the target from the returned doc.
+      let target = '/dashboard';
+      if (loggedInUser?.role === 'compliance') {
+        target = '/compliance-dashboard';
+      } else if (
+        loggedInUser?.department === 'resume' &&
+        loggedInUser?.role !== 'admin' &&
+        loggedInUser?.role !== 'developer' &&
+        loggedInUser?.role !== 'monitor' &&
+        loggedInUser?.role !== 'operations'
+      ) {
+        target = '/resume-dashboard';
+      }
       router.push(target);
     } catch (err: unknown) {
       setError(handleApiError(err, { title: 'Login Failed', showToast: true, retry: () => onSubmit(data) }));

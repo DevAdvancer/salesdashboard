@@ -42,16 +42,27 @@ async function run() {
 
         // 2. Update Enum
         console.log('Updating role enum...');
-        // Note: For required enums, Appwrite API requires a default value.
+        // Note: For required enums, Appwrite API has a bug where it requires xdefault but then rejects it.
         await databases.updateEnumAttribute(
             DATABASE_ID,
             USERS_COLLECTION_ID,
             'role',
-            ['admin', 'team_lead', 'agent'],
+            ['admin', 'developer', 'team_lead', 'agent', 'lead_generation', 'monitor', 'operations', 'compliance'],
             true, // required
-            'agent' // default
+            null as any // xdefault
         );
-        console.log('Role enum updated successfully.');
+        console.log('Role enum updated successfully for users.');
+
+        console.log('Updating access_config role enum...');
+        await databases.updateEnumAttribute(
+            DATABASE_ID,
+            'access_config',
+            'role',
+            ['admin', 'manager', 'agent', 'developer', 'team_lead', 'lead_generation', 'monitor', 'operations', 'compliance'],
+            true, // required
+            null as any // xdefault
+        );
+        console.log('Role enum updated successfully for access_config.');
 
     } catch (error: any) {
         console.error('Error:', error.message);

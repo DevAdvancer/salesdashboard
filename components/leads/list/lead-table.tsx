@@ -65,7 +65,7 @@ export const LeadRow = memo(
     const source = typeof leadData.source === "string" ? leadData.source : "";
 
     return (
-      <tr className="border-b hover:bg-accent/50 transition-colors">
+      <tr className="border-b last:border-0 hover:bg-accent/50 transition-colors">
         <td className="p-3 md:p-4">
           {firstName} {lastName}
         </td>

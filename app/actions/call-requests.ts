@@ -26,9 +26,10 @@ const STATUS_LABELS: Record<CallRequestStatus, string> = {
   not_called: 'Not called',
   pending_documents: 'Pending Documents',
   call_done: 'Call done',
+  moved_to_marketing: 'Moved to Marketing',
 };
 
-export type CallRequestUserOption = Pick<User, '$id' | 'name' | 'email'>;
+export type CallRequestUserOption = Pick<User, '$id' | 'name' | 'email' | 'role'>;
 
 // ─── Audit helper (mirrors app/actions/chat.ts) ──────────────────────────────
 async function logAuditAction(
@@ -215,10 +216,13 @@ export async function listCallRequestsAction(searchQuery?: string): Promise<Call
   const { databases } = await createAdminClient();
   try {
     let all: CallRequestDocument[] = [];
-    const queries = [Query.orderDesc('$createdAt')];
+    const queries = [
+      Query.notEqual('status', 'moved_to_marketing'),
+      Query.orderDesc('$createdAt')
+    ];
 
     if (!searchQuery) {
-      queries.push(Query.limit(10));
+      queries.push(Query.limit(100));
       const response = await databases.listDocuments(
         DATABASE_ID,
         COLLECTIONS.CALL_REQUESTS,
@@ -247,10 +251,25 @@ export async function listCallRequestsAction(searchQuery?: string): Promise<Call
       actor.role === 'developer' ||
       actor.role === 'monitor' ||
       actor.role === 'operations';
-    if (isLeadership || actor.role === 'team_lead') {
-      return all;
+    let filtered = all;
+    if (!isLeadership && actor.role !== 'team_lead') {
+      filtered = all.filter((r) => !r.assignedToId || r.assignedToId === actor.$id);
     }
-    return all.filter((r) => !r.assignedToId || r.assignedToId === actor.$id);
+
+    // Fetch Resume Team Leads so we can treat their assignments as "Unassigned" for sorting purposes
+    const tlIds = await getResumeTeamLeadIds(databases);
+
+    // Sort: Unassigned (or assigned to TL) first, then by created at
+    return filtered.sort((a, b) => {
+      const aAssigned = !!a.assignedToId && !tlIds.includes(a.assignedToId);
+      const bAssigned = !!b.assignedToId && !tlIds.includes(b.assignedToId);
+      if (aAssigned === bAssigned) {
+        const dateA = a.createdAt || (a as any).$createdAt || '';
+        const dateB = b.createdAt || (b as any).$createdAt || '';
+        return new Date(dateB).getTime() - new Date(dateA).getTime();
+      }
+      return aAssigned ? 1 : -1;
+    });
   } catch (error) {
     throw new Error(getAppwriteErrorMessage(error));
   }
@@ -267,7 +286,7 @@ export async function listMyCallRequestsAction(searchQuery?: string): Promise<Ca
     ];
 
     if (!searchQuery) {
-      queries.push(Query.limit(10));
+      queries.push(Query.limit(100));
       const response = await databases.listDocuments(
         DATABASE_ID,
         COLLECTIONS.CALL_REQUESTS,
@@ -311,7 +330,7 @@ export async function getCallRequestOptionsAction(): Promise<CallRequestUserOpti
     .filter((u) => u.isActive !== false)
     .filter((u) => (u as unknown as { department?: string }).department === 'resume')
     .sort((a, b) => a.name.localeCompare(b.name))
-    .map((u) => ({ $id: u.$id, name: u.name, email: u.email }));
+    .map((u) => ({ $id: u.$id, name: u.name, email: u.email, role: u.role }));
 }
 
 // ─── Assign to a resume user ─────────────────────────────────────────────────
@@ -563,7 +582,7 @@ export async function createProfileFromCallRequestAction(requestId: string) {
       callRequestId: request.$id,
       leadId: request.leadId ?? null,
       candidateName: request.clientName,
-      stage: '1. Draft',
+      stage: 'Draft & Approval',
       assignedToId: request.assignedToId ?? actor.$id,
       assignedToName: request.assignedToName ?? actor.name,
       createdBy: actor.$id,
@@ -581,7 +600,7 @@ export async function createProfileFromCallRequestAction(requestId: string) {
   await createNotificationsForRecipients(databases, recipients, {
     type: 'resume_profile_created',
     title: 'Sent to Resume Profiles',
-    body: `${request.clientName} call completed and moved to Resume Profiles page (Stage: 1. Draft).`,
+    body: `${request.clientName} call completed and moved to Resume Profiles page (Stage: Draft & Approval).`,
     targetType: 'resume_profile',
     targetId: createdProfile.$id,
   });

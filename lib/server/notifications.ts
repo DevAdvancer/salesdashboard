@@ -32,31 +32,68 @@ export async function createNotificationRecord(
     }
   );
 
-  await sendEmailForNotification(input.recipientId, input.title, input.body).catch(console.error);
+  await sendEmailForNotification(
+    input.recipientId, 
+    input.title, 
+    input.body, 
+    input.targetId, 
+    input.targetType
+  ).catch(console.error);
 
   return record;
 }
 
-async function sendEmailForNotification(userId: string, title: string, body: string) {
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:5000';
+
+function getNotificationLink(targetId?: string | null, targetType?: string | null): string | null {
+  if (!targetId || !targetType) return null;
+  const type = targetType.toLowerCase();
+  if (type === 'lead') return `${APP_URL}/leads/${targetId}`;
+  if (type === 'resume_profile') return `${APP_URL}/resume/${targetId}`;
+  if (type === 'call_request') return `${APP_URL}/my-call-requests`;
+  if (type === 'interview') return `${APP_URL}/resume/${targetId}`; // Or another appropriate route if interview has its own
+  if (type === 'mock') return `${APP_URL}/resume/${targetId}`; // Same here
+  if (type === 'user') return `${APP_URL}/profile/${targetId}`;
+  return null;
+}
+
+async function sendEmailForNotification(
+  userId: string, 
+  title: string, 
+  body: string, 
+  targetId?: string | null, 
+  targetType?: string | null
+) {
   const { users } = await createAdminClient();
   
   try {
     const user = await users.get(userId);
     
     if (user && user.email) {
+      if (user.email.toLowerCase() === 'unassigned@silverspaceinc.com') {
+        return;
+      }
+
       const targetEmail = user.email === 'abhirupvizva@gmail.com' 
         ? 'abhirup.kumar@vizvainc.com' 
         : user.email;
 
+      const link = getNotificationLink(targetId, targetType);
+      const linkHtml = link 
+        ? `<div style="margin-top: 25px;"><a href="${link}" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; padding: 10px 18px; border-radius: 6px; font-weight: 500; font-size: 14px;">View in CRM</a></div>` 
+        : '';
+      const linkText = link ? `\n\nView in CRM: ${link}` : '';
+
       await sendNotificationEmail({
         to: targetEmail,
         subject: `New CRM Notification: ${title}`,
-        text: `${title}\n\n${body}\n\nYou are receiving this because of a new notification in the CRM.\nThis is sent from sales.silverspace.tech. Please don't reply to this mail.`,
+        text: `${title}\n\n${body}${linkText}\n\nYou are receiving this because of a new notification in the CRM.\nThis is sent from sales.silverspace.tech. Please don't reply to this mail.`,
         html: `
           <div style="font-family: system-ui, -apple-system, sans-serif; background-color: #09090b; color: #e4e4e7; padding: 40px 20px; min-height: 100%;">
             <div style="max-width: 600px; margin: 0 auto; background-color: #18181b; border: 1px solid #27272a; border-radius: 8px; padding: 30px;">
               <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 600;">${title}</h2>
               <p style="font-size: 15px; line-height: 1.6; color: #d4d4d8;">${body}</p>
+              ${linkHtml}
               <hr style="margin-top: 30px; margin-bottom: 20px; border: none; border-top: 1px solid #27272a;" />
               <p style="margin: 0; font-size: 12px; color: #a1a1aa; line-height: 1.5;">
                 You are receiving this because of a new notification in the CRM.<br />

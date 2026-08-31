@@ -17,6 +17,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useAuth } from '@/lib/contexts/auth-context';
+import { useToast } from '@/components/ui/use-toast';
 import {
   RESUME_PROFILE_STAGES,
   type CallRequest,
@@ -59,13 +60,21 @@ export function ResumeProfileCreateForm({
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, serverSessionReady } = useAuth();
+  const { toast } = useToast();
 
   const [callRequests, setCallRequests] = useState(initialCallRequests);
   const [assignableUsers, setAssignableUsers] = useState(initialAssignableUsers);
 
   const [mode, setMode] = useState<'from_call' | 'manual'>('from_call');
   const [selectedCallId, setSelectedCallId] = useState(searchParams.get('callRequestId') || '');
-  const [candidateName, setCandidateName] = useState('');
+  const [candidateName, setCandidateName] = useState(() => {
+    const initialCallId = searchParams.get('callRequestId');
+    if (initialCallId) {
+      const found = initialCallRequests.find((c) => c.$id === initialCallId);
+      return found ? found.clientName : '';
+    }
+    return '';
+  });
   const [technology, setTechnology] = useState('');
   const [usaArrival, setUsaArrival] = useState('');
   const [educationHistory, setEducationHistory] = useState<EducationEntry[]>([]);
@@ -81,11 +90,38 @@ export function ResumeProfileCreateForm({
   const [missingDocs, setMissingDocs] = useState('');
   const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([]);
   const [remarks, setRemarks] = useState('');
-  const [stage, setStage] = useState<ResumeProfileStage>('1. Draft');
-  const [assignedToId, setAssignedToId] = useState('');
+  const [stage, setStage] = useState<ResumeProfileStage>('Draft & Approval');
+  
+  const [assignedToId, setAssignedToId] = useState(() => {
+    const initialCallId = searchParams.get('callRequestId');
+    let fallback = user?.$id || '';
+    if (initialCallId) {
+      const found = initialCallRequests.find((c) => c.$id === initialCallId);
+      if (found && found.assignedToId) {
+        fallback = found.assignedToId;
+      }
+    }
+    return fallback;
+  });
+
+  const [visaStatus, setVisaStatus] = useState('F1');
+  const [gcEadYear, setGcEadYear] = useState('');
+  const [gcEadStartDate, setGcEadStartDate] = useState('');
+  const [gcEadEndDate, setGcEadEndDate] = useState('');
+  const [greenCardYear, setGreenCardYear] = useState('');
+  const [greenCardStartDate, setGreenCardStartDate] = useState('');
+  const [greenCardEndDate, setGreenCardEndDate] = useState('');
+  const [usCitizenYear, setUsCitizenYear] = useState('');
+  const [h1bEmployers, setH1bEmployers] = useState<EmployerEntry[]>([]);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user && !assignedToId) {
+      setAssignedToId(user.$id);
+    }
+  }, [user, assignedToId]);
 
   // The page's server-side options fetch can come back empty if it runs before
   // the crm_appwrite_jwt cookie is written (right after login). Re-fetch once
@@ -135,33 +171,51 @@ export function ResumeProfileCreateForm({
 
       const input: CreateResumeProfileInput = {
         candidateName: candidateName.trim(),
-        technology: technology.trim() || null,
-        usaArrival: usaArrival.trim() || null,
-        cpt,
-        opt,
-        stemOpt,
-        experience: serializeExperience(experience),
-        data: JSON.stringify({
-          educationHistory: serializeEducation(educationHistory),
-          cptEmployers: cpt === 'YES' ? serializeExperience(cptEmployers) : null,
-          optEmployers: opt === 'YES' ? serializeExperience(optEmployers) : null,
-          stemOptEmployers: stemOpt === 'YES' ? serializeExperience(stemOptEmployers) : null,
-          timelineEntries: serializeTimeline(timelineEntries),
-        }),
-        missingDocs: missingDocs.trim() || null,
-        remarks: remarks.trim() || null,
         stage,
         callRequestId: mode === 'from_call' && selectedCallId ? selectedCallId : null,
         leadId: mode === 'from_call' && selectedCall ? selectedCall.leadId : null,
         assignedToId: assignedToId || null,
         assignedToName: selectedUser?.name || null,
+        data: {
+          technology: technology.trim() || null,
+          usaArrival: usaArrival.trim() || null,
+          cpt,
+          opt,
+          stemOpt,
+          experience: serializeExperience(experience),
+          educationHistory: serializeEducation(educationHistory),
+          cptEmployers: cpt === 'YES' ? serializeExperience(cptEmployers) : null,
+          optEmployers: opt === 'YES' ? serializeExperience(optEmployers) : null,
+          stemOptEmployers: stemOpt === 'YES' ? serializeExperience(stemOptEmployers) : null,
+          timelineEntries: serializeTimeline(timelineEntries),
+          visaStatus,
+          gcEadYear: visaStatus === 'GC EAD' ? gcEadYear.trim() : null,
+          gcEadStartDate: visaStatus === 'GC EAD' ? gcEadStartDate.trim() : null,
+          gcEadEndDate: visaStatus === 'GC EAD' ? gcEadEndDate.trim() : null,
+          greenCardYear: visaStatus === 'Green Card' ? greenCardYear.trim() : null,
+          greenCardStartDate: visaStatus === 'Green Card' ? greenCardStartDate.trim() : null,
+          greenCardEndDate: visaStatus === 'Green Card' ? greenCardEndDate.trim() : null,
+          usCitizenYear: visaStatus === 'US Citizen' ? usCitizenYear.trim() : null,
+          h1bEmployers: visaStatus === 'H1B' ? serializeExperience(h1bEmployers) : null,
+          missingDocs: missingDocs.trim() || null,
+          remarks: remarks.trim() || null,
+        }
       };
 
       const created = await createResumeProfileAction(input);
+      toast({
+        title: "Success",
+        description: "Resume profile created successfully.",
+      });
       router.push(`/resume/${created.$id}`);
       router.refresh();
     } catch (err: any) {
       setError(err?.message || 'Failed to create resume profile');
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: err?.message || 'Failed to create resume profile',
+      });
       setSaving(false);
     }
   };
@@ -254,7 +308,7 @@ export function ResumeProfileCreateForm({
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={LABEL_CLASS}>Candidate Name *</label>
                 <input
@@ -282,13 +336,120 @@ export function ResumeProfileCreateForm({
                   type="text"
                   value={usaArrival}
                   onChange={(e) => setUsaArrival(e.target.value)}
-                  placeholder="e.g. Aug 2022 / F1"
+                  placeholder="e.g. Aug 2021"
                   className={INPUT_CLASS}
                 />
               </div>
+              <div>
+                <label className={LABEL_CLASS}>Visa Status</label>
+                <select
+                  value={visaStatus}
+                  onChange={(e) => setVisaStatus(e.target.value)}
+                  className={INPUT_CLASS}
+                >
+                  <option value="F1">F1</option>
+                  <option value="H1B">H1B</option>
+                  <option value="H4 EAD">H4 EAD</option>
+                  <option value="L2S">L2S</option>
+                  <option value="GC EAD">GC EAD</option>
+                  <option value="Green Card">Green Card</option>
+                  <option value="US Citizen">US Citizen</option>
+                  <option value="Asylum">Asylum</option>
+                </select>
+              </div>
             </div>
 
-            <div className="pt-2">
+            {visaStatus === 'GC EAD' && (
+              <div className="pt-2 border-t mt-2">
+                <div className="text-sm font-semibold text-foreground mb-3">GC EAD Information</div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className={LABEL_CLASS}>Year GC EAD Was Obtained</label>
+                    <input
+                      type="text"
+                      value={gcEadYear}
+                      onChange={(e) => setGcEadYear(e.target.value)}
+                      className={INPUT_CLASS}
+                      placeholder="e.g. 2023"
+                    />
+                  </div>
+                  <div>
+                    <label className={LABEL_CLASS}>GC EAD Start Date</label>
+                    <input
+                      type="date"
+                      value={gcEadStartDate}
+                      onChange={(e) => setGcEadStartDate(e.target.value)}
+                      className={INPUT_CLASS}
+                    />
+                  </div>
+                  <div>
+                    <label className={LABEL_CLASS}>GC EAD End Date</label>
+                    <input
+                      type="date"
+                      value={gcEadEndDate}
+                      onChange={(e) => setGcEadEndDate(e.target.value)}
+                      className={INPUT_CLASS}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {visaStatus === 'Green Card' && (
+              <div className="pt-2 border-t mt-2">
+                <div className="text-sm font-semibold text-foreground mb-3">Green Card Information</div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className={LABEL_CLASS}>Year Green Card Was Obtained</label>
+                    <input
+                      type="text"
+                      value={greenCardYear}
+                      onChange={(e) => setGreenCardYear(e.target.value)}
+                      className={INPUT_CLASS}
+                      placeholder="e.g. 2023"
+                    />
+                  </div>
+                  <div>
+                    <label className={LABEL_CLASS}>Green Card Start Date</label>
+                    <input
+                      type="date"
+                      value={greenCardStartDate}
+                      onChange={(e) => setGreenCardStartDate(e.target.value)}
+                      className={INPUT_CLASS}
+                    />
+                  </div>
+                  <div>
+                    <label className={LABEL_CLASS}>Green Card End Date</label>
+                    <input
+                      type="date"
+                      value={greenCardEndDate}
+                      onChange={(e) => setGreenCardEndDate(e.target.value)}
+                      className={INPUT_CLASS}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {visaStatus === 'US Citizen' && (
+              <div className="pt-2 border-t mt-2">
+                <div className="text-sm font-semibold text-foreground mb-3">US Citizenship Information</div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className={LABEL_CLASS}>Year Became a US Citizen (USC)</label>
+                    <input
+                      type="text"
+                      value={usCitizenYear}
+                      onChange={(e) => setUsCitizenYear(e.target.value)}
+                      className={INPUT_CLASS}
+                      placeholder="e.g. 2020"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="pt-2 border-t mt-2">
               <EducationFields
                 entries={educationHistory}
                 onChange={setEducationHistory}
@@ -297,90 +458,107 @@ export function ResumeProfileCreateForm({
           </Card>
 
           {/* Work authorization */}
-          <Card className="p-5 border border-border shadow-sm space-y-4">
-            <div className={SECTION_HEADER_CLASS}>
-              <ShieldCheck className="h-4 w-4 text-primary" />
-              Work Authorization Verification (I-20 / I-983)
-            </div>
-
-            {/* CPT */}
-            <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-foreground">CPT (Curricular Practical Training)</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Status:</span>
-                  <select
-                    value={cpt}
-                    onChange={(e) => setCpt(e.target.value)}
-                    className="rounded-md border border-input bg-background pl-2.5 pr-8 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
-                  >
-                    <option value="NO">NO</option>
-                    <option value="YES">YES</option>
-                  </select>
-                </div>
+          {['F1', 'H1B', 'H4 EAD', 'L2S'].includes(visaStatus) && (
+            <Card className="p-5 border border-border shadow-sm space-y-4">
+              <div className={SECTION_HEADER_CLASS}>
+                <ShieldCheck className="h-4 w-4 text-primary" />
+                Work Authorization Verification
               </div>
-              {cpt === 'YES' && (
-                <div className="pt-2">
-                  <EmployerExperienceFields
-                    entries={cptEmployers}
-                    onChange={setCptEmployers}
-                  />
+
+              {/* CPT */}
+              <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-foreground">CPT (Curricular Practical Training)</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Status:</span>
+                    <select
+                      value={cpt}
+                      onChange={(e) => setCpt(e.target.value)}
+                      className="rounded-md border border-input bg-background pl-2.5 pr-8 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
+                    >
+                      <option value="NO">NO</option>
+                      <option value="YES">YES</option>
+                    </select>
+                  </div>
+                </div>
+                {cpt === 'YES' && (
+                  <div className="pt-2">
+                    <EmployerExperienceFields
+                      entries={cptEmployers}
+                      onChange={setCptEmployers}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* OPT */}
+              <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-foreground">OPT (Optional Practical Training)</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Status:</span>
+                    <select
+                      value={opt}
+                      onChange={(e) => setOpt(e.target.value)}
+                      className="rounded-md border border-input bg-background pl-2.5 pr-8 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
+                    >
+                      <option value="NO">NO</option>
+                      <option value="YES">YES</option>
+                    </select>
+                  </div>
+                </div>
+                {opt === 'YES' && (
+                  <div className="pt-2">
+                    <EmployerExperienceFields
+                      entries={optEmployers}
+                      onChange={setOptEmployers}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* STEM OPT */}
+              <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-foreground">STEM OPT Extension</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Status:</span>
+                    <select
+                      value={stemOpt}
+                      onChange={(e) => setStemOpt(e.target.value)}
+                      className="rounded-md border border-input bg-background pl-2.5 pr-8 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
+                    >
+                      <option value="NO">NO</option>
+                      <option value="YES">YES</option>
+                    </select>
+                  </div>
+                </div>
+                {stemOpt === 'YES' && (
+                  <div className="pt-2">
+                    <EmployerExperienceFields
+                      entries={stemOptEmployers}
+                      onChange={setStemOptEmployers}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* H1B block */}
+              {visaStatus === 'H1B' && (
+                <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-foreground">I-797 / Employer Verification</span>
+                  </div>
+                  <div className="pt-2">
+                    <EmployerExperienceFields
+                      entries={h1bEmployers}
+                      onChange={setH1bEmployers}
+                    />
+                  </div>
                 </div>
               )}
-            </div>
-
-            {/* OPT */}
-            <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-foreground">OPT (Optional Practical Training)</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Status:</span>
-                  <select
-                    value={opt}
-                    onChange={(e) => setOpt(e.target.value)}
-                    className="rounded-md border border-input bg-background pl-2.5 pr-8 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
-                  >
-                    <option value="NO">NO</option>
-                    <option value="YES">YES</option>
-                  </select>
-                </div>
-              </div>
-              {opt === 'YES' && (
-                <div className="pt-2">
-                  <EmployerExperienceFields
-                    entries={optEmployers}
-                    onChange={setOptEmployers}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* STEM OPT */}
-            <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-foreground">STEM OPT Extension</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Status:</span>
-                  <select
-                    value={stemOpt}
-                    onChange={(e) => setStemOpt(e.target.value)}
-                    className="rounded-md border border-input bg-background pl-2.5 pr-8 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
-                  >
-                    <option value="NO">NO</option>
-                    <option value="YES">YES</option>
-                  </select>
-                </div>
-              </div>
-              {stemOpt === 'YES' && (
-                <div className="pt-2">
-                  <EmployerExperienceFields
-                    entries={stemOptEmployers}
-                    onChange={setStemOptEmployers}
-                  />
-                </div>
-              )}
-            </div>
-          </Card>
+            </Card>
+          )}
 
           {/* Experience & docs */}
           <Card className="p-5 border border-border shadow-sm space-y-4">
@@ -421,8 +599,8 @@ export function ResumeProfileCreateForm({
               <label className={LABEL_CLASS}>Initial Stage</label>
               <select
                 value={stage}
-                onChange={(e) => setStage(e.target.value as ResumeProfileStage)}
-                className={INPUT_CLASS}
+                disabled
+                className={`${INPUT_CLASS} opacity-70 cursor-not-allowed`}
               >
                 {RESUME_PROFILE_STAGES.map((st) => (
                   <option key={st} value={st}>

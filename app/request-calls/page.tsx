@@ -31,6 +31,7 @@ const STATUS_LABELS: Record<CallRequestStatus, string> = {
   not_called: "Not called",
   pending_documents: "Pending Documents",
   call_done: "Call done",
+  moved_to_marketing: "Moved to Marketing",
 };
 
 function parseChat(raw: string | null | undefined): CallRequestChatMessage[] {
@@ -149,53 +150,6 @@ function RequestCallsContent() {
         </p>
       </div>
 
-      {/* My existing requests */}
-      <Card className="p-4">
-        <h2 className="text-lg font-semibold mb-3">My Call Requests</h2>
-        {myRequests.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            You have not requested any calls yet.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {myRequests.map((r) => {
-              const chat = parseChat(r.chat);
-              const open = openChatId === r.$id;
-              return (
-                <div key={r.$id} className="rounded-md border border-border p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-medium">{r.clientName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Status: {STATUS_LABELS[r.status]}
-                        {r.assignedToName ? ` · Assigned to ${r.assignedToName}` : ""}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setOpenChatId(open ? null : r.$id)}
-                    >
-                      {open ? "Hide chat" : `Chat${chat.length ? ` (${chat.length})` : ""}`}
-                    </Button>
-                  </div>
-                  {open && (
-                    <div className="mt-3">
-                      <CallRequestChat
-                        requestId={r.$id}
-                        messages={chat}
-                        onPosted={() => void loadMyRequests()}
-                      />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Card>
-
       {/* Client list */}
       <Card className="p-4">
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
@@ -239,7 +193,7 @@ function RequestCallsContent() {
                   clients.slice(0, 50).map((lead: Lead) => {
                     const existing = requestByLeadId.get(lead.$id);
                     return (
-                      <tr key={lead.$id} className="border-b border-border">
+                      <tr key={lead.$id} className="border-b last:border-0 border-border">
                         <td className="p-3">{leadName(lead)}</td>
                         <td className="p-3 text-sm text-muted-foreground">
                           {existing ? STATUS_LABELS[existing.status] : "—"}

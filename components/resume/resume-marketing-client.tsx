@@ -15,6 +15,8 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { listMarketingProfilesAction } from '@/app/actions/resume-profiles';
+import { ResumeProfileStage } from '@/lib/types';
+import { formatEasternDateTime } from '@/lib/utils/eastern-date';
 import type { ResumeProfile } from '@/lib/types';
 
 interface ResumeMarketingClientProps {
@@ -67,10 +69,21 @@ export function ResumeMarketingClient({ initialProfiles }: ResumeMarketingClient
       }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
+        
+        let techVal = p.technology || '';
+        let usaArrVal = p.usaArrival || '';
+        if (p.data) {
+          try {
+            const pd = JSON.parse(p.data);
+            techVal = pd.technology || techVal;
+            usaArrVal = pd.usaArrival || usaArrVal;
+          } catch {}
+        }
+
         return (
           p.candidateName?.toLowerCase().includes(q) ||
-          p.technology?.toLowerCase().includes(q) ||
-          p.usaArrival?.toLowerCase().includes(q)
+          techVal.toLowerCase().includes(q) ||
+          usaArrVal.toLowerCase().includes(q)
         );
       }
       return true;
@@ -164,9 +177,18 @@ export function ResumeMarketingClient({ initialProfiles }: ResumeMarketingClient
                 </tr>
               ) : (
                 filteredProfiles.map((p) => {
-                  const hasCpt = p.cpt?.toUpperCase() === 'YES';
-                  const hasOpt = p.opt?.toUpperCase() === 'YES';
-                  const hasStem = p.stemOpt?.toUpperCase() === 'YES';
+                  let parsedData: any = {};
+                  try { if (p.data) parsedData = JSON.parse(p.data); } catch {}
+                  
+                  const cptVal = parsedData.cpt || p.cpt;
+                  const optVal = parsedData.opt || p.opt;
+                  const stemOptVal = parsedData.stemOpt || p.stemOpt;
+                  const techVal = parsedData.technology || p.technology;
+                  const usaArrVal = parsedData.usaArrival || p.usaArrival;
+
+                  const hasCpt = cptVal?.toUpperCase() === 'YES';
+                  const hasOpt = optVal?.toUpperCase() === 'YES';
+                  const hasStem = stemOptVal?.toUpperCase() === 'YES';
 
                   return (
                     <tr key={p.$id} className="hover:bg-muted/30 transition-colors">
@@ -180,10 +202,10 @@ export function ResumeMarketingClient({ initialProfiles }: ResumeMarketingClient
                         </Link>
                       </td>
                       <td className="px-4 py-3.5 text-muted-foreground">
-                        {p.technology || '—'}
+                        {techVal || '—'}
                       </td>
                       <td className="px-4 py-3.5 text-muted-foreground">
-                        {p.usaArrival || '—'}
+                        {usaArrVal || '—'}
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="flex flex-wrap gap-1">
@@ -218,12 +240,7 @@ export function ResumeMarketingClient({ initialProfiles }: ResumeMarketingClient
                         <div className="flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5 opacity-70" />
                           {p.marketingMovedAt
-                            ? new Date(p.marketingMovedAt).toLocaleDateString([], {
-                                month: 'short',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })
+                            ? formatEasternDateTime(p.marketingMovedAt)
                             : '—'}
                         </div>
                       </td>

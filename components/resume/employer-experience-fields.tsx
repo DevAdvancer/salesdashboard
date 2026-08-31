@@ -2,6 +2,7 @@
 
 import { Plus, Trash2, Briefcase, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { MonthYearPicker } from '@/components/ui/month-year-picker';
 import {
   emptyEmployerEntry,
   type EmployerEntry,
@@ -18,8 +19,7 @@ interface EmployerExperienceFieldsProps {
 
 /**
  * Repeatable per-employer editor: each row captures Employer, Job Title,
- * Start Date and End Date. Used for India Experience on both the create form
- * and the detail page. Serialize with `serializeExperience` before saving.
+ * Location, Start Date and End Date (with Present option).
  */
 export function EmployerExperienceFields({
   entries,
@@ -113,29 +113,54 @@ export function EmployerExperienceFields({
                   className={inputClass}
                 />
               </div>
-              <div>
+              <div className="sm:col-span-2">
                 <label className="block text-[11px] font-medium text-muted-foreground mb-1">
-                  Start Date
+                  Location
                 </label>
                 <input
                   type="text"
-                  value={row.startDate}
-                  onChange={(e) => updateRow(index, { startDate: e.target.value })}
-                  placeholder="MM YYYY"
+                  value={row.location || ''}
+                  onChange={(e) => updateRow(index, { location: e.target.value })}
+                  placeholder="e.g. Hyderabad, India"
                   className={inputClass}
                 />
               </div>
               <div>
                 <label className="block text-[11px] font-medium text-muted-foreground mb-1">
-                  End Date
+                  Start Date
                 </label>
-                <input
-                  type="text"
-                  value={row.endDate}
-                  onChange={(e) => updateRow(index, { endDate: e.target.value })}
-                  placeholder="MM YYYY (or Present)"
-                  className={inputClass}
+                <MonthYearPicker
+                  value={row.startDate}
+                  onChange={(val) => updateRow(index, { startDate: val })}
                 />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[11px] font-medium text-muted-foreground">
+                    End Date
+                  </label>
+                  <label className="flex items-center gap-1.5 text-[10px] font-medium cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={row.isPresent}
+                      onChange={(e) =>
+                        updateRow(index, { isPresent: e.target.checked, endDate: '' })
+                      }
+                      className="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5"
+                    />
+                    Present
+                  </label>
+                </div>
+                {row.isPresent ? (
+                  <div className={`${inputClass} bg-muted text-muted-foreground flex items-center`}>
+                    Present
+                  </div>
+                ) : (
+                  <MonthYearPicker
+                    value={row.endDate}
+                    onChange={(val) => updateRow(index, { endDate: val })}
+                  />
+                )}
               </div>
             </div>
           </div>

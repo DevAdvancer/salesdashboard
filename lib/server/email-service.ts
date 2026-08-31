@@ -220,9 +220,12 @@ export async function sendDuplicateAlertEmail(
     return;
   }
 
-  // Filter out the acting user and the dummy email from recipients
+  // Filter out the acting user and the dummy emails from recipients
   const toEmails = input.recipientEmails.filter(
-    (e) => e.toLowerCase() !== input.actorEmail.toLowerCase() && e.toLowerCase() !== 'teamlead@silverspaceinc.com',
+    (e) => 
+      e.toLowerCase() !== input.actorEmail.toLowerCase() && 
+      e.toLowerCase() !== 'teamlead@silverspaceinc.com' &&
+      e.toLowerCase() !== 'unassigned@silverspaceinc.com'
   );
 
   if (toEmails.length === 0) {

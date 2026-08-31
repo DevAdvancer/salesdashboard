@@ -32,12 +32,14 @@ const STATUS_LABELS: Record<CallRequestStatus, string> = {
   not_called: "Not called",
   pending_documents: "Pending Documents",
   call_done: "Call done",
+  moved_to_marketing: "Moved to Marketing",
 };
 
 const STATUS_BADGE: Record<CallRequestStatus, string> = {
   not_called: "bg-secondary text-secondary-foreground",
   pending_documents: "bg-amber-100 text-amber-800",
   call_done: "bg-emerald-100 text-emerald-800",
+  moved_to_marketing: "bg-indigo-100 text-indigo-800",
 };
 
 function parse<T>(raw: string | null | undefined): T[] {
@@ -190,7 +192,7 @@ function CallsContent() {
                     const rowBusy = busyId === r.$id;
                     return (
                       <Fragment key={r.$id}>
-                        <tr className="border-b border-border align-top">
+                        <tr className="border-b last:border-0 border-border align-top">
                           <td className="p-3">
                             <p className="font-medium">{r.clientName}</p>
                             {docs.length > 0 && (
@@ -202,25 +204,33 @@ function CallsContent() {
                           </td>
                           <td className="p-3 text-sm">{r.requestedByName}</td>
                           <td className="p-3">
-                            <select
-                              className="flex h-9 w-full rounded-2xl border border-transparent bg-[var(--input)] px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ink)]"
-                              value={r.status}
-                              disabled={rowBusy}
-                              onChange={(e) =>
-                                changeStatus(r.$id, e.target.value as CallRequestStatus)
-                              }
-                            >
-                              {CALL_REQUEST_STATUSES.map((s) => (
-                                <option key={s} value={s}>
-                                  {STATUS_LABELS[s]}
-                                </option>
-                              ))}
-                            </select>
-                            <span
-                              className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] ${STATUS_BADGE[r.status]}`}
-                            >
-                              {STATUS_LABELS[r.status]}
-                            </span>
+                            {r.status === 'moved_to_marketing' ? (
+                              <span className={`inline-block rounded-full px-3 py-1.5 text-xs font-semibold ${STATUS_BADGE[r.status]}`}>
+                                {STATUS_LABELS[r.status]}
+                              </span>
+                            ) : (
+                              <>
+                                <select
+                                  className="flex h-9 w-full rounded-2xl border border-transparent bg-[var(--input)] px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ink)]"
+                                  value={r.status}
+                                  disabled={rowBusy}
+                                  onChange={(e) =>
+                                    changeStatus(r.$id, e.target.value as CallRequestStatus)
+                                  }
+                                >
+                                  {CALL_REQUEST_STATUSES.filter(s => s !== 'moved_to_marketing').map((s) => (
+                                    <option key={s} value={s}>
+                                      {STATUS_LABELS[s]}
+                                    </option>
+                                  ))}
+                                </select>
+                                <span
+                                  className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] ${STATUS_BADGE[r.status]}`}
+                                >
+                                  {STATUS_LABELS[r.status]}
+                                </span>
+                              </>
+                            )}
                           </td>
                           <td className="p-3">
                             {canAssign ? (
@@ -244,6 +254,15 @@ function CallsContent() {
                           </td>
                           <td className="p-3">
                             <div className="flex items-center gap-2">
+                              {r.assignedToId && (() => {
+                                const assignee = options.find(o => o.$id === r.assignedToId);
+                                const isTeamLead = assignee?.role === 'team_lead';
+                                return !isTeamLead ? (
+                                  <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-200">
+                                    Assigned
+                                  </span>
+                                ) : null;
+                              })()}
                               <Button
                                 type="button"
                                 variant="outline"
@@ -276,8 +295,8 @@ function CallsContent() {
                           </td>
                         </tr>
                         {open && (
-                          <tr key={`${r.$id}-chat`} className="border-b border-border">
-                            <td colSpan={5} className="p-3 bg-muted/30">
+                          <tr key={`${r.$id}-chat`} className="border-b last:border-0 border-border">
+                            <td colSpan={5} className="p-4 bg-muted/20">
                               <CallRequestChat
                                 requestId={r.$id}
                                 messages={chat}

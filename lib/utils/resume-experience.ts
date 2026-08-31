@@ -16,8 +16,10 @@
 export interface EmployerEntry {
   employer: string;
   jobTitle: string;
+  location: string;
   startDate: string;
   endDate: string;
+  isPresent: boolean;
 }
 
 export interface ParsedExperience {
@@ -27,7 +29,7 @@ export interface ParsedExperience {
 }
 
 export function emptyEmployerEntry(): EmployerEntry {
-  return { employer: '', jobTitle: '', startDate: '', endDate: '' };
+  return { employer: '', jobTitle: '', location: '', startDate: '', endDate: '', isPresent: false };
 }
 
 function isEmployerEntry(value: unknown): value is EmployerEntry {
@@ -45,6 +47,7 @@ export function isEmployerEntryEmpty(entry: EmployerEntry): boolean {
   return (
     !entry.employer.trim() &&
     !entry.jobTitle.trim() &&
+    !(entry.location || '').trim() &&
     !entry.startDate.trim() &&
     !entry.endDate.trim()
   );
@@ -64,7 +67,14 @@ export function parseExperience(raw: string | null | undefined): ParsedExperienc
     try {
       const parsed = JSON.parse(trimmed);
       if (Array.isArray(parsed) && parsed.every(isEmployerEntry)) {
-        return { entries: parsed, legacyText: '' };
+        // Backfill location and isPresent for old entries
+        const entries = parsed.map((e: any) => ({
+          ...emptyEmployerEntry(),
+          ...e,
+          location: e.location ?? '',
+          isPresent: e.isPresent ?? false,
+        }));
+        return { entries, legacyText: '' };
       }
     } catch {
       // fall through to legacy handling
@@ -83,8 +93,10 @@ export function serializeExperience(entries: EmployerEntry[]): string | null {
     .map((e) => ({
       employer: e.employer.trim(),
       jobTitle: e.jobTitle.trim(),
+      location: (e.location || '').trim(),
       startDate: e.startDate.trim(),
-      endDate: e.endDate.trim(),
+      endDate: e.isPresent ? '' : e.endDate.trim(),
+      isPresent: e.isPresent,
     }))
     .filter((e) => !isEmployerEntryEmpty(e));
 
