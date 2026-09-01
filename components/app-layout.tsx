@@ -13,12 +13,14 @@ const ADMIN_ATTENDANCE_PING_COOLDOWN_MS = 30 * 60 * 1000;
 const ADMIN_ATTENDANCE_PING_STORAGE_KEY = 'crm:last-admin-attendance-ping-at';
 
 
+import { useUIStore } from '@/lib/hooks/useUIStore';
+
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, activeDashboard } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const { isSidebarCollapsed, setSidebarCollapsed } = useUIStore();
   const lastRedirectPath = useRef<string | null>(null);
   const lastAttendancePingAt = useRef(0);
 
@@ -97,7 +99,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       
       <Navigation
         isCollapsed={isSidebarCollapsed}
-        onCollapsedChange={setIsSidebarCollapsed}
+        onCollapsedChange={setSidebarCollapsed}
       />
       <main
         className={`relative flex-1 p-6 pt-20 transition-[margin] duration-300 sm:p-8 sm:pt-20 lg:p-10 lg:pt-10 ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}

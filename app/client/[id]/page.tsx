@@ -40,6 +40,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { ProtectedRoute } from "@/components/protected-route";
 import { LeadActivityTimeline } from "@/components/leads/lead-activity-timeline";
 import { LeadNotesCard } from "@/components/leads/lead-notes-card";
+import { LeadMetadataCard } from "@/components/leads/detail/lead-metadata-card";
 import { isClientExcludedStatus } from "@/lib/utils/client-history";
 
 // Extracted Components
@@ -368,7 +369,13 @@ function HistoryDetailContent() {
     });
   }, [paymentRecord, leadData]);
 
-  const canReopen = Boolean(isTeamLead);
+  const isLeadOwner = lead?.ownerId === user?.$id;
+  const canModifyLead = user?.role !== "operations";
+  const canReopen =
+    canModifyLead &&
+    (user?.role === "admin" ||
+      user?.role === "developer" ||
+      user?.role === "team_lead");
   // Server actions in `app/actions/client-payments.ts` allow monitor and
   // admin-like roles to mutate client payments. Keeping the UI in sync so
   // monitor can edit status, notes, amounts, and the upfront / plan fields.
@@ -594,6 +601,13 @@ function HistoryDetailContent() {
 
         <div className="space-y-6">
           <LeadNotesCard leadId={leadId} user={user!} />
+          <LeadMetadataCard 
+            lead={lead!} 
+            metaNames={{
+              [lead?.ownerId ?? ""]: owner?.name ?? "",
+              ...(lead?.assignedToId ? { [lead.assignedToId]: assignedTo?.name ?? "" } : {})
+            }} 
+          />
           <LeadActivityTimeline lead={lead!} />
         </div>
       </div>

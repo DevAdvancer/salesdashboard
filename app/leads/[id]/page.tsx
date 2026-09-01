@@ -139,6 +139,12 @@ function LeadDetailContent() {
         user.role === "monitor" || user.role === "operations"
           ? await getLeadAction(leadId, user.$id)
           : await getLead(leadId);
+
+      if (fetchedLead.isClosed) {
+        router.push(`/client/${leadId}`);
+        return;
+      }
+
       setLead(fetchedLead);
       setLeadData(JSON.parse(fetchedLead.data));
       const idsToFetch = [fetchedLead.ownerId];
@@ -936,8 +942,7 @@ function LeadDetailContent() {
           )}
           {lead.isClosed &&
             canModifyLead &&
-            (isLeadOwner ||
-              user?.role === "admin" ||
+            (user?.role === "admin" ||
               user?.role === "developer" ||
               user?.role === "team_lead") && (
               <>
