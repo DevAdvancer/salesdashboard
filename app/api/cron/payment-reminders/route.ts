@@ -3,6 +3,9 @@ import { Query } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { createNotificationsForRecipients } from "@/lib/server/notifications";
+import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
+import { getTodayEst } from "@/lib/utils/est-date";
+import { isWorkingDateKey } from "@/lib/utils/holiday-calendar";
 import type { LeadData, PaymentStatus } from "@/lib/types";
 
 function getAuthorizationToken(request: NextRequest) {
@@ -40,12 +43,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const { databases } = await createAdminClient();
+  const todayKey = getTodayEst();
+  const holidays = await listHolidayDateKeys({ databases, from: todayKey, to: todayKey });
+  if (!isWorkingDateKey(todayKey, holidays)) {
+    return NextResponse.json({ ok: true, skipped: true, reason: "Not a working day" });
+  }
+
   const days = Number(process.env.PAYMENT_REMINDER_STALE_DAYS ?? "30");
   const staleMs = days * 24 * 60 * 60 * 1000;
   const now = new Date();
   const thresholdIso = new Date(now.getTime() - staleMs).toISOString();
-
-  const { databases } = await createAdminClient();
 
   const admins = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
     Query.equal("role", "admin"),

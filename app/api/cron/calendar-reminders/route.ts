@@ -3,6 +3,8 @@ import { createAdminClient } from "@/lib/server/appwrite";
 import { DATABASE_ID, COLLECTIONS } from "@/lib/constants/appwrite";
 import { Query, ID } from "node-appwrite";
 import { getTodayEst } from "@/lib/utils/est-date";
+import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
+import { isWorkingDateKey } from "@/lib/utils/holiday-calendar";
 
 // This cron job is scheduled to run daily at 9:00 AM EST (14:00 UTC during standard time / 13:00 UTC during DST)
 // We use 14:00 UTC in vercel.json. We can check if it's the correct day here if needed, but since it's cron we just process.
@@ -19,6 +21,12 @@ export async function GET(request: Request) {
 
     // Get today's date in EST
     const todayStr = getTodayEst();
+    
+    // Check if working day
+    const holidays = await listHolidayDateKeys({ databases, from: todayStr, to: todayStr });
+    if (!isWorkingDateKey(todayStr, holidays)) {
+      return NextResponse.json({ success: true, skipped: true, reason: "Not a working day" });
+    }
 
     // Fetch calendar events for today that have reminderEnabled = true and reminderSent = false
     const eventsResponse = await databases.listDocuments(

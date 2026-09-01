@@ -10,11 +10,11 @@
     },
     {
       "path": "/api/cron/payment-reminders",
-      "schedule": "0 5 * * *"
+      "schedule": "0 5 * * 1-5"
     },
     {
       "path": "/api/cron/partial-paid-reminders",
-      "schedule": "0 5 * * *"
+      "schedule": "0 5 * * 1-5"
     },
     {
       "path": "/api/cron/cleanup-notifications",
@@ -22,7 +22,11 @@
     },
     {
       "path": "/api/cron/calendar-reminders",
-      "schedule": "0 14 * * *"
+      "schedule": "0 14 * * 1-5"
+    },
+    {
+      "path": "/api/cron/daily-report-summary",
+      "schedule": "0 22 * * 1-5"
     }
   ]
 }

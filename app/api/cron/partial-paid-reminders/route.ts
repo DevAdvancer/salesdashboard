@@ -5,6 +5,9 @@ import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { getRequestCount, withRequestMeter } from "@/lib/server/appwrite-request-meter";
 import { createNotificationsForRecipients } from "@/lib/server/notifications";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
+import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
+import { getTodayEst } from "@/lib/utils/est-date";
+import { isWorkingDateKey } from "@/lib/utils/holiday-calendar";
 import {
   loadNotificationCountsSince,
   notificationDedupKey,
@@ -147,14 +150,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const { databases } = await createAdminClient();
+  const todayKey = getTodayEst();
+  const holidays = await listHolidayDateKeys({ databases, from: todayKey, to: todayKey });
+  if (!isWorkingDateKey(todayKey, holidays)) {
+    return NextResponse.json({ ok: true, skipped: true, reason: "Not a working day" });
+  }
+
   // The scope has to be opened here. getRequestCount() reads the active
   // AsyncLocalStorage store, so without this wrapper the appwriteRequests field
   // in the response below reports 0 on every run.
-  const { result } = await withRequestMeter(() => runPartialPaidSweep());
+  const { result } = await withRequestMeter(() => runPartialPaidSweep(databases));
   return result;
 }
 
-async function runPartialPaidSweep() {
+async function runPartialPaidSweep(databases: AdminDatabases) {
   const days = Number(
     process.env.PARTIAL_PAID_STALE_DAYS ?? "2",
   );
@@ -164,7 +174,6 @@ async function runPartialPaidSweep() {
   const thresholdIso = new Date(now.getTime() - staleMs).toISOString();
   const todayStartIso = getTodayStartIso(now);
 
-  const { databases } = await createAdminClient();
   const adminAndOpsIds = await getAdminAndOpsRecipientIds(databases);
 
   const response = await databases.listDocuments(

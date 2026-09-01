@@ -124,6 +124,14 @@ async function runWithdrawalReminderSweep() {
   const nowIso = now.toISOString();
   const todayStartIso = getTodayStartIso(now);
   const { databases } = await createAdminClient();
+  
+  const todayKey = todayStartIso.slice(0, 10);
+  const holidays = await import("@/lib/server/holiday-calendar").then(m => m.listHolidayDateKeys({ databases, from: todayKey, to: todayKey }));
+  const isWorking = await import("@/lib/utils/holiday-calendar").then(m => m.isWorkingDateKey(todayKey, holidays));
+  if (!isWorking) {
+    return NextResponse.json({ ok: true, skipped: true, reason: "Not a working day" });
+  }
+
   const adminRecipientIds = await getAdminRecipientIds(databases);
 
   const reminderCounts = await loadNotificationCountsSince({
