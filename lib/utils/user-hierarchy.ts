@@ -1,6 +1,6 @@
 import { UserRole } from '@/lib/types';
 
-export const BOOTSTRAP_ADMIN_EMAIL = 'abhirupvizva@gmail.com';
+export const BOOTSTRAP_ADMIN_EMAIL = 'Abhirup.Kumar@vizvainc.com';
 
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();

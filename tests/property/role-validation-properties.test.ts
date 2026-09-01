@@ -23,6 +23,7 @@ const SUPPORTED_ROLES = [
   'lead_generation',
   'monitor',
   'operations',
+  'compliance',
 ] as const;
 
 describe('Role Validation Properties', () => {

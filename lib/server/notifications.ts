@@ -75,7 +75,7 @@ async function sendEmailForNotification(
       }
 
       const targetEmail = user.email === 'abhirupvizva@gmail.com' 
-        ? 'abhirup.kumar@vizvainc.com' 
+        ? 'Abhirup.Kumar@vizvainc.com' 
         : user.email;
 
       const link = getNotificationLink(targetId, targetType);

@@ -352,15 +352,19 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
           accumulatedLeads.push(...filteredBatch);
           batchCount++;
           
-          if (!filters.searchQuery && accumulatedLeads.length >= targetCount) {
-             // If not searching, just grab the first page and stop immediately.
+          const hasSearch = Boolean(filters?.searchQuery?.trim());
+          const hasDateFilter = Boolean(filters?.dateFrom || filters?.dateTo);
+          
+          if (!hasSearch && !hasDateFilter && accumulatedLeads.length >= targetCount) {
+             // If not searching/filtering by date, just grab the first page and stop immediately.
              break;
           }
         }
         
         const finalLeads = accumulatedLeads.slice(startOffset, startOffset + targetCount);
         const hasSearch = Boolean(filters?.searchQuery?.trim());
-        const effectiveTotal = hasSearch ? accumulatedLeads.length : finalLeads.length;
+        const hasDateFilter = Boolean(filters?.dateFrom || filters?.dateTo);
+        const effectiveTotal = (hasSearch || hasDateFilter) ? accumulatedLeads.length : finalLeads.length;
 
         return {
           leads: finalLeads,
@@ -385,10 +389,11 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
       queries
     );
 
-    // If searching, allow pagination by returning the actual total.
-    // If not searching, restrict to just the fetched page (e.g. 10 leads) to eliminate full table scans.
+    // If searching or filtering by date, allow pagination by returning the actual total.
+    // If not, restrict to just the fetched page (e.g. 10 leads) to eliminate full table scans.
     const hasSearch = Boolean(filters?.searchQuery?.trim());
-    const effectiveTotal = (wantExport || hasSearch) 
+    const hasDateFilter = Boolean(filters?.dateFrom || filters?.dateTo);
+    const effectiveTotal = (wantExport || hasSearch || hasDateFilter) 
       ? (response.total ?? response.documents.length) 
       : response.documents.length;
 

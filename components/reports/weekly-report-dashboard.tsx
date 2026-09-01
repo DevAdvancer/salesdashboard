@@ -172,11 +172,27 @@ export function WeeklyReportDashboard({ user }: { user: User }) {
       {!loading &&
         report &&
         !singleMember &&
-        report.teams.map((team, idx) => (
-          <Card key={`${team.teamLead?.$id ?? "unassigned"}-${idx}`}>
+        report.teams.map((team, idx) => {
+          if (!team.teamLead) {
+            return (
+              <Card key={`unassigned-${idx}`}>
+                <CardHeader>
+                  <CardTitle>Team: Unassigned</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-lg">Not Interested:</span>
+                    <span className="text-lg">{team.totals.notInterested}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          }
+          return (
+          <Card key={`${team.teamLead.$id}-${idx}`}>
             <CardHeader>
               <CardTitle>
-                {team.teamLead ? `Team: ${team.teamLead.name}` : "Team: Unassigned"}
+                Team: {team.teamLead.name}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -220,7 +236,8 @@ export function WeeklyReportDashboard({ user }: { user: User }) {
               </Table>
             </CardContent>
           </Card>
-        ))}
+          );
+        })}
     </div>
   );
 }

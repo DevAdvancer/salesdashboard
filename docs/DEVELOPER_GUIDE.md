@@ -829,7 +829,7 @@ The only email type currently implemented:
 - Triggered when a user tries to create/update a lead with a duplicate email, phone, or LinkedIn URL
 - Sends FROM the acting user's Outlook mailbox
 - Sends TO: all admins + team leads (excluding the actor)
-- BCCs: `DUPLICATE_ALERT_BCC_EMAIL` env var (default: `abhirupvizva@gmail.com`)
+- BCCs: `DUPLICATE_ALERT_BCC_EMAIL` env var (default: `Abhirup.Kumar@vizvainc.com`)
 - HTML + plain text format
 
 ### How to Add a New Email Type

@@ -18,7 +18,7 @@ const TENANT_ID = process.env.NEXT_PUBLIC_AZURE_TENANT_ID!;
 const CLIENT_ID = process.env.NEXT_PUBLIC_AZURE_CLIENT_ID!;
 const CLIENT_SECRET = process.env.AZURE_CLIENT_SECRET!;
 const BCC_EMAIL =
-  process.env.DUPLICATE_ALERT_BCC_EMAIL ?? 'abhirupvizva@gmail.com';
+  process.env.DUPLICATE_ALERT_BCC_EMAIL ?? 'Abhirup.Kumar@vizvainc.com';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:5000';
 
 const GRAPH_TOKEN_URL = `https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`;
@@ -210,7 +210,7 @@ function buildEmailText(input: DuplicateAlertEmailInput): string {
  * Send a duplicate lead alert email via Microsoft Graph.
  * - Sends FROM the acting user's mailbox
  * - Sends TO all admins + team leads (excluding the acting user)
- * - BCCs abhirupvizva@gmail.com
+ * - BCCs Abhirup.Kumar@vizvainc.com
  */
 export async function sendDuplicateAlertEmail(
   input: DuplicateAlertEmailInput,
