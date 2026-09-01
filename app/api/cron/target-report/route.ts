@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { Query } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
-import { getTodayEst, getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
+import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import { sendNotificationEmail } from "@/lib/server/email-service";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import { buildTargetReport } from "@/lib/utils/monthly-target-report";
