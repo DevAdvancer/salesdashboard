@@ -400,7 +400,7 @@ export async function GET(request: NextRequest) {
     const statusColor = status === "Met" ? "green" : "red";
     
     html += `<tr style="font-weight: bold; background-color: #f3f4f6;">
-      <td>${row.teamLeadName}</td>
+      <td>${row.teamLeadName} (Team Total)</td>
       <td style="text-align: right;">${currencyFormatter.format(row.target)}</td>
       <td style="text-align: right;">${currencyFormatter.format(row.achieved)}</td>
       <td style="text-align: right;">${pct}</td>
@@ -408,14 +408,12 @@ export async function GET(request: NextRequest) {
     </tr>`;
 
     for (const agent of row.agents) {
-      if (agent.userId === row.teamLeadId) continue;
-      
       const apct = agent.percent !== null ? (agent.percent * 100).toFixed(1) + "%" : "-";
       const astatus = (agent.percent !== null && agent.percent >= 1) ? "Met" : "Not Met";
       const astatusColor = astatus === "Met" ? "green" : "red";
 
       html += `<tr>
-        <td style="padding-left: 20px;">${agent.userName}</td>
+        <td style="padding-left: 20px;">${agent.userName}${agent.userId === row.teamLeadId ? ' (Personal)' : ''}</td>
         <td style="text-align: right;">${currencyFormatter.format(agent.target)}</td>
         <td style="text-align: right;">${currencyFormatter.format(agent.achieved)}</td>
         <td style="text-align: right;">${apct}</td>
@@ -434,6 +432,8 @@ export async function GET(request: NextRequest) {
   </tr>`;
 
   html += `</table>`;
+
+  html += `<br><p style="font-size: 12px; color: #6b7280;">This email and any attachments are confidential and intended solely for the addressee.</p>`;
 
   const toEmails = adminEmails.join(",");
   const subject = `Target Report - ${monthKey}`;

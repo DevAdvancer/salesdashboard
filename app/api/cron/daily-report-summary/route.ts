@@ -406,6 +406,8 @@ export async function GET(request: NextRequest) {
     html += `</table>`;
   }
 
+  html += `<br><p style="font-size: 12px; color: #6b7280;">This email and any attachments are confidential and intended solely for the addressee.</p>`;
+
   const toEmails = adminEmails.join(",");
   const subject = `Daily Report Summary - ${todayKey}`;
   
