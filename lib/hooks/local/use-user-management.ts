@@ -79,6 +79,7 @@ export function useUserManagement() {
 
   const canCreateAdmin = isAdmin || isDeveloper;
   const canCreateDeveloper = isAdmin || isDeveloper;
+  const canCreateSeniorTL = isAdmin || isDeveloper;
   const canCreateTeamLead = isAdmin || isDeveloper || isSeniorTL;
   const canCreateAgent = isAdmin || isDeveloper || isTeamLead || isSeniorTL;
   const canCreateLeadGeneration = isAdmin || isDeveloper || isTeamLead || isSeniorTL;
@@ -88,6 +89,7 @@ export function useUserManagement() {
   const canCreate =
     canCreateAdmin ||
     canCreateDeveloper ||
+    canCreateSeniorTL ||
     canCreateTeamLead ||
     canCreateAgent ||
     canCreateLeadGeneration ||
@@ -615,7 +617,11 @@ export function useUserManagement() {
     departmentFilter, setDepartmentFilter, editRole, setEditRole,
     editEmail, setEditEmail, editDepartment, setEditDepartment,
     formErrors, availableTeamLeads, createRole, setCreateRole,
-    canCreateAdmin, canCreateDeveloper, canCreateTeamLead, canCreateAgent,
+    canCreateAdmin,
+    canCreateDeveloper,
+    canCreateSeniorTL,
+    canCreateTeamLead,
+    canCreateAgent,
     canCreateLeadGeneration, canCreateMonitor, canCreateOperations, canCreateCompliance, canCreate,
     availableBranches, toggleBranch, handleEdit, handleUpdateUser,
     handleDeleteUser, handleSetAgentActive, handleCreate, resetForm,

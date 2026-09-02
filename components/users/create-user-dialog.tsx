@@ -22,9 +22,10 @@ interface CreateUserDialogProps {
   setFormPassword: (password: string) => void;
   formErrors: Record<string, string>;
   createRole: string;
-  setCreateRole: (role: "admin" | "developer" | "team_lead" | "agent" | "lead_generation" | "monitor" | "operations" | "compliance") => void;
+  setCreateRole: (role: "admin" | "developer" | "team_lead" | "senior_tl" | "agent" | "lead_generation" | "monitor" | "operations" | "compliance") => void;
   canCreateAdmin: boolean;
   canCreateDeveloper: boolean;
+  canCreateSeniorTL: boolean;
   canCreateTeamLead: boolean;
   canCreateAgent: boolean;
   canCreateLeadGeneration: boolean;
@@ -65,6 +66,7 @@ export function CreateUserDialog({
   setCreateRole,
   canCreateAdmin,
   canCreateDeveloper,
+  canCreateSeniorTL,
   canCreateTeamLead,
   canCreateAgent,
   canCreateLeadGeneration,
@@ -273,6 +275,15 @@ export function CreateUserDialog({
                     onClick={() => setCreateRole("developer")}
                     size="sm">
                     Developer
+                  </Button>
+                )}
+                {canCreateSeniorTL && (
+                  <Button
+                    type="button"
+                    variant={createRole === "senior_tl" ? "default" : "outline"}
+                    onClick={() => setCreateRole("senior_tl")}
+                    size="sm">
+                    Senior TL
                   </Button>
                 )}
                 {canCreateTeamLead && (

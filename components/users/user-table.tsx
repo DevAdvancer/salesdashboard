@@ -57,6 +57,7 @@ export function UserTable({
     switch (role) {
       case "admin": return "Admin";
       case "developer": return "Developer";
+      case "senior_tl": return "Senior TL";
       case "team_lead": return "Team Lead";
       case "agent": return "Agent";
       case "lead_generation": return "Lead Generation";

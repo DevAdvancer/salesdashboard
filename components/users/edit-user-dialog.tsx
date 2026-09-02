@@ -64,10 +64,12 @@ export function EditUserDialog({
       case "admin": return "Admin";
       case "developer": return "Developer";
       case "team_lead": return "Team Lead";
+      case "senior_tl": return "Senior TL";
       case "agent": return "Agent";
       case "lead_generation": return "Lead Generation";
       case "monitor": return "Monitor";
       case "operations": return "Operations";
+      case "compliance": return "Compliance";
       default: return role;
     }
   };
@@ -97,6 +99,7 @@ export function EditUserDialog({
                     {(isAdmin || isDeveloper) && <option value="monitor">Monitor</option>}
                     {(isAdmin || isDeveloper) && <option value="operations">Operations</option>}
                     <option value="team_lead">Team Lead</option>
+                    {(isAdmin || isDeveloper) && <option value="senior_tl">Senior TL</option>}
                     <option value="agent">Agent</option>
                     {(isAdmin || isDeveloper) && <option value="compliance">Compliance</option>}
                     {editDepartment !== "resume" && (

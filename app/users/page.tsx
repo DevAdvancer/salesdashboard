@@ -35,7 +35,7 @@ function UserManagementContent() {
     departmentFilter, setDepartmentFilter, editRole, setEditRole,
     editEmail, setEditEmail, editDepartment, setEditDepartment,
     formErrors, availableTeamLeads, createRole, setCreateRole,
-    canCreateAdmin, canCreateDeveloper, canCreateTeamLead, canCreateAgent,
+    canCreateAdmin, canCreateDeveloper, canCreateSeniorTL, canCreateTeamLead, canCreateAgent,
     canCreateLeadGeneration, canCreateMonitor, canCreateOperations, canCreateCompliance, canCreate,
     availableBranches, toggleBranch, handleEdit, handleUpdateUser,
     handleDeleteUser, handleSetAgentActive, handleCreate, resetForm,
@@ -127,6 +127,7 @@ function UserManagementContent() {
         setCreateRole={setCreateRole}
         canCreateAdmin={canCreateAdmin}
         canCreateDeveloper={canCreateDeveloper}
+        canCreateSeniorTL={canCreateSeniorTL}
         canCreateTeamLead={canCreateTeamLead}
         canCreateAgent={canCreateAgent}
         canCreateLeadGeneration={canCreateLeadGeneration}
