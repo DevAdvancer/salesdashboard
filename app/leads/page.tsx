@@ -519,7 +519,11 @@ function LeadsContent() {
       
       for (const id of ownerIds) {
         if (id === user.$id) {
-          ownerMap.set(id, user);
+          if (!owners.has(id)) ownerMap.set(id, user);
+          continue;
+        }
+        const cached = owners.get(id);
+        if (cached) {
           continue;
         }
         const u = fetched.get(id);
@@ -528,13 +532,13 @@ function LeadsContent() {
       
       for (const id of assignedIds) {
         if (id === user.$id) {
-          assignedMap.set(id, user);
+          if (!assignedUsers.has(id)) assignedMap.set(id, user);
           continue;
         }
         const cached =
           assignedUsers.get(id) ?? agents.find((a) => a.$id === id);
         if (cached) {
-          assignedMap.set(id, cached);
+          if (!assignedUsers.has(id)) assignedMap.set(id, cached);
           continue;
         }
         const u = fetched.get(id);

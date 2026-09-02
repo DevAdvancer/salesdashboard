@@ -4,14 +4,16 @@ import { bumpRequestCount } from "@/lib/server/appwrite-request-meter";
 import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
 import type { User } from "@/lib/types";
 
-export async function getAuthenticatedAccount() {
+import { cache } from "react";
+
+export const getAuthenticatedAccount = cache(async () => {
   const { account } = await createSessionClient();
   // `/v1/account` never passes through the read cache, so without this the
   // meter would miss the one request every authenticated server entry point
   // makes.
   bumpRequestCount();
   return account.get();
-}
+});
 
 export async function assertAuthenticatedUserId(userId: string | null | undefined) {
   if (!userId) {
@@ -26,7 +28,7 @@ export async function assertAuthenticatedUserId(userId: string | null | undefine
   return account;
 }
 
-export async function getAuthenticatedUserDoc(): Promise<User> {
+export const getAuthenticatedUserDoc = cache(async (): Promise<User> => {
   const account = await getAuthenticatedAccount();
   const { databases } = await createAdminClient();
   const doc = await (async () => {
@@ -53,4 +55,4 @@ export async function getAuthenticatedUserDoc(): Promise<User> {
     $createdAt: doc.$createdAt,
     $updatedAt: doc.$updatedAt,
   } as User;
-}
+});
