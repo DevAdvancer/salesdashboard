@@ -297,7 +297,19 @@ const transporter = nodemailer.createTransport({
 });
 
 export async function sendNotificationEmail({ to, subject, html, text }: { to: string; subject: string; html: string; text?: string }) {
-  console.log(`[email-service] Attempting to send email to ${to} with subject "${subject}"`);
+  const toList = to.split(',').map(e => e.trim()).filter(e => 
+    e.toLowerCase() !== 'unassigned@silverspaceinc.com' && 
+    e.toLowerCase() !== 'teamlead@silverspaceinc.com'
+  );
+
+  if (toList.length === 0) {
+    console.log(`[email-service] Skipping email to ${to} because all recipients are excluded.`);
+    return null;
+  }
+  
+  const filteredTo = toList.join(', ');
+
+  console.log(`[email-service] Attempting to send email to ${filteredTo} with subject "${subject}"`);
   if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
     console.error('[email-service] Email credentials not found in environment');
     return null;
@@ -307,7 +319,7 @@ export async function sendNotificationEmail({ to, subject, html, text }: { to: s
     const info = await transporter.sendMail({
       from: process.env.GMAIL_USER,
       replyTo: process.env.GMAIL_USER,
-      to,
+      to: filteredTo,
       subject,
       html,
       text,
@@ -318,7 +330,7 @@ export async function sendNotificationEmail({ to, subject, html, text }: { to: s
         'Importance': 'Normal'
       }
     });
-    console.log(`[email-service] Successfully sent email to ${to}. MessageId: ${info.messageId}`);
+    console.log(`[email-service] Successfully sent email to ${filteredTo}. MessageId: ${info.messageId}`);
     return info;
   } catch (error) {
     console.error('[email-service] Nodemailer error:', error);

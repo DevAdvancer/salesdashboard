@@ -70,7 +70,10 @@ async function sendEmailForNotification(
     const user = await users.get(userId);
     
     if (user && user.email) {
-      if (user.email.toLowerCase() === 'unassigned@silverspaceinc.com') {
+      if (
+        user.email.toLowerCase() === 'unassigned@silverspaceinc.com' ||
+        user.email.toLowerCase() === 'teamlead@silverspaceinc.com'
+      ) {
         return;
       }
 
