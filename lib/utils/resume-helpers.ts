@@ -9,7 +9,7 @@ export async function getResumeTeamLeads(databases: Databases): Promise<User[]> 
     databases,
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.USERS,
-    queries: [Query.equal('role', 'team_lead')],
+    queries: [Query.equal('role', ['team_lead', 'senior_tl'])],
     pageLimit: 100,
     maxPages: 20,
   });

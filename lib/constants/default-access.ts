@@ -29,7 +29,7 @@ export type ComponentKey =
   | 'resume-reports'
   | 'my-call-requests';
 
-export type UserRole = 'admin' | 'developer' | 'team_lead' | 'agent' | 'lead_generation' | 'monitor' | 'operations' | 'compliance';
+export type UserRole = 'admin' | 'developer' | 'team_lead' | 'senior_tl' | 'agent' | 'lead_generation' | 'monitor' | 'operations' | 'compliance';
 
 export interface AccessRule {
   componentKey: ComponentKey;
@@ -157,7 +157,30 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'linkedin-account-management', role: 'team_lead', allowed: false },
   { componentKey: 'linkedin-reports', role: 'team_lead', allowed: true },
   { componentKey: 'payments-report', role: 'team_lead', allowed: false },
-  { componentKey: 'target-report', role: 'team_lead', allowed: true },
+  // Senior TL rules
+  { componentKey: 'dashboard', role: 'senior_tl', allowed: true },
+  { componentKey: 'chat', role: 'senior_tl', allowed: true },
+  { componentKey: 'leads', role: 'senior_tl', allowed: true },
+  { componentKey: 'history', role: 'senior_tl', allowed: true },
+  { componentKey: 'user-management', role: 'senior_tl', allowed: true },
+  { componentKey: 'field-management', role: 'senior_tl', allowed: false },
+  { componentKey: 'settings', role: 'senior_tl', allowed: true },
+  { componentKey: 'branch-management', role: 'senior_tl', allowed: false },
+  { componentKey: 'mock', role: 'senior_tl', allowed: true },
+  { componentKey: 'assessment-support', role: 'senior_tl', allowed: true },
+  { componentKey: 'interview-support', role: 'senior_tl', allowed: true },
+  { componentKey: 'hierarchy', role: 'senior_tl', allowed: true }, // Senior TL can see hierarchy
+  { componentKey: 'work-queue', role: 'senior_tl', allowed: true },
+  { componentKey: 'reports', role: 'senior_tl', allowed: true }, // Give access to reports
+  { componentKey: 'notifications', role: 'senior_tl', allowed: true },
+  { componentKey: 'attendance', role: 'senior_tl', allowed: true },
+  { componentKey: 'attendance-report', role: 'senior_tl', allowed: true },
+  { componentKey: 'lead-requests', role: 'senior_tl', allowed: false },
+  { componentKey: 'linkedin-requests', role: 'senior_tl', allowed: true },
+  { componentKey: 'linkedin-account-management', role: 'senior_tl', allowed: false },
+  { componentKey: 'linkedin-reports', role: 'senior_tl', allowed: true },
+  { componentKey: 'payments-report', role: 'senior_tl', allowed: false },
+  { componentKey: 'target-report', role: 'senior_tl', allowed: true },
   // Agent rules
   { componentKey: 'dashboard', role: 'agent', allowed: true },
   { componentKey: 'chat', role: 'agent', allowed: true },
@@ -211,6 +234,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'followups-payments', role: 'developer', allowed: true },
   { componentKey: 'followups-payments', role: 'monitor', allowed: true },
   { componentKey: 'followups-payments', role: 'operations', allowed: true },
+  { componentKey: 'followups-payments', role: 'senior_tl', allowed: true },
   { componentKey: 'followups-payments', role: 'team_lead', allowed: true },
   { componentKey: 'followups-payments', role: 'agent', allowed: false },
   { componentKey: 'followups-payments', role: 'lead_generation', allowed: false },
@@ -219,6 +243,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'calendar', role: 'developer', allowed: true },
   { componentKey: 'calendar', role: 'monitor', allowed: true },
   { componentKey: 'calendar', role: 'operations', allowed: true },
+  { componentKey: 'calendar', role: 'senior_tl', allowed: true },
   { componentKey: 'calendar', role: 'team_lead', allowed: true },
   { componentKey: 'calendar', role: 'agent', allowed: true },
   { componentKey: 'calendar', role: 'lead_generation', allowed: true },

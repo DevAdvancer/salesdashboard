@@ -158,6 +158,7 @@ export async function getAssignableUsers(
       creatorRole !== 'developer' &&
       creatorRole !== 'monitor' &&
       creatorRole !== 'operations' &&
+      creatorRole !== 'senior_tl' &&
       !creatorBranchIds.length
     ) {
       return [];
@@ -166,12 +167,14 @@ export async function getAssignableUsers(
     try {
       const allowedRoles: UserRole[] =
         creatorRole === 'admin' || creatorRole === 'developer'
-          ? ['admin', 'developer', 'team_lead', 'agent', 'operations', 'monitor']
-          : creatorRole === 'team_lead'
-            ? ['agent']
-            : creatorRole === 'monitor' || creatorRole === 'operations'
-              ? ['admin', 'developer', 'team_lead', 'agent', 'operations', 'monitor']
-              : [];
+          ? ['admin', 'developer', 'team_lead', 'senior_tl', 'agent', 'operations', 'monitor']
+          : creatorRole === 'senior_tl'
+            ? ['team_lead', 'senior_tl', 'agent']
+            : creatorRole === 'team_lead'
+              ? ['agent']
+              : creatorRole === 'monitor' || creatorRole === 'operations'
+                ? ['admin', 'developer', 'team_lead', 'senior_tl', 'agent', 'operations', 'monitor']
+                : [];
 
       if (!allowedRoles.length) return [];
 
@@ -181,9 +184,9 @@ export async function getAssignableUsers(
           : Query.equal('role', allowedRoles)
       ];
 
-      // Only team_lead scopes by branchIds; admin/developer/monitor/operations
+      // Only team_lead scopes by branchIds; admin/developer/monitor/operations/senior_tl
       // see across all branches by design.
-      if (creatorRole !== 'admin' && creatorRole !== 'developer' && creatorRole !== 'monitor' && creatorRole !== 'operations') {
+      if (creatorRole !== 'admin' && creatorRole !== 'developer' && creatorRole !== 'monitor' && creatorRole !== 'operations' && creatorRole !== 'senior_tl') {
         if (creatorBranchIds.length) {
           queries.push(
             Query.or([
@@ -599,7 +602,7 @@ export async function getTeamLeads(
   includeInactive: boolean = false,
 ): Promise<User[]> {
   try {
-    const queries = [Query.equal('role', 'team_lead')];
+    const queries = [Query.equal('role', ['team_lead', 'senior_tl'])];
 
     if (branchIds && branchIds.length > 0) {
       queries.push(

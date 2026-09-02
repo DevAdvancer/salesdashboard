@@ -1,7 +1,7 @@
 // User types
-export type UserRole = 'admin' | 'developer' | 'team_lead' | 'agent' | 'lead_generation' | 'monitor' | 'operations' | 'compliance';
+export type UserRole = 'admin' | 'developer' | 'team_lead' | 'senior_tl' | 'agent' | 'lead_generation' | 'monitor' | 'operations' | 'compliance';
 
-export const VALID_ROLES: UserRole[] = ['admin', 'developer', 'team_lead', 'agent', 'lead_generation', 'monitor', 'operations', 'compliance'];
+export const VALID_ROLES: UserRole[] = ['admin', 'developer', 'team_lead', 'senior_tl', 'agent', 'lead_generation', 'monitor', 'operations', 'compliance'];
 
 export function isValidRole(value: string): value is UserRole {
   return VALID_ROLES.includes(value as UserRole);
@@ -544,6 +544,7 @@ export interface AuthContext {
   isAdmin: boolean;
   isDeveloper: boolean;
   isTeamLead: boolean;
+  isSeniorTL: boolean;
   isAgent: boolean;
   isLeadGeneration: boolean;
   isMonitor: boolean;

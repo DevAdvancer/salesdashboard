@@ -295,6 +295,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isAdmin = user?.role === 'admin' || user?.role === 'developer';
   const isDeveloper = user?.role === 'developer';
   const isTeamLead = user?.role === 'team_lead';
+  const isSeniorTL = user?.role === 'senior_tl';
   const isAgent = user?.role === 'agent';
   const isLeadGeneration = user?.role === 'lead_generation';
   const isMonitor = user?.role === 'monitor';
@@ -330,6 +331,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAdmin,
       isDeveloper,
       isTeamLead,
+      isSeniorTL,
       isAgent,
       isLeadGeneration,
       isMonitor,
@@ -351,6 +353,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAdmin,
       isDeveloper,
       isTeamLead,
+      isSeniorTL,
       isAgent,
       isLeadGeneration,
       isMonitor,

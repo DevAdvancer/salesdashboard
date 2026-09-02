@@ -3,35 +3,35 @@ import type { ComponentKey, UserRole } from '@/lib/types';
 type RoleAccessMap = Record<ComponentKey, readonly UserRole[]>;
 
 export const COMPONENT_ACCESS: RoleAccessMap = {
-  dashboard: ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent', 'lead_generation'],
-  chat: ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent', 'lead_generation'],
-  leads: ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent', 'lead_generation'],
-  history: ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent'],
-  'user-management': ['admin', 'developer', 'monitor', 'operations', 'team_lead'],
+  dashboard: ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent', 'lead_generation'],
+  chat: ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent', 'lead_generation'],
+  leads: ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent', 'lead_generation'],
+  history: ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent'],
+  'user-management': ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead'],
   'field-management': [],
-  settings: ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent', 'lead_generation', 'compliance'],
+  settings: ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent', 'lead_generation', 'compliance'],
   'branch-management': ['admin', 'developer', 'monitor', 'operations'],
-  mock: ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent'],
-  'assessment-support': ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent'],
-  'interview-support': ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent'],
-  hierarchy: ['admin', 'developer', 'monitor', 'operations'],
-  'work-queue': ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent'],
-  reports: ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent'],
-  notifications: ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent', 'lead_generation'],
-  attendance: ['admin', 'developer', 'monitor', 'operations', 'team_lead'],
-  'attendance-report': ['admin', 'developer', 'monitor', 'operations', 'team_lead'],
+  mock: ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent'],
+  'assessment-support': ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent'],
+  'interview-support': ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent'],
+  hierarchy: ['admin', 'developer', 'monitor', 'operations', 'senior_tl'],
+  'work-queue': ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent'],
+  reports: ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent'],
+  notifications: ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent', 'lead_generation'],
+  attendance: ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead'],
+  'attendance-report': ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead'],
   'lead-requests': ['admin', 'developer', 'monitor', 'operations'],
-  'linkedin-requests': ['team_lead', 'agent', 'lead_generation'],
-  'linkedin-account-management': ['admin', 'monitor', 'operations', 'team_lead'],
-  'linkedin-reports': ['admin', 'developer', 'monitor', 'operations', 'team_lead'],
+  'linkedin-requests': ['senior_tl', 'team_lead', 'agent', 'lead_generation'],
+  'linkedin-account-management': ['admin', 'monitor', 'operations', 'senior_tl', 'team_lead'],
+  'linkedin-reports': ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead'],
   'payments-report': ['admin', 'developer', 'monitor', 'operations'],
-  'technical-payments': ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent', 'lead_generation'],
-  'followups-payments': ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent', 'lead_generation'],
+  'technical-payments': ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent', 'lead_generation'],
+  'followups-payments': ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent', 'lead_generation'],
   // Target Report — admin reads every TL/agent, TLs split their own
   // team's target, agents see their own achievement. Monitoring roles
   // (monitor / operations) can view but not edit; the server action
   // gates writes accordingly.
-  'target-report': ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent', 'lead_generation'],
+  'target-report': ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent', 'lead_generation'],
   // Empty by design — `resume-dashboard` opens only via the department
   // short-circuit in AccessControlProvider.canAccess (resume team members
   // and the leadership roles). Sales-team members are blocked at that gate.
@@ -52,8 +52,8 @@ export const COMPONENT_ACCESS: RoleAccessMap = {
   // leads raise requests against their own clients; leadership roles
   // can view. Resume-team members are blocked by SALES_ONLY_COMPONENTS
   // in AccessControlProvider regardless of role.
-  'request-calls': ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent'],
-  'my-call-requests': ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent'],
+  'request-calls': ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent'],
+  'my-call-requests': ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent'],
   // Empty by design — `call-requests` (the Resume "Calls" page) opens
   // only via the department short-circuit in AccessControlProvider
   // .canAccess (resume team members + leadership). Sales-team members
@@ -62,7 +62,7 @@ export const COMPONENT_ACCESS: RoleAccessMap = {
   // Assigned Report — leadership-only view of lead assignments per team,
   // breaking down assignment source (admin vs lead gen vs self).
   'assigned-report': ['admin', 'developer', 'monitor', 'operations'],
-  calendar: ['admin', 'developer', 'monitor', 'operations', 'team_lead', 'agent', 'lead_generation'],
+  calendar: ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent', 'lead_generation'],
   'team-report': ['admin', 'developer'],
   'compliance-dashboard': [],
   'resume-reports': [],

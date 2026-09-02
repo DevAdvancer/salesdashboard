@@ -322,10 +322,10 @@ export async function createResumeProfileAction(input: CreateResumeProfileInput)
     actor.role === 'developer' ||
     actor.role === 'monitor' ||
     actor.role === 'operations';
-  const canExplicitlyCreate = actor.role === 'team_lead' || isLeadership;
+  const canExplicitlyCreate = actor.role === 'team_lead' || actor.role === 'senior_tl' || isLeadership;
 
   if (!canExplicitlyCreate) {
-    throw new Error('Only Team Leads and Admins can explicitly create a resume profile.');
+    throw new Error('Only Team Leads, Senior TLs, and Admins can explicitly create a resume profile.');
   }
 
   if (!input.candidateName?.trim()) {
@@ -417,14 +417,14 @@ export async function updateResumeProfileAction(input: UpdateResumeProfileInput)
     actor.role === 'developer' ||
     actor.role === 'monitor' ||
     actor.role === 'operations';
-  const canAssign = actor.role === 'team_lead' || isLeadership;
+  const canAssign = actor.role === 'team_lead' || actor.role === 'senior_tl' || isLeadership;
 
   if (
     (input.assignedToId !== undefined && input.assignedToId !== existing.assignedToId) ||
     (input.assignedToName !== undefined && input.assignedToName !== existing.assignedToName)
   ) {
     if (!canAssign) {
-      throw new Error('Only Team Leads and Admins can assign or reassign resume profiles.');
+      throw new Error('Only Team Leads, Senior TLs, and Admins can assign or reassign resume profiles.');
     }
   }
 
@@ -526,8 +526,8 @@ export async function deleteResumeProfileAction(id: string): Promise<void> {
     throw new Error('Not authorized to delete resume profiles');
   }
 
-  if (actor.role !== 'admin' && actor.role !== 'developer' && actor.role !== 'team_lead') {
-    throw new Error('Only team leads, developers, and admins can delete resume profiles');
+  if (actor.role !== 'admin' && actor.role !== 'developer' && actor.role !== 'team_lead' && actor.role !== 'senior_tl') {
+    throw new Error('Only team leads, senior TLs, developers, and admins can delete resume profiles');
   }
 
   const { databases } = await createAdminClient();

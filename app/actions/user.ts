@@ -310,8 +310,8 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
     await assertAuthenticatedUserId(currentUserId);
 
     const callerDoc = await getUserDoc(currentUserId);
-    if (!callerDoc || (callerDoc.role !== 'admin' && callerDoc.role !== 'developer')) {
-        throw new Error("Permission denied: Only admins and developers can create team leads");
+    if (!callerDoc || (callerDoc.role !== 'admin' && callerDoc.role !== 'developer' && callerDoc.role !== 'senior_tl')) {
+        throw new Error("Permission denied: Only admins, developers, and senior TLs can create team leads");
     }
 
     const { name, email, password, branchIds, department } = teamLeadInput;
@@ -373,8 +373,8 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
     await assertAuthenticatedUserId(currentUserId);
 
     const callerDoc = await getUserDoc(currentUserId);
-    if (!callerDoc || (callerDoc.role !== 'team_lead' && callerDoc.role !== 'admin' && callerDoc.role !== 'developer')) {
-        throw new Error("Permission denied: Only team leads, admins, or developers can create agents");
+    if (!callerDoc || (callerDoc.role !== 'team_lead' && callerDoc.role !== 'senior_tl' && callerDoc.role !== 'admin' && callerDoc.role !== 'developer')) {
+        throw new Error("Permission denied: Only team leads, senior TLs, admins, or developers can create agents");
     }
 
     if (callerDoc.role !== 'admin' && callerDoc.role !== 'developer') {
@@ -398,9 +398,9 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
     const { users, databases } = await createAdminClient();
     const userId = ID.unique();
 
-    const isTeamLead = callerDoc.role === 'team_lead';
-    const teamLeadId = role === 'monitor' || role === 'operations' || role === 'compliance' ? null : (isTeamLead ? callerDoc.$id : (agentInput.teamLeadId || null));
-    if (!teamLeadId && role !== 'monitor' && role !== 'operations' && role !== 'compliance' && callerDoc.role !== 'admin' && callerDoc.role !== 'developer') {
+    const isJustTeamLead = callerDoc.role === 'team_lead';
+    const teamLeadId = role === 'monitor' || role === 'operations' || role === 'compliance' ? null : (isJustTeamLead ? callerDoc.$id : (agentInput.teamLeadId || null));
+    if (!teamLeadId && role !== 'monitor' && role !== 'operations' && role !== 'compliance' && callerDoc.role !== 'admin' && callerDoc.role !== 'developer' && callerDoc.role !== 'senior_tl') {
         throw new Error("Agents must be assigned to a Team Lead");
     }
 
@@ -477,15 +477,19 @@ export async function updateUserAction(input: {
     if (!targetUserDoc) throw new Error("Target user not found");
 
     const isCallerAdmin = callerDoc.role === 'admin' || callerDoc.role === 'developer';
-    const isCallerTeamLead = callerDoc.role === 'team_lead';
+    const isCallerTeamLead = callerDoc.role === 'team_lead' || callerDoc.role === 'senior_tl';
 
     // Permission Check
     if (!isCallerAdmin && !isCallerTeamLead) {
         throw new Error("Permission denied");
     }
 
-    if (isCallerTeamLead && targetUserDoc.teamLeadId !== currentUserId) {
+    if (callerDoc.role === 'team_lead' && targetUserDoc.teamLeadId !== currentUserId) {
         throw new Error("Permission denied: You can only update agents on your team");
+    }
+
+    if (callerDoc.role === 'senior_tl' && targetUserDoc.department !== callerDoc.department) {
+        throw new Error("Permission denied: You can only update users in your department");
     }
 
     const { users, databases } = await createAdminClient();
@@ -523,7 +527,7 @@ export async function updateUserAction(input: {
         }
 
         if (teamLeadId !== undefined && teamLeadId !== targetUserDoc.teamLeadId) {
-             if (!isCallerAdmin) {
+             if (!isCallerAdmin && callerDoc.role !== 'senior_tl') {
                  throw new Error("Team Leads cannot reassign Team Leads.");
              }
              updates.teamLeadId = teamLeadId;
@@ -708,18 +712,22 @@ export async function setAgentActiveAction(input: {
     const callerDoc = await getUserDoc(currentUserId);
     if (!callerDoc) throw new Error("Caller not found");
 
-    const isTL = callerDoc.role === 'team_lead';
+    const isTL = callerDoc.role === 'team_lead' || callerDoc.role === 'senior_tl';
     const isAdminOrDev = callerDoc.role === 'admin' || callerDoc.role === 'developer';
 
     if (!isAdminOrDev && !isTL) {
-        throw new Error("Permission denied: Only admins, developers, and team leads can update agent active status");
+        throw new Error("Permission denied: Only admins, developers, team leads, and senior TLs can update agent active status");
     }
 
     const targetUserDoc = await getUserDoc(userId);
     if (!targetUserDoc) throw new Error("Target user not found");
 
-    if (isTL && targetUserDoc.teamLeadId !== currentUserId) {
+    if (callerDoc.role === 'team_lead' && targetUserDoc.teamLeadId !== currentUserId) {
         throw new Error("Permission denied: You can only update the active status of agents on your team");
+    }
+
+    if (callerDoc.role === 'senior_tl' && targetUserDoc.department !== callerDoc.department) {
+        throw new Error("Permission denied: You can only update users in your department");
     }
 
     if (targetUserDoc.role !== 'agent' && targetUserDoc.role !== 'lead_generation' && targetUserDoc.role !== 'monitor' && targetUserDoc.role !== 'operations') {

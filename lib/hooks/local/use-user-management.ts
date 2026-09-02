@@ -20,6 +20,7 @@ export function useUserManagement() {
     isAdmin,
     isDeveloper,
     isTeamLead,
+    isSeniorTL,
     isMonitor,
     isOperations,
     activeDashboard,
@@ -68,19 +69,19 @@ export function useUserManagement() {
   const [availableTeamLeads, setAvailableTeamLeads] = useState<User[]>([]);
 
   const [createRole, setCreateRole] = useState<
-    "admin" | "developer" | "team_lead" | "agent" | "lead_generation" | "monitor" | "operations" | "compliance"
+    "admin" | "developer" | "team_lead" | "senior_tl" | "agent" | "lead_generation" | "monitor" | "operations" | "compliance"
   >("team_lead");
 
   useEffect(() => {
     if (isAdmin || isDeveloper) setCreateRole("admin");
-    else if (isTeamLead) setCreateRole("agent");
-  }, [isAdmin, isDeveloper, isTeamLead, showCreateDialog]);
+    else if (isTeamLead || isSeniorTL) setCreateRole("agent");
+  }, [isAdmin, isDeveloper, isTeamLead, isSeniorTL, showCreateDialog]);
 
   const canCreateAdmin = isAdmin || isDeveloper;
   const canCreateDeveloper = isAdmin || isDeveloper;
-  const canCreateTeamLead = isAdmin || isDeveloper;
-  const canCreateAgent = isAdmin || isDeveloper || isTeamLead;
-  const canCreateLeadGeneration = isAdmin || isDeveloper || isTeamLead;
+  const canCreateTeamLead = isAdmin || isDeveloper || isSeniorTL;
+  const canCreateAgent = isAdmin || isDeveloper || isTeamLead || isSeniorTL;
+  const canCreateLeadGeneration = isAdmin || isDeveloper || isTeamLead || isSeniorTL;
   const canCreateMonitor = isAdmin || isDeveloper;
   const canCreateOperations = isAdmin || isDeveloper;
   const canCreateCompliance = isAdmin || isDeveloper;
@@ -108,7 +109,7 @@ export function useUserManagement() {
     if (!user) return;
     try {
       setIsLoading(true);
-      if (isAdmin || isDeveloper || isMonitor || isOperations) {
+      if (isAdmin || isDeveloper || isMonitor || isOperations || isSeniorTL) {
         const { Query } = await import("appwrite");
         const response = await databases.listDocuments(
           process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
@@ -120,6 +121,7 @@ export function useUserManagement() {
               '$id', '$createdAt', '$updatedAt', 'name', 'email', 'role',
               'isActive', 'teamLeadId', 'branchIds', 'department',
             ]),
+            ...(isSeniorTL && !isAdmin && !isDeveloper ? [Query.equal('department', 'resume')] : [])
           ]
         );
         const pageUsers = response.documents.map((doc: any) => ({
@@ -164,11 +166,11 @@ export function useUserManagement() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, isAdmin, isDeveloper, isMonitor, isOperations, currentUsersPage]);
+  }, [user, isAdmin, isDeveloper, isMonitor, isOperations, isSeniorTL, currentUsersPage]);
 
   const fetchTeamLeadsOnly = useCallback(async () => {
     if (!user) return;
-    if (!isAdmin && !isDeveloper) return;
+    if (!isAdmin && !isDeveloper && !isSeniorTL) return;
 
     try {
       const { Query } = await import("appwrite");
@@ -176,8 +178,9 @@ export function useUserManagement() {
         process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
         process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
         [
-          Query.equal("role", "team_lead"),
+          Query.equal("role", ["team_lead", "senior_tl"]),
           Query.equal("isActive", [true]),
+          ...(isSeniorTL && !isAdmin && !isDeveloper ? [Query.equal('department', 'resume')] : [])
         ]
       );
       const teamLeads = response.documents.map((doc: any) => ({
@@ -197,7 +200,7 @@ export function useUserManagement() {
     } catch (err) {
       console.error("Error fetching team leads:", err);
     }
-  }, [user, isAdmin, isDeveloper]);
+  }, [user, isAdmin, isDeveloper, isSeniorTL]);
 
   const fetchBranches = async () => {
     try {
@@ -462,7 +465,7 @@ export function useUserManagement() {
       setIsCreating(true);
       setError(null);
 
-      if (isAdmin || isDeveloper) {
+      if (isAdmin || isDeveloper || isSeniorTL) {
         if (createRole === "admin") {
           await createAdminAction({
             name: formName.trim(),
@@ -478,7 +481,7 @@ export function useUserManagement() {
             password: formPassword,
             currentUserId: user.$id,
           });
-        } else if (createRole === "team_lead") {
+        } else if (createRole === "team_lead" || createRole === "senior_tl") {
           await createTeamLeadAction({
             name: formName.trim(),
             email: formEmail.trim(),
@@ -524,6 +527,7 @@ export function useUserManagement() {
           role: createRole === "lead_generation" ? "lead_generation" : "agent",
           teamLeadId: user.$id,
           branchIds: selectedBranchIds,
+          department: createDepartment,
           currentUserId: user.$id,
         });
       }
