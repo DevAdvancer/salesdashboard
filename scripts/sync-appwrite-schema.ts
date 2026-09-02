@@ -84,6 +84,8 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'teamLeadId', type: 'string', required: false, size: 255 },
       { key: 'branchIds', type: 'string', array: true, required: false, size: 255 },
       { key: 'branchId', type: 'string', required: false, size: 255 },
+      { key: 'notificationsEnabled', type: 'boolean', required: false, default: true },
+      { key: 'notificationEmails', type: 'string', required: false, size: 2000 },
       { key: 'isActive', type: 'boolean', required: false, default: true },
       {
         key: 'department',

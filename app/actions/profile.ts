@@ -40,6 +40,8 @@ async function logProfileUpdate(input: {
 export async function updateOwnProfileAction(input: {
   currentUserId: string;
   name: string;
+  notificationsEnabled?: boolean;
+  notificationEmails?: string;
 }) {
   const normalizedName = input.name.trim();
 
@@ -60,11 +62,21 @@ export async function updateOwnProfileAction(input: {
     input.currentUserId
   );
 
+  const updates: any = { name: normalizedName };
+  
+  if (typeof input.notificationsEnabled === "boolean") {
+    updates.notificationsEnabled = input.notificationsEnabled;
+  }
+  
+  if (typeof input.notificationEmails === "string") {
+    updates.notificationEmails = input.notificationEmails;
+  }
+
   await databases.updateDocument(
     DATABASE_ID,
     COLLECTIONS.USERS,
     input.currentUserId,
-    { name: normalizedName }
+    updates
   );
 
   await logProfileUpdate({

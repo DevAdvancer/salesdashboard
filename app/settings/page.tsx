@@ -10,6 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { account, databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { useAuth } from '@/lib/contexts/auth-context';
@@ -45,6 +47,8 @@ function SettingsContent() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [notificationEmails, setNotificationEmails] = useState('');
   const [branchNames, setBranchNames] = useState<string[]>([]);
   const [teamLeadName, setTeamLeadName] = useState<string | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
@@ -70,6 +74,8 @@ function SettingsContent() {
   useEffect(() => {
     if (user) {
       setName(user.name ?? '');
+      setNotificationsEnabled(user.notificationsEnabled ?? true);
+      setNotificationEmails(user.notificationEmails ?? '');
     }
   }, [user]);
 
@@ -123,11 +129,13 @@ function SettingsContent() {
       await updateOwnProfileAction({
         currentUserId: user.$id,
         name,
+        notificationsEnabled,
+        notificationEmails,
       });
-      toast({ title: 'Profile updated' });
+      toast({ title: 'Settings updated' });
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unable to update your profile.';
-      console.error('Failed to update profile:', error);
+      const message = error instanceof Error ? error.message : 'Unable to update your settings.';
+      console.error('Failed to update settings:', error);
       toast({
         title: 'Error',
         description: message,
@@ -192,8 +200,36 @@ function SettingsContent() {
                 <Input id="profile-email" value={user.email} readOnly />
               </div>
             </div>
+            <div className="space-y-4 pt-4 border-t border-border">
+              <div className="flex items-center space-x-3">
+                <Switch
+                  id="notifications-enabled"
+                  checked={notificationsEnabled}
+                  onCheckedChange={setNotificationsEnabled}
+                />
+                <Label htmlFor="notifications-enabled" className="text-base font-normal">
+                  Receive email notifications for CRM events
+                </Label>
+              </div>
+              
+              {notificationsEnabled && (
+                <div className="space-y-2">
+                  <Label htmlFor="notification-emails">Additional Notification Emails (Optional)</Label>
+                  <Textarea
+                    id="notification-emails"
+                    placeholder="Enter email addresses (comma separated) to share notifications with..."
+                    value={notificationEmails}
+                    onChange={(e) => setNotificationEmails(e.target.value)}
+                    className="min-h-[80px]"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Notifications will be sent to your primary email ({user.email}) and any emails listed above.
+                  </p>
+                </div>
+              )}
+            </div>
             <Button onClick={saveProfile} loading={savingProfile} disabled={!name.trim()}>
-              Save Profile
+              Save Settings
             </Button>
           </CardContent>
         </Card>

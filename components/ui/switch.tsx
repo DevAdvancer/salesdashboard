@@ -9,6 +9,7 @@ interface SwitchProps {
   disabled?: boolean
   className?: string
   "aria-label"?: string
+  id?: string
 }
 
 const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(

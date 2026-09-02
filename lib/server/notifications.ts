@@ -67,19 +67,40 @@ async function sendEmailForNotification(
   const { users } = await createAdminClient();
   
   try {
-    const user = await users.get(userId);
+    const authUser = await users.get(userId);
+    const { databases } = await createAdminClient();
+    let dbUser: any = null;
+    try {
+      dbUser = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, userId);
+    } catch (e) {
+      // Ignored
+    }
     
-    if (user && user.email) {
+    if (authUser && authUser.email) {
       if (
-        user.email.toLowerCase() === 'unassigned@silverspaceinc.com' ||
-        user.email.toLowerCase() === 'teamlead@silverspaceinc.com'
+        authUser.email.toLowerCase() === 'unassigned@silverspaceinc.com' ||
+        authUser.email.toLowerCase() === 'teamlead@silverspaceinc.com'
       ) {
         return;
       }
 
-      const targetEmail = user.email === 'abhirupvizva@gmail.com' 
-        ? 'Abhirup.Kumar@vizvainc.com' 
-        : user.email;
+      const notificationsEnabled = dbUser?.notificationsEnabled ?? true;
+      if (!notificationsEnabled) {
+        return;
+      }
+
+      const additionalEmailsStr = (dbUser?.notificationEmails || '').trim();
+      let toEmails = [authUser.email];
+
+      // Remove the hardcoded override for abhirupvizva@gmail.com, as they can now set it in settings.
+      // Or keep it as a fallback if they haven't explicitly set additional emails?
+      // "again report mail is going to abhirupvizva@gmail.com this email address. in setting page give options to enable or disable email notification and a text areawhere they can mention particular email they want to share the notifciation too."
+      // Let's remove the hardcoded override.
+
+      if (additionalEmailsStr) {
+        const extraEmails = additionalEmailsStr.split(',').map((e: string) => e.trim()).filter(Boolean);
+        toEmails.push(...extraEmails);
+      }
 
       const link = getNotificationLink(targetId, targetType);
       const linkHtml = link 
@@ -88,7 +109,7 @@ async function sendEmailForNotification(
       const linkText = link ? `\n\nView in CRM: ${link}` : '';
 
       await sendNotificationEmail({
-        to: targetEmail,
+        to: toEmails.join(','),
         subject: `New CRM Notification: ${title}`,
         text: `${title}\n\n${body}${linkText}\n\nYou are receiving this because of a new notification in the CRM.\nThis is sent from sales.silverspace.tech. Please don't reply to this mail.`,
         html: `

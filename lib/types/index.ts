@@ -27,6 +27,8 @@ export interface User {
   department: Department;
   teamLeadId: string | null;
   branchIds: string[];
+  notificationsEnabled?: boolean;
+  notificationEmails?: string;
   isActive?: boolean;
   /** @deprecated Use branchIds instead */
   branchId?: string | null;
