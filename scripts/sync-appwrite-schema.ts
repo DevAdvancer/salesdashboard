@@ -79,8 +79,7 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
         key: 'role',
         type: 'enum',
         required: true,
-        values: ['admin', 'developer', 'team_lead', 'agent', 'lead_generation', 'monitor', 'operations'],
-        default: 'agent'
+        values: ['admin', 'developer', 'team_lead', 'senior_tl', 'agent', 'lead_generation', 'monitor', 'operations', 'compliance']
       },
       { key: 'teamLeadId', type: 'string', required: false, size: 255 },
       { key: 'branchIds', type: 'string', array: true, required: false, size: 255 },

@@ -491,6 +491,7 @@ export function useUserManagement() {
             branchIds: selectedBranchIds,
             department: createDepartment,
             currentUserId: user.$id,
+            role: createRole as "team_lead" | "senior_tl",
           });
         } else {
           const isResumeTarget = createDepartment === "resume" || activeDashboard === "resume";

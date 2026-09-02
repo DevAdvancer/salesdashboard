@@ -304,8 +304,8 @@ export async function createDeveloperAction(input: CreateAdminInput & { currentU
     }
 }
 
-export async function createTeamLeadAction(input: CreateTeamLeadInput & { currentUserId: string }) {
-    const { currentUserId, ...teamLeadInput } = input;
+export async function createTeamLeadAction(input: CreateTeamLeadInput & { currentUserId: string, role?: 'team_lead' | 'senior_tl' }) {
+    const { currentUserId, role = 'team_lead', ...teamLeadInput } = input;
 
     await assertAuthenticatedUserId(currentUserId);
 
@@ -333,7 +333,7 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
             {
                 name,
                 email,
-                role: 'team_lead',
+                role: role,
                 teamLeadId: null,
                 isActive: true,
                 branchIds,
@@ -353,8 +353,8 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
             callerDoc.$id,
             callerDoc.name,
             userId,
-            'team_lead',
-            { role: 'team_lead', email, name, branchIds, department: department ?? 'sales' }
+            role,
+            { role, email, name, branchIds, department: department ?? 'sales' }
         );
 
         invalidateDepartmentScopedUserIds();
