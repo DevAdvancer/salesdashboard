@@ -5,6 +5,7 @@ import { Query, ID } from "node-appwrite";
 import { getTodayEst } from "@/lib/utils/est-date";
 import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
 import { isWorkingDateKey } from "@/lib/utils/holiday-calendar";
+import { createNotificationRecord } from "@/lib/server/notifications";
 
 // This cron job is scheduled to run daily at 9:00 AM EST (14:00 UTC during standard time / 13:00 UTC during DST)
 // We use 14:00 UTC in vercel.json. We can check if it's the correct day here if needed, but since it's cron we just process.
@@ -28,12 +29,16 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: true, skipped: true, reason: "Not a working day" });
     }
 
+    const startOfDayStr = `${todayStr}T00:00:00.000Z`;
+    const endOfDayStr = `${todayStr}T23:59:59.999Z`;
+
     // Fetch calendar events for today that have reminderEnabled = true and reminderSent = false
     const eventsResponse = await databases.listDocuments(
       DATABASE_ID,
       COLLECTIONS.CALENDAR_EVENTS,
       [
-        Query.equal("date", todayStr),
+        Query.greaterThanEqual("date", startOfDayStr),
+        Query.lessThanEqual("date", endOfDayStr),
         Query.equal("reminderEnabled", true),
         Query.equal("reminderSent", false),
         Query.limit(100), // process in batches if many
@@ -48,18 +53,14 @@ export async function GET(request: Request) {
         ? `${event.type} with ${event.candidateName}. Notes: ${event.notes}`
         : `${event.type} with ${event.candidateName}`;
         
-      await databases.createDocument(
-        DATABASE_ID,
-        COLLECTIONS.NOTIFICATIONS,
-        ID.unique(),
-        {
-          recipientId: event.userId,
-          type: "calendar_reminder",
-          title: "Calendar Reminder",
-          body: bodyText,
-          createdAt: new Date().toISOString(),
-        }
-      );
+      await createNotificationRecord(databases, {
+        recipientId: event.userId,
+        type: "calendar_reminder",
+        title: "Calendar Reminder",
+        body: bodyText,
+        targetId: event.$id,
+        targetType: "calendar",
+      });
 
       // Mark event as reminderSent = true
       await databases.updateDocument(

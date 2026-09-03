@@ -11,9 +11,11 @@ function mapEventDoc(doc: any): CalendarEvent {
     $id: doc.$id,
     userId: doc.userId,
     type: doc.type,
+    title: doc.title,
+    priority: doc.priority,
     candidateName: doc.candidateName,
     notes: doc.notes,
-    date: doc.date ? doc.date.substring(0, 10) : "", // Appwrite returns full ISO string
+    date: doc.date, // ISO string including time
     reminderEnabled: doc.reminderEnabled,
     reminderSent: doc.reminderSent,
     createdAt: doc.createdAt,
@@ -52,7 +54,9 @@ export async function listCalendarEventsAction(input: {
 export async function createCalendarEventAction(input: {
   currentUserId: string;
   type: string;
-  candidateName: string;
+  title?: string;
+  priority?: string;
+  candidateName?: string;
   notes?: string;
   date: string;
   reminderEnabled?: boolean;
@@ -61,8 +65,10 @@ export async function createCalendarEventAction(input: {
 
   const date = input.date.trim();
   const type = input.type.trim();
-  const candidateName = input.candidateName.trim();
-  if (!date || !type || !candidateName) {
+  const title = input.title?.trim() || "Reminder";
+  const priority = input.priority?.trim() || null;
+  const candidateName = input.candidateName?.trim() || title; // fallback to title for legacy schema requirement
+  if (!date || !type) {
     throw new Error("Missing required fields.");
   }
 
@@ -74,6 +80,8 @@ export async function createCalendarEventAction(input: {
     {
       userId: input.currentUserId,
       type,
+      title,
+      priority,
       candidateName,
       notes: input.notes?.trim() || null,
       date,
@@ -90,6 +98,8 @@ export async function updateCalendarEventAction(input: {
   currentUserId: string;
   eventId: string;
   type?: string;
+  title?: string;
+  priority?: string;
   candidateName?: string;
   notes?: string;
   date?: string;
@@ -112,6 +122,8 @@ export async function updateCalendarEventAction(input: {
     updatedAt: new Date().toISOString(),
   };
   if (input.type !== undefined) updates.type = input.type.trim();
+  if (input.title !== undefined) updates.title = input.title.trim();
+  if (input.priority !== undefined) updates.priority = input.priority.trim();
   if (input.candidateName !== undefined) updates.candidateName = input.candidateName.trim();
   if (input.notes !== undefined) updates.notes = input.notes.trim() || null;
   if (input.date !== undefined) updates.date = input.date.trim();

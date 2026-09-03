@@ -427,6 +427,8 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
     attributes: [
       { key: 'userId', type: 'string', required: true, size: 255 },
       { key: 'type', type: 'string', required: true, size: 255 },
+      { key: 'title', type: 'string', required: false, size: 500 },
+      { key: 'priority', type: 'string', required: false, size: 50 },
       { key: 'candidateName', type: 'string', required: true, size: 255 },
       { key: 'notes', type: 'string', required: false, size: 5000 },
       { key: 'date', type: 'datetime', required: true },

@@ -812,7 +812,9 @@ export interface CalendarEvent {
   $id: string;
   userId: string;
   type: string;
-  candidateName: string;
+  title?: string | null;
+  priority?: string | null;
+  candidateName?: string | null;
   notes?: string | null;
   date: string; // ISO string
   reminderEnabled?: boolean | null;
