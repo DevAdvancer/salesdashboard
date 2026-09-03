@@ -111,7 +111,7 @@ export function CalendarView() {
     <div className="space-y-6 max-w-5xl mx-auto">
       <div className="flex justify-between items-start">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Reminders</h2>
+          <h1 className="text-2xl font-bold md:text-3xl tracking-tight">Reminders</h1>
           <p className="text-muted-foreground">All your tasks, meetings, and follow-ups in one place.</p>
         </div>
         <Button 
@@ -242,8 +242,8 @@ export function CalendarView() {
                   </div>
                 </div>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => handleDelete(event.$id)} className="text-red-500 hover:text-red-600 hover:bg-red-50">
-                <Trash2 className="h-4 w-4" />
+              <Button variant="ghost" size="icon" onClick={() => handleDelete(event.$id)} className="hover:bg-red-500/20">
+                <Trash2 className="h-4 w-4" style={{ color: '#ef4444', filter: 'none' }} />
               </Button>
             </Card>
             );

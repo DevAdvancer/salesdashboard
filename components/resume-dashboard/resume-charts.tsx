@@ -12,7 +12,7 @@ interface ResumeChartsProps {
 
 export function ResumeCharts({ stageDistribution, loading }: ResumeChartsProps) {
   return (
-    <Card className="col-span-1 shadow-sm border-slate-200 dark:border-slate-800">
+    <Card className="col-span-1 shadow-sm border-slate-200 dark:border-slate-800 overflow-hidden">
       <CardHeader className="bg-slate-50/50 dark:bg-slate-900/50 border-b">
         <CardTitle>Pipeline Distribution</CardTitle>
         <CardDescription>Current snapshot of profile stages</CardDescription>

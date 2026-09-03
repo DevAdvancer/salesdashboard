@@ -433,7 +433,7 @@ export async function GET(request: NextRequest) {
 
   html += `</table>`;
 
-  html += `<br><p style="font-size: 12px; color: #6b7280;">This email and any attachments are confidential and intended solely for the addressee.</p>`;
+  html += `<br><p style="font-size: 12px; color: #6b7280;">You are receiving this because of a new notification in the CRM. This email and any attachments are confidential and intended solely for the addressee.<br />This is sent from crm.silverspaceinc.tech. Please don't reply to this mail.</p>`;
 
   const toEmails = adminEmails.join(",");
   const subject = `Target Report - ${monthKey}`;

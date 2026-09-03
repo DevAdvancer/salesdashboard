@@ -12,7 +12,7 @@ interface ResumeKpiTableProps {
 
 export function ResumeKpiTable({ kpiRows, loading }: ResumeKpiTableProps) {
   return (
-    <Card className="col-span-1 lg:col-span-2 shadow-sm border-slate-200 dark:border-slate-800">
+    <Card className="col-span-1 lg:col-span-2 shadow-sm border-slate-200 dark:border-slate-800 overflow-hidden">
       <CardHeader className="bg-slate-50/50 dark:bg-slate-900/50 border-b">
         <CardTitle>Team Performance (KPI)</CardTitle>
         <CardDescription>Activity within the selected date range</CardDescription>

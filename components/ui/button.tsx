@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils"
 import { Spinner } from "./spinner"
 
 const buttonVariants = cva(
-  "glass-button relative isolate cursor-pointer rounded-full transition-all disabled:pointer-events-none disabled:opacity-40",
+  "glass-button relative isolate rounded-full transition-all disabled:pointer-events-none",
   {
     variants: {
       variant: {
@@ -39,12 +39,12 @@ export interface ButtonProps
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, loading, children, disabled, ...props }, ref) => {
     return (
-      <div className={cn("glass-button-wrap cursor-pointer rounded-full", className)}>
+      <div className={cn("glass-button-wrap rounded-full", (disabled || loading) ? "cursor-not-allowed opacity-50" : "cursor-pointer", className)}>
         <button
           className={cn("w-full h-full", buttonVariants({ variant, size }))}
           ref={ref}
           disabled={disabled || loading}
-          style={{ cursor: "pointer", ...props.style }}
+          style={props.style}
           {...props}
         >
           <span className="glass-button-text flex items-center justify-center gap-2 w-full h-full">

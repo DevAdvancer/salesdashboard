@@ -112,7 +112,7 @@ async function sendEmailForNotification(
       await sendNotificationEmail({
         to: toEmails.join(','),
         subject: `New CRM Notification: ${title}`,
-        text: `${title}\n\n${body}${linkText}\n\nYou are receiving this because of a new notification in the CRM.\nThis is sent from sales.silverspace.tech. Please don't reply to this mail.`,
+        text: `${title}\n\n${body}${linkText}\n\nYou are receiving this because of a new notification in the CRM. This email and any attachments are confidential and intended solely for the addressee.\nThis is sent from crm.silverspaceinc.tech. Please don't reply to this mail.`,
         html: `
           <div style="font-family: system-ui, -apple-system, sans-serif; background-color: #09090b; color: #e4e4e7; padding: 40px 20px; min-height: 100%;">
             <div style="max-width: 600px; margin: 0 auto; background-color: #18181b; border: 1px solid #27272a; border-radius: 8px; padding: 30px;">
@@ -121,8 +121,8 @@ async function sendEmailForNotification(
               ${linkHtml}
               <hr style="margin-top: 30px; margin-bottom: 20px; border: none; border-top: 1px solid #27272a;" />
               <p style="margin: 0; font-size: 12px; color: #a1a1aa; line-height: 1.5;">
-                You are receiving this because of a new notification in the CRM.<br />
-                This is sent from sales.silverspace.tech. Please don't reply to this mail.
+                You are receiving this because of a new notification in the CRM. This email and any attachments are confidential and intended solely for the addressee.<br />
+                This is sent from crm.silverspaceinc.tech. Please don't reply to this mail.
               </p>
             </div>
           </div>
