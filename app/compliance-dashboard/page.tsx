@@ -13,7 +13,7 @@ import { format } from "date-fns";
 
 async function ComplianceContent() {
   const actor = await getAuthenticatedUserDoc();
-  if (!actor || actor.role !== 'compliance') {
+  if (!actor || (actor.role !== 'compliance' && actor.role !== 'admin' && actor.role !== 'developer')) {
     return <div>Access denied</div>;
   }
 

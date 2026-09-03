@@ -101,7 +101,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'technical-payments', label: 'Technical Payments', href: '/technical-payments', icon: appIcons.technicalPayments },
   { key: 'followups-payments', label: 'Followups Payments', href: '/previous-followups-payments', icon: appIcons.followupsPayments },
   { key: 'resume-dashboard', label: 'Resume Dashboard', href: '/resume-dashboard', icon: appIcons.resumeDashboard },
-  { key: 'compliance-dashboard', label: 'Compliance', href: '/compliance-dashboard', icon: appIcons.resumeDashboard },
+  { key: 'compliance-dashboard', label: 'Compliance', href: '/compliance-dashboard', icon: appIcons.auditLogs },
   { key: 'call-requests', label: 'Calls', href: '/call-requests', icon: appIcons.callRequests },
   { key: 'resume-profiles', label: 'Resume Profiles', href: '/resume', icon: appIcons.resumeProfiles },
   { key: 'resume-marketing', label: 'Marketing', href: '/resume-marketing', icon: appIcons.resumeMarketing },

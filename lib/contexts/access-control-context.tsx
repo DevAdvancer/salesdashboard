@@ -146,9 +146,7 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
     if (componentKey === 'compliance-dashboard') {
       if (
         user.role === 'admin' ||
-        user.role === 'developer' ||
-        user.role === 'monitor' ||
-        user.role === 'operations'
+        user.role === 'developer'
       ) {
         return true;
       }

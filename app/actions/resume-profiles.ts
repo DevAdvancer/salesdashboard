@@ -665,8 +665,8 @@ export async function updateComplianceNotesAction(
   notes: string
 ): Promise<ResumeProfileDocument> {
   const actor = await getAuthenticatedUserDoc();
-  if (!actor || actor.role !== 'compliance') {
-    throw new Error('Only compliance users can update notes');
+  if (!actor || (actor.role !== 'compliance' && actor.role !== 'admin' && actor.role !== 'developer')) {
+    throw new Error('Only compliance users or admins can update notes');
   }
 
   const { databases } = await createAdminClient();
@@ -720,8 +720,8 @@ export async function updateComplianceStatusAction(
   status: 'approved' | 'rejected'
 ): Promise<ResumeProfileDocument> {
   const actor = await getAuthenticatedUserDoc();
-  if (!actor || actor.role !== 'compliance') {
-    throw new Error('Only compliance users can update compliance status');
+  if (!actor || (actor.role !== 'compliance' && actor.role !== 'admin' && actor.role !== 'developer')) {
+    throw new Error('Only compliance users or admins can update compliance status');
   }
 
   const { databases } = await createAdminClient();
