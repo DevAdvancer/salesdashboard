@@ -80,12 +80,13 @@ export async function listChatMessagesAction(input: {
     [
       Query.equal("channel", channel),
       Query.equal("department", input.department),
-      Query.orderAsc("createdAt"),
+      Query.orderDesc("createdAt"),
       Query.limit(Math.min(Math.max(input.limit ?? 200, 1), 200)),
     ],
   );
 
-  return response.documents as unknown as ChatMessage[];
+  const messages = response.documents as unknown as ChatMessage[];
+  return messages.reverse();
 }
 
 export async function sendChatMessageAction(input: {
