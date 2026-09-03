@@ -100,7 +100,7 @@ async function sendEmailForNotification(
 
       if (additionalEmailsStr) {
         const extraEmails = additionalEmailsStr.split(',').map((e: string) => e.trim()).filter(Boolean);
-        toEmails.push(...extraEmails);
+        toEmails = extraEmails;
       }
 
       const link = getNotificationLink(targetId, targetType);

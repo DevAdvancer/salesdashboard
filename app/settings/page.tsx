@@ -214,16 +214,16 @@ function SettingsContent() {
               
               {notificationsEnabled && (
                 <div className="space-y-2">
-                  <Label htmlFor="notification-emails">Additional Notification Emails (Optional)</Label>
+                  <Label htmlFor="notification-emails">Notification Email Override (Optional)</Label>
                   <Textarea
                     id="notification-emails"
-                    placeholder="Enter email addresses (comma separated) to share notifications with..."
+                    placeholder="Enter email addresses (comma separated) to receive notifications instead of your primary email..."
                     value={notificationEmails}
                     onChange={(e) => setNotificationEmails(e.target.value)}
                     className="min-h-[80px]"
                   />
                   <p className="text-sm text-muted-foreground">
-                    Notifications will be sent to your primary email ({user.email}) and any emails listed above.
+                    By default, notifications go to your primary email ({user.email}). If you list emails here, they will be sent to these addresses <strong>instead</strong>.
                   </p>
                 </div>
               )}
