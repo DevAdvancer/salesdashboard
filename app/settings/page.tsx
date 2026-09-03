@@ -27,7 +27,7 @@ function formatRoleLabel(role: UserRole) {
 
 // Bump this string every time you ship a new release. It is shown on the
 // Settings page so users can confirm which build they are running.
-const APP_VERSION = '4.0';
+const APP_VERSION = '5.0';
 
 export default function SettingsPage() {
   return (

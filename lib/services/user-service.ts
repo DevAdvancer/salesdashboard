@@ -20,6 +20,12 @@ function matchesDepartmentScope(user: User, departmentScope?: Department | 'all'
   return normalizeDepartment(user.department) === departmentScope;
 }
 
+export function isUserVisible(user: User, includeInactive = false): boolean {
+  if (!includeInactive && !user.isActive) return false;
+  if (user.email.toLowerCase() === 'unassigned@silverspaceinc.com') return false;
+  return true;
+}
+
 /**
  * Map an Appwrite document to a User object
  */
@@ -57,7 +63,7 @@ export async function getUsersByBranch(branchId: string): Promise<User[]> {
         ])
       ]
     );
-    return response.documents.map(mapDocToUser).filter(u => u.isActive);
+    return response.documents.map(mapDocToUser).filter(u => isUserVisible(u));
   } catch (error: unknown) {
     logger.error('Error fetching users by branch:', error);
     throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to fetch users by branch');
@@ -84,7 +90,7 @@ export async function getUsersByBranches(branchIds: string[]): Promise<User[]> {
         ])
       ]
     );
-    return response.documents.map(mapDocToUser).filter(u => u.isActive);
+    return response.documents.map(mapDocToUser).filter(u => isUserVisible(u));
   } catch (error: unknown) {
     logger.error('Error fetching users by branches:', error);
     throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to fetch users by branches');
@@ -111,7 +117,7 @@ export async function getAllActiveUsers(limit = 5000): Promise<User[]> {
           Query.limit(limit),
         ]
       );
-      return response.documents.map(mapDocToUser).filter((user) => user.isActive);
+      return response.documents.map(mapDocToUser).filter((user) => isUserVisible(user));
     } catch (error: unknown) {
       logger.error('Error fetching all active users:', error);
       throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to fetch all active users');
@@ -228,7 +234,7 @@ export async function getAssignableUsers(
 
       const users = response.documents
         .map(mapDocToUser)
-        .filter((u) => includeInactive || u.isActive)
+        .filter((u) => isUserVisible(u, includeInactive))
         .filter((u) => matchesDepartmentScope(u, departmentScope));
       return creatorId ? users.filter(u => u.$id !== creatorId) : users;
     } catch (error: unknown) {
@@ -272,7 +278,7 @@ export async function getAgentsByTeamLead(
       return response.documents
         .map(mapDocToUser)
         .filter((user) => matchesDepartmentScope(user, departmentScope))
-        .filter((user) => includeInactive || user.isActive);
+        .filter((user) => isUserVisible(user, includeInactive));
     } catch (error: unknown) {
       logger.error('Error fetching agents by team lead:', error);
       throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to fetch agents by team lead');
@@ -441,7 +447,7 @@ export async function getAllAgents(): Promise<User[]> {
       USERS_COLLECTION_ID,
       [Query.equal('role', 'agent')]
     );
-    return response.documents.map(mapDocToUser).filter(u => u.isActive);
+    return response.documents.map(mapDocToUser).filter(u => isUserVisible(u));
   } catch (error: unknown) {
     logger.error('Error fetching all agents:', error);
     throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to fetch all agents');
@@ -621,7 +627,7 @@ export async function getTeamLeads(
     return response.documents
       .map(mapDocToUser)
       .filter((user) => matchesDepartmentScope(user, departmentScope))
-      .filter((user) => includeInactive || user.isActive);
+      .filter((user) => isUserVisible(user, includeInactive));
   } catch (error: unknown) {
     logger.error('Error fetching team leads:', error);
     throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to fetch team leads');
