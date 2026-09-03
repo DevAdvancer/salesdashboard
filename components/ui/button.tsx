@@ -47,8 +47,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           style={{ cursor: "pointer", ...props.style }}
           {...props}
         >
-          {loading && <Spinner size="sm" />}
-          <span className="glass-button-text flex items-center justify-center gap-2">
+          <span className="glass-button-text flex items-center justify-center gap-2 w-full h-full">
+            {loading && <Spinner size="sm" />}
             {children}
           </span>
         </button>
