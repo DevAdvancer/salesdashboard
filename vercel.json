@@ -22,7 +22,7 @@
     },
     {
       "path": "/api/cron/calendar-reminders",
-      "schedule": "0 14 * * 1-5"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/cron/daily-report-summary",

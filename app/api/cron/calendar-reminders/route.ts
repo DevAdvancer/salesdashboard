@@ -1,14 +1,22 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/server/appwrite";
 import { DATABASE_ID, COLLECTIONS } from "@/lib/constants/appwrite";
-import { Query, ID } from "node-appwrite";
-import { getTodayEst } from "@/lib/utils/est-date";
-import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
-import { isWorkingDateKey } from "@/lib/utils/holiday-calendar";
+import { Query } from "node-appwrite";
 import { createNotificationRecord } from "@/lib/server/notifications";
 
-// This cron job is scheduled to run daily at 9:00 AM EST (14:00 UTC during standard time / 13:00 UTC during DST)
-// We use 14:00 UTC in vercel.json. We can check if it's the correct day here if needed, but since it's cron we just process.
+// This cron job is scheduled to run every 5 minutes (or however often configured)
+// It finds events where the date (which is stored as YYYY-MM-DDTHH:mm in EST) is <= current EST time.
+
+function getEstDateTimeString(now = new Date()) {
+  const formatter = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "America/New_York",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
+  const parts = formatter.formatToParts(now);
+  const find = (type: string) => parts.find((p) => p.type === type)?.value;
+  return `${find('year')}-${find('month')}-${find('day')}T${find('hour')}:${find('minute')}`;
+}
 
 export async function GET(request: Request) {
   // Optional: check for cron secret
@@ -20,25 +28,14 @@ export async function GET(request: Request) {
   try {
     const { databases } = await createAdminClient();
 
-    // Get today's date in EST
-    const todayStr = getTodayEst();
-    
-    // Check if working day
-    const holidays = await listHolidayDateKeys({ databases, from: todayStr, to: todayStr });
-    if (!isWorkingDateKey(todayStr, holidays)) {
-      return NextResponse.json({ success: true, skipped: true, reason: "Not a working day" });
-    }
+    const currentEstTimeStr = getEstDateTimeString();
 
-    const startOfDayStr = `${todayStr}T00:00:00.000Z`;
-    const endOfDayStr = `${todayStr}T23:59:59.999Z`;
-
-    // Fetch calendar events for today that have reminderEnabled = true and reminderSent = false
+    // Fetch calendar events that are due (date <= currentEstTimeStr) and haven't been sent
     const eventsResponse = await databases.listDocuments(
       DATABASE_ID,
       COLLECTIONS.CALENDAR_EVENTS,
       [
-        Query.greaterThanEqual("date", startOfDayStr),
-        Query.lessThanEqual("date", endOfDayStr),
+        Query.lessThanEqual("date", currentEstTimeStr),
         Query.equal("reminderEnabled", true),
         Query.equal("reminderSent", false),
         Query.limit(100), // process in batches if many
