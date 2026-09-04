@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ProtectedRoute } from "@/components/protected-route";
 import { listLeads, clearLeadReadCache } from "@/lib/services/lead-action-service";
 import type { User } from "@/lib/types";
+import { NotificationBell } from "@/components/notification-bell";
 import { AttendanceSelfToggle } from "@/components/attendance-self-toggle";
 import { DashboardDateRange } from "@/components/dashboard/dashboard-date-range";
 import { TopMetricsRow } from "@/components/dashboard/top-metrics-row";
@@ -616,6 +617,7 @@ function MainDashboard({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <NotificationBell />
           <DashboardDateRange
             value={dateRange!}
             onChange={handleDateRangeChange}
@@ -751,17 +753,18 @@ function LeadGenerationDashboardContent() {
       try {
         const startOfMonthIso = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
         const leads = await listLeads(
-          { isClosed: false, dateFrom: startOfMonthIso, limit: 200 },
+          { includeClosed: true, dateFrom: startOfMonthIso, limit: 500 },
           user.$id,
           user.role,
           user.branchIds,
         );
-        const unassigned = leads.filter((lead) => !lead.assignedToId).length;
+        const unassigned = leads.filter((lead) => !lead.isClosed && !lead.assignedToId).length;
         const { getUserByIdOrNull } =
           await import("@/lib/services/user-service");
         const usersById = new Map<string, User>([[user.$id, user]]);
         const userIdsToResolve = new Set(
           leads
+            .filter((lead) => !lead.isClosed)
             .map((lead) => lead.assignedToId)
             .filter((assignedToId): assignedToId is string =>
               Boolean(assignedToId),
@@ -787,6 +790,7 @@ function LeadGenerationDashboardContent() {
 
         const teamMap = new Map<string, LeadGenerationTeamAssignmentStat>();
         for (const lead of leads) {
+          if (lead.isClosed) continue;
           if (!lead.assignedToId) continue;
           const assignee = usersById.get(lead.assignedToId);
           const teamLeadId =
@@ -866,7 +870,7 @@ function LeadGenerationDashboardContent() {
             My Generated Leads
           </div>
           <div className="text-muted-foreground text-xs">
-            Leads created by you (active only).
+            Leads created by you this month.
           </div>
           <div className="mt-2 flex items-center justify-between">
             <div className="text-3xl font-semibold">

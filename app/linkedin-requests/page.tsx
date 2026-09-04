@@ -683,7 +683,7 @@ function LinkedinRequestsContent() {
                 <TableHead>URL</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-[180px]">Action</TableHead>
+                <TableHead className="w-[280px]">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

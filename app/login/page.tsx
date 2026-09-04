@@ -200,7 +200,7 @@ export default function LoginPage() {
               </div>
 
               <Button type="submit" id="login-submit" loading={isLoading} className="w-full h-10 mt-0.5">
-                {isLoading ? 'Signing in…' : 'Sign in'}
+                Sign in
               </Button>
             </div>
           </form>

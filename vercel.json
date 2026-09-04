@@ -31,6 +31,14 @@
     {
       "path": "/api/cron/target-report",
       "schedule": "0 23 * * *"
+    },
+    {
+      "path": "/api/cron/aggregate-linkedin-stats",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/aggregate-agent-stats",
+      "schedule": "0 4 * * *"
     }
   ]
 }

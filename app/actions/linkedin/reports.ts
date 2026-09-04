@@ -231,9 +231,9 @@ export async function loadLinkedinConnectionKpiAction(input: {
     const userId = account.assignedUserId;
     const userName = user?.name ?? "Unknown";
     
-    // Calculate sent count for this account from active requests
+    // Calculate sent count for this account
     const accountStats = stats.filter((s) => s.accountId === account.$id);
-    const sentCount = accountStats.reduce((sum, s) => sum + ((s.sent || 0) - (s.withdrawn || 0)), 0);
+    const sentCount = accountStats.reduce((sum, s) => sum + (s.sent || 0), 0);
     const target = (account.connectionLimit ?? 0) * daysCount;
 
     const existing = userRowsMap.get(userId) ?? {

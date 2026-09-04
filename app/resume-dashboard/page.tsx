@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ProtectedRoute } from "@/components/protected-route";
 import { Button } from "@/components/ui/button";
 import { DashboardDateRange } from "@/components/dashboard/dashboard-date-range";
+import { NotificationBell } from "@/components/notification-bell";
 import { getTodayEst, getMonthStartEst } from "@/lib/utils/est-date";
 import type { DateRange } from "@/lib/utils/dashboard-kpi";
 import { getResumeDashboardDataAction, type ResumeDashboardData } from "@/app/actions/resume-dashboard";
@@ -99,6 +100,7 @@ function ResumeDashboardContent() {
         </div>
         
         <div className="flex items-center gap-2 self-start sm:self-auto">
+          <NotificationBell />
           <DashboardDateRange
             value={dateRange}
             onChange={handleDateRangeChange}

@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { NAV_ITEMS, appIcons } from "./navigation-config";
-import { NotificationBell } from "./notification-bell";
+
 import {
   startDashboardTour,
   startLeadsTour,
@@ -544,7 +544,6 @@ export function Navigation({
           </div>
 
           <div className="hidden lg:flex items-center gap-2 shrink-0">
-            <NotificationBell />
             <button
               type="button"
               aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}

@@ -54,7 +54,7 @@ function getNotificationLink(targetId?: string | null, targetType?: string | nul
   if (type === 'interview') return `${APP_URL}/resume/${targetId}`; // Or another appropriate route if interview has its own
   if (type === 'mock') return `${APP_URL}/resume/${targetId}`; // Same here
   if (type === 'user') return `${APP_URL}/profile/${targetId}`;
-  if (type === 'calendar') return `${APP_URL}/calendar`;
+  if (type === 'calendar') return `${APP_URL}/reminders`;
   return null;
 }
 
