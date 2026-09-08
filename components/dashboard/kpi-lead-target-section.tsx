@@ -36,6 +36,7 @@ interface KpiLeadTargetSectionProps {
   target: number;
   scopeLabel: string;
   rangeLabel: string;
+  className?: string;
 }
 
 function roleLabel(role: string): string {
@@ -51,6 +52,7 @@ export function KpiLeadTargetSection({
   target,
   scopeLabel,
   rangeLabel,
+  className,
 }: KpiLeadTargetSectionProps) {
   const [open, setOpen] = useState<"complete" | "incomplete" | null>(null);
 
@@ -58,20 +60,22 @@ export function KpiLeadTargetSection({
     const all = rows ?? [];
     const completedRows = all.filter((r) => r.target > 0 && r.leadCount >= r.target);
     const pendingRows = all.filter((r) => r.target > 0 && r.leadCount < r.target);
+    const noKpi = all.filter((r) => r.target === 0);
+
     return {
       completed: completedRows.length,
       pending: pendingRows.length,
       completedRows,
       pendingRows,
-      totalActive: all.length,
-      noKpiRequired: all.length > 0 && all.every((r) => r.target === 0),
+      totalActive: all.length - noKpi.length,
+      noKpiRequired: noKpi.length > 0 && all.every((r) => r.target === 0),
     };
   }, [rows]);
 
   const completedPct = totalActive > 0 ? Math.round((completed / totalActive) * 100) : 0;
 
   return (
-    <Card id="tour-kpi-target">
+    <Card id="tour-kpi-target" className={className}>
       <CardHeader>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>

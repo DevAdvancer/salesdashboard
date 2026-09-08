@@ -3,6 +3,7 @@
 import { memo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { LeadStatusBadge } from "@/components/ui/lead-status-badge";
 import type { Lead, User, LeadListFilters } from "@/lib/types";
 
 function parseLeadData(lead: Lead) {
@@ -73,9 +74,7 @@ export const LeadRow = memo(
           {email}
         </td>
         <td className="p-3 md:p-4">
-          <span className="inline-block px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-primary/10 text-primary">
-            {lead.status}
-          </span>
+          <LeadStatusBadge status={lead.status} className="md:px-3 md:text-sm" />
         </td>
         <td className="p-3 md:p-4 text-muted-foreground hidden lg:table-cell">
           {sourceName || source || "-"}

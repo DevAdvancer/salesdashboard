@@ -48,8 +48,14 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           {...props}
         >
           <span className="glass-button-text flex items-center justify-center gap-2 w-full h-full whitespace-nowrap">
-            {loading && <Spinner size="sm" />}
-            {children}
+            {loading ? (
+              <>
+                <Spinner size="sm" />
+                <span>Loading...</span>
+              </>
+            ) : (
+              children
+            )}
           </span>
         </button>
         <div className="glass-button-shadow rounded-full"></div>

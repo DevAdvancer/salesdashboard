@@ -26,9 +26,22 @@ export async function loadDashboardDataServerAction(
   sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
   const dateFrom = sixtyDaysAgo.toISOString();
 
+  const closedDateFrom = input.dateRange?.from || dateFrom;
+  const closedDateTo = input.dateRange?.to;
+
   const [activeLeads, closedLeads, allBranches, lgHandoffs] = await Promise.all([
-    listLeads({ isClosed: false, teamLeadId: input.teamLeadId }, input.user.$id, input.user.role, branchIds),
-    listLeads({ isClosed: true, teamLeadId: input.teamLeadId, dateFrom }, input.user.$id, input.user.role, branchIds),
+    listLeads({ 
+      isClosed: false, 
+      teamLeadId: input.teamLeadId,
+      dateFrom: input.dateRange?.from,
+      dateTo: input.dateRange?.to
+    }, input.user.$id, input.user.role, branchIds),
+    listLeads({ 
+      isClosed: true, 
+      teamLeadId: input.teamLeadId, 
+      dateFrom: closedDateFrom,
+      dateTo: closedDateTo
+    }, input.user.$id, input.user.role, branchIds),
     listBranches(),
     listLgHandoffsAction().catch((error) => {
       console.error("Error loading LG handoffs:", error);

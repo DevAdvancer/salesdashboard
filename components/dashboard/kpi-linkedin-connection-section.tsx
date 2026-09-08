@@ -34,6 +34,7 @@ interface KpiLinkedinConnectionSectionProps {
   isLoading: boolean;
   mode: "daily" | "monthly";
   rangeLabel: string;
+  className?: string;
 }
 
 export function KpiLinkedinConnectionSection({
@@ -41,6 +42,7 @@ export function KpiLinkedinConnectionSection({
   isLoading,
   mode,
   rangeLabel,
+  className,
 }: KpiLinkedinConnectionSectionProps) {
   const [open, setOpen] = useState<"complete" | "incomplete" | null>(null);
 
@@ -61,7 +63,7 @@ export function KpiLinkedinConnectionSection({
   const completedPct = totalActive > 0 ? Math.round((completed / totalActive) * 100) : 0;
 
   return (
-    <Card id="tour-linkedin-kpi-target">
+    <Card id="tour-linkedin-kpi-target" className={className}>
       <CardHeader>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>

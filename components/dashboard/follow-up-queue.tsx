@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { LeadStatusBadge } from '@/components/ui/lead-status-badge';
 import type { FollowUpQueue } from '@/lib/utils/dashboard-insights';
 
 interface FollowUpQueueCardProps {
@@ -73,8 +74,8 @@ function QueueList({
                   {formatDateTime(item.nextFollowUpAt)}
                 </p>
               </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                {item.status} / {item.branchName}
+              <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                <LeadStatusBadge status={item.status} /> <span>/ {item.branchName}</span>
               </p>
             </button>
           ))}

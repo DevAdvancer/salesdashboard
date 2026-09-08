@@ -50,6 +50,13 @@ export function TopMetricsRow({
       hint: "In client records",
     },
     {
+      id: "tour-conversion-rate",
+      label: "Conversion Rate",
+      icon: appIcons.leads,
+      count: `${Math.round(((value.clientRecords ?? value.closedLeads) / Math.max(value.activeLeads + (value.clientRecords ?? value.closedLeads), 1)) * 100)}%`,
+      hint: "Closed / Total Leads",
+    },
+    {
       id: "tour-created-mocks",
       label: "Created Mocks",
       icon: appIcons.mock,
@@ -75,7 +82,7 @@ export function TopMetricsRow({
   return (
     <div
       id="tour-global-metrics"
-      className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
+      className="grid gap-6 md:grid-cols-3 lg:grid-cols-6">
       {cards.map((card) => {
         const Icon = card.icon;
         return (

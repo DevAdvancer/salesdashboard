@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ProtectedRoute } from "@/components/protected-route";
 import { DateRangePicker } from "@/components/ui/date-picker";
+import { LeadStatusBadge } from "@/components/ui/lead-status-badge";
 import { listBranches } from "@/lib/services/branch-service";
 import { listClientPaymentSummaries } from "@/lib/services/client-payment-service";
 import { isVisibleClientLead } from "@/lib/utils/client-history";
@@ -584,9 +585,7 @@ function HistoryContent() {
                         {email || "N/A"}
                       </td>
                       <td className="p-3 md:p-4">
-                        <span className="px-2 py-1 rounded-full text-xs bg-secondary text-secondary-foreground">
-                          {lead.status}
-                        </span>
+                        <LeadStatusBadge status={lead.status} />
                       </td>
                       <td className="p-3 md:p-4 hidden md:table-cell">
                         <span className="px-2 py-1 rounded-full text-xs bg-secondary text-secondary-foreground">
@@ -635,32 +634,32 @@ function HistoryContent() {
         </div>
       </Card>
 
-      {/* Pagination Controls */}
-      {filteredLeads.length > 0 && (
-        <div className="flex justify-between items-center mt-4">
-          <Button
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-            variant="outline">
-            Previous
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            Page {currentPage} of {totalPages}
-          </span>
-          <Button
-            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
-            variant="outline">
-            Next
-          </Button>
-        </div>
+      {/* Pagination Controls & Summary */}
+      {totalPages > 1 && (
+        <>
+          <div className="flex justify-between items-center mt-4">
+            <Button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              variant="outline">
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Page {currentPage} of {totalPages}
+            </span>
+            <Button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              variant="outline">
+              Next
+            </Button>
+          </div>
+          <div className="mt-4 text-muted-foreground text-sm">
+            Showing {paginatedLeads.length} of {closedLeadsQuery.data?.total ?? filteredLeads.length} client record
+            {(closedLeadsQuery.data?.total ?? filteredLeads.length) !== 1 ? "s" : ""}
+          </div>
+        </>
       )}
-
-      {/* Summary */}
-      <div className="mt-4 text-muted-foreground text-sm">
-        Showing {paginatedLeads.length} of {filteredLeads.length} client record
-        {filteredLeads.length !== 1 ? "s" : ""}
-      </div>
     </div>
   );
 }

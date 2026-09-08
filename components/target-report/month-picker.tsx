@@ -30,25 +30,23 @@ export function MonthPicker({ monthKey, onChange }: MonthPickerProps) {
   };
 
   return (
-    <div className="inline-flex items-center gap-1 rounded-md border bg-card px-2 py-1 text-sm">
+    <div className="inline-flex items-center gap-1 rounded-full border bg-card px-2 py-1 text-sm">
       <Button
         type="button"
         size="icon"
         variant="ghost"
-        className="h-7 w-7"
         aria-label="Previous month"
         onClick={() => shift(-1)}>
-        <ChevronLeft className="h-4 w-4" />
+        <ChevronLeft className="h-5 w-5" />
       </Button>
-      <div className="min-w-[140px] text-center font-medium tabular-nums">{label}</div>
+      <div className="min-w-[140px] text-center text-base font-medium tabular-nums">{label}</div>
       <Button
         type="button"
         size="icon"
         variant="ghost"
-        className="h-7 w-7"
         aria-label="Next month"
         onClick={() => shift(1)}>
-        <ChevronRight className="h-4 w-4" />
+        <ChevronRight className="h-5 w-5" />
       </Button>
     </div>
   );

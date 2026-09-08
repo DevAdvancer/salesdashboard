@@ -11,11 +11,14 @@ import type { User } from "@/lib/types";
 import { NotificationBell } from "@/components/notification-bell";
 import { AttendanceSelfToggle } from "@/components/attendance-self-toggle";
 import { DashboardDateRange } from "@/components/dashboard/dashboard-date-range";
+import { EstClock } from "@/components/dashboard/est-clock";
 import { TopMetricsRow } from "@/components/dashboard/top-metrics-row";
 import { KpiLeadTargetSection } from "@/components/dashboard/kpi-lead-target-section";
 import { KpiLinkedinConnectionSection } from "@/components/dashboard/kpi-linkedin-connection-section";
 import { HolidayCalendarSection } from "@/components/dashboard/holiday-calendar-section";
 import { ReferralSection } from "@/components/dashboard/referral-section";
+import { StatusBreakdownSection } from "@/components/dashboard/status-breakdown-section";
+import { RecentActivitySection } from "@/components/dashboard/recent-activity-section";
 import { PaymentsSection } from "@/components/dashboard/payments-section";
 import { LgHandoffSection } from "@/components/dashboard/lg-handoff-section";
 import {
@@ -203,6 +206,11 @@ function MainDashboard({
 
 
 
+  // Status Breakdown & Recent Activity
+  const [statusBreakdown, setStatusBreakdown] = useState<any[] | null>(null);
+  const [recentLeads, setRecentLeads] = useState<any[] | null>(null);
+  const [statusBreakdownLoading, setStatusBreakdownLoading] = useState(true);
+
   const isDashboardLoading =
     topMetricsLoading ||
     kpiLoading ||
@@ -210,7 +218,8 @@ function MainDashboard({
     holidayLoading ||
     paymentLoading ||
     referralLoading ||
-    handoffLoading;
+    handoffLoading ||
+    statusBreakdownLoading;
 
   useEffect(() => {
     // Only trigger the overlay loader if we actually have a user, preventing it
@@ -505,6 +514,48 @@ function MainDashboard({
     };
   }, [user, isAdminLike, dateRange]);
 
+  // ── Fetch Status Breakdown ──────────────────────
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setStatusBreakdownLoading(true);
+    });
+
+    (async () => {
+      try {
+        const data = await import("@/lib/services/dashboard-data-service").then(m => m.loadDashboardData({
+          user,
+          isAdminLike,
+          isTeamLead,
+          teamLeadId: undefined,
+          includeAllBranchesForAdminLike: false,
+          departmentScope: "sales",
+          dateRange: dateRange ?? undefined,
+        }));
+        if (!cancelled) {
+          setStatusBreakdown(data.insights?.statusBreakdown ?? []);
+          const allLeads = [...(data.activeLeads || []), ...(data.closedLeads || [])];
+          allLeads.sort((a, b) => new Date(b.$updatedAt || b.$createdAt || Date.now()).getTime() - new Date(a.$updatedAt || a.$createdAt || Date.now()).getTime());
+          setRecentLeads(allLeads.slice(0, 5));
+          setStatusBreakdownLoading(false);
+        }
+      } catch (error) {
+        console.error("Error loading status breakdown:", error);
+        if (!cancelled) {
+          setStatusBreakdown([]);
+          setRecentLeads([]);
+          setStatusBreakdownLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, isAdminLike, isTeamLead, dateRange]);
+
   // KPI section mode + target derived from range
   const kpiMode = (dateRange && isSingleDay(dateRange)) ? "daily" : "monthly";
   const scopeLabel = isAgent
@@ -617,6 +668,7 @@ function MainDashboard({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <EstClock />
           <NotificationBell />
           <DashboardDateRange
             value={dateRange!}
@@ -635,25 +687,47 @@ function MainDashboard({
         visibilityLabel={visibilityLabel}
       />
 
-      {/* KPI — daily/monthly lead target per member */}
-      <KpiLeadTargetSection
-        rows={kpiRows}
-        isLoading={kpiLoading}
-        mode={kpiMode}
-        target={kpiTarget}
-        scopeLabel={scopeLabel}
-        rangeLabel={dateRange ? rangeLabel(dateRange) : ""}
-      />
+      <div className="grid gap-6 md:grid-cols-3">
+        {/* ROW 1 */}
+        <div className="md:col-span-2 flex">
+          <KpiLeadTargetSection
+            rows={kpiRows}
+            isLoading={kpiLoading}
+            mode={kpiMode}
+            target={kpiTarget}
+            scopeLabel={scopeLabel}
+            rangeLabel={dateRange ? rangeLabel(dateRange) : ""}
+            className="flex-1 flex flex-col"
+          />
+        </div>
+        <div className="md:col-span-1 flex">
+          <StatusBreakdownSection 
+            breakdown={statusBreakdown ?? undefined} 
+            isLoading={statusBreakdownLoading} 
+            className="flex-1 flex flex-col"
+          />
+        </div>
 
-      {/* LinkedIn daily/monthly Connection limit KPI */}
-      {(isAdminLike || isTeamLead) && (
-        <KpiLinkedinConnectionSection
-          rows={linkedinKpiRows}
-          isLoading={linkedinKpiLoading}
-          mode={kpiMode}
-          rangeLabel={dateRange ? rangeLabel(dateRange) : ""}
-        />
-      )}
+        {/* ROW 2 */}
+        {(isAdminLike || isTeamLead) && (
+          <div className="md:col-span-2 flex">
+            <KpiLinkedinConnectionSection
+              rows={linkedinKpiRows}
+              isLoading={linkedinKpiLoading}
+              mode={kpiMode}
+              rangeLabel={dateRange ? rangeLabel(dateRange) : ""}
+              className="flex-1 flex flex-col"
+            />
+          </div>
+        )}
+        <div className={`flex ${(isAdminLike || isTeamLead) ? 'md:col-span-1' : 'md:col-span-3'}`}>
+          <RecentActivitySection
+            recentLeads={recentLeads ?? undefined}
+            isLoading={statusBreakdownLoading}
+            className="flex-1 flex flex-col"
+          />
+        </div>
+      </div>
 
       {/* Referral split — admin-only, filtered by date range */}
       {isAdminLike && (

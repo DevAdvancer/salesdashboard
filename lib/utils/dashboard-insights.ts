@@ -224,7 +224,7 @@ function parseLeadData(lead: Lead): Record<string, unknown> {
   }
 }
 
-function getLeadName(lead: Lead): string {
+export function getLeadName(lead: Lead): string {
   const leadData = parseLeadData(lead);
   const firstName = String(leadData.firstName ?? '').trim();
   const lastName = String(leadData.lastName ?? '').trim();

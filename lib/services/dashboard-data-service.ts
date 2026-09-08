@@ -54,7 +54,8 @@ export interface DashboardDataInput {
   teamLeadId?: string;
   includeAllBranchesForAdminLike?: boolean;
   includeAssignedAgents?: boolean;
-  departmentScope?: Department | 'all';
+  departmentScope?: import("@/lib/types").Department | "all";
+  dateRange?: { from?: string; to?: string };
 }
 
 export interface DashboardDataResult {
@@ -127,6 +128,8 @@ export async function loadDashboardData(
       Boolean(input.includeAllBranchesForAdminLike),
       Boolean(input.includeAssignedAgents),
       input.departmentScope ?? 'all',
+      input.dateRange?.from ?? "",
+      input.dateRange?.to ?? "",
     ],
     async () => {
       // Delegate to the Server Action to prevent fetching massive JSON arrays over the network to the browser
