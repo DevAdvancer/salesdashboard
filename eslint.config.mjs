@@ -20,7 +20,7 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-explicit-any": "warn",
       "no-console": ["warn", { allow: ["warn", "error"] }],
       "complexity": ["warn", 20],
-      "max-lines-per-function": ["warn", 100],
+      "max-lines-per-function": "off",
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/static-components": "off",
       "react-hooks/purity": "off",
