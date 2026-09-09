@@ -71,7 +71,7 @@ function NonReferralCard({
   isLoading: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-[var(--hairline)] bg-[var(--soft-cloud)]/40 p-4">
+    <div className="rounded-2xl border border-[var(--hairline)] bg-card p-4 shadow-sm transition-all">
       <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
         <Users className="h-4 w-4" />
         Non-Referral
@@ -126,14 +126,14 @@ function ReferralCard({
   isLoading: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-emerald-700/60 bg-emerald-950/25 p-4">
-      <div className="flex items-center gap-2 text-sm font-medium text-emerald-400">
+    <div className="rounded-2xl border border-[var(--info)]/30 bg-gradient-to-br from-[var(--info)]/5 to-[var(--info-deep)]/10 p-4 transition-all">
+      <div className="flex items-center gap-2 text-sm font-medium text-[var(--info-deep)] dark:text-[var(--info)]">
         <UserPlus className="h-4 w-4" />
         Referral
       </div>
       <div className="mt-3 grid grid-cols-2 gap-4">
         <div>
-          <div className="text-xs uppercase tracking-wide text-emerald-400/70">
+          <div className="text-xs uppercase tracking-wide text-[var(--info-deep)]/70 dark:text-[var(--info)]/70">
             Clients
           </div>
           {isLoading || count === null ? (
@@ -143,7 +143,7 @@ function ReferralCard({
           )}
         </div>
         <div>
-          <div className="text-xs uppercase tracking-wide text-emerald-400/70">
+          <div className="text-xs uppercase tracking-wide text-[var(--info-deep)]/70 dark:text-[var(--info)]/70">
             Amount
           </div>
           {isLoading ||
@@ -156,7 +156,7 @@ function ReferralCard({
               <div className="mt-1 text-2xl font-bold tabular-nums">
                 {currencyFormatter.format(totalAmount)}
               </div>
-              <div className="mt-1 text-xs text-emerald-300/80">
+              <div className="mt-1 text-xs text-[var(--info-deep)]/80 dark:text-[var(--info)]/80">
                 Uses payment upfront totals for eligible clients
               </div>
             </>
@@ -166,3 +166,5 @@ function ReferralCard({
     </div>
   );
 }
+
+

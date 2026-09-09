@@ -59,7 +59,7 @@ export function StatusBreakdownSection({ breakdown, isLoading, className }: Stat
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
                 <div 
-                  className="h-full bg-[var(--ink)] transition-all duration-500 ease-in-out" 
+                  className="h-full bg-gradient-to-r from-[var(--info)] to-[var(--info-deep)] transition-all duration-500 ease-in-out" 
                   style={{ width: `${(item.count / maxCount) * 100}%` }} 
                 />
               </div>
@@ -70,3 +70,4 @@ export function StatusBreakdownSection({ breakdown, isLoading, className }: Stat
     </Card>
   );
 }
+
