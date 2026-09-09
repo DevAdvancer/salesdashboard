@@ -111,6 +111,8 @@
    LIGHT THEME  (fallback — not the active theme)
 ───────────────────────────────────────────────────────────── */
 :root {
+  --glass-bg: rgba(0, 0, 0, 0.7);
+  --glass-bg-hover: rgba(0, 0, 0, 0.85);
   --background:            var(--canvas);
   --foreground:            var(--ink);
   --card:                  var(--canvas);
@@ -150,6 +152,8 @@
    Nike-inspired neutral chrome
 ───────────────────────────────────────────────────────────── */
 .dark {
+  --glass-bg: rgba(255, 255, 255, 0.12);
+  --glass-bg-hover: rgba(255, 255, 255, 0.20);
   --ink:            #ffffff;
   --canvas:         #000000;
   --soft-cloud:     #18181b;
@@ -774,7 +778,7 @@
     border-radius: 9999px;
   }
   .glass-button {
-    background: rgba(0, 0, 0, 0.4);
+    background: var(--glass-bg, rgba(0, 0, 0, 0.7));
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.15);
@@ -783,7 +787,7 @@
     z-index: 10;
   }
   .glass-button:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--glass-bg-hover, rgba(0, 0, 0, 0.85));
     border-color: rgba(255, 255, 255, 0.2);
   }
   .glass-button:active {
@@ -816,3 +820,5 @@
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
   }
 }
+
+
