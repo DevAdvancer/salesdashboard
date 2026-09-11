@@ -84,7 +84,7 @@ export function LeadInfoCard({
     // can view (mirrors the server-side `assertLeadUpdateAllowed` policy
     // in app/actions/lead.ts). Operations is read-only.
     const isReadOnly =
-      !isEditing || lead?.isClosed || user?.role === "operations";
+      !isEditing || lead?.isClosed || user?.role === "operations" || field.key === "source";
     const fieldError = fieldErrors[field.key];
 
     switch (field.type) {
@@ -436,3 +436,4 @@ export function LeadInfoCard({
     </Card>
   );
 }
+
