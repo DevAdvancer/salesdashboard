@@ -179,7 +179,7 @@ export function ChatChannelView({ department }: { department: Department }) {
                                 : "text-muted-foreground"
                             }`}
                           >
-                            {new Date(m.createdAt).toLocaleString()}
+                            {new Date(m.createdAt).toLocaleString("en-US", { timeZone: "America/New_York" })}
                           </p>
                         </div>
                         <p

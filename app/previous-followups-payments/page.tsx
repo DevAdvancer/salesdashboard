@@ -326,7 +326,7 @@ export default function PreviousFollowupsPaymentsPage() {
               <div className="text-2xl font-bold">
                 {filteredPayments
                   .reduce((sum, p) => sum + p.amount, 0)
-                  .toLocaleString()}
+                  .toLocaleString("en-US")}
               </div>
               <p className="text-xs text-muted-foreground">
                 {filteredPayments.length} entries
@@ -342,7 +342,7 @@ export default function PreviousFollowupsPaymentsPage() {
               <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-500">
                 {filteredPayments
                   .reduce((sum, p) => sum + p.amount, 0)
-                  .toLocaleString()}
+                  .toLocaleString("en-US")}
               </div>
               <p className="text-xs text-muted-foreground">
                 All followup payments are marked paid
@@ -358,7 +358,7 @@ export default function PreviousFollowupsPaymentsPage() {
               <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-500">
                 {thisMonthPayments
                   .reduce((sum, p) => sum + p.amount, 0)
-                  .toLocaleString()}
+                  .toLocaleString("en-US")}
               </div>
               <p className="text-xs text-muted-foreground">
                 {thisMonthPayments.length} payments

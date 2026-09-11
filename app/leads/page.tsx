@@ -290,7 +290,7 @@ function LeadsContent() {
           data.firstName || "", data.lastName || "", data.email || "",
           data.phone || "", data.company || "", lead.status || "",
           sourceVal, referralVal,
-          lead.$createdAt ? new Date(lead.$createdAt).toLocaleDateString() : "",
+          lead.$createdAt ? new Date(lead.$createdAt).toLocaleDateString("en-US", { timeZone: "America/New_York" }) : "",
           ...otherKeys.map((key) => data[key] || ""),
         ];
         return row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`);

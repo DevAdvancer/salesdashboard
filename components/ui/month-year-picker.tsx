@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { getCurrentEasternIsoDate } from '@/lib/utils/eastern-date';
 
 interface MonthYearPickerProps {
   value: string; // format: "YYYY-MM" or empty string
@@ -25,7 +26,7 @@ const MONTHS = [
 ];
 
 export function MonthYearPicker({ value, onChange, className, disabled }: MonthYearPickerProps) {
-  const currentYear = new Date().getFullYear();
+  const currentYear = Number(getCurrentEasternIsoDate().slice(0, 4));
   const years = React.useMemo(() => {
     const arr = [];
     for (let i = currentYear + 5; i >= 1970; i--) {

@@ -355,7 +355,7 @@ function HistoryContent() {
 
   const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return "N/A";
-    return new Date(dateString).toLocaleDateString();
+    return new Date(dateString).toLocaleDateString("en-US", { timeZone: "America/New_York" });
   };
 
   if (loading) {

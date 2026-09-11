@@ -355,12 +355,12 @@ function MockContent() {
       let formattedSchedule = "";
       if (formData.schedule) {
         const date = new Date(formData.schedule);
-        const datePart = new Intl.DateTimeFormat("en-US", {
+        const datePart = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", 
           month: "short",
           day: "numeric",
           year: "numeric",
         }).format(date);
-        const timePart = new Intl.DateTimeFormat("en-US", {
+        const timePart = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", 
           hour: "numeric",
           minute: "numeric",
           hour12: true,

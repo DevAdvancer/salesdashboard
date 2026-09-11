@@ -35,7 +35,7 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
 });
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
+  return new Date(iso).toLocaleDateString("en-US", { timeZone: "America/New_York", 
     month: "short",
     day: "numeric",
     year: "numeric",

@@ -36,7 +36,7 @@ const currency = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
 
-const dateFormatter = new Intl.DateTimeFormat(undefined, {
+const dateFormatter = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", 
   year: "numeric",
   month: "short",
   day: "2-digit",

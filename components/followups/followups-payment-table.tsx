@@ -76,7 +76,7 @@ export function FollowupsPaymentTable({
                 {payment.remark || "—"}
               </TableCell>
               <TableCell className="text-right font-mono font-medium">
-                {payment.amount.toLocaleString()}
+                {payment.amount.toLocaleString("en-US")}
               </TableCell>
               <TableCell>
                 <Badge

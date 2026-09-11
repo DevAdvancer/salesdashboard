@@ -134,7 +134,7 @@ function NotificationsContent() {
                 </p>
                 <p className="text-sm text-muted-foreground">{notification.body}</p>
                 <p className="mt-2 text-xs text-muted-foreground">
-                  {notification.type} / {new Date(notification.createdAt).toLocaleString()}
+                  {notification.type} / {new Date(notification.createdAt).toLocaleString("en-US", { timeZone: "America/New_York" })}
                 </p>
               </div>
             );

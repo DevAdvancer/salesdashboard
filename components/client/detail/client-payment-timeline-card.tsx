@@ -43,7 +43,7 @@ export function ClientPaymentTimelineCard({ paymentRecord }: ClientPaymentTimeli
                 </div>
                 {update.amount !== undefined && update.amount !== null && (
                   <p className="text-sm text-emerald-600 font-medium">
-                    Payment Amount: ${update.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    Payment Amount: ${update.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                   </p>
                 )}
                 {update.note && (

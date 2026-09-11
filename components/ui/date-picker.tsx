@@ -3,6 +3,7 @@
 import * as React from "react"
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date"
 
 type DateRange = {
   from?: string
@@ -15,7 +16,7 @@ type CalendarDay = {
   isCurrentMonth: boolean
 }
 
-const MONTH_LABEL = new Intl.DateTimeFormat("en-US", {
+const MONTH_LABEL = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", 
   month: "long",
   year: "numeric",
 })
@@ -38,7 +39,7 @@ function parseDateValue(value?: string) {
 
 function getMonthStart(value?: string) {
   const parsed = parseDateValue(value)
-  const today = new Date()
+  const today = parseDateValue(getCurrentEasternIsoDate())!
   const source = parsed ?? today
   return new Date(source.getFullYear(), source.getMonth(), 1)
 }
@@ -67,7 +68,7 @@ function buildMonthDays(month: Date): CalendarDay[] {
 function formatDisplayDate(value?: string) {
   const date = parseDateValue(value)
   if (!date) return ""
-  return date.toLocaleDateString("en-US", {
+  return date.toLocaleDateString("en-US", { timeZone: "America/New_York", 
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -308,7 +309,7 @@ export function DatePicker({
             </button>
             <button
               type="button"
-              onClick={() => setVisibleMonth(new Date())}
+              onClick={() => setVisibleMonth(parseDateValue(getCurrentEasternIsoDate())!)}
               className="rounded-full px-3 py-2 text-xs text-muted-foreground hover:bg-[var(--accent)] hover:text-foreground"
             >
               Today
@@ -528,7 +529,7 @@ export function DateTimePicker({
   const minParts = splitDateTime(min)
 
   const setTime = (nextHour: string, nextMinute: string) => {
-    const date = parts.date || toDateValue(new Date())
+    const date = parts.date || getCurrentEasternIsoDate()
     onChange(joinDateTime(date, nextHour, nextMinute))
   }
 

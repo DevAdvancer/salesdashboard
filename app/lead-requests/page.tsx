@@ -329,7 +329,7 @@ function StatusBadge({ status }: { status: string }) {
 
 function formatDate(value?: string | null) {
   if (!value) return '';
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", 
     month: 'short',
     day: 'numeric',
     year: 'numeric',

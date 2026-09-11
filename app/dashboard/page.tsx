@@ -825,7 +825,7 @@ function LeadGenerationDashboardContent() {
 
     (async () => {
       try {
-        const startOfMonthIso = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+        const startOfMonthIso = getMonthStartEst();
         const leads = await listLeads(
           { includeClosed: true, dateFrom: startOfMonthIso, limit: 500 },
           user.$id,

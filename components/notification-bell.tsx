@@ -27,7 +27,7 @@ function formatNotificationTime(value: string) {
     return '';
   }
 
-  return date.toLocaleDateString([], {
+  return date.toLocaleDateString("en-US", { timeZone: "America/New_York", 
     month: 'short',
     day: 'numeric',
   });

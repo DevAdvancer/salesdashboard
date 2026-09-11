@@ -756,8 +756,7 @@ function LinkedinRequestsContent() {
                     <TableRow key={r.$id}>
                       <TableCell className="break-all">{r.targetUrl}</TableCell>
                       <TableCell>
-                        {new Date(r.dateSent).toLocaleDateString(undefined, {
-                          timeZone: "UTC",
+                        {new Date(r.dateSent).toLocaleDateString("en-US", { timeZone: "America/New_York",
                         })}
                       </TableCell>
                       <TableCell>{statusLabel}</TableCell>
@@ -798,7 +797,7 @@ function LinkedinRequestsContent() {
                             <span className="text-sm text-muted-foreground">
                               Accepted{" "}
                               {r.acceptedAt
-                                ? `(${new Date(r.acceptedAt).toLocaleDateString()})`
+                                ? `(${new Date(r.acceptedAt).toLocaleDateString("en-US", { timeZone: "America/New_York" })})`
                                 : ""}
                             </span>
                           </div>
@@ -949,7 +948,7 @@ function LinkedinRequestsContent() {
                                   ) : null}
                                   <span className="text-muted-foreground">
                                     {log.createdAt
-                                      ? `(${new Date(log.createdAt).toLocaleString()})`
+                                      ? `(${new Date(log.createdAt).toLocaleString("en-US", { timeZone: "America/New_York" })})`
                                       : ""}
                                   </span>
                                 </div>

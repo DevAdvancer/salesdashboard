@@ -279,12 +279,12 @@ function InterviewContent() {
   const formatDateEST = (isoString: string) => {
     if (!isoString) return "";
     const date = new Date(isoString);
-    const datePart = new Intl.DateTimeFormat("en-US", {
+    const datePart = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", 
       month: "short",
       day: "numeric",
       year: "numeric",
     }).format(date);
-    const timePart = new Intl.DateTimeFormat("en-US", {
+    const timePart = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", 
       hour: "numeric",
       minute: "numeric",
       hour12: true,

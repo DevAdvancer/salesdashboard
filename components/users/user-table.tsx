@@ -165,7 +165,7 @@ export function UserTable({
                       <td className="py-3 px-4">{formatBranches(u.branchIds)}</td>
                       <td className="py-3 px-4">
                         {u.$createdAt
-                          ? new Date(u.$createdAt).toLocaleDateString()
+                          ? new Date(u.$createdAt).toLocaleDateString("en-US", { timeZone: "America/New_York" })
                           : "N/A"}
                       </td>
                       {(isAdmin || isDeveloper || isTeamLead) && (

@@ -4,6 +4,7 @@ import { ProtectedRoute } from "@/components/protected-route";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useQuery } from "@tanstack/react-query";
 import { getAssignedReportData } from "@/app/actions/assigned-report";
+import { getMonthStartEst, getMonthEndEst, getTodayEst } from "@/lib/utils/est-date";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,14 +25,8 @@ export default function AssignedReportPage() {
 function AssignedReportContent() {
   const { user } = useAuth();
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
-  const [dateFrom, setDateFrom] = useState<string | undefined>(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-  });
-  const [dateTo, setDateTo] = useState<string | undefined>(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-  });
+  const [dateFrom, setDateFrom] = useState<string | undefined>(() => getMonthStartEst());
+  const [dateTo, setDateTo] = useState<string | undefined>(() => getMonthEndEst());
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['assigned-report', dateFrom, dateTo],
@@ -81,17 +76,14 @@ function AssignedReportContent() {
   const totalClosed = summaries.reduce((acc, team) => acc + team.closedCount, 0);
 
   const setToday = () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayEst();
     setDateFrom(today);
     setDateTo(today);
   };
 
   const setThisMonth = () => {
-    const now = new Date();
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-    setDateFrom(firstDay);
-    setDateTo(lastDay);
+    setDateFrom(getMonthStartEst());
+    setDateTo(getMonthEndEst());
   };
 
   const toggleTeam = (teamId: string) => {

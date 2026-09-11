@@ -24,7 +24,7 @@ function formatDateTime(value: string) {
     return 'No date';
   }
 
-  return date.toLocaleString([], {
+  return date.toLocaleString("en-US", { timeZone: "America/New_York", 
     month: 'short',
     day: 'numeric',
     hour: 'numeric',

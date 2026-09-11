@@ -21,7 +21,7 @@ export function LeadMetadataCard({ lead, metaNames }: LeadMetadataCardProps) {
             <Label>Created</Label>
             <p className="text-muted-foreground">
               {lead.$createdAt
-                ? new Date(lead.$createdAt).toLocaleString()
+                ? new Date(lead.$createdAt).toLocaleString("en-US", { timeZone: "America/New_York" })
                 : "N/A"}
             </p>
           </div>
@@ -29,7 +29,7 @@ export function LeadMetadataCard({ lead, metaNames }: LeadMetadataCardProps) {
             <Label>Last Updated</Label>
             <p className="text-muted-foreground">
               {lead.$updatedAt
-                ? new Date(lead.$updatedAt).toLocaleString()
+                ? new Date(lead.$updatedAt).toLocaleString("en-US", { timeZone: "America/New_York" })
                 : "N/A"}
             </p>
           </div>
@@ -49,7 +49,7 @@ export function LeadMetadataCard({ lead, metaNames }: LeadMetadataCardProps) {
             <div>
               <Label>Closed At</Label>
               <p className="text-muted-foreground">
-                {new Date(lead.closedAt).toLocaleString()}
+                {new Date(lead.closedAt).toLocaleString("en-US", { timeZone: "America/New_York" })}
               </p>
             </div>
           )}

@@ -98,7 +98,7 @@ export const LeadRow = memo(
         )}
         <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">
           {lead.$updatedAt
-            ? new Date(lead.$updatedAt).toLocaleDateString()
+            ? new Date(lead.$updatedAt).toLocaleDateString("en-US", { timeZone: "America/New_York" })
             : "N/A"}
         </td>
         <td className="p-3 md:p-4">

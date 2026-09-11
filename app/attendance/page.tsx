@@ -534,7 +534,7 @@ function AttendanceContent() {
                             </td>
                             <td className="p-3 text-muted-foreground">
                               {row.presentAt
-                                ? new Date(row.presentAt).toLocaleString()
+                                ? new Date(row.presentAt).toLocaleString("en-US", { timeZone: "America/New_York" })
                                 : "—"}
                             </td>
                             <td className="p-3">
@@ -673,7 +673,7 @@ function AttendanceContent() {
                         </td>
                         <td className="p-3 text-muted-foreground">
                           {row.presentAt
-                            ? new Date(row.presentAt).toLocaleString()
+                            ? new Date(row.presentAt).toLocaleString("en-US", { timeZone: "America/New_York" })
                             : "—"}
                         </td>
                         <td className="p-3">
