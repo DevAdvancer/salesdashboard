@@ -16,6 +16,7 @@ describe("lead status workflow", () => {
   it("allows Pipeline / Follow up after Interested", () => {
     expect(getLeadEditAllowedStatuses("Interested")).toEqual([
       "Interested",
+      "Not Interested",
       "Pipeline / Follow up",
     ]);
   });

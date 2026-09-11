@@ -91,6 +91,7 @@ export function getLeadEditAllowedStatusesForRole(
   if (normalized === "interested") {
     return [
       LEAD_STATUS_INTERESTED,
+      LEAD_STATUS_NOT_INTERESTED,
       LEAD_STATUS_PIPELINE,
       ...monitorOnlySuffix,
     ];
@@ -173,3 +174,5 @@ export function shouldRequireLeadFollowUpForStatus(
   const next = normalizeLeadStatus(nextStatus);
   return next === "pipelinefollowup" && previous !== next;
 }
+
+
