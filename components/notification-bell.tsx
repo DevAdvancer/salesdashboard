@@ -243,7 +243,7 @@ export function NotificationBell({ className }: { className?: string }) {
               <p className="p-3 text-sm text-muted-foreground">No notifications yet.</p>
             ) : (
               visibleNotifications.map((notification) => {
-                const url = getNotificationUrl(notification.targetId, notification.targetType);
+                const url = getNotificationUrl(notification.targetId, notification.targetType, notification.type);
                 const content = (
                   <div className="min-w-0">
                     <p className={cn("truncate text-sm font-medium", url && "text-primary group-hover:underline")}>

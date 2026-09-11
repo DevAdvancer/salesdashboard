@@ -126,7 +126,7 @@ function NotificationsContent() {
           ) : notifications.length === 0 ? (
             <p className="text-sm text-muted-foreground">No notifications yet.</p>
           ) : notifications.map((notification) => {
-            const url = getNotificationUrl(notification.targetId, notification.targetType);
+            const url = getNotificationUrl(notification.targetId, notification.targetType, notification.type);
             const content = (
               <div>
                 <p className={cn("text-sm font-medium", url && "text-primary group-hover:underline")}>

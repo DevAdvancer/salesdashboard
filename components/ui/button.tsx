@@ -17,9 +17,9 @@ const buttonVariants = cva(
         destructive: "bg-[var(--sale)] text-white shadow-sm hover:bg-[var(--sale-deep)]",
       },
       size: {
-        default: "px-8 py-3 h-12 text-base font-medium",
-        sm: "px-6 py-2.5 h-10 text-sm font-medium",
-        lg: "px-10 py-4 h-14 text-lg font-medium",
+        default: "h-10 px-4 py-2 text-sm font-medium",
+        sm: "h-9 px-3 text-xs font-medium",
+        lg: "h-11 px-8 text-base font-medium",
         icon: "h-10 w-10 p-0 flex items-center justify-center",
       },
     },
@@ -86,3 +86,4 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = "Button"
 
 export { Button, buttonVariants }
+
