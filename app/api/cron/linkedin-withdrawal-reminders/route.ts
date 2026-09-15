@@ -134,6 +134,15 @@ async function runWithdrawalReminderSweep() {
 
   const adminRecipientIds = await getAdminRecipientIds(databases);
 
+  const allUsersRes = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
+    Query.limit(500),
+  ]);
+  const activeUserIds = new Set(
+    (allUsersRes.documents as any[])
+      .filter((u) => u.isActive !== false)
+      .map((u) => u.$id)
+  );
+
   const reminderCounts = await loadNotificationCountsSince({
     databases,
     types: LINKEDIN_REMINDER_TYPES,
@@ -207,12 +216,16 @@ async function runWithdrawalReminderSweep() {
       continue;
     }
 
-    await createNotificationsForRecipients(databases, [
+    const recipients = [
       requestDoc.agentId,
       requestDoc.teamLeadId,
-    ], {
-      ...buildLinkedinWithdrawalReminder(requestDoc),
-    });
+    ].filter(id => id && activeUserIds.has(id));
+
+    if (recipients.length > 0) {
+      await createNotificationsForRecipients(databases, recipients, {
+        ...buildLinkedinWithdrawalReminder(requestDoc),
+      });
+    }
     
     reminderCounts.set(dedupKey, remindersSentToday + 1);
     remindersSent += 1;
@@ -220,17 +233,20 @@ async function runWithdrawalReminderSweep() {
 
   // Send batch notifications for auto-withdrawals
   for (const [_, data] of autoWithdrawalsByUser) {
-    await createNotificationsForRecipients(
-      databases,
-      [data.agentId, data.teamLeadId],
-      {
-        type: 'linkedin_auto_withdrawn',
-        title: 'Linkedin Auto-Withdrawn',
-        body: `\${data.count} Linkedin request(s) were auto-withdrawn due to expiration.`,
-        targetId: null,
-        targetType: null,
-      }
-    );
+    const recipients = [data.agentId, data.teamLeadId].filter(id => id && activeUserIds.has(id));
+    if (recipients.length > 0) {
+      await createNotificationsForRecipients(
+        databases,
+        recipients,
+        {
+          type: 'linkedin_auto_withdrawn',
+          title: 'Linkedin Auto-Withdrawn',
+          body: `${data.count} Linkedin request(s) were auto-withdrawn due to expiration.`,
+          targetId: null,
+          targetType: null,
+        }
+      );
+    }
   }
 
   return NextResponse.json({

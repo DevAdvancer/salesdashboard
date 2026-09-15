@@ -154,7 +154,7 @@ export async function GET(request: NextRequest) {
     let data: any = {};
     try { data = JSON.parse(l.data || "{}"); } catch {}
     const creatorId = data.creatorId || l.ownerId;
-    if (creatorId) {
+    if (creatorId && creatorId !== "unassigned") {
       generatedMap.set(creatorId, (generatedMap.get(creatorId) || 0) + 1);
     }
   });
@@ -184,7 +184,7 @@ export async function GET(request: NextRequest) {
 
   validClosed.forEach((l: any) => {
     const actorId = l.assignedToId || l.ownerId;
-    if (actorId) {
+    if (actorId && actorId !== "unassigned") {
       const stat = agentStats.get(actorId) || { leadsClosedCount: 0, followupsCount: 0, revenueTotal: 0 };
       stat.leadsClosedCount += 1;
       stat.revenueTotal += (upfrontMap.get(l.$id) || 0);
@@ -195,7 +195,7 @@ export async function GET(request: NextRequest) {
   followupsDocs.forEach((f: any) => {
     const leadId = f.leadId;
     const actorId = followupLeadActorMap.get(leadId);
-    if (actorId) {
+    if (actorId && actorId !== "unassigned") {
       const stat = agentStats.get(actorId) || { leadsClosedCount: 0, followupsCount: 0, revenueTotal: 0 };
       stat.followupsCount += 1;
       stat.revenueTotal += (Number(f.amount) || 0);

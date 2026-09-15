@@ -30,7 +30,7 @@
     },
     {
       "path": "/api/cron/target-report",
-      "schedule": "0 23 * * *"
+      "schedule": "0 22 * * 5"
     },
     {
       "path": "/api/cron/aggregate-linkedin-stats",

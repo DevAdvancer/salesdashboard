@@ -49,12 +49,6 @@ export async function GET(request: NextRequest) {
   const todayIso = getCurrentEasternIsoDate(); // e.g. "2026-09-01T15:00:00.000Z"
   // Compute eastern date
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
-  const is15th = now.getDate() === 15;
-  const isLastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() === now.getDate();
-
-  if (!is15th && !isLastDay) {
-    return NextResponse.json({ ok: true, skipped: true, reason: "Not 15th or last day of month" });
-  }
 
   const { databases } = await createAdminClient();
   const todayKey = now.toISOString().slice(0, 10);
@@ -381,7 +375,7 @@ export async function GET(request: NextRequest) {
     branchMap,
   });
 
-  const isMonthOver = isLastDay;
+  const isMonthOver = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() === now.getDate();
   
   let html = `<h2>Target Report - ${monthKey}</h2>`;
   
