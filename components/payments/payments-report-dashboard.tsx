@@ -138,13 +138,12 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
     let amountPaid = 0;
     let amountPaidCount = 0;
     let totalAmount = 0;
+    let totalUpfront = 0;
+    let totalPaidSum = 0;
     for (const r of filtered) {
-      // "Paid" is derived from the planned `upfrontAmount` on the payment
-      // plan, not from the running sum of update `amount` values. The update
-      // history is unreliable after a payment is edited (entries get
-      // re-summed / double-counted), which inflated the total to values like
-      // 25499.99. The upfront amount is set once at plan creation and is the
-      // stable source of truth for collected revenue.
+      const rowPaid = r.totalPaid ?? 0;
+      totalPaidSum += rowPaid;
+      
       const rowUpfront =
         typeof r.paymentPlan?.upfrontAmount === "number" &&
         Number.isFinite(r.paymentPlan.upfrontAmount)
@@ -152,6 +151,8 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
           : 0;
       amountPaid += rowUpfront;
       if (rowUpfront > 0) amountPaidCount += 1;
+      
+      totalUpfront += rowUpfront;
       totalAmount += r.leadAmount;
     }
     return {
@@ -159,6 +160,9 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
       amountPaid,
       amountPaidCount,
       totalAmount,
+      totalUpfront,
+      totalPaidSum,
+      pendingAmount: totalAmount - totalUpfront,
     };
   }, [filtered]);
 
@@ -238,7 +242,7 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
               Date range filters the report by client closing date.
             </p>
 
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-4">
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -277,6 +281,21 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
                   <p className="text-xs text-muted-foreground">
                     Across {summary.amountPaidCount} of {summary.count} record
                     {summary.count === 1 ? "" : "s"}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Pending Amount
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-semibold">
+                    {currency.format(summary.pendingAmount)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Total Amount - Upfront Amount
                   </p>
                 </CardContent>
               </Card>
@@ -354,7 +373,7 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
                           {currency.format(row.paymentPlan.upfrontAmount)}
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          {currency.format(row.paymentPlan.upfrontAmount ?? 0)}
+                          {currency.format(row.totalPaid ?? 0)}
                         </TableCell>
                         <TableCell>
                           <Badge variant={statusBadgeVariant(row.status)}>
