@@ -1,4 +1,4 @@
-import { listLeads } from '@/lib/services/lead/queries';
+import { listLeads } from '@/lib/services/lead_deprecated/queries';
 import { databases } from '@/lib/appwrite';
 import { getUserById } from '@/lib/services/user-service';
 import { Query } from 'appwrite';

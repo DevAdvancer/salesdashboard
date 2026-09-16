@@ -10,7 +10,7 @@ import {
 } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter, useParams } from "next/navigation";
-import { getLead } from "@/lib/services/lead/queries";
+
 import { getUsersNamesAction } from "@/app/actions/user";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queries/keys";
@@ -135,10 +135,7 @@ function LeadDetailContent() {
       setError(null);
       // Invalidate React Query cache so we get fresh data
       queryClient.invalidateQueries({ queryKey: queryKeys.leads.detail(leadId) });
-      const fetchedLead =
-        user.role === "monitor" || user.role === "operations"
-          ? await getLeadAction(leadId, user.$id)
-          : await getLead(leadId);
+      const fetchedLead = await getLeadAction(leadId, user.$id);
 
       if (fetchedLead.isClosed) {
         router.push(`/client/${leadId}`);

@@ -19,7 +19,8 @@ import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
 import { buildDepartmentScopeQuery, isDepartmentScopeInlineEnabled } from "@/lib/server/department-scope-query";
 import { validateLeadUniqueness, validateLeadUniquenessAction, enrichDuplicateResult } from "./validation";
 import { isNotInterestedStatus, normalizeStatusText, isLinkedinRequestLeadData } from "./status";
-import { getHierarchyPermissions, HierarchyUserDocument, getVisibleHierarchyUserIds, getLeadVisibilityUserIds, TeamLeadScopedUserDocument, getTeamLeadLeadVisibilityScope, appendHierarchyLeadVisibilityQuery, appendTeamLeadLeadVisibilityQuery, UserDocument, normalizeDepartment, getDepartmentScopedUserIds, leadMatchesDepartmentScope, isMonitorRole, isOperationsRole, isAdminLikeReadAllRole, assertSalesCrmAccess, assertLeadReopenAllowed, assertLeadUpdateAllowed } from "./visibility";
+import { getHierarchyPermissions, HierarchyUserDocument, getVisibleHierarchyUserIds, getLeadVisibilityUserIds, TeamLeadScopedUserDocument, getTeamLeadLeadVisibilityScope, appendHierarchyLeadVisibilityQuery, appendTeamLeadLeadVisibilityQuery, UserDocument, normalizeDepartment, getDepartmentScopedUserIds, leadMatchesDepartmentScope, assertSalesCrmAccess, assertLeadReopenAllowed, assertLeadUpdateAllowed } from "./visibility";
+import { isMonitorRole, isOperationsRole, isAdminLikeReadAllRole } from "@/lib/utils/role-utils";
 import { restoreNotInterestedDuplicateLead, createLeadAction, updateLeadAction, reopenLeadAction } from "./mutations";
 import { getLeadAction, listLeadsAction, listLeadCountsAction, loadLeadTargetProgressAction, LeadCounts, getUserByIdOrNull, getAgentsByTeamLead} from "./queries";
 import { normalizeSource, isReferralSource } from "@/lib/utils/lead-source";
@@ -27,9 +28,11 @@ import { REQUIRED_LEAD_FIELD_LABELS, isValidId, normalizeDuplicateFieldValue, is
 import { parseLeadDataSafely, getLeadAuditName, buildAuditChanges, getDuplicateValue } from "./sync-helpers";
 import { parseIsoDateLocal, daysInMonthLocal } from "./sync-helpers";
 
-export const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
-export const LEADS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_LEADS_COLLECTION_ID!;
-export const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
+import { DATABASE_ID } from "@/lib/constants/appwrite";
+
+export { DATABASE_ID };
+export const LEADS_COLLECTION_ID = COLLECTIONS.LEADS;
+export const USERS_COLLECTION_ID = COLLECTIONS.USERS;
 /**
  * Fields actually rendered in the leads list table. Projects the per-page
  * payload to ~30% of the original size (the `data` JSON blob still ships

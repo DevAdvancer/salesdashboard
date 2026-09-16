@@ -201,7 +201,7 @@ function dedupeOptions(options: unknown, fieldKey?: string): string[] | undefine
   return result;
 }
 
-function normalizeFormFields(fields: FormField[]): FormField[] {
+export function normalizeFormFields(fields: FormField[]): FormField[] {
   return fields.map((field) => {
     if (field.type !== 'dropdown' && field.type !== 'checklist') return field;
     const options = dedupeOptions(field.options, field.key);

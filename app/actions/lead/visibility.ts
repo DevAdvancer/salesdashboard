@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/server/appwrite";
 import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
 import { LeadActionError } from "@/lib/server/lead-errors";
 import { Lead, LeadData, LeadListFilters, UserRole, CreateLeadInput, Department } from "@/lib/types";
+import { isMonitorRole, isOperationsRole, isAdminLikeReadAllRole } from "@/lib/utils/role-utils";
 import { Databases, Query, Models, Client, Users, Permission, Role } from 'node-appwrite';
 import { logger } from '@/lib/utils/logger';
 import { COLLECTIONS } from "@/lib/constants/appwrite";
@@ -73,32 +74,100 @@ export async function getHierarchyPermissions(userId: string): Promise<string[]>
     return permissions;
 }
 
-import {
-  HierarchyUserDocument,
-  getVisibleHierarchyUserIds,
-  appendHierarchyLeadVisibilityQuery,
-  appendTeamLeadLeadVisibilityQuery,
-  normalizeDepartment,
-  leadMatchesDepartmentScope,
-  isMonitorRole,
-  isOperationsRole,
-  isAdminLikeReadAllRole,
-} from '@/lib/services/lead/visibility';
+export type HierarchyUserDocument = {
+  $id: string;
+  teamLeadId?: string | null;
+};
+
 import { REQUIRED_LEAD_FIELD_LABELS, isValidId, normalizeDuplicateFieldValue, isBlankLeadValue, shouldIgnoreLinkedinDuplicate, assertRequiredLeadData } from "./sync-helpers";
 import { parseLeadDataSafely, getLeadAuditName, buildAuditChanges, getDuplicateValue } from "./sync-helpers";
 import { parseIsoDateLocal, daysInMonthLocal } from "./sync-helpers";
 
-export {
-  type HierarchyUserDocument,
-  getVisibleHierarchyUserIds,
-  appendHierarchyLeadVisibilityQuery,
-  appendTeamLeadLeadVisibilityQuery,
-  normalizeDepartment,
-  leadMatchesDepartmentScope,
-  isMonitorRole,
-  isOperationsRole,
-  isAdminLikeReadAllRole,
-};
+export function getVisibleHierarchyUserIds(viewerId: string, viewerRole: UserRole, users: HierarchyUserDocument[]): string[] {
+  if (viewerRole === 'agent') return [viewerId];
+
+  const visibleIds = new Set<string>([viewerId]);
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+    users.forEach((candidate) => {
+      if (visibleIds.has(candidate.$id)) return;
+
+      const reportsToVisibleTeamLead = Boolean(candidate.teamLeadId && visibleIds.has(candidate.teamLeadId));
+
+      if (reportsToVisibleTeamLead) {
+        visibleIds.add(candidate.$id);
+        changed = true;
+      }
+    });
+  }
+
+  return Array.from(visibleIds);
+}
+
+export function appendHierarchyLeadVisibilityQuery(
+  queries: string[],
+  visibleUserIds: string[],
+  branchIds?: string[],
+  includeBackedOutForBranches?: boolean
+) {
+  const orConditions = [
+    Query.equal('ownerId', visibleUserIds),
+    Query.equal('assignedToId', visibleUserIds),
+  ];
+
+  if (includeBackedOutForBranches && branchIds && branchIds.length > 0) {
+    orConditions.push(
+      Query.and([
+        Query.equal('branchId', branchIds[0]),
+        Query.equal('isClosed', true),
+        Query.equal('status', ['Backout', 'Backed Out', 'Backedout', 'Backed out']),
+      ])
+    );
+  }
+
+  queries.push(Query.or(orConditions));
+}
+
+export function appendTeamLeadLeadVisibilityQuery(
+  queries: string[],
+  ownerVisibleUserIds: string[],
+  assignmentVisibleUserIds: string[],
+  branchIds?: string[],
+  includeBackedOutForBranches?: boolean
+) {
+  const orConditions = [
+    Query.equal('ownerId', ownerVisibleUserIds),
+    Query.equal('assignedToId', assignmentVisibleUserIds),
+  ];
+
+  if (includeBackedOutForBranches && branchIds && branchIds.length > 0) {
+    orConditions.push(
+      Query.and([
+        Query.equal('branchId', branchIds[0]),
+        Query.equal('isClosed', true),
+        Query.equal('status', ['Backout', 'Backed Out', 'Backedout', 'Backed out']),
+      ])
+    );
+  }
+
+  queries.push(Query.or(orConditions));
+}
+
+export function normalizeDepartment(value: unknown): 'sales' | 'resume' {
+  return value === 'resume' ? 'resume' : 'sales';
+}
+
+export function leadMatchesDepartmentScope(
+  lead: { ownerId: string; assignedToId?: string | null },
+  visibleUserIds: Set<string>
+) {
+  return (
+    visibleUserIds.has(lead.ownerId) ||
+    (typeof lead.assignedToId === 'string' && visibleUserIds.has(lead.assignedToId))
+  );
+}
 
 export async function getLeadVisibilityUserIds(databases: Databases, viewerId: string, viewerRole: UserRole): Promise<string[]> {
     if (viewerRole === 'agent') return [viewerId];

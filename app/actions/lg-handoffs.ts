@@ -4,6 +4,7 @@ import { Query } from 'node-appwrite';
 import { createAdminClient } from '@/lib/server/appwrite';
 import { COLLECTIONS } from '@/lib/constants/appwrite';
 import type { LgHandoff } from '@/lib/types';
+import { getAuthenticatedAccount } from '@/lib/server/current-user';
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const LG_HANDOFFS_COLLECTION_ID = COLLECTIONS.LG_HANDOFFS;
@@ -48,6 +49,8 @@ interface RecordLgHandoffInput {
 export async function recordLgHandoffAction(
   input: RecordLgHandoffInput,
 ): Promise<LgHandoff | null> {
+  await getAuthenticatedAccount();
+
   const leadId = String(input.leadId ?? '').trim();
   const teamLeadId = String(input.teamLeadId ?? '').trim();
   const leadGenerationId = String(input.leadGenerationId ?? '').trim();
@@ -141,6 +144,7 @@ export async function recordLgHandoffAction(
  * dashboard renders an empty-state instead of crashing.
  */
 export async function listLgHandoffsAction(dateFrom?: string, dateTo?: string): Promise<LgHandoff[]> {
+  await getAuthenticatedAccount();
   const { databases } = await createAdminClient();
 
   try {

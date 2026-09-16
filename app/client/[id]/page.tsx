@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter, useParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queries/keys";
-import { getLead } from "@/lib/services/lead/queries";
+import { getLeadAction } from "@/app/actions/lead/queries";
 import { reopenLead } from "@/lib/services/lead-action-service";
 import { getUserByIdOrNull } from "@/lib/services/user-service";
 import { User } from "@/lib/types";
@@ -121,10 +121,11 @@ function HistoryDetailContent() {
   }, [user, authLoading, leadId, router]);
 
   const loadLead = async () => {
+    if (!user) return;
     try {
       setIsLoading(true);
       setError(null);
-      const fetchedLead = await getLead(leadId);
+      const fetchedLead = await getLeadAction(leadId, user.$id);
 
       // Verify this is a closed lead
       if (!fetchedLead.isClosed) {

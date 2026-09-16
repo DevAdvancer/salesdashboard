@@ -13,10 +13,22 @@ import { buildLeadershipDashboardInsights } from "@/lib/utils/dashboard-insights
 import type { DashboardDataInput, DashboardDataResult } from "@/lib/services/dashboard-data-service";
 import type { User, Branch } from "@/lib/types";
 
+import { getAuthenticatedUserDoc } from "@/lib/server/current-user";
+import { isAdminLikeReadAllRole } from "@/lib/utils/role-utils";
+
 export async function loadDashboardDataServerAction(
   input: DashboardDataInput
 ): Promise<DashboardDataResult> {
-  const branchIds = input.user.branchIds ?? [];
+  const authUser = await getAuthenticatedUserDoc();
+  if (authUser.$id !== input.user.$id) {
+    throw new Error("Unauthorized: Invalid user ID");
+  }
+
+  // Force true server-side role evaluation rather than trusting the client payload
+  const realIsAdminLike = isAdminLikeReadAllRole(authUser.role);
+  const realIsTeamLead = authUser.role === 'team_lead';
+
+  const branchIds = authUser.branchIds ?? [];
   const normalizedBranchIds = [...branchIds].sort();
   const normalizedTeamLeadId = input.teamLeadId ?? null;
 
@@ -35,13 +47,13 @@ export async function loadDashboardDataServerAction(
       teamLeadId: input.teamLeadId,
       dateFrom: input.dateRange?.from,
       dateTo: input.dateRange?.to
-    }, input.user.$id, input.user.role, branchIds),
+    }, authUser.$id, authUser.role, branchIds),
     listLeads({ 
       isClosed: true, 
       teamLeadId: input.teamLeadId, 
       dateFrom: closedDateFrom,
       dateTo: closedDateTo
-    }, input.user.$id, input.user.role, branchIds),
+    }, authUser.$id, authUser.role, branchIds),
     listBranches(),
     listLgHandoffsAction().catch((error) => {
       console.error("Error loading LG handoffs:", error);
@@ -64,10 +76,10 @@ export async function loadDashboardDataServerAction(
     });
   };
 
-  let usersForInsights: User[] = [input.user];
+  let usersForInsights: User[] = [authUser];
   let assignedAgents: any[] = [];
 
-  if (input.isAdminLike && input.teamLeadId) {
+  if (realIsAdminLike && input.teamLeadId) {
     const selectedTeamLead = await getUserByIdOrNull(input.teamLeadId);
     if (selectedTeamLead) {
       const teamAgents = await getAgentsByTeamLead(
@@ -81,24 +93,24 @@ export async function loadDashboardDataServerAction(
     } else {
       usersForInsights = [];
     }
-  } else if (input.isAdminLike) {
+  } else if (realIsAdminLike) {
     const visibleUsers = await getAssignableUsers(
-      input.user.role,
+      authUser.role,
       branchIds,
-      input.user.$id,
+      authUser.$id,
       input.departmentScope,
       true
     );
     usersForInsights = [
-      input.user,
-      ...visibleUsers.filter((visibleUser) => visibleUser.$id !== input.user.$id),
+      authUser,
+      ...visibleUsers.filter((visibleUser) => visibleUser.$id !== authUser.$id),
     ];
-  } else if (input.isTeamLead) {
+  } else if (realIsTeamLead) {
     const teamAgents = await getAgentsByTeamLead(
-      input.user.$id,
+      authUser.$id,
       input.departmentScope,
     );
-    usersForInsights = [input.user, ...teamAgents];
+    usersForInsights = [authUser, ...teamAgents];
     if (input.includeAssignedAgents) {
       assignedAgents = _mapAgentsWithBranches(teamAgents);
     }
@@ -127,14 +139,14 @@ export async function loadDashboardDataServerAction(
     ...combinedLeads.flatMap((lead) => (lead.branchId ? [lead.branchId] : [])),
   ]);
   const branches = allBranches.filter((branch: Branch) =>
-    input.includeAllBranchesForAdminLike && input.isAdminLike
+    input.includeAllBranchesForAdminLike && realIsAdminLike
       ? true
       : branchIdsInScope.has(branch.$id),
   );
   const paymentSummaries =
     visibleLeadIds.length > 0
       ? await listClientPaymentSummariesAction({
-          actorId: input.user.$id,
+          actorId: authUser.$id,
           leadIds: visibleLeadIds,
         })
       : [];

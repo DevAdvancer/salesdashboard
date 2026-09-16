@@ -525,24 +525,53 @@ function MainDashboard({
 
     (async () => {
       try {
-        const data = await import("@/lib/services/dashboard-data-service").then(m => m.loadDashboardData({
-          user,
-          isAdminLike,
-          isTeamLead,
-          teamLeadId: undefined,
-          includeAllBranchesForAdminLike: false,
-          departmentScope: "sales",
-          dateRange: dateRange ?? undefined,
-        }));
+        const [{ listLeadCountsAction, listLeadsAction }] = await Promise.all([
+          import("@/app/actions/lead/queries"),
+        ]);
+        
+        const [counts, recentActive, recentClosed] = await Promise.all([
+          listLeadCountsAction(user.$id, user.role, user.branchIds, {
+            dateFrom: dateRange?.from,
+            dateTo: dateRange?.to,
+          }),
+          listLeadsAction(
+            {
+              isClosed: false,
+              dateFrom: dateRange?.from,
+              dateTo: dateRange?.to,
+            },
+            user.$id,
+            user.role,
+            user.branchIds,
+            { page: 1, pageSize: 5 }
+          ),
+          listLeadsAction(
+            {
+              isClosed: true,
+              dateFrom: dateRange?.from,
+              dateTo: dateRange?.to,
+            },
+            user.$id,
+            user.role,
+            user.branchIds,
+            { page: 1, pageSize: 5 }
+          ),
+        ]);
+
         if (!cancelled) {
-          setStatusBreakdown(data.insights?.statusBreakdown ?? []);
-          const allLeads = [...(data.activeLeads || []), ...(data.closedLeads || [])];
+          const breakdownArray = Object.entries(counts.byStatus)
+            .map(([status, count]) => ({ status, count }))
+            .sort((a, b) => a.status.localeCompare(b.status));
+          setStatusBreakdown(breakdownArray);
+          
+          const allLeads = [...recentActive.leads, ...recentClosed.leads];
           allLeads.sort((a, b) => new Date(b.$updatedAt || b.$createdAt || Date.now()).getTime() - new Date(a.$updatedAt || a.$createdAt || Date.now()).getTime());
           setRecentLeads(allLeads.slice(0, 5));
+          
           setStatusBreakdownLoading(false);
         }
       } catch (error) {
-        console.error("Error loading status breakdown:", error);
+        console.error("Error loading status breakdown and recent leads:", error);
         if (!cancelled) {
           setStatusBreakdown([]);
           setRecentLeads([]);

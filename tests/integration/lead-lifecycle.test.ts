@@ -13,11 +13,11 @@ import {
   closeLead,
   reopenLead,
   assignLead,
-} from '@/lib/services/lead/mutations';
+} from '@/lib/services/lead_deprecated/mutations';
 import {
   getLead,
   listLeads,
-} from '@/lib/services/lead/queries';
+} from '@/lib/services/lead_deprecated/queries';
 import { databases } from '@/lib/appwrite';
 import { Permission, Role } from 'appwrite';
 import { Lead, LeadData } from '@/lib/types';

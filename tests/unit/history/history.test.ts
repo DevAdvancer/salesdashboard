@@ -1,5 +1,5 @@
-import { listLeads } from '@/lib/services/lead/queries';
-import { reopenLead } from '@/lib/services/lead/mutations';
+import { listLeads } from '@/lib/services/lead_deprecated/queries';
+import { reopenLead } from '@/lib/services/lead_deprecated/mutations';
 import { databases } from '@/lib/appwrite';
 import { Query } from 'appwrite';
 

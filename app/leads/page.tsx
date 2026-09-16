@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/button";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { handleError } from "@/lib/utils/error-handler";
 import { ProtectedRoute } from "@/components/protected-route";
-import { isAdminLikeReadAllRole } from "@/lib/services/lead/visibility";
+import { isAdminLikeReadAllRole } from "@/lib/utils/role-utils";
 import { Download } from "lucide-react";
 
 // Extracted components

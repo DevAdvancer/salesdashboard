@@ -72,6 +72,12 @@ function WorkQueueContent() {
           setLoading(false);
           return;
         }
+        const now = new Date();
+        const fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        const from = fromDate.toISOString().split("T")[0];
+        const toDate = new Date(now.getFullYear(), now.getMonth() + 2, 0);
+        const to = toDate.toISOString().split("T")[0];
+
         const data = await loadDashboardData({
           user,
           isAdminLike: canReadLikeAdmin,
@@ -79,6 +85,7 @@ function WorkQueueContent() {
           teamLeadId,
           includeAllBranchesForAdminLike: false,
           departmentScope: "sales",
+          dateRange: { from, to },
         });
         setInsights(data.insights);
       } catch (error) {
