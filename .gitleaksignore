@@ -1,0 +1,16 @@
+# User-confirmed test-only findings from the initial Secret scan run.
+# Keep these exact historical fingerprints; do not ignore entire rules or files.
+049c4458580cb596db9dce759d50d75a76f751ea:app/dashboard/page.tsx:linkedin-client-id:217
+151efc885442b3f3dd5a00ca9ac98b7ce8acab70:scripts/setup-stats-collections.ts:linkedin-client-id:38
+314cf68b473d677ea40600a4d152286a2a2f12b7:app/actions/lead.ts:linkedin-client-secret:421
+314cf68b473d677ea40600a4d152286a2a2f12b7:app/leads/new/page.tsx:linkedin-client-secret:660
+314cf68b473d677ea40600a4d152286a2a2f12b7:app/leads/new/page.tsx:linkedin-client-secret:661
+314cf68b473d677ea40600a4d152286a2a2f12b7:lib/services/lead-service.ts:linkedin-client-secret:61
+7317fbed59ef23f6ee343dbca5262e850fd50796:app/actions/lead/status.ts:linkedin-client-secret:42
+7317fbed59ef23f6ee343dbca5262e850fd50796:components/leads/new/legacy-lead-form.tsx:linkedin-client-secret:246
+7317fbed59ef23f6ee343dbca5262e850fd50796:components/leads/new/legacy-lead-form.tsx:linkedin-client-secret:247
+7317fbed59ef23f6ee343dbca5262e850fd50796:components/leads/new/legacy-new-lead.tsx:linkedin-client-secret:246
+7317fbed59ef23f6ee343dbca5262e850fd50796:components/leads/new/legacy-new-lead.tsx:linkedin-client-secret:247
+7317fbed59ef23f6ee343dbca5262e850fd50796:lib/services/lead/utils.ts:linkedin-client-secret:46
+f6399b0411c7bd70f08f2acf21cbe42c704773f3:app/leads/new/page.tsx:linkedin-client-secret:876
+f6399b0411c7bd70f08f2acf21cbe42c704773f3:app/leads/new/page.tsx:linkedin-client-secret:877
