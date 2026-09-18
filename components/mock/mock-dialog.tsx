@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DateTimePicker } from "@/components/ui/date-picker";
+import { useMinimumSupportDateTime } from "@/lib/hooks/use-minimum-support-date-time";
 import type { MockFormData } from "./mock-types";
 
 function RequiredText({ children }: { children: ReactNode }) {
@@ -31,7 +32,6 @@ interface MockDialogProps {
   setIsModalOpen: (val: boolean) => void;
   formData: MockFormData;
   setFormData: (fn: MockFormData | ((prev: MockFormData) => MockFormData)) => void;
-  minDateTime: string;
   fileInputKey: number;
   handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   sendEmail: () => void;
@@ -43,12 +43,12 @@ export function MockDialog({
   setIsModalOpen,
   formData,
   setFormData,
-  minDateTime,
   fileInputKey,
   handleFileChange,
   sendEmail,
   isSending,
 }: MockDialogProps) {
+  const minDateTime = useMinimumSupportDateTime(isModalOpen);
   return (
     <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -169,10 +169,11 @@ export function MockDialog({
             </div>
 
             <div className="col-span-2 md:col-span-1">
-              <Label htmlFor="schedule">Schedule</Label>
+              <Label htmlFor="schedule">Schedule (24-hour, ET)</Label>
               <DateTimePicker
                 id="schedule"
                 min={minDateTime}
+                hourFormat="24"
                 value={formData.schedule}
                 onChange={(value) =>
                   setFormData({ ...formData, schedule: value })

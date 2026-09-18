@@ -34,6 +34,7 @@ import {
 import { saveTechnicalPayment } from "@/app/actions/technical-payments";
 import { listLeads } from "@/lib/services/lead-action-service";
 import { useDebounce } from "@/lib/hooks/use-debounce";
+import { isFutureSupportDateTime } from "@/lib/utils/support-schedule";
 
 // Components
 import { InterviewFiltersCard } from "@/components/interview-support/interview-filters-card";
@@ -321,6 +322,15 @@ function InterviewContent() {
       toast({
         title: "Missing Field",
         description: `${missingField.label} is required.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!isFutureSupportDateTime(formData.interviewDate)) {
+      toast({
+        title: "Invalid interview time",
+        description: "Choose an interview date and time in the future (Eastern time).",
         variant: "destructive",
       });
       return;

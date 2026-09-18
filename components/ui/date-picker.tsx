@@ -511,6 +511,7 @@ export function DateTimePicker({
   value,
   onChange,
   min,
+  hourFormat = "12",
   className,
   required,
   disabled,
@@ -520,6 +521,7 @@ export function DateTimePicker({
   value: string
   onChange: (value: string) => void
   min?: string
+  hourFormat?: "12" | "24"
   className?: string
   required?: boolean
   disabled?: boolean
@@ -528,17 +530,29 @@ export function DateTimePicker({
   const parts = splitDateTime(value)
   const minParts = splitDateTime(min)
 
+  const applyMinimum = (nextValue: string) =>
+    min && nextValue < min ? min : nextValue
+
   const setTime = (nextHour: string, nextMinute: string) => {
     const date = parts.date || getCurrentEasternIsoDate()
-    onChange(joinDateTime(date, nextHour, nextMinute))
+    onChange(applyMinimum(joinDateTime(date, nextHour, nextMinute)))
   }
 
   const setDisplayTime = (nextDisplayHour: string, nextMinute: string, nextPeriod: string) => {
     setTime(toTwentyFourHour(nextDisplayHour, nextPeriod), nextMinute)
   }
 
+  const isTimeBeforeMin = (hour: string, minute: string, period: string) =>
+    Boolean(
+      min && parts.date === minParts.date &&
+      joinDateTime(parts.date, hourFormat === "24" ? hour : toTwentyFourHour(hour, period), minute) < min,
+    )
+
+  const displayTime = hourFormat === "24"
+    ? `${parts.hour}:${parts.minute}`
+    : `${toDisplayHour(parts.hour)}:${parts.minute} ${toPeriod(parts.hour)}`
   const displayValue = parts.date
-    ? `${formatDisplayDate(parts.date)} ${toDisplayHour(parts.hour)}:${parts.minute} ${toPeriod(parts.hour)}`
+    ? `${formatDisplayDate(parts.date)} ${displayTime}`
     : "Select date and time"
 
   return (
@@ -547,7 +561,10 @@ export function DateTimePicker({
       aria-label={displayValue}
       data-required={ariaRequired ?? required ? true : undefined}
       className={cn(
-        "grid w-full grid-cols-[minmax(6.75rem,1fr)_auto_auto_auto_auto] items-center gap-0.5",
+        "grid w-full items-center gap-0.5",
+        hourFormat === "24"
+          ? "grid-cols-[minmax(6.75rem,1fr)_auto_auto_auto]"
+          : "grid-cols-[minmax(6.75rem,1fr)_auto_auto_auto_auto]",
         "rounded-[1.5rem] bg-[var(--input)] px-2 py-1 text-sm text-foreground",
         "focus-within:ring-1 focus-within:ring-[var(--ink)]",
         disabled && "cursor-not-allowed opacity-40",
@@ -561,7 +578,9 @@ export function DateTimePicker({
         disabled={disabled}
         required={required}
         aria-label="Date"
-        onChange={(event) => onChange(joinDateTime(event.target.value, parts.hour, parts.minute))}
+        onChange={(event) =>
+          onChange(event.target.value ? applyMinimum(joinDateTime(event.target.value, parts.hour, parts.minute)) : "")
+        }
         className={cn(
           "min-w-0 bg-transparent px-2 text-sm font-medium outline-none",
           "disabled:cursor-not-allowed",
@@ -569,16 +588,24 @@ export function DateTimePicker({
         )}
       />
       <select
-        value={toDisplayHour(parts.hour)}
+        value={hourFormat === "24" ? parts.hour : toDisplayHour(parts.hour)}
         disabled={disabled}
         onChange={(event) =>
-          setDisplayTime(event.target.value, parts.minute, toPeriod(parts.hour))
+          hourFormat === "24"
+            ? setTime(event.target.value, parts.minute)
+            : setDisplayTime(event.target.value, parts.minute, toPeriod(parts.hour))
         }
         className="h-7 w-[2.25rem] bg-transparent px-0 text-center text-sm font-medium outline-none disabled:cursor-not-allowed"
         aria-label="Hour"
       >
-        {Array.from({ length: 12 }, (_, hour) => String(hour + 1).padStart(2, "0")).map((hour) => (
-          <option key={hour} value={hour}>
+        {Array.from({ length: hourFormat === "24" ? 24 : 12 }, (_, hour) =>
+          String(hourFormat === "24" ? hour : hour + 1).padStart(2, "0"),
+        ).map((hour) => (
+          <option
+            key={hour}
+            value={hour}
+            disabled={isTimeBeforeMin(hour, parts.minute, toPeriod(parts.hour))}
+          >
             {hour}
           </option>
         ))}
@@ -588,29 +615,41 @@ export function DateTimePicker({
         value={parts.minute}
         disabled={disabled}
         onChange={(event) =>
-          setDisplayTime(toDisplayHour(parts.hour), event.target.value, toPeriod(parts.hour))
+          hourFormat === "24"
+            ? setTime(parts.hour, event.target.value)
+            : setDisplayTime(toDisplayHour(parts.hour), event.target.value, toPeriod(parts.hour))
         }
         className="h-7 w-[2.25rem] bg-transparent px-0 text-center text-sm font-medium outline-none disabled:cursor-not-allowed"
         aria-label="Minute"
       >
         {minuteOptions(parts.minute).map((minute) => (
-          <option key={minute} value={minute}>
+          <option
+            key={minute}
+            value={minute}
+            disabled={isTimeBeforeMin(
+              hourFormat === "24" ? parts.hour : toDisplayHour(parts.hour),
+              minute,
+              toPeriod(parts.hour),
+            )}
+          >
             {minute}
           </option>
         ))}
       </select>
-      <select
-        value={toPeriod(parts.hour)}
-        disabled={disabled}
-        onChange={(event) =>
-          setDisplayTime(toDisplayHour(parts.hour), parts.minute, event.target.value)
-        }
-        className="h-7 w-[2.75rem] bg-transparent px-0 text-center text-sm font-medium outline-none disabled:cursor-not-allowed"
-        aria-label="AM/PM"
-      >
-        <option value="AM">AM</option>
-        <option value="PM">PM</option>
-      </select>
+      {hourFormat === "12" && (
+        <select
+          value={toPeriod(parts.hour)}
+          disabled={disabled}
+          onChange={(event) =>
+            setDisplayTime(toDisplayHour(parts.hour), parts.minute, event.target.value)
+          }
+          className="h-7 w-[2.75rem] bg-transparent px-0 text-center text-sm font-medium outline-none disabled:cursor-not-allowed"
+          aria-label="AM/PM"
+        >
+          <option value="AM" disabled={isTimeBeforeMin(toDisplayHour(parts.hour), parts.minute, "AM")}>AM</option>
+          <option value="PM" disabled={isTimeBeforeMin(toDisplayHour(parts.hour), parts.minute, "PM")}>PM</option>
+        </select>
+      )}
     </div>
   )
 }

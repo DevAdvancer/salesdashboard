@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DateTimePicker } from "@/components/ui/date-picker";
+import { useMinimumSupportDateTime } from "@/lib/hooks/use-minimum-support-date-time";
+import { getMinimumAssessmentDeadline } from "@/lib/utils/support-schedule";
 import type { AssessmentFormData } from "./assessment-types";
 
 function RequiredText({ children }: { children: ReactNode }) {
@@ -54,6 +56,7 @@ export function AssessmentDialog({
   isSending,
   formatScheduleEST,
 }: AssessmentDialogProps) {
+  const minDateTime = useMinimumSupportDateTime(isModalOpen);
   const liveSubject = `[Sales] Assessment Support - ${formData.candidateName || "..."} - ${
     formData.jobTitle || "..."
   } - ${formData.assessmentReceived ? formatScheduleEST(formData.assessmentReceived) : "..."}`;
@@ -99,27 +102,34 @@ export function AssessmentDialog({
             <div className="col-span-2 border rounded-md overflow-hidden">
               <div className="grid grid-cols-[200px_1fr] text-sm">
                 <div className="p-3 bg-muted font-semibold border-b">
-                  <RequiredText>Assessment Received</RequiredText>
+                  <RequiredText>Assessment Received (24-hour, ET)</RequiredText>
                 </div>
                 <div className="p-2 border-b">
                   <DateTimePicker
                     value={formData.assessmentReceived}
-                    onChange={(val) =>
-                      setFormData({ ...formData, assessmentReceived: val })
-                    }
+                    min={minDateTime}
+                    hourFormat="24"
+                    onChange={(val) => setFormData((previous) => ({
+                      ...previous,
+                      assessmentReceived: val,
+                      assessmentDeadline: previous.assessmentDeadline && previous.assessmentDeadline <= val
+                        ? ""
+                        : previous.assessmentDeadline,
+                    }))}
                   />
                 </div>
 
                 <div className="p-3 bg-muted font-semibold border-b">
-                  <RequiredText>Assessment Deadline</RequiredText>
+                  <RequiredText>Assessment Deadline (24-hour, ET)</RequiredText>
                 </div>
                 <div className="p-2 border-b">
                   <DateTimePicker
                     value={formData.assessmentDeadline}
+                    hourFormat="24"
                     onChange={(val) =>
                       setFormData({ ...formData, assessmentDeadline: val })
                     }
-                    min={formData.assessmentReceived || undefined}
+                    min={getMinimumAssessmentDeadline(formData.assessmentReceived)}
                   />
                 </div>
 

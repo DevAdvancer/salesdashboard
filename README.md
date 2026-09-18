@@ -16,6 +16,12 @@ npm run dev              # Start dev server → http://localhost:5000
 
 > The dev server runs on **port 5000** (not 3000).
 
+## Secret protection on GitHub
+
+The [Secret scan workflow](.github/workflows/secret-scan.yml) scans committed Git history on every push and pull request. A detection fails the `Secret scan` check; it does **not** undo or reject a push that has already reached GitHub. To prevent merging a failed check, add `Secret scan` as a required status check in a branch ruleset for the protected branch. Run the workflow once before making it required: GitHub needs to see the check first.
+
+For rejection **at push time**, enable GitHub push protection in the repository's **Settings → Advanced Security → Secret Protection → Push protection** (availability depends on repository ownership and plan). Push protection detects supported secret patterns; it is not a guarantee that every credential will be caught. If the first CI run finds an old leak, rotate the credential even if a later commit deleted it, then review the affected history. Keep real credentials in environment variables or GitHub Actions secrets, never in the repository.
+
 ---
 
 ## 📚 Documentation

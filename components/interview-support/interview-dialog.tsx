@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DateTimePicker } from "@/components/ui/date-picker";
+import { useMinimumSupportDateTime } from "@/lib/hooks/use-minimum-support-date-time";
 import type { InterviewFormData } from "./interview-types";
 
 function RequiredText({ children }: { children: ReactNode }) {
@@ -54,6 +55,7 @@ export function InterviewDialog({
   isSending,
   formatDateEST,
 }: InterviewDialogProps) {
+  const minDateTime = useMinimumSupportDateTime(isModalOpen);
   const liveSubject = `[Sales] Interview Support - ${formData.candidateName || "..."} - ${
     formData.technology || "..."
   } - ${formData.interviewDate ? formatDateEST(formData.interviewDate) : "..."}`;
@@ -102,11 +104,13 @@ export function InterviewDialog({
             <div className="col-span-2 border rounded-md overflow-hidden">
               <div className="grid grid-cols-[200px_1fr] text-sm">
                 <div className="p-3 bg-muted font-semibold border-b">
-                  <RequiredText>Date & Time (EST)</RequiredText>
+                  <RequiredText>Date & Time (24-hour, ET)</RequiredText>
                 </div>
                 <div className="p-2 border-b">
                   <DateTimePicker
                     value={formData.interviewDate}
+                    min={minDateTime}
+                    hourFormat="24"
                     onChange={(val) =>
                       setFormData({ ...formData, interviewDate: val })
                     }

@@ -34,6 +34,7 @@ import {
 import { saveTechnicalPayment } from "@/app/actions/technical-payments";
 import { listLeads } from "@/lib/services/lead-action-service";
 import { useDebounce } from "@/lib/hooks/use-debounce";
+import { isFutureSupportDateTime } from "@/lib/utils/support-schedule";
 
 // Components
 import { AssessmentFiltersCard } from "@/components/assessment-support/assessment-filters-card";
@@ -333,6 +334,18 @@ function AssessmentContent() {
       toast({
         title: "Missing Field",
         description: `${missingField.label} is required.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const validationNow = new Date();
+    if (!isFutureSupportDateTime(formData.assessmentReceived, validationNow) ||
+        !isFutureSupportDateTime(formData.assessmentDeadline, validationNow) ||
+        formData.assessmentDeadline <= formData.assessmentReceived) {
+      toast({
+        title: "Invalid assessment time",
+        description: "Choose future Eastern times, with the deadline after the received time.",
         variant: "destructive",
       });
       return;

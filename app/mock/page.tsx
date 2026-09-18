@@ -23,6 +23,7 @@ import {
 } from "@/app/actions/mock";
 import { listLeads } from "@/lib/services/lead-action-service";
 import { useDebounce } from "@/lib/hooks/use-debounce";
+import { isFutureSupportDateTime } from "@/lib/utils/support-schedule";
 
 // Components
 import { MockFiltersCard } from "@/components/mock/mock-filters-card";
@@ -313,6 +314,15 @@ function MockContent() {
 
     if (!selectedLead) return;
 
+    if (formData.schedule && !isFutureSupportDateTime(formData.schedule)) {
+      toast({
+        title: "Invalid mock interview time",
+        description: "Choose a schedule in the future (Eastern time).",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setIsSending(true);
       localStorage.setItem(
@@ -496,10 +506,6 @@ function MockContent() {
     currentPage * ITEMS_PER_PAGE,
   );
 
-  const now = new Date();
-  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-  const minDateTime = now.toISOString().slice(0, 16);
-
   if (loading || isLoading) {
     return (
       <div className="container mx-auto p-6">
@@ -557,7 +563,6 @@ function MockContent() {
         setIsModalOpen={setIsModalOpen}
         formData={formData}
         setFormData={setFormData}
-        minDateTime={minDateTime}
         fileInputKey={fileInputKey}
         handleFileChange={handleFileChange}
         sendEmail={sendEmail}
