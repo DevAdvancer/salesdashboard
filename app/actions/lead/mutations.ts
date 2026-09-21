@@ -29,6 +29,8 @@ import { getLeadAction, listLeadsAction, listLeadCountsAction, loadLeadTargetPro
 import { normalizeSource, isReferralSource } from "@/lib/utils/lead-source";
 import { REQUIRED_LEAD_FIELD_LABELS, isValidId, normalizeDuplicateFieldValue, isBlankLeadValue, shouldIgnoreLinkedinDuplicate, assertRequiredLeadData } from "./sync-helpers";
 import { parseIsoDateLocal, daysInMonthLocal } from "./sync-helpers";
+import { createNotificationsForRecipients } from "@/lib/server/notifications";
+import { getLeadDisplayName } from "@/lib/actions/lead/utils";
 
 export async function restoreNotInterestedDuplicateLead(input: {
         databases: Awaited<ReturnType<typeof createAdminClient>>['databases'];
@@ -119,6 +121,24 @@ export async function restoreNotInterestedDuplicateLead(input: {
         );
     } catch (error) {
         logger.error('Failed to log restored not interested lead', error);
+    }
+
+    if (nextAssignedToId && isValidId(nextAssignedToId) && nextAssignedToId !== actorId) {
+        try {
+            await createNotificationsForRecipients(
+                databases,
+                [nextAssignedToId],
+                {
+                    type: 'lead_assignment',
+                    title: 'Lead assigned',
+                    body: `Lead ${getLeadDisplayName(reopenedLead as unknown as Lead)} is assigned to you by ${actorName || 'Admin'}.`,
+                    targetId: duplicateLeadId,
+                    targetType: 'LEAD',
+                }
+            );
+        } catch (notifyError) {
+            logger.error('Failed to notify assignee on duplicate lead restoration:', notifyError);
+        }
     }
 
     return reopenedLead as unknown as Lead;
@@ -332,6 +352,27 @@ export async function createLeadAction(ownerId: string, input: CreateLeadInput, 
             } catch (e) {
                 // Handoff row is best-effort. Log and continue.
                 logger.error("Failed to record LG handoff:", e);
+            }
+        }
+
+        const assigneeId = input.assignedToId;
+        if (assigneeId && isValidId(assigneeId) && assigneeId !== finalOwnerId) {
+            try {
+                const actorDisplayName =
+                    creatingUserName || actorDoc.name || actorDoc.email || 'Admin';
+                await createNotificationsForRecipients(
+                    databases,
+                    [assigneeId],
+                    {
+                        type: 'lead_assignment',
+                        title: 'Lead assigned',
+                        body: `Lead ${getLeadDisplayName(lead as unknown as Lead)} is assigned to you by ${actorDisplayName}.`,
+                        targetId: lead.$id,
+                        targetType: 'LEAD',
+                    }
+                );
+            } catch (notifyError) {
+                logger.error('Failed to notify assignee on lead creation:', notifyError);
             }
         }
 

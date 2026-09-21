@@ -1429,4 +1429,243 @@ describe('lead server action authorization', () => {
       }),
     );
   });
+
+  it('sends notification and email when an admin creates a lead assigned to an agent', async () => {
+    mockGetDocument
+      .mockResolvedValueOnce({
+        $id: 'admin-1',
+        email: 'admin@example.com',
+        name: 'Admin User',
+        role: 'admin',
+        teamLeadId: null,
+      })
+      .mockResolvedValueOnce({
+        $id: 'agent-1',
+        email: 'agent1@example.com',
+        name: 'Agent One',
+        role: 'agent',
+        teamLeadId: null,
+      });
+
+    mockCreateDocument.mockResolvedValueOnce({
+      $id: 'lead-new-1',
+      data: JSON.stringify({
+        firstName: 'John',
+        lastName: 'Doe',
+        email: 'john.doe@example.com',
+        phone: '5551234567',
+      }),
+      ownerId: 'admin-1',
+      assignedToId: 'agent-1',
+      branchId: null,
+      isClosed: false,
+      closedAt: null,
+      status: 'Interested',
+    });
+
+    const { createLeadAction } = await import('@/app/actions/lead/mutations');
+    const { createNotificationsForRecipients } = await import('@/lib/server/notifications');
+
+    await expect(
+      createLeadAction(
+        'admin-1',
+        {
+          data: {
+            firstName: 'John',
+            lastName: 'Doe',
+            email: 'john.doe@example.com',
+            phone: '5551234567',
+          },
+          assignedToId: 'agent-1',
+          status: 'Interested',
+        },
+        'admin-1',
+        'Admin User',
+      )
+    ).resolves.toMatchObject({
+      $id: 'lead-new-1',
+      assignedToId: 'agent-1',
+    });
+
+    expect(createNotificationsForRecipients).toHaveBeenCalledWith(
+      expect.anything(),
+      ['agent-1'],
+      expect.objectContaining({
+        type: 'lead_assignment',
+        title: 'Lead assigned',
+        body: 'Lead John Doe is assigned to you by Admin User.',
+        targetId: 'lead-new-1',
+        targetType: 'LEAD',
+      })
+    );
+  });
+
+  it('does not send notification when lead is assigned to creator themselves on creation', async () => {
+    mockGetDocument.mockResolvedValueOnce({
+      $id: 'admin-1',
+      email: 'admin@example.com',
+      name: 'Admin User',
+      role: 'admin',
+      teamLeadId: null,
+    });
+
+    mockCreateDocument.mockResolvedValueOnce({
+      $id: 'lead-self-1',
+      data: JSON.stringify({
+        firstName: 'Self',
+        lastName: 'Assign',
+        email: 'self@example.com',
+        phone: '5551234567',
+      }),
+      ownerId: 'admin-1',
+      assignedToId: 'admin-1',
+      branchId: null,
+      isClosed: false,
+      closedAt: null,
+      status: 'Interested',
+    });
+
+    const { createLeadAction } = await import('@/app/actions/lead/mutations');
+    const { createNotificationsForRecipients } = await import('@/lib/server/notifications');
+
+    await expect(
+      createLeadAction(
+        'admin-1',
+        {
+          data: {
+            firstName: 'Self',
+            lastName: 'Assign',
+            email: 'self@example.com',
+            phone: '5551234567',
+          },
+          assignedToId: 'admin-1',
+          status: 'Interested',
+        },
+        'admin-1',
+        'Admin User',
+      )
+    ).resolves.toMatchObject({
+      $id: 'lead-self-1',
+      assignedToId: 'admin-1',
+    });
+
+    expect(createNotificationsForRecipients).not.toHaveBeenCalled();
+  });
+
+  it('sends notification to assignee when a duplicate not interested lead is restored to an agent', async () => {
+    mockGetDocument.mockImplementation((_databaseId, _collectionId, documentId: string) => {
+      switch (documentId) {
+        case 'admin-1':
+          return Promise.resolve({
+            $id: 'admin-1',
+            email: 'admin@example.com',
+            name: 'Admin User',
+            role: 'admin',
+            branchIds: [],
+            teamLeadId: null,
+            teamLeadIds: [],
+          });
+        case 'agent-1':
+          return Promise.resolve({
+            $id: 'agent-1',
+            name: 'Agent One',
+            teamLeadId: null,
+            teamLeadIds: [],
+          });
+        case 'lead-dup-2':
+          return Promise.resolve({
+            $id: 'lead-dup-2',
+            data: JSON.stringify({
+              firstName: 'Existing',
+              lastName: 'Lead',
+              email: 'dup2@example.com',
+              phone: '5559998888',
+              creatorId: 'creator-1',
+            }),
+            ownerId: 'old-owner',
+            assignedToId: 'old-agent',
+            branchId: null,
+            isClosed: true,
+            closedAt: '2026-01-02T00:00:00.000Z',
+            status: 'Not Interested',
+          });
+        default:
+          return Promise.resolve({
+            $id: documentId,
+            name: documentId,
+            teamLeadId: null,
+            teamLeadIds: [],
+          });
+      }
+    });
+
+    mockListDocuments.mockResolvedValueOnce({
+      documents: [
+        {
+          $id: 'lead-dup-2',
+          ownerId: 'old-owner',
+          assignedToId: 'old-agent',
+          branchId: null,
+          status: 'Not Interested',
+          data: JSON.stringify({
+            email: 'dup2@example.com',
+            phone: '5559998888',
+          }),
+        },
+      ],
+    });
+
+    mockUpdateDocument.mockResolvedValueOnce({
+      $id: 'lead-dup-2',
+      ownerId: 'admin-1',
+      assignedToId: 'agent-1',
+      branchId: null,
+      isClosed: false,
+      closedAt: null,
+      status: 'Interested',
+      data: JSON.stringify({
+        firstName: 'Restored',
+        lastName: 'Lead',
+        email: 'dup2@example.com',
+        phone: '5559998888',
+      }),
+    });
+
+    const { createLeadAction } = await import('@/app/actions/lead/mutations');
+    const { createNotificationsForRecipients } = await import('@/lib/server/notifications');
+
+    await expect(
+      createLeadAction(
+        'admin-1',
+        {
+          data: {
+            firstName: 'Restored',
+            lastName: 'Lead',
+            email: 'dup2@example.com',
+            phone: '5559998888',
+          },
+          assignedToId: 'agent-1',
+          status: 'Interested',
+        },
+        'admin-1',
+        'Admin User',
+      )
+    ).resolves.toMatchObject({
+      $id: 'lead-dup-2',
+      ownerId: 'admin-1',
+      assignedToId: 'agent-1',
+    });
+
+    expect(createNotificationsForRecipients).toHaveBeenCalledWith(
+      expect.anything(),
+      ['agent-1'],
+      expect.objectContaining({
+        type: 'lead_assignment',
+        title: 'Lead assigned',
+        body: 'Lead Restored Lead is assigned to you by Admin User.',
+        targetId: 'lead-dup-2',
+        targetType: 'LEAD',
+      })
+    );
+  });
 });
