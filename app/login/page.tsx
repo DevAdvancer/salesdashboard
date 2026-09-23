@@ -111,7 +111,7 @@ export default function LoginPage() {
           }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/silverspace.png"
+              src="/silverspace.png?v=1"
               alt="Silverspace Inc."
               style={{
                 position: 'absolute', inset: 0,
@@ -122,7 +122,7 @@ export default function LoginPage() {
             />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/vizva.png"
+              src="/vizva.png?v=1"
               alt="Vizva Inc."
               style={{
                 position: 'absolute', inset: 0,

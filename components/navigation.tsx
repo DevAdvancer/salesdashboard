@@ -523,7 +523,7 @@ export function Navigation({
             <div className="shrink-0 relative flex items-center justify-center w-14 h-12 overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/silverspace.png"
+                src="/silverspace.png?v=1"
                 alt="Silverspace Inc."
                 className="absolute inset-0 w-full h-full object-contain"
                 style={{
@@ -533,7 +533,7 @@ export function Navigation({
               />
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/vizva.png"
+                src="/vizva.png?v=1"
                 alt="Vizva Inc."
                 className="absolute inset-0 w-full h-full object-contain"
                 style={{
