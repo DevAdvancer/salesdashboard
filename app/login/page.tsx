@@ -26,6 +26,14 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [showSilverspace, setShowSilverspace] = useState(true);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setShowSilverspace(prev => !prev);
+    }, 4500);
+    return () => clearInterval(timer);
+  }, []);
 
   // All hooks must be above any conditional returns
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormData>({
@@ -93,8 +101,9 @@ export default function LoginPage() {
         {/* Brand mark */}
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <div style={{
+            position: 'relative',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: '3.5rem', height: '3.5rem', borderRadius: '50%',
+            width: '5.5rem', height: '5.5rem', borderRadius: '50%',
             background: 'rgba(201,100,66,0.10)',
             boxShadow: '0 0 0 1px rgba(201,100,66,0.20)',
             marginBottom: '0.875rem',
@@ -104,7 +113,23 @@ export default function LoginPage() {
             <img
               src="/silverspace.png"
               alt="Silverspace Inc."
-              style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '0.375rem' }}
+              style={{
+                position: 'absolute', inset: 0,
+                width: '100%', height: '100%', objectFit: 'contain', padding: '0.5rem',
+                opacity: showSilverspace ? 1 : 0,
+                transition: 'opacity 1.5s ease-in-out'
+              }}
+            />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/vizva.png"
+              alt="Vizva Inc."
+              style={{
+                position: 'absolute', inset: 0,
+                width: '100%', height: '100%', objectFit: 'contain', padding: '0.5rem',
+                opacity: showSilverspace ? 0 : 1,
+                transition: 'opacity 1.5s ease-in-out'
+              }}
             />
           </div>
           <h1 style={{

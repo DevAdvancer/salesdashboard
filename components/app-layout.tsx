@@ -102,7 +102,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         onCollapsedChange={setSidebarCollapsed}
       />
       <main
-        className={`relative flex-1 p-6 pt-20 transition-[margin] duration-300 sm:p-8 sm:pt-20 lg:p-10 lg:pt-10 ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}
+        className="relative flex-1 p-6 pt-20 transition-[margin] duration-300 sm:p-8 sm:pt-20 lg:p-10 lg:pt-10 lg:ml-64"
         style={{ minWidth: 0 }}
       >
         <LoaderOverlay />

@@ -391,14 +391,13 @@ function InterviewContent() {
       const formattedDate = formatDateEST(formData.interviewDate);
       const subject = `[Sales] Interview Support - ${formData.candidateName} - ${formData.technology} - ${formattedDate}`;
 
-      let logoUrl =
-        "https://egvjgtfjstxgszpzvvbx.supabase.co/storage/v1/object/public/images//20250610_1111_3D%20Gradient%20Logo_remix_01jxd69dc9ex29jbj9r701yjkf%20(2).png";
+      const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+      let logoUrl = `${baseUrl}/silverspace.png`;
       let websiteUrl = "www.silverspaceinc.com";
       let websiteLink = "https://www.silverspaceinc.com";
 
       if (formData.company === "Vizva Consultancy") {
-        logoUrl =
-          "https://egvjgtfjstxgszpzvvbx.supabase.co/storage/v1/object/public/images//20250611_1634_3D%20Logo%20Design_remix_01jxgb3x1qebfa2hsxw7sdagw1%20(1).png";
+        logoUrl = `${baseUrl}/vizva.png`;
         websiteUrl = "vizvaconsultancyservices.com";
         websiteLink = "https://vizvaconsultancyservices.com/";
       }

@@ -19,7 +19,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { NAV_ITEMS, appIcons } from "./navigation-config";
 
 import {
@@ -70,6 +70,15 @@ export function Navigation({
   const [linkedinOpen, setLinkedinOpen] = useState(false);
   const [technicalOpen, setTechnicalOpen] = useState(false);
   const [attendanceOpen, setAttendanceOpen] = useState(true);
+
+  const [showSilverspace, setShowSilverspace] = useState(true);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setShowSilverspace(prev => !prev);
+    }, 4500);
+    return () => clearInterval(timer);
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -505,18 +514,35 @@ export function Navigation({
 
       {/* ── Sidebar ── */}
       <aside
-        className={`fixed top-0 left-0 h-full w-64 flex flex-col z-40 transition-all duration-300 lg:translate-x-0 bg-card border-r border-border/50 ${isCollapsed ? "sidebar-collapsed lg:w-20" : "lg:w-64"} ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed top-0 left-0 h-full w-64 flex flex-col z-40 transition-all duration-300 lg:translate-x-0 bg-card border-r border-border/50 lg:w-64 ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}
         style={{
         }}>
         {/* Brand */}
-        <div
-          className={`flex items-start border-b border-border p-5 ${isCollapsed ? "lg:items-center lg:justify-center lg:p-3" : ""}`}>
-          <div className={`min-w-0 flex-1 ${isCollapsed ? "lg:hidden" : ""}`}>
-            <div
-              className="brand-accent-bar"
-              style={{ marginBottom: "0.625rem" }}
-            />
-            <div className={isCollapsed ? "lg:sr-only" : ""}>
+        <div className="flex items-center border-b border-border p-5">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className="shrink-0 relative flex items-center justify-center w-14 h-12 overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/silverspace.png"
+                alt="Silverspace Inc."
+                className="absolute inset-0 w-full h-full object-contain"
+                style={{
+                  opacity: showSilverspace ? 1 : 0,
+                  transition: 'opacity 1.5s ease-in-out'
+                }}
+              />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/vizva.png"
+                alt="Vizva Inc."
+                className="absolute inset-0 w-full h-full object-contain"
+                style={{
+                  opacity: showSilverspace ? 0 : 1,
+                  transition: 'opacity 1.5s ease-in-out'
+                }}
+              />
+            </div>
+            <div className="min-w-0 flex-1">
                 <h1
                   style={{
                     fontFamily: "'Bebas Neue', var(--font-bebas-neue), 'Inter', sans-serif",
@@ -528,7 +554,7 @@ export function Navigation({
                     margin: 0,
                     textTransform: "uppercase",
                   }}>
-                CRM HUB | Silverspace Inc.
+                CRM HUB
                 </h1>
               <p
                 style={{
@@ -537,26 +563,13 @@ export function Navigation({
                   textTransform: "uppercase",
                   color: "var(--muted-foreground)",
                   marginTop: "0.1875rem",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
                 }}>
                 {activeDashboard === "resume" ? "Resume Intelligence" : "Sales Intelligence"}
               </p>
             </div>
-          </div>
-
-          <div className="hidden lg:flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              aria-pressed={isCollapsed}
-              title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              onClick={() => onCollapsedChange(!isCollapsed)}
-              className="flex size-10 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
-              {isCollapsed ? (
-                <PanelLeftOpen size={17} />
-              ) : (
-                <PanelLeftClose size={17} />
-              )}
-            </button>
           </div>
         </div>
 
