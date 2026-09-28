@@ -42,6 +42,7 @@ export function AssessmentFiltersCard({
               value={filter}
               onChange={(e) => setFilter(e.target.value)}>
               <option value="all">All Leads</option>
+              <option value="closed">Closed Clients</option>
               <option value="assessment_created">Assessment Created</option>
               <option value="assessment_not_created">Assessment Not Created</option>
             </select>

@@ -42,6 +42,7 @@ export function MockFiltersCard({
               value={filter}
               onChange={(e) => setFilter(e.target.value)}>
               <option value="all">All Leads</option>
+              <option value="closed">Closed Clients</option>
               <option value="mock_created">Mock Created</option>
               <option value="mock_not_created">Mock Not Created</option>
             </select>

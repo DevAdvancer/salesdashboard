@@ -42,6 +42,7 @@ export function InterviewFiltersCard({
               value={filter}
               onChange={(e) => setFilter(e.target.value)}>
               <option value="all">All Leads</option>
+              <option value="closed">Closed Clients</option>
               <option value="interview_created">Interview Support Sent</option>
               <option value="interview_not_created">Not Sent</option>
             </select>

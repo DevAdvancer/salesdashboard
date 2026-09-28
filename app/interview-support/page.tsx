@@ -176,19 +176,17 @@ function InterviewContent() {
         const attempt = interviewAttempts.get(lead.$id);
         return !attempt || attempt.attemptCount === 0;
       });
+    } else if (filter === "closed") {
+      result = result.filter((lead) => lead.isClosed === true);
     }
 
     if (debouncedSearchQuery) {
       const lowerQuery = debouncedSearchQuery.toLowerCase();
       result = result.filter((lead) => {
         const data = JSON.parse(lead.data);
-        return (
-          data.firstName?.toLowerCase().includes(lowerQuery) ||
-          data.lastName?.toLowerCase().includes(lowerQuery) ||
-          data.email?.toLowerCase().includes(lowerQuery) ||
-          data.phone?.includes(lowerQuery) ||
-          data.company?.toLowerCase().includes(lowerQuery)
-        );
+        const searchableString = `${data.firstName || ""} ${data.lastName || ""} ${data.email || ""} ${data.phone || ""} ${data.company || ""}`.toLowerCase();
+        const searchWords = lowerQuery.split(/\s+/).filter(w => w.length > 0);
+        return searchWords.every((word) => searchableString.includes(word));
       });
     }
 
