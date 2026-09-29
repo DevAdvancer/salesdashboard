@@ -269,7 +269,7 @@ export async function getSalesUserIds(databases: Awaited<ReturnType<typeof creat
       Query.limit(2000),
     ]);
     for (const userDoc of usersResponse.documents as unknown as User[]) {
-      if ((userDoc.department ?? "sales") === "sales" && userDoc.isActive !== false) {
+      if ((userDoc.department ?? "sales") === "sales") {
         salesUserIds.add(userDoc.$id);
       }
     }
@@ -318,8 +318,23 @@ export async function resolveScopeUsersForLinkedin(input: {
     return [selected, ...agents].filter(isKpiEligible);
     }
 
-    const all = await getAssignableUsers(role as any, branchIds ?? [], userId, "all");
-    return all.filter((candidate) => candidate.$id !== userId && isKpiEligible(candidate));
+    const allAssignable = await getAssignableUsers(role as any, branchIds ?? [], userId, "all");
+    
+    // getAssignableUsers explicitly excludes lead_generation to prevent lead assignment.
+    // We must fetch them manually for the admin/monitor KPI scope.
+    let extraLeadGen: User[] = [];
+    if (["admin", "developer", "monitor", "operations"].includes(role)) {
+      const { getAllActiveUsers } = await import("@/lib/services/user-service");
+      const allActive = await getAllActiveUsers();
+      extraLeadGen = allActive.filter(u => u.role === "lead_generation" && (u.department ?? "sales") === "sales");
+    }
+
+    const uniqueMap = new Map<string, User>();
+    for (const u of [...allAssignable, ...extraLeadGen]) {
+      uniqueMap.set(u.$id, u);
+    }
+    
+    return Array.from(uniqueMap.values()).filter((candidate) => candidate.$id !== userId && isKpiEligible(candidate));
 }
 
 export interface LinkedinConnectionKpiRow {

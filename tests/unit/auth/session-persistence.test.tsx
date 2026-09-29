@@ -51,6 +51,10 @@ describe('Session Persistence and Restoration - Task 2.5', () => {
       teamLeadId: null,
       branchIds: [],
       branchId: null,
+        department: 'sales',
+        isActive: true,
+        notificationsEnabled: true,
+        notificationEmails: '',
       $createdAt: '2024-01-01T00:00:00.000Z',
       $updatedAt: '2024-01-01T00:00:00.000Z',
     };
@@ -99,6 +103,10 @@ describe('Session Persistence and Restoration - Task 2.5', () => {
       teamLeadId: 'teamLead-123',
       branchIds: [],
       branchId: null,
+        department: 'sales',
+        isActive: true,
+        notificationsEnabled: true,
+        notificationEmails: '',
       $createdAt: '2024-01-01T00:00:00.000Z',
       $updatedAt: '2024-01-01T00:00:00.000Z',
     };
@@ -123,6 +131,10 @@ describe('Session Persistence and Restoration - Task 2.5', () => {
       teamLeadId: null,
       branchIds: [],
       branchId: null,
+        department: 'sales',
+        isActive: true,
+        notificationsEnabled: true,
+        notificationEmails: '',
       $createdAt: '2024-01-01T00:00:00.000Z',
       $updatedAt: '2024-01-01T00:00:00.000Z',
     };

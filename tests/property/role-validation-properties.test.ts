@@ -19,6 +19,7 @@ const SUPPORTED_ROLES = [
   'admin',
   'developer',
   'team_lead',
+  'senior_tl',
   'agent',
   'lead_generation',
   'monitor',
@@ -71,7 +72,7 @@ describe('Role Validation Properties', () => {
       );
     });
 
-    it('VALID_ROLES array should contain exactly the seven supported roles', () => {
+    it('VALID_ROLES array should contain exactly the supported roles', () => {
       expect(VALID_ROLES).toHaveLength(SUPPORTED_ROLES.length);
       expect(new Set(VALID_ROLES).size).toBe(SUPPORTED_ROLES.length);
       for (const role of SUPPORTED_ROLES) {

@@ -19,10 +19,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Re-aggregate the last 15 days to catch any leads that were closed recently
+    // Re-aggregate the last 30 days to catch any leads that were closed recently or auto-withdrawn (20 days)
     const dateKeys = [];
     const today = new Date();
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 30; i++) {
       dateKeys.push(format(subDays(today, i), "yyyy-MM-dd"));
     }
 
