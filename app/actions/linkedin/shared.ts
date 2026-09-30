@@ -110,6 +110,11 @@ export async function getLinkedinRequestLeadOutcomeLabel(databases: Awaited<Retu
 export async function isBlockingLinkedinRequest(databases: Awaited<ReturnType<typeof createAdminClient>>["databases"], request: LinkedinRequest) {
     if ((request.isActive ?? true) === false) return false;
     if (request.status === "withdrawn") return false;
+    
+    if (shouldAutoWithdrawLinkedinRequest({ request, now: new Date() })) {
+        return false;
+    }
+
     if (request.status !== "accepted") return true;
     const outcomeLabel = await getLinkedinRequestLeadOutcomeLabel(databases, request);
     return !outcomeLabel;
