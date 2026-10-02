@@ -370,7 +370,6 @@ export function useUserManagement() {
         role,
         teamLeadId: (role === "agent" || role === "lead_generation") ? selectedTeamLeadId || null : null,
         branchIds: selectedBranchIds,
-            primaryBranchId: selectedBranchIds.length > 1 ? selectedPrimaryBranchId : null,
         primaryBranchId: selectedBranchIds.length > 1 ? selectedPrimaryBranchId : null,
         email: emailChanged ? trimmedEmail : undefined,
         department: editDepartment,
