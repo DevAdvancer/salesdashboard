@@ -1,4 +1,5 @@
 "use server";
+import { getTargetMonthBound } from "@/app/actions/target-month-bounds";
 
 import { Query } from "node-appwrite";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
@@ -156,6 +157,19 @@ export async function getAgentPaymentDetailsAction(input: {
   const monthStartIso = `${monthFromIso}T00:00:00.000Z`;
   const monthEndIso = `${monthToIso}T23:59:59.999Z`;
 
+  let leadsAndPaymentsFromIso = monthFromIso;
+  let leadsAndPaymentsToIso = monthToIso;
+  const monthKeyToUse = input.monthKey;
+  const customBounds = await getTargetMonthBound(monthKeyToUse);
+  if (customBounds) {
+    leadsAndPaymentsFromIso = customBounds.leadsFromIso;
+    leadsAndPaymentsToIso = customBounds.leadsToIso;
+  }
+
+  const leadsAndPaymentsStartIso = `${leadsAndPaymentsFromIso}T00:00:00.000Z`;
+  const leadsAndPaymentsEndIso = `${leadsAndPaymentsToIso}T23:59:59.999Z`;
+
+
   // ── 3.  Followup payments ─────────────────────────────────────────────
   const followupDetails: AgentPaymentDetail[] = [];
   const followupDocs = await listAllDocuments<Record<string, unknown>>({
@@ -240,8 +254,8 @@ export async function getAgentPaymentDetailsAction(input: {
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.CLIENT_PAYMENTS,
     queries: [
-      Query.greaterThanEqual("updatedAt", monthStartIso),
-      Query.lessThanEqual("updatedAt", monthEndIso),
+      Query.greaterThanEqual("updatedAt", leadsAndPaymentsStartIso),
+      Query.lessThanEqual("updatedAt", leadsAndPaymentsEndIso),
     ],
     pageLimit: 100,
     maxPages: 200,
@@ -277,7 +291,7 @@ export async function getAgentPaymentDetailsAction(input: {
     const attributedTo = assignedToId || ownerId;
 
     const leadCreated = (lead.closedAt as string) || (lead.$createdAt as string) || (lead.createdAt as string);
-    if (leadCreated && leadCreated < monthStartIso) {
+    if (leadCreated && leadCreated < leadsAndPaymentsStartIso) {
       continue; // Payments for leads closed in previous months are followups, not upfront
     }
 
@@ -295,8 +309,8 @@ export async function getAgentPaymentDetailsAction(input: {
     for (const u of updates) {
       if (
         u.createdAt &&
-        u.createdAt >= monthStartIso &&
-        u.createdAt <= monthEndIso &&
+        u.createdAt >= leadsAndPaymentsStartIso &&
+        u.createdAt <= leadsAndPaymentsEndIso &&
         (u.status === "partially_paid" || u.status === "fully_paid")
       ) {
         if (attributedTo === input.agentId) {
@@ -311,8 +325,8 @@ export async function getAgentPaymentDetailsAction(input: {
       const createdAt = cp.createdAt as string | undefined;
       if (
         createdAt &&
-        createdAt >= monthStartIso &&
-        createdAt <= monthEndIso &&
+        createdAt >= leadsAndPaymentsStartIso &&
+        createdAt <= leadsAndPaymentsEndIso &&
         ((cp.status as string) === "partially_paid" || (cp.status as string) === "fully_paid")
       ) {
         if (attributedTo === input.agentId) {
@@ -351,8 +365,8 @@ export async function getAgentPaymentDetailsAction(input: {
     collectionId: COLLECTIONS.TECHNICAL_PAYMENTS,
     queries: [
       Query.equal("userId", input.agentId),
-      Query.greaterThanEqual("createdAt", monthStartIso),
-      Query.lessThanEqual("createdAt", monthEndIso),
+      Query.greaterThanEqual("createdAt", leadsAndPaymentsStartIso),
+      Query.lessThanEqual("createdAt", leadsAndPaymentsEndIso),
     ],
     pageLimit: 100,
     maxPages: 100,

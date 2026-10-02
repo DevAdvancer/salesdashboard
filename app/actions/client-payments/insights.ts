@@ -64,6 +64,7 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
               company: string;
               source: string;
               leadStatus: string;
+              branchId: string | null;
               isClosed: boolean;
               closedAt: string | null;
               leadAmount: number;
@@ -103,6 +104,7 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
       company: company || "Unknown",
       source,
       leadStatus: typeof lead.status === "string" ? lead.status : "",
+      branchId: typeof lead.branchId === "string" ? lead.branchId : null,
       isClosed: lead.isClosed === true,
       closedAt: typeof lead.closedAt === "string" ? lead.closedAt : null,
       leadAmount,
@@ -300,6 +302,7 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
       company: leadMeta?.company ?? "Unknown",
       source: leadMeta?.source ?? "",
       leadStatus: leadMeta?.leadStatus ?? "",
+      branchId: leadMeta?.branchId ?? null,
       isFollowupOnly: false,
       isClosed: leadMeta?.isClosed === true,
       closedAt: leadMeta?.closedAt ?? null,
@@ -335,6 +338,7 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
       company: followup.company,
       source: "Followup payment",
       leadStatus: "followup_payment",
+      branchId: null,
       isFollowupOnly: true,
       isClosed: false,
       closedAt: null,

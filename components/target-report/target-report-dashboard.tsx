@@ -11,6 +11,7 @@ import { MonthPicker } from "./month-picker";
 import { TargetReportTable } from "./target-report-table";
 import { AdminTargetForm } from "./admin-target-form";
 import { TlSplitForm } from "./tl-split-form";
+import { AdminTargetBoundsForm } from "./admin-target-bounds-form";
 import { filterTargetReportForAgent } from "@/lib/utils/monthly-target-report";
 
 const currency = new Intl.NumberFormat("en-US", {
@@ -94,7 +95,10 @@ export function TargetReportDashboard({ user }: TargetReportDashboardProps) {
       </Card>
 
       {isAdmin ? (
-        <AdminTargetForm user={user} monthKey={monthKey} onSaved={() => void load()} />
+        <div className="space-y-4">
+          <AdminTargetForm user={user} monthKey={monthKey} onSaved={() => void load()} />
+          <AdminTargetBoundsForm monthKey={monthKey} onSaved={() => void load()} />
+        </div>
       ) : null}
 
       {isTl ? (

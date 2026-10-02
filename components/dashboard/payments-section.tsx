@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { PaymentInsightRecord } from "@/app/actions/client-payments/shared";
-import type { PaymentStatus } from "@/lib/types";
+import type { PaymentStatus, Branch } from "@/lib/types";
 import { isClientExcludedStatus } from "@/lib/utils/client-history";
 
 
@@ -84,7 +84,8 @@ interface PaymentsSectionProps {
     to?: string;
   };
   /** Total from assessment + interview technical payments for the selected period. */
-  technicalPaymentsTotal?: number;
+  technicalPayments?: { amount: number; branchId: string | null }[];
+  branches?: Branch[];
 }
 
 interface CompanyRow {
@@ -127,12 +128,34 @@ export function PaymentsSection({
   isLoading,
   rangeLabel,
   dateFilter,
-  technicalPaymentsTotal = 0,
+  technicalPayments = [],
+  branches = [],
 }: PaymentsSectionProps) {
   const [statusFilter, setStatusFilter] = useState<"all" | PaymentStatus>(
     "all",
   );
   const [companyFilter, setCompanyFilter] = useState<CompanyFilter>("all");
+
+  const technicalPaymentsTotal = technicalPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+  const branchTotals = useMemo(() => {
+    const totals: Record<string, number> = {};
+    branches.forEach(b => totals[b.$id] = 0);
+
+    records.forEach(r => {
+      if (r.branchId && totals[r.branchId] !== undefined) {
+        totals[r.branchId] += (r.totalPaid || 0) + (r.pendingTotal || 0);
+      }
+    });
+
+    technicalPayments.forEach(t => {
+      if (t.branchId && totals[t.branchId] !== undefined) {
+        totals[t.branchId] += Number(t.amount) || 0;
+      }
+    });
+
+    return totals;
+  }, [records, technicalPayments, branches]);
 
   // Filter records by company first, then status.
   const companyFiltered = useMemo(

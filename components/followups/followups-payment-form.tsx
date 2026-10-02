@@ -63,7 +63,8 @@ export function FollowupsPaymentForm({
   const [candidateName, setCandidateName] = useState(
     payment?.candidateName || "",
   );
-  const [amount, setAmount] = useState(payment?.amount?.toString() || "0");
+  const [amount, setAmount] = useState(payment ? Math.abs(payment.amount).toString() : "0");
+  const [isRefund, setIsRefund] = useState(payment ? payment.amount < 0 : false);
   const [date, setDate] = useState(payment?.date || getCurrentEasternIsoDate());
   const [remark, setRemark] = useState(payment?.remark || "");
 
@@ -221,7 +222,7 @@ export function FollowupsPaymentForm({
       leadId: mode === "client" ? selectedLeadId : null,
       company,
       candidateName,
-      amount: parseFloat(amount) || 0,
+      amount: (parseFloat(amount) || 0) * (isRefund ? -1 : 1),
       date,
       remark: remark || null,
       status: mode === "client" && selectedLeadId ? status : undefined,
@@ -393,6 +394,17 @@ export function FollowupsPaymentForm({
 
         <div className="space-y-2">
           <label className="text-sm font-semibold text-foreground">Amount</label>
+          <div className="flex items-center gap-2 mb-2">
+            <input
+              type="checkbox"
+              id="isRefund"
+              checked={isRefund}
+              onChange={(e) => setIsRefund(e.target.checked)}
+            />
+            <label htmlFor="isRefund" className="text-sm text-muted-foreground">
+              Is this a refund?
+            </label>
+          </div>
           <Input
             type="number"
             value={amount}

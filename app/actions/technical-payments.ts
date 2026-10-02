@@ -218,6 +218,7 @@ export interface TechnicalPaymentSummary {
   createdAt: string;
   leadName: string;
   leadEmail: string;
+  branchId: string | null;
 }
 
 /**
@@ -276,16 +277,16 @@ export async function listTechnicalPaymentsAction(
         })
       : [];
 
-  const leadDataMap = new Map<string, { name: string; email: string }>();
+  const leadDataMap = new Map<string, { name: string; email: string; branchId: string | null }>();
   for (const lead of leadDocs) {
     try {
       const data = JSON.parse(lead.data ?? '{}') as Record<string, unknown>;
       const firstName = typeof data.firstName === 'string' ? data.firstName.trim() : '';
       const lastName = typeof data.lastName === 'string' ? data.lastName.trim() : '';
       const name = [firstName, lastName].filter(Boolean).join(' ') || data.email as string || 'Unknown';
-      leadDataMap.set(lead.$id, { name, email: (data.email as string) || '' });
+      leadDataMap.set(lead.$id, { name, email: (data.email as string) || '', branchId: typeof lead.branchId === 'string' ? lead.branchId : null });
     } catch {
-      leadDataMap.set(lead.$id, { name: 'Unknown', email: '' });
+      leadDataMap.set(lead.$id, { name: 'Unknown', email: '', branchId: typeof lead.branchId === 'string' ? lead.branchId : null });
     }
   }
 
@@ -316,7 +317,7 @@ export async function listTechnicalPaymentsAction(
   for (const doc of payments) {
     const userId = doc.userId as string;
     if (scopedUserIds && !scopedUserIds.includes(userId)) continue;
-    const leadMeta = leadDataMap.get(doc.leadId as string) ?? { name: 'Unknown', email: '' };
+    const leadMeta = leadDataMap.get(doc.leadId as string) ?? { name: 'Unknown', email: '', branchId: null };
     results.push({
       $id: doc.$id,
       leadId: doc.leadId as string,
@@ -327,6 +328,7 @@ export async function listTechnicalPaymentsAction(
       createdAt: doc.createdAt as string,
       leadName: leadMeta.name,
       leadEmail: leadMeta.email,
+      branchId: leadMeta.branchId,
     });
   }
 

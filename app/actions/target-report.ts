@@ -1,4 +1,5 @@
 "use server";
+import { getTargetMonthBound } from "@/app/actions/target-month-bounds";
 
 import { Query } from "node-appwrite";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
@@ -161,6 +162,19 @@ export async function getTargetReportAction(input: {
   const { from: monthFromIso, to: monthToIso } = monthBounds(input.monthKey);
   const monthStartIso = `${monthFromIso}T00:00:00.000Z`;
   const monthEndIso = `${monthToIso}T23:59:59.999Z`;
+
+  let leadsAndPaymentsFromIso = monthFromIso;
+  let leadsAndPaymentsToIso = monthToIso;
+  const monthKeyToUse = input.monthKey;
+  const customBounds = await getTargetMonthBound(monthKeyToUse);
+  if (customBounds) {
+    leadsAndPaymentsFromIso = customBounds.leadsFromIso;
+    leadsAndPaymentsToIso = customBounds.leadsToIso;
+  }
+
+  const leadsAndPaymentsStartIso = `${leadsAndPaymentsFromIso}T00:00:00.000Z`;
+  const leadsAndPaymentsEndIso = `${leadsAndPaymentsToIso}T23:59:59.999Z`;
+
   const todayIso = getCurrentEasternIsoDate();
 
   const agentStatsByUserId: Record<string, {
@@ -179,14 +193,14 @@ export async function getTargetReportAction(input: {
       collectionId: COLLECTIONS.AGENT_DAILY_STATS,
       queries: [
         Query.equal("agentId", chunk),
-        Query.greaterThanEqual("dateKey", monthFromIso),
+        Query.greaterThanEqual("dateKey", leadsAndPaymentsFromIso),
         Query.lessThanEqual(
           "dateKey",
-          monthToIso >= todayIso ? (() => {
+          leadsAndPaymentsToIso >= todayIso ? (() => {
             const d = new Date(todayIso);
             d.setUTCDate(d.getUTCDate() - 1);
             return d.toISOString().slice(0, 10);
-          })() : monthToIso
+          })() : leadsAndPaymentsToIso
         ),
         Query.orderAsc("$id"),
       ],
@@ -208,7 +222,7 @@ export async function getTargetReportAction(input: {
     }
   }
 
-  if (monthFromIso <= todayIso && monthToIso >= todayIso) {
+  if (leadsAndPaymentsFromIso <= todayIso && leadsAndPaymentsToIso >= todayIso) {
     const todayStats = await computeAgentStatsForDate(todayIso);
     for (const doc of todayStats) {
       if (readableAgentIds.includes(doc.agentId)) {
@@ -302,8 +316,8 @@ export async function getTargetReportAction(input: {
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.CLIENT_PAYMENTS,
     queries: [
-      Query.greaterThanEqual("updatedAt", monthStartIso),
-      Query.lessThanEqual("updatedAt", monthEndIso),
+      Query.greaterThanEqual("updatedAt", leadsAndPaymentsStartIso),
+      Query.lessThanEqual("updatedAt", leadsAndPaymentsEndIso),
     ],
     pageLimit: 100,
     maxPages: 200,
@@ -336,7 +350,7 @@ export async function getTargetReportAction(input: {
     const attributedTo = assignedToId || ownerId;
 
     const leadCreated = (lead.closedAt as string) || (lead.$createdAt as string) || (lead.createdAt as string);
-    if (leadCreated && leadCreated < monthStartIso) {
+    if (leadCreated && leadCreated < leadsAndPaymentsStartIso) {
       continue; // Payments for leads closed in previous months are followups, not upfront
     }
 
@@ -355,8 +369,8 @@ export async function getTargetReportAction(input: {
     for (const u of updates) {
       if (
         u.createdAt &&
-        u.createdAt >= monthStartIso &&
-        u.createdAt <= monthEndIso &&
+        u.createdAt >= leadsAndPaymentsStartIso &&
+        u.createdAt <= leadsAndPaymentsEndIso &&
         (u.status === "partially_paid" || u.status === "fully_paid")
       ) {
         if (attributedTo) {
@@ -373,8 +387,8 @@ export async function getTargetReportAction(input: {
       const createdAt = cp.createdAt as string | undefined;
       if (
         createdAt &&
-        createdAt >= monthStartIso &&
-        createdAt <= monthEndIso &&
+        createdAt >= leadsAndPaymentsStartIso &&
+        createdAt <= leadsAndPaymentsEndIso &&
         ((cp.status as string) === "partially_paid" || (cp.status as string) === "fully_paid")
       ) {
         if (attributedTo) {
@@ -411,8 +425,8 @@ export async function getTargetReportAction(input: {
   // 4b. Technical payments in the month window.
   const technicalPaymentsByAgentId = await getTechnicalPaymentTotalsByUserAction({
     actorId: actor.$id,
-    dateFrom: monthStartIso,
-    dateTo: monthEndIso,
+    dateFrom: leadsAndPaymentsStartIso,
+    dateTo: leadsAndPaymentsEndIso,
   });
 
   for (const [agentId, amount] of Object.entries(technicalPaymentsByAgentId)) {

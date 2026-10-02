@@ -1,3 +1,4 @@
+import { getTargetMonthBound } from "@/app/actions/target-month-bounds";
 import { NextResponse, type NextRequest } from "next/server";
 import { Query } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
@@ -118,6 +119,19 @@ export async function GET(request: NextRequest) {
   const monthStartIso = `${monthFromIso}T00:00:00.000Z`;
   const monthEndIso = `${monthToIso}T23:59:59.999Z`;
 
+  let leadsAndPaymentsFromIso = monthFromIso;
+  let leadsAndPaymentsToIso = monthToIso;
+  const monthKeyToUse = monthKey;
+  const customBounds = await getTargetMonthBound(monthKeyToUse);
+  if (customBounds) {
+    leadsAndPaymentsFromIso = customBounds.leadsFromIso;
+    leadsAndPaymentsToIso = customBounds.leadsToIso;
+  }
+
+  const leadsAndPaymentsStartIso = `${leadsAndPaymentsFromIso}T00:00:00.000Z`;
+  const leadsAndPaymentsEndIso = `${leadsAndPaymentsToIso}T23:59:59.999Z`;
+
+
   const agentStatsByUserId: Record<string, any> = {};
   const CHUNK = 100;
   for (let i = 0; i < readableAgentIds.length; i += CHUNK) {
@@ -128,14 +142,14 @@ export async function GET(request: NextRequest) {
       collectionId: COLLECTIONS.AGENT_DAILY_STATS,
       queries: [
         Query.equal("agentId", chunk),
-        Query.greaterThanEqual("dateKey", monthFromIso),
+        Query.greaterThanEqual("dateKey", leadsAndPaymentsFromIso),
         Query.lessThanEqual(
           "dateKey",
-          monthToIso >= todayIso ? (() => {
+          leadsAndPaymentsToIso >= todayIso ? (() => {
             const d = new Date(todayIso);
             d.setUTCDate(d.getUTCDate() - 1);
             return d.toISOString().slice(0, 10);
-          })() : monthToIso
+          })() : leadsAndPaymentsToIso
         ),
         Query.orderAsc("$id"),
       ],
@@ -152,7 +166,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  if (monthFromIso <= todayIso && monthToIso >= todayIso) {
+  if (leadsAndPaymentsFromIso <= todayIso && leadsAndPaymentsToIso >= todayIso) {
     const todayStats = await computeAgentStatsForDate(todayIso);
     for (const doc of todayStats) {
       if (readableAgentIds.includes(doc.agentId)) {
@@ -232,8 +246,8 @@ export async function GET(request: NextRequest) {
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.CLIENT_PAYMENTS,
     queries: [
-      Query.greaterThanEqual("updatedAt", monthStartIso),
-      Query.lessThanEqual("updatedAt", monthEndIso),
+      Query.greaterThanEqual("updatedAt", leadsAndPaymentsStartIso),
+      Query.lessThanEqual("updatedAt", leadsAndPaymentsEndIso),
     ],
     pageLimit: 100,
     maxPages: 200,
@@ -266,7 +280,7 @@ export async function GET(request: NextRequest) {
     const attributedTo = assignedToId || ownerId;
 
     const leadCreated = (lead.closedAt as string) || (lead.$createdAt as string) || (lead.createdAt as string);
-    if (leadCreated && leadCreated < monthStartIso) {
+    if (leadCreated && leadCreated < leadsAndPaymentsStartIso) {
       continue;
     }
 
@@ -285,8 +299,8 @@ export async function GET(request: NextRequest) {
     for (const u of updates) {
       if (
         u.createdAt &&
-        u.createdAt >= monthStartIso &&
-        u.createdAt <= monthEndIso &&
+        u.createdAt >= leadsAndPaymentsStartIso &&
+        u.createdAt <= leadsAndPaymentsEndIso &&
         (u.status === "partially_paid" || u.status === "fully_paid")
       ) {
         if (attributedTo) {
@@ -303,8 +317,8 @@ export async function GET(request: NextRequest) {
       const createdAt = cp.createdAt as string | undefined;
       if (
         createdAt &&
-        createdAt >= monthStartIso &&
-        createdAt <= monthEndIso &&
+        createdAt >= leadsAndPaymentsStartIso &&
+        createdAt <= leadsAndPaymentsEndIso &&
         ((cp.status as string) === "partially_paid" || (cp.status as string) === "fully_paid")
       ) {
         if (attributedTo) {
@@ -342,7 +356,7 @@ export async function GET(request: NextRequest) {
     databases,
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.TECHNICAL_PAYMENTS,
-    queries: [Query.greaterThanEqual("createdAt", monthStartIso), Query.lessThanEqual("createdAt", monthEndIso)],
+    queries: [Query.greaterThanEqual("createdAt", leadsAndPaymentsStartIso), Query.lessThanEqual("createdAt", leadsAndPaymentsEndIso)],
     pageLimit: 100,
     maxPages: 100,
   });

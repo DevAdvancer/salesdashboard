@@ -22,11 +22,22 @@ export default function AssignedReportPage() {
   );
 }
 
+import { useCurrentMonthBounds } from "@/lib/hooks/use-current-month-bounds";
+import { useEffect } from "react";
+
 function AssignedReportContent() {
   const { user } = useAuth();
+  const currentMonthBounds = useCurrentMonthBounds();
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
-  const [dateFrom, setDateFrom] = useState<string | undefined>(() => getMonthStartEst());
-  const [dateTo, setDateTo] = useState<string | undefined>(() => getMonthEndEst());
+  const [dateFrom, setDateFrom] = useState<string | undefined>();
+  const [dateTo, setDateTo] = useState<string | undefined>();
+
+  useEffect(() => {
+    if (!currentMonthBounds.isLoading && dateFrom === undefined && dateTo === undefined) {
+      setDateFrom(currentMonthBounds.leadsFromIso);
+      setDateTo(currentMonthBounds.leadsToIso);
+    }
+  }, [currentMonthBounds, dateFrom, dateTo]);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['assigned-report', dateFrom, dateTo],
@@ -82,8 +93,8 @@ function AssignedReportContent() {
   };
 
   const setThisMonth = () => {
-    setDateFrom(getMonthStartEst());
-    setDateTo(getMonthEndEst());
+    setDateFrom(currentMonthBounds.leadsFromIso);
+    setDateTo(currentMonthBounds.leadsToIso);
   };
 
   const toggleTeam = (teamId: string) => {

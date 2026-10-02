@@ -26,6 +26,8 @@ import {
   X,
 } from "lucide-react";
 import { getTodayEst, getMonthStartEst } from "@/lib/utils/est-date";
+import { useCurrentMonthBounds } from "@/lib/hooks/use-current-month-bounds";
+
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -51,7 +53,7 @@ function toIsoDate(date: Date): string {
   }).format(date);
 }
 
-function dateRangePresets() {
+function dateRangePresets(customMonthStart?: string) {
   const today = getTodayEst();
   const nowEst = new Date();
   const estParts = new Intl.DateTimeFormat("en-US", {
@@ -63,7 +65,7 @@ function dateRangePresets() {
   const dayIndex = days.indexOf(dayOfWeekStr);
   const startOfWeekMs = nowEst.getTime() - dayIndex * 24 * 60 * 60 * 1000;
   const startOfWeek = toIsoDate(new Date(startOfWeekMs));
-  const startOfMonth = getMonthStartEst();
+  const startOfMonth = customMonthStart ?? getMonthStartEst();
   return [
     { label: "Today", from: today, to: today },
     { label: "This Week", from: startOfWeek, to: today },
@@ -159,7 +161,7 @@ function TechnicalPaymentsPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   // Filters
-  const [dateFrom, setDateFrom] = useState(() => getMonthStartEst());
+  const [dateFrom, setDateFrom] = useState<string | undefined>();
   const [dateTo, setDateTo] = useState(() => getTodayEst());
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [searchAgent, setSearchAgent] = useState("");
@@ -226,7 +228,8 @@ function TechnicalPaymentsPage() {
     return { assessment, interview, total: assessment + interview, count: filtered.length };
   }, [filtered]);
 
-  const presets = dateRangePresets();
+  const currentMonthBounds = useCurrentMonthBounds();
+  const presets = dateRangePresets(currentMonthBounds.leadsFromIso);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -427,7 +430,7 @@ function TechnicalPaymentsPage() {
           <div className="flex items-center gap-2 ml-1">
             <input
               type="date"
-              value={dateFrom}
+              value={dateFrom || ""}
               onChange={(e) => setDateFrom(e.target.value)}
               className="h-8 rounded-lg border border-[var(--hairline)] bg-background px-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--ink)]/20"
             />

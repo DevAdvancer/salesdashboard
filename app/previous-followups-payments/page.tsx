@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { ProtectedRoute } from "@/components/protected-route";
+import { useCurrentMonthBounds } from "@/lib/hooks/use-current-month-bounds";
 import {
   createPreviousFollowupsPaymentAction,
   deletePreviousFollowupsPaymentAction,

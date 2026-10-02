@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/lib/contexts/auth-context";
+import { useCurrentMonthBounds } from "@/lib/hooks/use-current-month-bounds";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ import { useRealtimeCollection } from "@/lib/hooks/use-realtime-collection";
 import { COLLECTIONS } from "@/lib/constants/appwrite";
 import type { ReferralSplit } from "@/lib/utils/dashboard-referral";
 import type { PaymentInsightRecord } from "@/app/actions/client-payments/shared";
+import { getCachedBranchesAction } from '@/app/actions/branch-cache';
 import { listTechnicalPaymentsAction } from "@/app/actions/technical-payments";
 import type { TeamLeadAssignmentSummary } from "@/lib/utils/dashboard-insights";
 import { getTodayEst, getMonthStartEst, getMonthEndEst } from "@/lib/utils/est-date";
@@ -148,26 +150,38 @@ function MainDashboard({
   const visibilityLabel = isAgent ? "Assigned to you" : "Total active leads";
   const router = useRouter();
 
-  // Date range — initialized synchronously from localStorage to prevent hydration mismatch and double-fetching.
-  const [dateRange, setDateRange] = useState<DateRange | null>(() => {
-    if (typeof window === "undefined") return null;
+  const currentMonthBounds = useCurrentMonthBounds();
+
+  // Date range
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [dateFilterType, setDateFilterType] = useState<'today' | 'month' | 'custom' | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || currentMonthBounds.isLoading || dateRange !== null) return;
     const savedFilter = window.localStorage.getItem('dashboard_date_filter');
     const today = getTodayEst();
     if (savedFilter === 'month') {
-      return { from: getMonthStartEst(new Date()), to: today };
+      setDateFilterType('month');
+      setDateRange({ from: currentMonthBounds.leadsFromIso, to: today });
+    } else {
+      setDateFilterType('today');
+      setDateRange({ from: today, to: today });
     }
-    return { from: today, to: today };
-  });
+  }, [currentMonthBounds.isLoading, currentMonthBounds.leadsFromIso, dateRange]);
 
   const handleDateRangeChange = (newRange: DateRange) => {
     setDateRange(newRange);
     
-    // Check if it's a single day to determine the filter type.
-    if (newRange.from && newRange.to && newRange.from === newRange.to) {
-      localStorage.setItem('dashboard_date_filter', 'today');
-    } else {
-      // Treat any multi-day range as 'month' for persistence
+    const today = getTodayEst();
+    if (newRange.from === currentMonthBounds.leadsFromIso && newRange.to === today) {
       localStorage.setItem('dashboard_date_filter', 'month');
+      setDateFilterType('month');
+    } else if (newRange.from === newRange.to && newRange.from === today) {
+      localStorage.setItem('dashboard_date_filter', 'today');
+      setDateFilterType('today');
+    } else {
+      localStorage.setItem('dashboard_date_filter', 'custom');
+      setDateFilterType('custom');
     }
   };
 
@@ -195,7 +209,8 @@ function MainDashboard({
     [],
   );
   const [paymentLoading, setPaymentLoading] = useState(isAdminLike);
-  const [technicalPaymentsTotal, setTechnicalPaymentsTotal] = useState(0);
+  const [technicalPayments, setTechnicalPayments] = useState<{ amount: number; branchId: string | null }[]>([]);
+  const [branches, setBranches] = useState<import("@/lib/types").Branch[]>([]);
   const [referralData, setReferralData] = useState<ReferralSplit | null>(null);
   const [referralLoading, setReferralLoading] = useState(isAdminLike);
 
@@ -322,11 +337,15 @@ function MainDashboard({
 
     (async () => {
       try {
+        const linkedinDateRange = dateFilterType === 'month'
+          ? { from: getMonthStartEst(new Date()), to: getTodayEst() }
+          : dateRange;
+
         const rows = await loadLinkedinConnectionKpiProgress({
           userId: user.$id,
           role: user.role,
           branchIds: user.branchIds,
-          dateRange,
+          dateRange: linkedinDateRange,
         });
         if (!cancelled) {
           setLinkedinKpiRows(rows);
@@ -409,10 +428,14 @@ function MainDashboard({
     };
   }, [user, isAdminLike, dateRange]);
 
+  useEffect(() => {
+    getCachedBranchesAction().then(setBranches).catch(console.error);
+  }, []);
+
   // ── Fetch technical payments total for dashboard (all accessible technical payments in date range) ──
   useEffect(() => {
     if (!user || !isAdminLike || !dateRange) {
-      setTechnicalPaymentsTotal(0);
+      setTechnicalPayments([]);
       return;
     }
     let cancelled = false;
@@ -426,13 +449,12 @@ function MainDashboard({
         );
 
         if (!cancelled) {
-          const techTotal = techPayments.reduce((sum: number, p: { amount: number }) => sum + (Number(p.amount) || 0), 0);
-          setTechnicalPaymentsTotal(techTotal);
+          setTechnicalPayments(techPayments);
         }
       } catch (error) {
         console.error("Error loading technical payments total:", error);
         if (!cancelled) {
-          setTechnicalPaymentsTotal(0);
+          setTechnicalPayments([]);
         }
       }
     })();
@@ -704,6 +726,7 @@ function MainDashboard({
             onChange={handleDateRangeChange}
             disabledDates={holidayDateKeys}
             disableHolidaySelection
+            customMonthStart={currentMonthBounds.leadsFromIso}
           />
           <AttendanceSelfToggle />
         </div>
@@ -782,7 +805,8 @@ function MainDashboard({
           isLoading={paymentLoading}
           rangeLabel={dateRange ? rangeLabel(dateRange) : ""}
           dateFilter={dateRange!}
-          technicalPaymentsTotal={technicalPaymentsTotal}
+          technicalPayments={technicalPayments}
+          branches={branches}
         />
       )}
 

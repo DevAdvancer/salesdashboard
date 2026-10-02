@@ -18,6 +18,8 @@ interface DashboardDateRangeProps {
   className?: string;
   disabledDates?: string[];
   disableHolidaySelection?: boolean;
+  customMonthStart?: string;
+  customMonthEnd?: string;
 }
 
 function findNextSelectableDate(
@@ -52,12 +54,17 @@ export function DashboardDateRange({
   className,
   disabledDates = [],
   disableHolidaySelection = false,
+  customMonthStart,
+  customMonthEnd,
 }: DashboardDateRangeProps) {
   const today = getTodayEst();
-  const monthFirst = getMonthStartEst();
+  const monthFirst = customMonthStart ?? getMonthStartEst();
+  const monthLast = customMonthEnd ?? today;
+  
   const selectableToday = disableHolidaySelection
-    ? findPreviousSelectableDate(today, disabledDates)
-    : today;
+    ? findPreviousSelectableDate(monthLast < today ? monthLast : today, disabledDates)
+    : (monthLast < today ? monthLast : today);
+    
   const selectableMonthStart = disableHolidaySelection
     ? findNextSelectableDate(monthFirst, disabledDates)
     : monthFirst;

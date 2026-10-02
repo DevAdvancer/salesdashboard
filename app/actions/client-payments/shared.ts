@@ -180,6 +180,7 @@ export interface PaymentInsightRecord {
     company: string;
     source: string;
     leadStatus: string;
+    branchId: string | null;
     /** Synthetic records created from standalone followup payments only. */
     isFollowupOnly?: boolean;
     isClosed: boolean;
