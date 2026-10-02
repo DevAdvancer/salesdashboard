@@ -426,6 +426,26 @@ export function PaymentsSection({
                       )}
                     </td>
                   </tr>
+                  {branches && branches.map(b => (
+
+                    <tr key={b.$id} className="border-t border-[var(--hairline-soft)] text-emerald-800 text-sm font-semibold">
+
+                      <td colSpan={3} className="py-2 pr-4 text-right">
+
+                        {b.name} Split:
+
+                      </td>
+
+                      <td colSpan={3} className="py-2 pl-4 text-right tabular-nums">
+
+                        {currencyFormatter.format(branchTotals[b.$id] || 0)}
+
+                      </td>
+
+                    </tr>
+
+                  ))}
+
                 </tfoot>
               </table>
             </div>
