@@ -370,6 +370,8 @@ export function useUserManagement() {
         role,
         teamLeadId: (role === "agent" || role === "lead_generation") ? selectedTeamLeadId || null : null,
         branchIds: selectedBranchIds,
+            primaryBranchId: selectedBranchIds.length > 1 ? selectedPrimaryBranchId : null,
+        primaryBranchId: selectedBranchIds.length > 1 ? selectedPrimaryBranchId : null,
         email: emailChanged ? trimmedEmail : undefined,
         department: editDepartment,
         currentUserId: user.$id,
@@ -491,6 +493,7 @@ export function useUserManagement() {
             email: formEmail.trim(),
             password: formPassword,
             branchIds: selectedBranchIds,
+            primaryBranchId: selectedBranchIds.length > 1 ? selectedPrimaryBranchId : null,
             department: createDepartment,
             currentUserId: user.$id,
             role: createRole as "team_lead" | "senior_tl",
@@ -520,6 +523,7 @@ export function useUserManagement() {
               createRole === "compliance" ? "compliance" : "agent",
             teamLeadId: (createRole === "monitor" || createRole === "operations" || createRole === "compliance") ? undefined : selectedTeamLeadId || undefined,
             branchIds: selectedBranchIds,
+            primaryBranchId: selectedBranchIds.length > 1 ? selectedPrimaryBranchId : null,
             department: createDepartment,
             currentUserId: user.$id,
           });
@@ -532,6 +536,7 @@ export function useUserManagement() {
           role: createRole === "lead_generation" ? "lead_generation" : "agent",
           teamLeadId: user.$id,
           branchIds: selectedBranchIds,
+            primaryBranchId: selectedBranchIds.length > 1 ? selectedPrimaryBranchId : null,
           department: createDepartment,
           currentUserId: user.$id,
         });
