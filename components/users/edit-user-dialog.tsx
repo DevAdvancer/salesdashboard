@@ -28,6 +28,8 @@ interface EditUserDialogProps {
   setSelectedTeamLeadId: (id: string | null) => void;
   availableBranches: Branch[];
   selectedBranchIds: string[];
+  selectedPrimaryBranchId: string | null;
+  setSelectedPrimaryBranchId: (id: string | null) => void;
   toggleBranch: (id: string) => void;
   isUpdating: boolean;
   handleUpdateUser: () => void;
@@ -52,6 +54,8 @@ export function EditUserDialog({
   setSelectedTeamLeadId,
   availableBranches,
   selectedBranchIds,
+  selectedPrimaryBranchId,
+  setSelectedPrimaryBranchId,
   toggleBranch,
   isUpdating,
   handleUpdateUser,

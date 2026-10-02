@@ -174,6 +174,8 @@ function UserManagementContent() {
         availableBranches={availableBranches}
         selectedBranchIds={selectedBranchIds}
         setSelectedBranchIds={setSelectedBranchIds}
+        selectedPrimaryBranchId={selectedPrimaryBranchId}
+        setSelectedPrimaryBranchId={setSelectedPrimaryBranchId}
         toggleBranch={toggleBranch}
         isUpdating={isUpdating}
         handleUpdateUser={handleUpdateUser}
