@@ -30,7 +30,7 @@ function UserManagementContent() {
     showCreateDialog, setShowCreateDialog, editingUser, setEditingUser,
     isUpdating, deletingUserId, activeStatusUserId, error, setError,
     ConfirmDialog, formName, setFormName, formEmail, setFormEmail,
-    formPassword, setFormPassword, selectedBranchIds, setSelectedBranchIds,
+    formPassword, setFormPassword, selectedBranchIds, setSelectedBranchIds, selectedPrimaryBranchId, setSelectedPrimaryBranchId,
     selectedTeamLeadId, setSelectedTeamLeadId, createDepartment, setCreateDepartment,
     departmentFilter, setDepartmentFilter, editRole, setEditRole,
     editEmail, setEditEmail, editDepartment, setEditDepartment,
@@ -144,6 +144,8 @@ function UserManagementContent() {
         setSelectedTeamLeadId={setSelectedTeamLeadId}
         availableBranches={availableBranches}
         selectedBranchIds={selectedBranchIds}
+        selectedPrimaryBranchId={selectedPrimaryBranchId}
+        setSelectedPrimaryBranchId={setSelectedPrimaryBranchId}
         toggleBranch={toggleBranch}
         isCreating={isCreating}
         handleCreate={handleCreate}

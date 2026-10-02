@@ -462,11 +462,12 @@ export async function updateUserAction(input: {
     role?: UserRole;
     teamLeadId?: string | null;
     branchIds?: string[];
+    primaryBranchId?: string | null;
     email?: string;
     department?: Department;
     currentUserId: string;
 }) {
-    const { userId, role, teamLeadId, branchIds, email, department, currentUserId } = input;
+    const { userId, role, teamLeadId, branchIds, primaryBranchId, email, department, currentUserId } = input;
 
     await assertAuthenticatedUserId(currentUserId);
 

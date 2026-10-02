@@ -309,6 +309,10 @@ export async function listTechnicalPaymentsAction(
           maxPages: 500,
         });
 
+  const userPrimaryBranchMap = new Map<string, string | null>(
+    userDocs.map((u: any) => [u.$id, typeof u.primaryBranchId === "string" ? u.primaryBranchId : null])
+  );
+
   const userNameMap = new Map<string, string>(
     userDocs.map((u: any) => [u.$id, u.name as string || u.$id])
   );

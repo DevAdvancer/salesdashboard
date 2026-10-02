@@ -570,6 +570,7 @@ export async function listPaymentsReportAction(input: {
 
     // Fetch user names
     const userNameMap = new Map<string, string>();
+    const userPrimaryBranchMap = new Map<string, string | null>();
     const agentIdsArray = Array.from(allAgentIds);
     for (let i = 0; i < agentIdsArray.length; i += 100) {
       const chunkIds = agentIdsArray.slice(i, i + 100);
@@ -577,12 +578,13 @@ export async function listPaymentsReportAction(input: {
         databases,
         databaseId: DATABASE_ID,
         collectionId: COLLECTIONS.USERS,
-        queries: [Query.equal("$id", chunkIds), Query.select(["$id", "name"])],
+        queries: [Query.equal("$id", chunkIds), Query.select(["$id", "name", "primaryBranchId"])],
         pageLimit: 100,
         maxPages: 5,
       });
       for (const u of userDocs) {
         userNameMap.set(u.$id, u.name);
+          userPrimaryBranchMap.set(u.$id, typeof u.primaryBranchId === "string" ? u.primaryBranchId : null);
       }
     }
 

@@ -27,7 +27,8 @@ export interface User {
   department: Department;
   teamLeadId: string | null;
   branchIds: string[];
-  notificationsEnabled?: boolean;
+    primaryBranchId?: string | null;
+    notificationsEnabled?: boolean;
   notificationEmails?: string;
   isActive?: boolean;
   /** @deprecated Use branchIds instead */
@@ -44,7 +45,8 @@ export interface CreateUserInput {
   department?: Department;
   teamLeadId?: string;
   branchIds: string[];
-}
+    primaryBranchId?: string | null;
+  }
 
 export interface CreateTeamLeadInput {
   name: string;
@@ -52,7 +54,8 @@ export interface CreateTeamLeadInput {
   password: string;
   department?: Department;
   branchIds: string[];
-}
+    primaryBranchId?: string | null;
+  }
 
 export interface CreateAgentInput {
   name: string;
@@ -62,7 +65,8 @@ export interface CreateAgentInput {
   department?: Department;
   teamLeadId?: string;
   branchIds: string[];
-}
+    primaryBranchId?: string | null;
+  }
 
 // Lead types
 export interface Lead {

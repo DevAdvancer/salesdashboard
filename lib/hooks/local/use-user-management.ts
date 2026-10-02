@@ -49,6 +49,7 @@ export function useUserManagement() {
   const [formEmail, setFormEmail] = useState("");
   const [formPassword, setFormPassword] = useState("");
   const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>([]);
+  const [selectedPrimaryBranchId, setSelectedPrimaryBranchId] = useState<string | null>(null);
   const [selectedTeamLeadId, setSelectedTeamLeadId] = useState<string | null>(null);
   
   const [createDepartment, setCreateDepartment] = useState<Department>(() => activeDashboard);
@@ -327,6 +328,7 @@ export function useUserManagement() {
   const handleEdit = useCallback((userToEdit: User) => {
     setEditingUser(userToEdit);
     setSelectedBranchIds(userToEdit.branchIds || []);
+      setSelectedPrimaryBranchId(userToEdit.primaryBranchId || null);
     setSelectedTeamLeadId(userToEdit.teamLeadId || null);
     setEditRole(userToEdit.role);
     setEditEmail(userToEdit.email || "");
@@ -613,7 +615,7 @@ export function useUserManagement() {
     showCreateDialog, setShowCreateDialog, editingUser, setEditingUser,
     isUpdating, deletingUserId, activeStatusUserId, error, setError,
     ConfirmDialog, formName, setFormName, formEmail, setFormEmail,
-    formPassword, setFormPassword, selectedBranchIds, setSelectedBranchIds,
+    formPassword, setFormPassword, selectedBranchIds, setSelectedBranchIds, selectedPrimaryBranchId, setSelectedPrimaryBranchId,
     selectedTeamLeadId, setSelectedTeamLeadId, createDepartment, setCreateDepartment,
     departmentFilter, setDepartmentFilter, editRole, setEditRole,
     editEmail, setEditEmail, editDepartment, setEditDepartment,
