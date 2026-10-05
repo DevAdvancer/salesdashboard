@@ -63,6 +63,8 @@ export const COLLECTIONS = {
   CALENDAR_EVENTS: process.env.NEXT_PUBLIC_APPWRITE_CALENDAR_EVENTS_COLLECTION_ID || 'calendar_events',
   TEAM_REPORTS: process.env.NEXT_PUBLIC_APPWRITE_TEAM_REPORTS_COLLECTION_ID || 'team_reports',
   TARGET_MONTH_BOUNDS: process.env.NEXT_PUBLIC_APPWRITE_TARGET_MONTH_BOUNDS_COLLECTION_ID || 'target_month_bounds',
+  // Single server-managed document containing the recipients for scheduled report emails.
+  REPORT_EMAIL_SETTINGS: process.env.NEXT_PUBLIC_APPWRITE_REPORT_EMAIL_SETTINGS_COLLECTION_ID || 'report_email_settings',
 };
 
 export const BUCKETS = {

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Info, Lock, Moon, ShieldCheck, Sun, UserRound } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { updateOwnProfileAction } from '@/app/actions/profile';
+import { getReportEmailSettingsAction, saveReportEmailSettingsAction } from '@/app/actions/report-email-settings';
 import { ProtectedRoute } from '@/components/protected-route';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -52,6 +53,34 @@ function SettingsContent() {
   const [branchNames, setBranchNames] = useState<string[]>([]);
   const [teamLeadName, setTeamLeadName] = useState<string | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [reportEmails, setReportEmails] = useState('');
+  const [loadingReportEmails, setLoadingReportEmails] = useState(false);
+  const [savingReportEmails, setSavingReportEmails] = useState(false);
+  const canManageReportEmails = user?.role === 'admin' && user.email.toLowerCase() === 'abhirupvizva@gmail.com';
+
+  useEffect(() => {
+    if (!canManageReportEmails) return;
+    let active = true;
+    setLoadingReportEmails(true);
+    getReportEmailSettingsAction()
+      .then((emails) => { if (active) setReportEmails(emails.join('\n')); })
+      .catch((error) => { if (active) toast({ title: 'Unable to load report recipients', description: error instanceof Error ? error.message : undefined, variant: 'destructive' }); })
+      .finally(() => { if (active) setLoadingReportEmails(false); });
+    return () => { active = false; };
+  }, [canManageReportEmails, toast]);
+
+  const saveReportEmails = async () => {
+    setSavingReportEmails(true);
+    try {
+      const emails = await saveReportEmailSettingsAction(reportEmails);
+      setReportEmails(emails.join('\n'));
+      toast({ title: 'Report recipients saved' });
+    } catch (error) {
+      toast({ title: 'Unable to save report recipients', description: error instanceof Error ? error.message : undefined, variant: 'destructive' });
+    } finally {
+      setSavingReportEmails(false);
+    }
+  };
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('salesdashboard-theme') === 'dark' ? 'dark' : 'light';
@@ -262,6 +291,29 @@ function SettingsContent() {
           </CardContent>
         </Card>
       </div>
+
+      {canManageReportEmails && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Scheduled report emails</CardTitle>
+            <CardDescription>Daily Summary and Target Report emails go only to the addresses listed here. Leave this empty to pause report emails.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Label htmlFor="report-emails">Recipient email addresses</Label>
+            <Textarea
+              id="report-emails"
+              value={reportEmails}
+              onChange={(event) => setReportEmails(event.target.value)}
+              placeholder="One email address per line"
+              className="min-h-[120px]"
+              disabled={loadingReportEmails || savingReportEmails}
+            />
+            <Button onClick={saveReportEmails} loading={savingReportEmails} disabled={loadingReportEmails}>
+              Save report recipients
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-3">
         <Card className="xl:col-span-2">

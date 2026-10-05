@@ -6,6 +6,7 @@ import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
 import { getTodayEst } from "@/lib/utils/est-date";
 import { isWorkingDateKey } from "@/lib/utils/holiday-calendar";
 import { sendNotificationEmail } from "@/lib/server/email-service";
+import { getReportEmails } from "@/lib/server/report-email-settings";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 
 function getAuthorizationToken(request: NextRequest) {
@@ -42,15 +43,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: true, skipped: true, reason: "Not a working day" });
   }
 
-  // 1. Fetch Admins
-  const admins = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
-    Query.equal("role", "admin"),
-    Query.limit(500),
-  ]);
-  const adminEmails = admins.documents.map((doc: any) => doc.email).filter(Boolean);
+  const reportEmails = await getReportEmails(databases);
   
-  if (adminEmails.length === 0) {
-    return NextResponse.json({ ok: false, reason: "No admin emails found" });
+  if (reportEmails.length === 0) {
+    return NextResponse.json({ ok: true, skipped: true, reason: "No report recipients configured" });
   }
   
   const startIso = `${todayKey}T00:00:00.000Z`;
@@ -118,7 +114,7 @@ export async function GET(request: NextRequest) {
   
   // Need leads for followups to find agent ID
   const followupLeadIds = Array.from(new Set(followupsDocs.map((f: any) => f.leadId).filter(Boolean)));
-  let followupLeads: any[] = [];
+  const followupLeads: any[] = [];
   for (let i = 0; i < followupLeadIds.length; i += 100) {
     const chunk = followupLeadIds.slice(i, i + 100);
     const docs = await listAllDocuments<any>({
@@ -163,7 +159,7 @@ export async function GET(request: NextRequest) {
   const agentStats = new Map<string, { leadsClosedCount: number; followupsCount: number; revenueTotal: number }>();
 
   const closedLeadIds = validClosed.map((l: any) => l.$id);
-  let closedLeadPayments: any[] = [];
+  const closedLeadPayments: any[] = [];
   if (closedLeadIds.length > 0) {
     for (let i = 0; i < closedLeadIds.length; i += 100) {
       const chunk = closedLeadIds.slice(i, i + 100);
@@ -408,10 +404,10 @@ export async function GET(request: NextRequest) {
 
   html += `<br><p style="font-size: 12px; color: #6b7280;">You are receiving this because of a new notification in the CRM. This email and any attachments are confidential and intended solely for the addressee.<br />This is sent from crm.silverspaceinc.tech. Please don't reply to this mail.</p>`;
 
-  const toEmails = adminEmails.join(",");
+  const toEmails = reportEmails.join(",");
   const subject = `Daily Report Summary - ${todayKey}`;
   
-  await sendNotificationEmail({ to: toEmails, subject, html });
+  await sendNotificationEmail({ to: toEmails, subject, html, allowAllRecipients: true });
 
-  return NextResponse.json({ ok: true, sentTo: adminEmails.length });
+  return NextResponse.json({ ok: true, sentTo: reportEmails.length });
 }

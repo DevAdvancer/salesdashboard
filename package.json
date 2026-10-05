@@ -14,6 +14,8 @@
     "setup:appwrite:dry": "tsx scripts/sync-appwrite-schema.ts --dry-run",
     "setup:appwrite:targets": "tsx scripts/setup-monthly-targets.ts",
     "setup:appwrite:targets:dry": "tsx scripts/setup-monthly-targets.ts --dry-run",
+    "setup:report-emails:dry": "tsx scripts/setup-report-email-settings.ts",
+    "setup:report-emails:apply": "tsx scripts/setup-report-email-settings.ts --apply",
     "setup:technical-payments": "tsx scripts/setup-technical-payments.ts",
     "setup:technical-payments:dry": "tsx scripts/setup-technical-payments.ts --dry-run",
     "setup:pending-amounts": "tsx scripts/setup-pending-amounts.ts",

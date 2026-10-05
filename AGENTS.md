@@ -229,6 +229,7 @@ Vercel is the primary target (`vercel.json` supplies the cron schedule). A [Dock
 
 - **Dry-run first** on anything that mutates Appwrite schema or production data, and show the user the plan before applying.
 - **Do not commit or push unless explicitly asked by the user.** You are ONLY allowed to push when the user says to push. Otherwise, you will not. When you do commit, plain messages only, no AI attribution trailers.
+- **Ask before every commit and every push.** Show the exact scope and proposed commit message, then get explicit approval for that commit. After committing, ask separately for approval before pushing. Approval for one commit or push does not cover later ones.
 - **Verify before claiming done.** `bun run lint` and `bun run test` at minimum; run the dev server for UI changes.
 - **When behavior spans layers**, check whether the change is needed in the service, the action, the access constants, and the tests. This codebase's most common defect is updating one of the four.
 

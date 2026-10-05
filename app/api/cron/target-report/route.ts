@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/server/appwrite";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import { sendNotificationEmail } from "@/lib/server/email-service";
+import { getReportEmails } from "@/lib/server/report-email-settings";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import { buildTargetReport } from "@/lib/utils/monthly-target-report";
 import { computeAgentStatsForDate } from "@/lib/server/stats-aggregator";
@@ -55,15 +56,10 @@ export async function GET(request: NextRequest) {
   const todayKey = now.toISOString().slice(0, 10);
   const monthKey = todayKey.slice(0, 7); // e.g. "2026-09"
 
-  // Fetch Admins
-  const admins = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
-    Query.equal("role", "admin"),
-    Query.limit(500),
-  ]);
-  const adminEmails = admins.documents.map((doc: any) => doc.email).filter(Boolean);
+  const reportEmails = await getReportEmails(databases);
   
-  if (adminEmails.length === 0) {
-    return NextResponse.json({ ok: false, reason: "No admin emails found" });
+  if (reportEmails.length === 0) {
+    return NextResponse.json({ ok: true, skipped: true, reason: "No report recipients configured" });
   }
 
   const targets = await listAllDocuments<any>({
@@ -338,7 +334,8 @@ export async function GET(request: NextRequest) {
       .filter((doc) => doc.leadId === leadId)
       .reduce((sum, doc) => sum + (Number(doc.amount) || 0), 0);
 
-    for (let [agentId, amount] of agentTotals.entries()) {
+    for (const [agentId, initialAmount] of agentTotals.entries()) {
+      let amount = initialAmount;
       amount -= followupsForThisLead;
       if (amount < 0) amount = 0;
       
@@ -443,10 +440,10 @@ export async function GET(request: NextRequest) {
 
   html += `<br><p style="font-size: 12px; color: #6b7280;">You are receiving this because of a new notification in the CRM. This email and any attachments are confidential and intended solely for the addressee.<br />This is sent from crm.silverspaceinc.tech. Please don't reply to this mail.</p>`;
 
-  const toEmails = adminEmails.join(",");
+  const toEmails = reportEmails.join(",");
   const subject = `Target Report - ${monthKey}`;
   
-  await sendNotificationEmail({ to: toEmails, subject, html });
+  await sendNotificationEmail({ to: toEmails, subject, html, allowAllRecipients: true });
 
-  return NextResponse.json({ ok: true, sentTo: adminEmails.length });
+  return NextResponse.json({ ok: true, sentTo: reportEmails.length });
 }

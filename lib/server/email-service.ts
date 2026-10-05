@@ -296,11 +296,11 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-export async function sendNotificationEmail({ to, subject, html, text }: { to: string; subject: string; html: string; text?: string }) {
-  const toList = to.split(',').map(e => e.trim()).filter(e => 
-    e.toLowerCase() !== 'unassigned@silverspaceinc.com' && 
+export async function sendNotificationEmail({ to, subject, html, text, allowAllRecipients = false }: { to: string; subject: string; html: string; text?: string; allowAllRecipients?: boolean }) {
+  const toList = to.split(',').map(e => e.trim()).filter(e => allowAllRecipients || (
+    e.toLowerCase() !== 'unassigned@silverspaceinc.com' &&
     e.toLowerCase() !== 'teamlead@silverspaceinc.com'
-  );
+  ));
 
   if (toList.length === 0) {
     console.log(`[email-service] Skipping email to ${to} because all recipients are excluded.`);
