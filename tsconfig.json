@@ -38,6 +38,7 @@
   ],
   "exclude": [
     "node_modules",
+    "extensions/**",
     "scripts/**/*.ts",
     "scripts/**/*.tsx",
     "scripts/**/*.mts",

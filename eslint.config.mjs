@@ -14,6 +14,9 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     "coverage/**",
     ".codex/**",
+    "extensions/**/node_modules/**",
+    "extensions/**/.output/**",
+    "extensions/**/.wxt/**",
   ]),
   {
     rules: {
@@ -26,6 +29,11 @@ const eslintConfig = defineConfig([
       "react-hooks/purity": "off",
       "react-hooks/immutability": "off",
     },
+  },
+  {
+    files: ["extensions/**/*.{ts,tsx}"],
+    // Browser-extension pages bundle their own assets and do not run a Next image server.
+    rules: { "@next/next/no-img-element": "off" },
   },
   {
     files: ["tests/**/*.{ts,tsx}"],
