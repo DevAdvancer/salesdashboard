@@ -26,6 +26,10 @@ interface UserTableProps {
   currentUsersPage: number;
   setCurrentUsersPage: (val: number | ((prev: number) => number)) => void;
   usersTotal: number;
+  activeUsersTotal: number;
+  inactiveUsersTotal: number;
+  statusFilter: "active" | "inactive";
+  setStatusFilter: (value: "active" | "inactive") => void;
   USERS_PAGE_SIZE: number;
 }
 
@@ -51,6 +55,10 @@ export function UserTable({
   currentUsersPage,
   setCurrentUsersPage,
   usersTotal,
+  activeUsersTotal,
+  inactiveUsersTotal,
+  statusFilter,
+  setStatusFilter,
   USERS_PAGE_SIZE,
 }: UserTableProps) {
   const formatRole = (role: string) => {
@@ -91,6 +99,14 @@ export function UserTable({
 
   return (
     <>
+      <div className="mb-5 flex flex-wrap gap-2" role="group" aria-label="User status">
+        <Button type="button" variant={statusFilter === "active" ? "default" : "outline"} onClick={() => setStatusFilter("active")} aria-pressed={statusFilter === "active"}>
+          Active users ({activeUsersTotal})
+        </Button>
+        <Button type="button" variant={statusFilter === "inactive" ? "default" : "outline"} onClick={() => setStatusFilter("inactive")} aria-pressed={statusFilter === "inactive"}>
+          Inactive users ({inactiveUsersTotal})
+        </Button>
+      </div>
       {isLoading ? (
         <div className="flex items-center justify-center py-8">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
@@ -98,7 +114,7 @@ export function UserTable({
       ) : filteredUsers.length === 0 && search === "" ? (
         <div className="text-center py-8">
           <p className="text-gray-500 dark:text-gray-400">
-            No users found. {canCreate ? "Create your first user to get started." : ""}
+            {statusFilter === "inactive" ? "No inactive users found." : `No active users found. ${canCreate ? "Create your first user to get started." : ""}`}
           </p>
         </div>
       ) : (

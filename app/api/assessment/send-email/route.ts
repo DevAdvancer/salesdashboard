@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedAccount } from "@/lib/server/current-user";
 import { cookies } from "next/headers";
+import { createAdminClient } from "@/lib/server/appwrite";
+import { excludeInactiveGraphRecipients } from "@/lib/server/active-email-recipients";
 import {
   SUPPORT_EMAIL_MAX_JSON_PAYLOAD_BYTES,
   SUPPORT_EMAIL_MAX_JSON_PAYLOAD_LABEL,
@@ -46,8 +48,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Send via Microsoft Graph API
+    const eligibleMessage = await excludeInactiveGraphRecipients((await createAdminClient()).databases, message);
+    if (!eligibleMessage.toRecipients?.length) {
+      return NextResponse.json({ error: "No active recipients remain." }, { status: 400 });
+    }
     const graphPayload = {
-      message,
+      message: eligibleMessage,
       saveToSentItems: saveToSentItems ?? "true",
     };
 

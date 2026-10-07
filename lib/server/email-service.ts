@@ -10,6 +10,8 @@
 
 import dotenv from 'dotenv';
 import path from 'path';
+import { createAdminClient } from '@/lib/server/appwrite';
+import { excludeInactiveUserEmails } from '@/lib/server/active-email-recipients';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
@@ -221,12 +223,15 @@ export async function sendDuplicateAlertEmail(
   }
 
   // Filter out the acting user and the dummy emails from recipients
-  const toEmails = input.recipientEmails.filter(
+  const eligibleEmails = await excludeInactiveUserEmails((await createAdminClient()).databases, input.recipientEmails);
+  const toEmails = eligibleEmails.filter(
     (e) => 
       e.toLowerCase() !== input.actorEmail.toLowerCase() && 
       e.toLowerCase() !== 'teamlead@silverspaceinc.com' &&
       e.toLowerCase() !== 'unassigned@silverspaceinc.com'
   );
+
+  const bccEmails = await excludeInactiveUserEmails((await createAdminClient()).databases, [BCC_EMAIL]);
 
   if (toEmails.length === 0) {
     console.warn('[email-service] No recipients after excluding actor, skipping email.');
@@ -255,9 +260,7 @@ export async function sendDuplicateAlertEmail(
       toRecipients: toEmails.map((email) => ({
         emailAddress: { address: email },
       })),
-      bccRecipients: [
-        { emailAddress: { address: BCC_EMAIL } },
-      ],
+      bccRecipients: bccEmails.map((email) => ({ emailAddress: { address: email } })),
     },
     saveToSentItems: false,
   };
@@ -297,11 +300,12 @@ const transporter = nodemailer.createTransport({
 });
 
 export async function sendNotificationEmail({ to, subject, html, text, allowAllRecipients = false }: { to: string; subject: string; html: string; text?: string; allowAllRecipients?: boolean }) {
-  const toList = to.split(',').map(e => e.trim()).filter(e => allowAllRecipients || (
+  const requested = to.split(',').map(e => e.trim()).filter(e => allowAllRecipients || (
     e.toLowerCase() !== 'unassigned@silverspaceinc.com' &&
     e.toLowerCase() !== 'teamlead@silverspaceinc.com'
   ));
 
+  const toList = await excludeInactiveUserEmails((await createAdminClient()).databases, requested);
   if (toList.length === 0) {
     console.log(`[email-service] Skipping email to ${to} because all recipients are excluded.`);
     return null;

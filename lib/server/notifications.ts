@@ -16,6 +16,10 @@ export async function createNotificationRecord(
   databases: Databases,
   input: CreateNotificationInput
 ) {
+  // Check the current user status before writing any in-app notification or email.
+  const recipient = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, input.recipientId);
+  if (recipient.isActive === false) return null;
+
   const record = await databases.createDocument(
     DATABASE_ID,
     COLLECTIONS.NOTIFICATIONS,
@@ -70,12 +74,8 @@ async function sendEmailForNotification(
   try {
     const authUser = await users.get(userId);
     const { databases } = await createAdminClient();
-    let dbUser: any = null;
-    try {
-      dbUser = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, userId);
-    } catch (e) {
-      // Ignored
-    }
+    const dbUser = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, userId);
+    if (dbUser.isActive === false) return;
     
     if (authUser && authUser.email) {
       if (

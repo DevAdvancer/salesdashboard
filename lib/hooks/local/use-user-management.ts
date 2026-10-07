@@ -28,6 +28,9 @@ export function useUserManagement() {
   
   const [users, setUsers] = useState<User[]>([]);
   const [usersTotal, setUsersTotal] = useState(0);
+  const [activeUsersTotal, setActiveUsersTotal] = useState(0);
+  const [inactiveUsersTotal, setInactiveUsersTotal] = useState(0);
+  const [statusFilter, setStatusFilter] = useState<"active" | "inactive">("active");
   const [currentUsersPage, setCurrentUsersPage] = useState(1);
   const USERS_PAGE_SIZE = 50;
   const [search, setSearch] = useState("");
@@ -114,19 +117,29 @@ export function useUserManagement() {
       setIsLoading(true);
       if (isAdmin || isDeveloper || isMonitor || isOperations || isSeniorTL) {
         const { Query } = await import("appwrite");
-        const response = await databases.listDocuments(
+        const baseQueries = isSeniorTL && !isAdmin && !isDeveloper ? [Query.equal('department', 'resume')] : [];
+        const [response, activeCount, inactiveCount] = await Promise.all([
+          databases.listDocuments(
           process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
           process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!,
           [
             Query.limit(USERS_PAGE_SIZE),
             Query.offset((currentUsersPage - 1) * USERS_PAGE_SIZE),
+            Query.equal('isActive', statusFilter === 'active'),
             Query.select([
               '$id', '$createdAt', '$updatedAt', 'name', 'email', 'role',
               'isActive', 'teamLeadId', 'branchIds', 'department',
             ]),
-            ...(isSeniorTL && !isAdmin && !isDeveloper ? [Query.equal('department', 'resume')] : [])
+            ...baseQueries
           ]
-        );
+          ),
+          databases.listDocuments(process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!, process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!, [...baseQueries, Query.equal('isActive', true), Query.limit(1)]),
+          databases.listDocuments(process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!, process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!, [...baseQueries, Query.equal('isActive', false), Query.limit(1)]),
+        ]);
+        if (response.documents.length === 0 && response.total > 0 && currentUsersPage > 1) {
+          setCurrentUsersPage(Math.max(1, Math.ceil(response.total / USERS_PAGE_SIZE)));
+          return;
+        }
         const pageUsers = response.documents.map((doc: any) => ({
           $id: doc.$id,
           name: doc.name,
@@ -154,14 +167,20 @@ export function useUserManagement() {
 
         setUsers(pageUsers);
         setUsersTotal(response.total);
+        setActiveUsersTotal(activeCount.total);
+        setInactiveUsersTotal(inactiveCount.total);
       } else if (user.role === "team_lead") {
         const { getAgentsByTeamLead } = await import("@/lib/services/user-service");
-        const agentsList = await getAgentsByTeamLead(user.$id);
+        const agentsList = await getAgentsByTeamLead(user.$id, undefined, true);
         setUsers(agentsList);
-        setUsersTotal(agentsList.length);
+        setActiveUsersTotal(agentsList.filter((agent) => agent.isActive !== false).length);
+        setInactiveUsersTotal(agentsList.filter((agent) => agent.isActive === false).length);
+        setUsersTotal(agentsList.filter((agent) => agent.isActive === (statusFilter === 'active')).length);
       } else {
         setUsers([]);
         setUsersTotal(0);
+        setActiveUsersTotal(0);
+        setInactiveUsersTotal(0);
       }
     } catch (err: any) {
       console.error("Error fetching users:", err);
@@ -169,7 +188,7 @@ export function useUserManagement() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, isAdmin, isDeveloper, isMonitor, isOperations, isSeniorTL, currentUsersPage]);
+  }, [user, isAdmin, isDeveloper, isMonitor, isOperations, isSeniorTL, currentUsersPage, statusFilter]);
 
   const fetchTeamLeadsOnly = useCallback(async () => {
     if (!user) return;
@@ -453,6 +472,7 @@ export function useUserManagement() {
         currentUserId: user.$id,
       });
 
+      databases.clearReadCacheForCollection(process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!);
       invalidateUsersCache();
       await fetchUsers();
     } catch (err: unknown) {
@@ -559,7 +579,7 @@ export function useUserManagement() {
 
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase();
-    let result = users;
+    let result = users.filter((target) => (target.isActive !== false) === (statusFilter === 'active'));
 
     const isLeadership = (role?: string) =>
       role === "admin" || role === "developer" || role === "monitor" || role === "operations";
@@ -595,7 +615,7 @@ export function useUserManagement() {
     }
 
     return result;
-  }, [branchMap, search, users, departmentFilter, activeDashboard]);
+  }, [branchMap, search, users, departmentFilter, activeDashboard, statusFilter]);
 
   const teamLeadOptions = useMemo(() => {
     if (activeDashboard !== "resume" && createDepartment !== "resume") {
@@ -614,7 +634,8 @@ export function useUserManagement() {
 
   return {
     user, isAdmin, isDeveloper, isTeamLead, isMonitor, isOperations, activeDashboard,
-    users, usersTotal, currentUsersPage, setCurrentUsersPage, USERS_PAGE_SIZE,
+    users, usersTotal, activeUsersTotal, inactiveUsersTotal, statusFilter, setStatusFilter,
+    currentUsersPage, setCurrentUsersPage, USERS_PAGE_SIZE,
     search, setSearch, allBranches, branchMap, isLoading, isCreating,
     showCreateDialog, setShowCreateDialog, editingUser, setEditingUser,
     isUpdating, deletingUserId, activeStatusUserId, error, setError,

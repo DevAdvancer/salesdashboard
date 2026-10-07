@@ -26,6 +26,7 @@ function UserManagementContent() {
   const {
     user, isAdmin, isDeveloper, isTeamLead, isMonitor, isOperations, activeDashboard,
     currentUsersPage, setCurrentUsersPage, USERS_PAGE_SIZE, usersTotal,
+    activeUsersTotal, inactiveUsersTotal, statusFilter, setStatusFilter,
     search, setSearch, branchMap, isLoading, isCreating,
     showCreateDialog, setShowCreateDialog, editingUser, setEditingUser,
     isUpdating, deletingUserId, activeStatusUserId, error, setError,
@@ -107,6 +108,10 @@ function UserManagementContent() {
             currentUsersPage={currentUsersPage}
             setCurrentUsersPage={setCurrentUsersPage}
             usersTotal={usersTotal}
+            activeUsersTotal={activeUsersTotal}
+            inactiveUsersTotal={inactiveUsersTotal}
+            statusFilter={statusFilter}
+            setStatusFilter={(value) => { setStatusFilter(value); setCurrentUsersPage(1); }}
             USERS_PAGE_SIZE={USERS_PAGE_SIZE}
           />
         </CardContent>
