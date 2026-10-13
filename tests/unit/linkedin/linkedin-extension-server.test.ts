@@ -19,8 +19,9 @@ jest.mock("@/app/actions/linkedin/accounts", () => ({ listMyLinkedinAccountsActi
 jest.mock("@/app/actions/linkedin/requests", () => ({ createLinkedinRequestAction: jest.fn() }));
 jest.mock("@/app/actions/linkedin/shared", () => ({
   assertAccessibleLinkedinAccount: jest.fn(), isBlockingLinkedinRequest: jest.fn(), logAuditAction: jest.fn(),
+  sameLinkedinCompany: (left: string, right: string) =>
+    left.toLowerCase().replace(/[^a-z0-9]/g, "") === right.toLowerCase().replace(/[^a-z0-9]/g, ""),
 }));
-jest.mock("@/app/actions/lead/validation", () => ({ validateLeadUniquenessAction: jest.fn() }));
 
 import { createAdminClient } from "@/lib/server/appwrite";
 import { getAuthenticatedUserDoc } from "@/lib/server/current-user";
@@ -29,13 +30,12 @@ import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import { listMyLinkedinAccountsAction } from "@/app/actions/linkedin/accounts";
 import { createLinkedinRequestAction } from "@/app/actions/linkedin/requests";
 import { assertAccessibleLinkedinAccount, isBlockingLinkedinRequest } from "@/app/actions/linkedin/shared";
-import { validateLeadUniquenessAction } from "@/app/actions/lead/validation";
 import { bootstrapLinkedinExtension, checkLinkedinExtension, recordLinkedinExtension } from "@/lib/server/linkedin-extension";
 import { COLLECTIONS } from "@/lib/constants/appwrite";
 
 const account = { $id: "account-1", assignedUserId: "agent-1", company: "Silverspace", idName: "Account A", accountType: "main", isActive: true, connectionLimit: 3 };
 const databases = { clearReadCacheForCollection: jest.fn(), createDocument: jest.fn() };
-const input = { accountId: account.$id, targetUrl: "https://linkedin.com/in/person?trk=test" };
+const input = { accountId: account.$id, targetUrl: "https://linkedin.com/in/person/?trk=test" };
 let records: any[];
 let used: any[];
 
@@ -48,9 +48,9 @@ beforeEach(() => {
   (hasLinkedinHelperAccess as jest.Mock).mockResolvedValue(true);
   (listMyLinkedinAccountsAction as jest.Mock).mockResolvedValue([account]);
   (assertAccessibleLinkedinAccount as jest.Mock).mockResolvedValue(account);
-  (validateLeadUniquenessAction as jest.Mock).mockResolvedValue({ isValid: true });
   (isBlockingLinkedinRequest as jest.Mock).mockImplementation(async (_databases, r) => r.status !== "withdrawn" && r.isActive !== false);
-  (listAllDocuments as jest.Mock).mockImplementation(async ({ queries }) => queries.some((q: string) => q.includes('"attribute":"accountId"')) ? used : records);
+  (listAllDocuments as jest.Mock).mockImplementation(async ({ queries }) => queries.some((q: string) => q.includes('"attribute":"dateSent"')) ? used :
+    records.map(record => ({ company: account.company, ...record })));
   databases.createDocument.mockResolvedValue({ $id: "saved" });
 });
 afterEach(() => jest.useRealTimers());
@@ -86,11 +86,12 @@ it("rejects a user whose beta extension access was revoked", async () => {
   await expect(checkLinkedinExtension(input)).rejects.toMatchObject({ status: 403 });
   expect(assertAccessibleLinkedinAccount).not.toHaveBeenCalled();
 });
-it("requires a fresh check and rechecks lead duplicates on save", async () => {
-  const checked = await checkLinkedinExtension(input);
-  (validateLeadUniquenessAction as jest.Mock).mockResolvedValue({ isValid: false });
-  await expect(recordLinkedinExtension({ ...input, revision: checked.revision, confirmResend: false })).rejects.toMatchObject({ status: 409 });
-  expect(databases.createDocument).not.toHaveBeenCalled();
+it("allows the same profile through another company's LinkedIn account", async () => {
+  records = [{ $id: "other-company-request", targetUrl: "https://www.linkedin.com/in/person",
+    company: account.company, status: "sent", isActive: true }];
+  const otherAccount = { ...account, $id: "account-2", company: "Vizva INC" };
+  (assertAccessibleLinkedinAccount as jest.Mock).mockResolvedValue(otherAccount);
+  expect((await checkLinkedinExtension({ ...input, accountId: otherAccount.$id })).state).toBe("new");
 });
 it("rechecks allowance at save time", async () => {
   const checked = await checkLinkedinExtension(input);
@@ -145,10 +146,10 @@ it("direct recording inspects once, hides history, and returns the updated allow
   const saved = await recordLinkedinExtension({ ...input, confirmResend: false });
   expect(saved).toMatchObject({ mode: "created", state: "active_request", canRecord: false, used: 1, remaining: 2, history: [],
     previousRequest: { status: "sent", dateSent: "2026-10-05T00:00:00.000Z" } });
-  expect(validateLeadUniquenessAction).toHaveBeenCalledTimes(1);
-  const companyReads = (listAllDocuments as jest.Mock).mock.calls.filter(([args]) => args.queries.some((q: string) => q.includes('"attribute":"company"')));
-  expect(companyReads).toHaveLength(1);
-  expect(companyReads[0][0].queries).toContain(JSON.stringify({ contains: "targetUrl", value: "/in/person" }));
+  const profileReads = (listAllDocuments as jest.Mock).mock.calls.filter(([args]) =>
+    args.queries.some((q: string) => q.includes('"contains":"targetUrl"')));
+  expect(profileReads).toHaveLength(1);
+  expect(profileReads[0][0].queries).toContain(JSON.stringify({ contains: "targetUrl", value: "/in/person" }));
 });
 
 it.each(["sent", "withdrawn"])("direct recording of an existing %s request never creates or silently resends", async status => {
@@ -160,10 +161,7 @@ it.each(["sent", "withdrawn"])("direct recording of an existing %s request never
   expect(createLinkedinRequestAction).not.toHaveBeenCalled();
 });
 
-it("direct recording returns existing-lead and allowance blocks without writing", async () => {
-  (validateLeadUniquenessAction as jest.Mock).mockResolvedValue({ isValid: false });
-  expect(await recordLinkedinExtension({ ...input, confirmResend: false })).toMatchObject({ mode: "existing", state: "lead_exists" });
-  (validateLeadUniquenessAction as jest.Mock).mockResolvedValue({ isValid: true });
+it("direct recording returns an allowance block without writing", async () => {
   used = Array.from({ length: 3 }, () => ({ status: "sent", isActive: true }));
   expect(await recordLinkedinExtension({ ...input, confirmResend: false })).toMatchObject({ mode: "existing", state: "limit_reached" });
   expect(databases.createDocument).not.toHaveBeenCalled();
@@ -183,6 +181,6 @@ it("substring candidates for longer profile slugs are not mistaken for duplicate
 it("falls back for unsupported contains queries without skipping legacy duplicate protection", async () => {
   (listAllDocuments as jest.Mock).mockRejectedValueOnce({ code: 400 });
   expect((await checkLinkedinExtension(input)).state).toBe("new");
-  expect((listAllDocuments as jest.Mock).mock.calls.some(([args]) => args.queries.some((q: string) => q.includes('"attribute":"company"')) &&
+  expect((listAllDocuments as jest.Mock).mock.calls.some(([args]) =>
     !args.queries.some((q: string) => q.includes('"contains"')))).toBe(true);
 });

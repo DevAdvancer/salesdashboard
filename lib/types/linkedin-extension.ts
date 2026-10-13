@@ -7,7 +7,7 @@ export interface ExtensionAccount {
 export interface ExtensionBootstrap {
   user: ExtensionUser; today: string; accounts: Array<ExtensionAccount & ExtensionQuota>;
 }
-export type ExtensionState = "new" | "active_request" | "lead_exists" | "resend_available" | "limit_reached" | "missing_limit";
+export type ExtensionState = "new" | "active_request" | "resend_available" | "limit_reached" | "missing_limit";
 export interface ExtensionHistory {
   requestId: string | null; own: boolean; status: "sent" | "accepted" | "withdrawn";
   dateSent: string; acceptedAt: string | null; withdrawnAt: string | null; isActive: boolean;

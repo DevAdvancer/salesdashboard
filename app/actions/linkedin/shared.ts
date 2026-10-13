@@ -9,13 +9,41 @@ import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import { expandIsoDateToEnd, expandIsoDateToStart } from "@/lib/utils/iso-date-range";
 import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
 import { getAgentsByTeamLead, getAssignableUsers, getUserByIdOrNull } from "@/lib/services/user-service";
+import { normalizeProfileUrl, sameProfile } from "@/lib/utils/linkedin-extension-url";
 
 export function normalizeCompany(value: string) {
     return value.trim();
 }
 
+export function sameLinkedinCompany(left: string | undefined, right: string | undefined) {
+    const key = (value: string | undefined) => (value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    return Boolean(key(left)) && key(left) === key(right);
+}
+
 export function normalizeUrl(value: string) {
-    return value.trim();
+    return normalizeProfileUrl(value);
+}
+
+export async function listLinkedinRequestsForProfile(
+    databases: Awaited<ReturnType<typeof createAdminClient>>["databases"],
+    targetUrl: string,
+    company?: string,
+): Promise<LinkedinRequest[]> {
+    const canonical = normalizeProfileUrl(targetUrl);
+    databases.clearReadCacheForCollection?.(COLLECTIONS.LINKEDIN_REQUESTS);
+    const search = (targeted: boolean) => listAllDocuments<LinkedinRequest>({
+      databases, databaseId: DATABASE_ID, collectionId: COLLECTIONS.LINKEDIN_REQUESTS,
+      queries: [
+        ...(targeted ? [Query.contains("targetUrl", new URL(canonical).pathname)] : []),
+        Query.orderDesc("$createdAt"),
+      ],
+    });
+    const records = await search(true).catch(error => {
+      if ((error as { code?: number }).code === 400) return search(false);
+      throw error;
+    });
+    return records.filter(record => sameProfile(record.targetUrl, canonical) &&
+      (!company || sameLinkedinCompany(record.company, company)));
 }
 
 export function parseDateOnly(value: string) {

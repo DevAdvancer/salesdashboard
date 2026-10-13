@@ -6,8 +6,7 @@ import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { listMyLinkedinAccountsAction } from "@/app/actions/linkedin/accounts";
 import { createLinkedinRequestAction } from "@/app/actions/linkedin/requests";
-import { logAuditAction, assertAccessibleLinkedinAccount, isBlockingLinkedinRequest } from "@/app/actions/linkedin/shared";
-import { validateLeadUniquenessAction } from "@/app/actions/lead/validation";
+import { logAuditAction, assertAccessibleLinkedinAccount, isBlockingLinkedinRequest, sameLinkedinCompany } from "@/app/actions/linkedin/shared";
 import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import { normalizeProfileUrl, sameProfile } from "@/lib/utils/linkedin-extension-url";
 import { canUseLinkedinExtension, LinkedinExtensionError, projectExtensionHistory } from "./linkedin-extension-policy";
@@ -70,7 +69,7 @@ async function inspect(input: { accountId: string; targetUrl: string }) {
   // Filter on the server before pagination; exact normalization still rejects neighboring slugs.
   const queryRecords = (targeted: boolean) => listAllDocuments<LinkedinRequest>({
     databases, databaseId: DATABASE_ID, collectionId: COLLECTIONS.LINKEDIN_REQUESTS,
-    queries: [Query.equal("company", account.company.trim()),
+    queries: [
       ...(targeted ? [Query.contains("targetUrl", new URL(targetUrl).pathname)] : []), Query.orderDesc("$createdAt")],
   });
   const companyPromise = queryRecords(true).catch(error => {
@@ -78,14 +77,16 @@ async function inspect(input: { accountId: string; targetUrl: string }) {
     if ((error as { code?: number }).code === 400) return queryRecords(false);
     throw error;
   });
-  const [companyRecords, quota, leadCheck] = await Promise.all([
-    companyPromise, usage(databases, account, today), validateLeadUniquenessAction({ linkedinProfileUrl: targetUrl }),
+  const [companyRecords, quota] = await Promise.all([
+    companyPromise, usage(databases, account, today),
   ]);
-  const records = companyRecords.filter(record => sameProfile(record.targetUrl, targetUrl));
+  const records = companyRecords.filter(record => sameProfile(record.targetUrl, targetUrl) &&
+    sameLinkedinCompany(record.company, account.company));
   const blocking = await Promise.all(records.map(async record => ({ record, blocks: await isBlockingLinkedinRequest(databases, record) })));
-  const active = blocking.find(item => item.blocks)?.record;
+  const active = (blocking.find(item => item.blocks && item.record.status === "accepted") ||
+    blocking.find(item => item.blocks))?.record;
   const latest = records[0];
-  const state: ExtensionState = !leadCheck.isValid ? "lead_exists" : active ? "active_request" :
+  const state: ExtensionState = active ? "active_request" :
     quota.limit === null ? "missing_limit" : quota.remaining === 0 ? "limit_reached" :
     latest ? "resend_available" : "new";
   return { actor, databases, today, account, targetUrl, records, latest, state, quota };
@@ -119,7 +120,7 @@ export async function recordLinkedinExtension(input: {
   let mode: "created" | "resent";
   if (current.latest) {
     // Reuse the existing resend business operation, including its permission and limit checks.
-    // Preserve the stored URL so legacy rows are updated rather than duplicated.
+    // Reuse the legacy row; the request action saves its canonical profile URL.
     const saved = await createLinkedinRequestAction({ currentUserId: current.actor.$id,
       accountId: current.account.$id, targetUrl: current.latest.targetUrl, dateSent: current.today });
     mode = saved.mode;

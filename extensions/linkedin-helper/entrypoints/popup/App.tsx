@@ -7,13 +7,12 @@ import { AccountPicker, History, Quota } from "./RequestDetails";
 const descriptions: Record<ExtensionState, [string, string]> = {
   new: ["Ready to record", "No blocking request was found for this company. Record after you send the invitation."],
   active_request: ["Already exists", "An active request exists for this company. View history for details."],
-  lead_exists: ["Existing CRM lead", "A lead with this profile already exists. Manage it in CRM."],
   resend_available: ["Previous CRM request found", "This profile has an earlier CRM request. Review it before sending another invitation."],
   limit_reached: ["Daily allowance reached", "Choose another assigned account or return on the next Eastern business date."],
   missing_limit: ["Account limit not configured", "Ask your team lead or administrator to configure a connection limit."],
 };
 const resultTones: Record<ExtensionState, "ready" | "existing" | "blocked"> = {
-  new: "ready", active_request: "existing", lead_exists: "existing", resend_available: "existing",
+  new: "ready", active_request: "existing", resend_available: "existing",
   limit_reached: "blocked", missing_limit: "blocked",
 };
 

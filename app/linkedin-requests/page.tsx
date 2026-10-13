@@ -34,7 +34,9 @@ import {
 } from "@/app/actions/linkedin/requests";
 import type { LinkedinAccount, LinkedinRequest } from "@/lib/types";
 import { getErrorMessage } from "@/lib/utils";
-import { getLinkedinRequestDateFilterValue } from "@/lib/utils/linkedin-request-dates";
+import { daysSinceLinkedinRequestDate, daysSinceLinkedinRequestEvent, formatLinkedinRequestSentDate, getLinkedinRequestDateFilterValue } from "@/lib/utils/linkedin-request-dates";
+import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
+import { normalizeProfileUrl } from "@/lib/utils/linkedin-extension-url";
 import {
   LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS,
   LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS,
@@ -44,12 +46,7 @@ import {
 import { validateLeadUniquenessAction } from "@/app/actions/lead/validation";
 
 function todayDateInputValue() {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
+  return getCurrentEasternIsoDate();
 }
 
 function safeParseJson(value: unknown) {
@@ -75,25 +72,6 @@ function formatUsPhone(value: string) {
 
 function RequiredMark() {
   return <span className="text-red-500">*</span>;
-}
-
-function daysSinceDateInputValue(dateValue: string) {
-  const parsed = new Date(dateValue);
-  if (Number.isNaN(parsed.getTime())) return 0;
-
-  const now = new Date();
-  const startUtc = Date.UTC(
-    parsed.getUTCFullYear(),
-    parsed.getUTCMonth(),
-    parsed.getUTCDate(),
-  );
-  const endUtc = Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate(),
-  );
-  const diff = Math.floor((endUtc - startUtc) / (24 * 60 * 60 * 1000));
-  return Math.max(diff, 0);
 }
 
 function LinkedinRequestsContent() {
@@ -256,19 +234,8 @@ function LinkedinRequestsContent() {
     try {
       setChecking(true);
       setHistoryLoading(true);
-
-      const urlCheck = await validateLeadUniquenessAction({
-        linkedinProfileUrl: targetUrl.trim(),
-      });
-      if (!urlCheck.isValid) {
-        toast({
-          title: "Duplicate LinkedIn URL",
-          description: `A lead with this LinkedIn profile already exists (lead: ${urlCheck.existingLeadId}).`,
-          variant: "destructive",
-        });
-        setIsDuplicate(null);
-        return;
-      }
+      const normalizedTargetUrl = normalizeProfileUrl(targetUrl);
+      setTargetUrl(normalizedTargetUrl);
 
       if (coldCallEnabled) {
         const digits = toUsPhoneDigits(coldCallPhone);
@@ -297,16 +264,16 @@ function LinkedinRequestsContent() {
 
       const result = await checkLinkedinDuplicateAction({
         currentUserId: user.$id,
-        company: selectedAccount.company,
-        targetUrl,
+        accountId: selectedAccount.$id,
+        targetUrl: normalizedTargetUrl,
       });
       setIsDuplicate(result.isDuplicate);
       const history = await getLinkedinConnectionHistoryAction({
         currentUserId: user.$id,
-        targetUrl,
+        targetUrl: normalizedTargetUrl,
       });
       setHistoryData(history);
-      setHistoryTargetUrl(targetUrl.trim());
+      setHistoryTargetUrl(normalizedTargetUrl);
       setHistoryOpen(true);
       toast({
         title: result.isDuplicate
@@ -355,11 +322,13 @@ function LinkedinRequestsContent() {
 
     try {
       setAdding(true);
+      const normalizedTargetUrl = normalizeProfileUrl(targetUrl);
+      setTargetUrl(normalizedTargetUrl);
       const result = await createLinkedinRequestAction({
         currentUserId: user.$id,
         accountId: selectedAccount.$id,
         dateSent,
-        targetUrl,
+        targetUrl: normalizedTargetUrl,
         coldCall: coldCallEnabled,
         coldCallPhone: coldCallEnabled ? coldCallPhone : undefined,
       });
@@ -483,6 +452,14 @@ function LinkedinRequestsContent() {
       return true;
     });
   }, [filterDate, filterStatus, requests]);
+
+  const applyUrlFilter = () => {
+    const raw = filterUrl.trim();
+    let query = raw;
+    try { query = normalizeProfileUrl(raw); } catch { /* Company text remains a text search. */ }
+    if (query !== raw) setFilterUrl(query);
+    setAppliedFilterUrl(query);
+  };
 
   if (!user) return null;
 
@@ -670,12 +647,12 @@ function LinkedinRequestsContent() {
                   onChange={(e) => setFilterUrl(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
-                      setAppliedFilterUrl(filterUrl);
+                      applyUrlFilter();
                     }
                   }}
                   placeholder="Search..."
                 />
-                <Button onClick={() => setAppliedFilterUrl(filterUrl)}>Search</Button>
+                <Button onClick={applyUrlFilter}>Search</Button>
               </div>
             </div>
           </div>
@@ -711,7 +688,7 @@ function LinkedinRequestsContent() {
                     ? leadOutcomeByLeadId[r.leadId]
                     : undefined;
                   const leadStatusLabel = leadOutcome?.statusLabel ?? null;
-                  const sentDaysPassed = daysSinceDateInputValue(r.dateSent);
+                  const sentDaysPassed = daysSinceLinkedinRequestDate(r.dateSent);
                   const sentDaysLeft = Math.max(
                     LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS - sentDaysPassed,
                     0,
@@ -720,9 +697,9 @@ function LinkedinRequestsContent() {
                     LINKEDIN_SENT_AUTO_WITHDRAW_DAYS - sentDaysPassed,
                     0,
                   );
-                  const acceptedAnchor = r.acceptedAt || r.dateSent;
-                  const acceptedDaysPassed =
-                    daysSinceDateInputValue(acceptedAnchor);
+                  const acceptedDaysPassed = r.acceptedAt
+                    ? daysSinceLinkedinRequestEvent(r.acceptedAt)
+                    : sentDaysPassed;
                   const acceptedLeadDaysLeft = Math.max(
                     LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS - acceptedDaysPassed,
                     0,
@@ -758,8 +735,7 @@ function LinkedinRequestsContent() {
                     <TableRow key={r.$id}>
                       <TableCell className="break-all">{r.targetUrl}</TableCell>
                       <TableCell>
-                        {new Date(r.dateSent).toLocaleDateString("en-US", { timeZone: "America/New_York",
-                        })}
+                        {formatLinkedinRequestSentDate(r.dateSent)}
                       </TableCell>
                       <TableCell>{statusLabel}</TableCell>
                       <TableCell>

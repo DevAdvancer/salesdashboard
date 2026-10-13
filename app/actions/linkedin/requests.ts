@@ -12,40 +12,33 @@ import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
 import { getAgentsByTeamLead, getAssignableUsers, getUserByIdOrNull } from "@/lib/services/user-service";
 import { normalizeCompany, normalizeUrl, parseDateOnly, toUtcDayStartIso, toUtcDayEndIso, daysBetweenUtc, assertDateIso, normalizeLeadOutcomeStatus, getLeadOutcomeLabel, getLinkedinRequestLeadSnapshot, getLinkedinRequestLeadOutcomeLabel, isBlockingLinkedinRequest, createGeneralChatMessage, logAuditAction, canManageLinkedinAccounts, canSeeLinkedinReports, canReadLinkedinAccountsLikeAdmin, resolveLinkedinReportTeamLeadId, assertLinkedinReportTeamScope, assertAgentIsInTeam, getEtDateKey, getLinkedinAccountDoc, getTeamLeadAssignedUserIds, listDelegatedSourceUserIdsForToday, assertAccessibleLinkedinAccount, getSalesUserIds, resolveScopeUsersForLinkedin, LinkedinConnectionKpiRow, AutoWithdrawResult } from "./shared";
 import { parseIsoDateLocal, daysInMonthLocal } from "../lead/sync-helpers";
+import { listLinkedinRequestsForProfile } from "./shared";
+import { normalizeProfileUrl, sameProfile } from "@/lib/utils/linkedin-extension-url";
+
+function normalizedProfileSearch(value: string | undefined): string | null {
+    if (!value?.trim()) return null;
+    try { return normalizeProfileUrl(value); } catch { return null; }
+}
 
 export async function checkLinkedinDuplicateAction(input: {
       currentUserId: string;
-      company: string;
+      accountId: string;
       targetUrl: string;
     }) {
     await assertAuthenticatedUserId(input.currentUserId);
-    const company = normalizeCompany(input.company);
     const targetUrl = normalizeUrl(input.targetUrl);
-    if (!company) {
-    throw new Error("Company is required");
-    }
-
     if (!targetUrl) {
     throw new Error("URL is required");
     }
 
     const { databases } = await createAdminClient();
-    const response = await databases.listDocuments(
-            DATABASE_ID,
-            COLLECTIONS.LINKEDIN_REQUESTS,
-            [
-              Query.equal("company", company),
-              Query.equal("targetUrl", targetUrl),
-              Query.orderDesc("$createdAt"),
-              Query.limit(25),
-            ],
-          );
-    const docs = response.documents as unknown as LinkedinRequest[];
+    const account = await assertAccessibleLinkedinAccount(databases, input.currentUserId, input.accountId);
+    const docs = await listLinkedinRequestsForProfile(databases, targetUrl, normalizeCompany(account.company));
     let active: LinkedinRequest | null = null;
     for (const doc of docs) {
     if (await isBlockingLinkedinRequest(databases, doc)) {
-      active = doc;
-      break;
+      if (!active || doc.status === "accepted") active = doc;
+      if (doc.status === "accepted") break;
     }
     }
 
@@ -73,7 +66,7 @@ export async function createLinkedinRequestAction(input: {
     throw new Error("URL is required");
     }
 
-    const dateSent = assertDateIso(input.dateSent);
+    const dateSent = toUtcDayStartIso(input.dateSent);
     const coldCall = Boolean(input.coldCall);
     const coldCallPhone = coldCall && typeof input.coldCallPhone === "string" && input.coldCallPhone.trim()
               ? input.coldCallPhone.trim()
@@ -108,22 +101,12 @@ export async function createLinkedinRequestAction(input: {
     );
     }
 
-    const existingByCompanyResponse = await databases.listDocuments(
-            DATABASE_ID,
-            COLLECTIONS.LINKEDIN_REQUESTS,
-            [
-              Query.equal("company", company),
-              Query.equal("targetUrl", targetUrl),
-              Query.orderDesc("$createdAt"),
-              Query.limit(25),
-            ],
-          );
-    const existingByCompany = existingByCompanyResponse.documents as unknown as LinkedinRequest[];
+    const existingByCompany = await listLinkedinRequestsForProfile(databases, targetUrl, company);
     let activeByCompany: LinkedinRequest | null = null;
     for (const doc of existingByCompany) {
     if (await isBlockingLinkedinRequest(databases, doc)) {
-      activeByCompany = doc;
-      break;
+      if (!activeByCompany || doc.status === "accepted") activeByCompany = doc;
+      if (doc.status === "accepted") break;
     }
     }
 
@@ -164,6 +147,11 @@ export async function createLinkedinRequestAction(input: {
     const docToUpdate = activeByCompany || (existingByCompany.length > 0 ? existingByCompany[0] : null);
 
     if (docToUpdate) {
+      const canonicalKeyOccupied = existingByCompany.some(doc => doc.$id !== docToUpdate.$id &&
+        doc.company === company && doc.targetUrl === targetUrl && (doc.isActive ?? true));
+      if (canonicalKeyOccupied) {
+        throw new Error("This profile has conflicting request history for this company. Ask an admin to review it before resending.");
+      }
       const prev = {
         accountId: docToUpdate.accountId,
         agentId: docToUpdate.agentId,
@@ -186,6 +174,8 @@ export async function createLinkedinRequestAction(input: {
           agentId: user.$id,
           teamLeadId: user.teamLeadId || null,
           dateSent,
+          company,
+          targetUrl,
           ...(coldCall ? { coldCall: true, coldCallPhone } : {}),
           status: "sent" satisfies LinkedinRequestStatus,
           acceptedAt: null,
@@ -364,19 +354,7 @@ export async function findBackedOutLeadForLinkedinTargetUrlAction(input: {
     if (!targetUrl) throw new Error("URL is required");
     const company = input.company ? normalizeCompany(input.company) : "";
     const { databases } = await createAdminClient();
-    const requestsResponse = await databases.listDocuments(
-            DATABASE_ID,
-            COLLECTIONS.LINKEDIN_REQUESTS,
-            [
-              Query.equal("targetUrl", targetUrl),
-              ...(company ? [Query.equal("company", company)] : []),
-              Query.orderDesc("$createdAt"),
-              Query.select(["$id", "leadId"]),
-              // 100 is enough since a single URL will rarely have this many requests
-              Query.limit(100),
-            ],
-          );
-    const requests = requestsResponse.documents as unknown as LinkedinRequest[];
+    const requests = await listLinkedinRequestsForProfile(databases, targetUrl, company);
     const leadIds = Array.from(
             new Set(
               requests
@@ -407,18 +385,7 @@ export async function getLinkedinConnectionHistoryAction(input: {
     const targetUrl = normalizeUrl(input.targetUrl);
     if (!targetUrl) throw new Error("URL is required");
     const { databases } = await createAdminClient();
-    const requestsResponse = await databases.listDocuments(
-            DATABASE_ID,
-            COLLECTIONS.LINKEDIN_REQUESTS,
-            [
-              Query.equal("targetUrl", targetUrl), 
-              Query.orderDesc("$createdAt"), 
-              // Leaving limit relatively high but capped at 100 (URL history is short)
-              // No Query.select since the full object is rendered in the UI
-              Query.limit(100)
-            ],
-          );
-    const requests = requestsResponse.documents as unknown as LinkedinRequest[];
+    const requests = await listLinkedinRequestsForProfile(databases, targetUrl);
     const requestToLeadId = new Map<string, string>();
     for (const r of requests) {
     if (typeof r.leadId === "string" && r.leadId) {
@@ -611,6 +578,20 @@ export async function listMyLinkedinRequestsAction(input: {
       queries.push(Query.equal("dateSent", assertDateIso(input.dateSent)));
     }
 
+    const profileSearch = normalizedProfileSearch(input.searchQuery);
+    if (profileSearch) {
+      const search = (targeted: boolean) => listAllDocuments<LinkedinRequest>({
+        databases, databaseId: DATABASE_ID, collectionId: COLLECTIONS.LINKEDIN_REQUESTS,
+        queries: [...queries, ...(targeted ? [Query.contains("targetUrl", new URL(profileSearch).pathname)] : [])],
+        maxPages: 100,
+      });
+      const candidates = await search(true).catch(error => {
+        if ((error as { code?: number }).code === 400) return search(false);
+        throw error;
+      });
+      return candidates.filter(request => sameProfile(request.targetUrl, profileSearch)).slice(0, 500);
+    }
+
     if (!input.searchQuery) {
       queries.push(Query.limit(Math.min(Math.max(input.limit ?? 10, 1), 500)));
       const response = await databases.listDocuments(
@@ -627,7 +608,7 @@ export async function listMyLinkedinRequestsAction(input: {
         queries,
       );
       const all = response.documents as unknown as LinkedinRequest[];
-      const q = input.searchQuery.toLowerCase();
+      const q = input.searchQuery.trim().toLowerCase();
       return all.filter((r) => 
         (r.targetUrl && r.targetUrl.toLowerCase().includes(q)) || 
         (r.company && r.company.toLowerCase().includes(q))
@@ -814,9 +795,13 @@ export async function listLinkedinRequestsForAdminAction(input: {
             Query.orderDesc("$createdAt"),
           ];
 
+    const profileSearch = normalizedProfileSearch(input.searchQuery);
+    const resultLimit = Math.min(Math.max(input.limit ?? 100, 1), 500);
     if (input.searchQuery) {
-        queries.push(Query.search("targetUrl", input.searchQuery.trim()));
-        queries.push(Query.limit(Math.min(Math.max(input.limit ?? 100, 1), 500)));
+        queries.push(profileSearch
+          ? Query.contains("targetUrl", new URL(profileSearch).pathname)
+          : Query.search("targetUrl", input.searchQuery.trim()));
+        if (!profileSearch) queries.push(Query.limit(resultLimit));
     } else {
         queries.push(Query.limit(10));
     }
@@ -834,12 +819,21 @@ export async function listLinkedinRequestsForAdminAction(input: {
     }
 
     const { databases } = await createAdminClient();
-    const response = await databases.listDocuments(
-            DATABASE_ID,
-            COLLECTIONS.LINKEDIN_REQUESTS,
-            queries,
-          );
-    const docs = response.documents as unknown as LinkedinRequest[];
+    let docs: LinkedinRequest[];
+    if (profileSearch) {
+      const search = (querySet: string[]) => listAllDocuments<LinkedinRequest>({
+        databases, databaseId: DATABASE_ID, collectionId: COLLECTIONS.LINKEDIN_REQUESTS,
+        queries: querySet, maxPages: 100,
+      });
+      const candidates = await search(queries).catch(error => {
+        if ((error as { code?: number }).code === 400) return search(queries.slice(0, -1));
+        throw error;
+      });
+      docs = candidates.filter(request => sameProfile(request.targetUrl, profileSearch)).slice(0, resultLimit);
+    } else {
+      const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LINKEDIN_REQUESTS, queries);
+      docs = response.documents as unknown as LinkedinRequest[];
+    }
     const uniqueDocs = Array.from(new Map(docs.map((r) => [r.$id, r] as const)).values());
     const agentIds = Array.from(
             new Set(uniqueDocs.map((r) => r.agentId).filter(Boolean)),

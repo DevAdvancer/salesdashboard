@@ -25,6 +25,7 @@ jest.mock("node-appwrite", () => ({
   },
   Query: {
     equal: jest.fn((key, value) => `equal:${key}:${JSON.stringify(value)}`),
+    contains: jest.fn((key, value) => `contains:${key}:${JSON.stringify(value)}`),
     limit: jest.fn((limit) => `limit:${limit}`),
     orderAsc: jest.fn((key) => `orderAsc:${key}`),
     orderDesc: jest.fn((key) => `orderDesc:${key}`),
@@ -113,5 +114,20 @@ describe("Linkedin request history", () => {
         'equal:agentId:["agent-1","source-agent-1"]',
       ]),
     );
+  });
+
+  it("finds the same saved profile when the search has a trailing slash", async () => {
+    const saved = { $id: "request-haf", agentId: "agent-1", company: "Vizva INC",
+      targetUrl: "https://www.linkedin.com/in/haf-48", status: "sent", isActive: true };
+    mockListDocuments
+      .mockResolvedValueOnce({ documents: [], total: 0 })
+      .mockResolvedValueOnce({ documents: [saved, { ...saved, $id: "neighbor",
+        targetUrl: "https://www.linkedin.com/in/haf-48-other" }], total: 2 });
+    const { listMyLinkedinRequestsAction } = await import("@/app/actions/linkedin/requests");
+    const result = await listMyLinkedinRequestsAction({ currentUserId: "agent-1",
+      searchQuery: "https://www.linkedin.com/in/haf-48/" });
+    expect(result).toEqual([saved]);
+    expect(mockListDocuments).toHaveBeenNthCalledWith(2, expect.any(String), expect.any(String),
+      expect.arrayContaining(["contains:targetUrl:\"/in/haf-48\""]));
   });
 });

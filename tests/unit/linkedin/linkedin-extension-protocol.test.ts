@@ -16,6 +16,11 @@ describe("extension URLs", () => {
     expect(sameProfile("https://linkedin.com/in/alex/?trk=test", "https://www.linkedin.com/in/alex")).toBe(true);
     expect(sameProfile("https://linkedin.com/in/alex", "https://linkedin.com/in/alexander")).toBe(false);
   });
+  it("treats a final slash as the same profile and stores the slash-free form", () => {
+    const plain = "https://www.linkedin.com/in/haf-48";
+    expect(normalizeProfileUrl(`${plain}/`)).toBe(plain);
+    expect(sameProfile(plain, `${plain}/`)).toBe(true);
+  });
   it("permits HTTP only for local development", () => {
     expect(normalizeCrmOrigin("http://localhost:5000/linkedin-requests")).toBe("http://localhost:5000");
     expect(normalizeCrmOrigin("https://crm.example.com/path")).toBe("https://crm.example.com");
