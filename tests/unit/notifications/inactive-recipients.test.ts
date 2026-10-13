@@ -1,5 +1,7 @@
 import { excludeInactiveGraphRecipients, excludeInactiveUserEmails } from '@/lib/server/active-email-recipients';
 import { createNotificationRecord } from '@/lib/server/notifications';
+import { createAdminClient } from '@/lib/server/appwrite';
+import { sendNotificationEmail } from '@/lib/server/email-service';
 
 jest.mock('@/lib/server/email-service', () => ({ sendNotificationEmail: jest.fn() }));
 jest.mock('@/lib/server/appwrite', () => ({ createAdminClient: jest.fn() }));
@@ -14,6 +16,27 @@ jest.mock('node-appwrite', () => ({
 }));
 
 describe('inactive notification recipients', () => {
+  it('uses the current CRM domain in lead notification emails', async () => {
+    const databases = {
+      getDocument: jest.fn().mockResolvedValue({ isActive: true, notificationsEnabled: true }),
+      createDocument: jest.fn().mockResolvedValue({ $id: 'notification-id' }),
+    };
+    (createAdminClient as jest.Mock).mockResolvedValue({
+      databases,
+      users: { get: jest.fn().mockResolvedValue({ email: 'agent@example.com' }) },
+    });
+
+    await createNotificationRecord(databases as never, {
+      recipientId: 'agent', type: 'LEAD_ASSIGNED', title: 'Lead assigned', body: 'Open the lead.',
+      targetId: 'lead-id', targetType: 'lead',
+    });
+
+    expect(sendNotificationEmail).toHaveBeenCalledWith(expect.objectContaining({
+      text: expect.stringContaining('https://crm.silverspaceinc.tech/leads/lead-id'),
+      html: expect.stringContaining('https://crm.silverspaceinc.tech/leads/lead-id'),
+    }));
+  });
+
   it('does not create a notification for an inactive user', async () => {
     const databases = {
       getDocument: jest.fn().mockResolvedValue({ isActive: false }),

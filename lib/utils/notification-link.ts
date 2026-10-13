@@ -18,5 +18,6 @@ export function getNotificationUrl(
   if (type === 'interview') return '/resume/' + targetId;
   if (type === 'mock') return '/resume/' + targetId;
   if (type === 'user') return '/profile/' + targetId;
+  if (type === 'linkedin_requests') return '/linkedin-requests';
   return null;
 }

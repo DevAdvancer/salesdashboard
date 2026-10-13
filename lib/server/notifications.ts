@@ -2,6 +2,7 @@ import { ID, type Databases } from 'node-appwrite';
 import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { sendNotificationEmail } from './email-service';
 import { createAdminClient } from './appwrite';
+import { CRM_PUBLIC_URL } from './crm-url';
 
 interface CreateNotificationInput {
   recipientId: string;
@@ -47,18 +48,17 @@ export async function createNotificationRecord(
   return record;
 }
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:5000';
-
 function getNotificationLink(targetId?: string | null, targetType?: string | null): string | null {
   if (!targetId || !targetType) return null;
   const type = targetType.toLowerCase();
-  if (type === 'lead') return `${APP_URL}/leads/${targetId}`;
-  if (type === 'resume_profile') return `${APP_URL}/resume/${targetId}`;
-  if (type === 'call_request') return `${APP_URL}/my-call-requests`;
-  if (type === 'interview') return `${APP_URL}/resume/${targetId}`; // Or another appropriate route if interview has its own
-  if (type === 'mock') return `${APP_URL}/resume/${targetId}`; // Same here
-  if (type === 'user') return `${APP_URL}/profile/${targetId}`;
-  if (type === 'calendar') return `${APP_URL}/reminders`;
+  if (type === 'lead') return `${CRM_PUBLIC_URL}/leads/${targetId}`;
+  if (type === 'resume_profile') return `${CRM_PUBLIC_URL}/resume/${targetId}`;
+  if (type === 'call_request') return `${CRM_PUBLIC_URL}/my-call-requests`;
+  if (type === 'interview') return `${CRM_PUBLIC_URL}/resume/${targetId}`; // Or another appropriate route if interview has its own
+  if (type === 'mock') return `${CRM_PUBLIC_URL}/resume/${targetId}`; // Same here
+  if (type === 'user') return `${CRM_PUBLIC_URL}/profile/${targetId}`;
+  if (type === 'calendar') return `${CRM_PUBLIC_URL}/reminders`;
+  if (type === 'linkedin_requests') return `${CRM_PUBLIC_URL}/linkedin-requests`;
   return null;
 }
 

@@ -7,6 +7,7 @@ import { createAdminClient } from '@/lib/server/appwrite';
 import { listAllDocuments } from '@/lib/server/appwrite-pagination';
 import { getAuthenticatedUserDoc } from '@/lib/server/current-user';
 import { betaAccessDocumentId, hasLinkedinHelperAccess, LINKEDIN_HELPER_FEATURE, listLinkedinHelperAccess } from '@/lib/server/beta-feature-access';
+import { createNotificationsForRecipients } from '@/lib/server/notifications';
 import type { User } from '@/lib/types';
 
 async function assertBetaAdmin() {
@@ -50,6 +51,7 @@ export async function setLinkedinHelperBetaAccessAction(userId: string, enabled:
       !isRoleEligibleForComponent('linkedin-requests', user.role)) throw new Error('This user cannot use LinkedIn Requests.');
   const id = betaAccessDocumentId(userId);
   const data = { feature: LINKEDIN_HELPER_FEATURE, userId, enabled };
+  const wasEnabled = await hasLinkedinHelperAccess(databases, userId);
   databases.clearReadCacheForCollection(COLLECTIONS.BETA_FEATURE_ACCESS);
   try {
     await databases.updateDocument(DATABASE_ID, COLLECTIONS.BETA_FEATURE_ACCESS, id, data);
@@ -58,5 +60,14 @@ export async function setLinkedinHelperBetaAccessAction(userId: string, enabled:
     await databases.createDocument(DATABASE_ID, COLLECTIONS.BETA_FEATURE_ACCESS, id, data);
   }
   databases.clearReadCacheForCollection(COLLECTIONS.BETA_FEATURE_ACCESS);
+  if (enabled && !wasEnabled) {
+    await createNotificationsForRecipients(databases, [userId], {
+      type: 'LINKEDIN_HELPER_ACCESS',
+      title: 'LinkedIn Helper access granted',
+      body: 'You now have access to the LinkedIn Helper beta. Open LinkedIn Requests to install the extension and get started.',
+      targetId: userId,
+      targetType: 'linkedin_requests',
+    });
+  }
   return { userId, enabled };
 }

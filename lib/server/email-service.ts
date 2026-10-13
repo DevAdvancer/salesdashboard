@@ -12,6 +12,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { createAdminClient } from '@/lib/server/appwrite';
 import { excludeInactiveUserEmails } from '@/lib/server/active-email-recipients';
+import { CRM_PUBLIC_URL } from '@/lib/server/crm-url';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
@@ -21,7 +22,6 @@ const CLIENT_ID = process.env.NEXT_PUBLIC_AZURE_CLIENT_ID!;
 const CLIENT_SECRET = process.env.AZURE_CLIENT_SECRET!;
 const BCC_EMAIL =
   process.env.DUPLICATE_ALERT_BCC_EMAIL ?? 'Abhirup.Kumar@vizvainc.com';
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:5000';
 
 const GRAPH_TOKEN_URL = `https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`;
 const GRAPH_SCOPE = 'https://graph.microsoft.com/.default';
@@ -99,7 +99,7 @@ function buildEmailHtml(input: DuplicateAlertEmailInput): string {
   const duplicateRows = duplicateFields
     .map((w) => {
       const label = FIELD_LABELS[w.field] ?? w.field;
-      const leadLink = `${APP_URL}/leads/${encodeURIComponent(w.existingLeadId)}`;
+      const leadLink = `${CRM_PUBLIC_URL}/leads/${encodeURIComponent(w.existingLeadId)}`;
       return `
         <tr>
           <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#374151;font-weight:600;">${label}</td>
@@ -202,7 +202,7 @@ function buildEmailText(input: DuplicateAlertEmailInput): string {
     'Duplicate Fields:',
     ...duplicateFields.map(
       (w) =>
-        `  ${FIELD_LABELS[w.field] ?? w.field}: ${APP_URL}/leads/${encodeURIComponent(w.existingLeadId)}`,
+        `  ${FIELD_LABELS[w.field] ?? w.field}: ${CRM_PUBLIC_URL}/leads/${encodeURIComponent(w.existingLeadId)}`,
     ),
   ];
   return lines.filter((l) => l !== undefined).join('\n');
