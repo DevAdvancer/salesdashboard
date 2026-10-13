@@ -82,7 +82,7 @@ async function inspect(input: { accountId: string; targetUrl: string }) {
   ]);
   const records = companyRecords.filter(record => sameProfile(record.targetUrl, targetUrl) &&
     sameLinkedinCompany(record.company, account.company));
-  const blocking = await Promise.all(records.map(async record => ({ record, blocks: await isBlockingLinkedinRequest(databases, record) })));
+  const blocking = records.map(record => ({ record, blocks: isBlockingLinkedinRequest(record) }));
   const active = (blocking.find(item => item.blocks && item.record.status === "accepted") ||
     blocking.find(item => item.blocks))?.record;
   const latest = records[0];

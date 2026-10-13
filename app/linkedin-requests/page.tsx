@@ -85,7 +85,7 @@ function LinkedinRequestsContent() {
   const [coldCallEnabled, setColdCallEnabled] = useState(false);
   const [coldCallPhone, setColdCallPhone] = useState("");
   const [checking, setChecking] = useState(false);
-  const [isDuplicate, setIsDuplicate] = useState<boolean | null>(null);
+  const [checkedRequestState, setCheckedRequestState] = useState<"new" | "resend" | "active" | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyTargetUrl, setHistoryTargetUrl] = useState("");
@@ -257,7 +257,7 @@ function LinkedinRequestsContent() {
             description: `A lead with this phone already exists (lead: ${phoneCheck.existingLeadId}).`,
             variant: "destructive",
           });
-          setIsDuplicate(null);
+          setCheckedRequestState(null);
           return;
         }
       }
@@ -267,7 +267,7 @@ function LinkedinRequestsContent() {
         accountId: selectedAccount.$id,
         targetUrl: normalizedTargetUrl,
       });
-      setIsDuplicate(result.isDuplicate);
+      setCheckedRequestState(result.isDuplicate ? "active" : result.canResend ? "resend" : "new");
       const history = await getLinkedinConnectionHistoryAction({
         currentUserId: user.$id,
         targetUrl: normalizedTargetUrl,
@@ -276,12 +276,12 @@ function LinkedinRequestsContent() {
       setHistoryTargetUrl(normalizedTargetUrl);
       setHistoryOpen(true);
       toast({
-        title: result.isDuplicate
-          ? "History loaded (resend)"
-          : "History loaded",
+        title: result.isDuplicate ? "Active request found" : "History loaded",
         description: result.isDuplicate
-          ? "This URL already exists for this company. Adding will resend it."
-          : "No active request for this company. You can add now.",
+          ? "This company has an active request for this profile. Withdraw it before sending another."
+          : result.canResend
+            ? "The previous request was withdrawn. You can send a new invitation."
+            : "No request for this company. You can add now.",
       });
     } catch (error: unknown) {
       toast({
@@ -289,7 +289,7 @@ function LinkedinRequestsContent() {
         description: getErrorMessage(error),
         variant: "destructive",
       });
-      setIsDuplicate(null);
+      setCheckedRequestState(null);
     } finally {
       setChecking(false);
       setHistoryLoading(false);
@@ -299,6 +299,7 @@ function LinkedinRequestsContent() {
   const onAdd = async () => {
     if (!user) return;
     if (adding || checking) return;
+    if (checkedRequestState !== "new" && checkedRequestState !== "resend") return;
     if (isCoolingDown("add")) return;
     if (!selectedAccount) return;
 
@@ -340,7 +341,7 @@ function LinkedinRequestsContent() {
             : "Linkedin request saved.",
       });
       setTargetUrl("");
-      setIsDuplicate(null);
+      setCheckedRequestState(null);
       setColdCallEnabled(false);
       setColdCallPhone("");
       setLocalUsedToday(prev => prev + 1);
@@ -484,7 +485,10 @@ function LinkedinRequestsContent() {
                 </Label>
                 <select
                   value={selectedAccountId}
-                  onChange={(e) => setSelectedAccountId(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedAccountId(e.target.value);
+                    setCheckedRequestState(null);
+                  }}
                   className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
                   {accounts.map((a) => (
                     <option key={a.$id} value={a.$id}>
@@ -528,7 +532,7 @@ function LinkedinRequestsContent() {
                   onChange={(event) => {
                     const enabled = event.target.checked;
                     setColdCallEnabled(enabled);
-                    setIsDuplicate(null);
+                    setCheckedRequestState(null);
                     if (!enabled) setColdCallPhone("");
                   }}
                 />
@@ -547,7 +551,7 @@ function LinkedinRequestsContent() {
                     value={coldCallPhone}
                     onChange={(e) => {
                       setColdCallPhone(formatUsPhone(e.target.value));
-                      setIsDuplicate(null);
+                      setCheckedRequestState(null);
                     }}
                     placeholder="(555) 555-5555"
                   />
@@ -562,7 +566,7 @@ function LinkedinRequestsContent() {
                   value={targetUrl}
                   onChange={(e) => {
                     setTargetUrl(e.target.value);
-                    setIsDuplicate(null);
+                    setCheckedRequestState(null);
                   }}
                   placeholder="Paste profile URL"
                 />
@@ -576,12 +580,17 @@ function LinkedinRequestsContent() {
                   disabled={checking || !selectedAccount}>
                   Check
                 </Button>
-                {isDuplicate !== null && (
+                {(checkedRequestState === "new" || checkedRequestState === "resend") && (
                   <Button onClick={onAdd} loading={adding} disabled={adding}>
-                    {isDuplicate ? "Resend" : "Add"}
+                    {checkedRequestState === "resend" ? "Resend" : "Add"}
                   </Button>
                 )}
-                {isDuplicate === null && (
+                {checkedRequestState === "active" && (
+                  <span className="text-sm text-destructive">
+                    Active request found. Withdraw it before sending another.
+                  </span>
+                )}
+                {checkedRequestState === null && (
                   <span className="text-sm text-muted-foreground">
                     Click Check to confirm duplicate (Company + URL).
                   </span>

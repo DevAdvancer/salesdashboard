@@ -207,7 +207,31 @@ describe('LinkedIn Server Actions Regression', () => {
 
       sent.status = 'withdrawn';
       sent.isActive = false;
-      expect((await checkLinkedinDuplicateAction({ ...input, accountId: 'account-1' })).isDuplicate).toBe(false);
+      expect(await checkLinkedinDuplicateAction({ ...input, accountId: 'account-1' }))
+        .toMatchObject({ isDuplicate: false, canResend: true });
+    });
+
+    it.each([
+      { status: 'sent', leadId: null },
+      { status: 'accepted', leadId: 'lead-1' },
+    ])('blocks a still-active $status request even when it is old', async ({ status, leadId }) => {
+      mockGetAuthenticatedUserDoc.mockResolvedValue({ $id: 'agent-2', role: 'agent', name: 'Second Agent' });
+      mockGetDocument.mockResolvedValue({ $id: 'account-2', assignedUserId: 'agent-2',
+        company: 'Silverspace INC', isActive: true, connectionLimit: 100 });
+      mockListDocuments.mockResolvedValue({ documents: [{ $id: 'active-request',
+        company: 'Silverspace INC', targetUrl: 'https://www.linkedin.com/in/person/',
+        status, leadId, isActive: true, dateSent: '2025-01-01T00:00:00.000Z' }] });
+      const { checkLinkedinDuplicateAction, createLinkedinRequestAction } =
+        await import('@/app/actions/linkedin/requests');
+      const input = { currentUserId: 'agent-2', accountId: 'account-2',
+        targetUrl: 'https://www.linkedin.com/in/person' };
+
+      expect(await checkLinkedinDuplicateAction(input))
+        .toMatchObject({ isDuplicate: true, canResend: false, activeRequestId: 'active-request' });
+      await expect(createLinkedinRequestAction({ ...input, dateSent: '2026-10-13' }))
+        .rejects.toThrow('Withdraw it before sending another request');
+      expect(mockCreateDocument).not.toHaveBeenCalled();
+      expect(mockUpdateDocument).not.toHaveBeenCalled();
     });
 
     it('prioritizes an accepted request when older URL variants also contain a sent request', async () => {
@@ -306,7 +330,7 @@ describe('LinkedIn Server Actions Regression', () => {
           targetUrl: 'https://www.linkedin.com/in/person' }), expect.any(Array));
     });
 
-    it('does not save a legacy slash variant when a canonical active row already occupies its key', async () => {
+    it('does not save a legacy slash variant when a canonical active row already exists', async () => {
       mockGetAuthenticatedUserDoc.mockResolvedValue({ $id: 'agent-1', role: 'agent', name: 'Agent' });
       mockGetDocument.mockResolvedValue({ $id: 'account-1', assignedUserId: 'agent-1',
         company: 'Vizva INC', isActive: true, connectionLimit: 100 });
@@ -321,7 +345,7 @@ describe('LinkedIn Server Actions Regression', () => {
       const { createLinkedinRequestAction } = await import('@/app/actions/linkedin/requests');
       await expect(createLinkedinRequestAction({ currentUserId: 'agent-1', accountId: 'account-1',
         dateSent: '2026-10-13', targetUrl: 'https://www.linkedin.com/in/haf-48/' }))
-        .rejects.toThrow('conflicting request history');
+        .rejects.toThrow('active request for this company');
       expect(mockUpdateDocument).not.toHaveBeenCalled();
       expect(mockCreateDocument).not.toHaveBeenCalled();
     });

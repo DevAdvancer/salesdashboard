@@ -48,7 +48,7 @@ beforeEach(() => {
   (hasLinkedinHelperAccess as jest.Mock).mockResolvedValue(true);
   (listMyLinkedinAccountsAction as jest.Mock).mockResolvedValue([account]);
   (assertAccessibleLinkedinAccount as jest.Mock).mockResolvedValue(account);
-  (isBlockingLinkedinRequest as jest.Mock).mockImplementation(async (_databases, r) => r.status !== "withdrawn" && r.isActive !== false);
+  (isBlockingLinkedinRequest as jest.Mock).mockImplementation(r => r.status !== "withdrawn");
   (listAllDocuments as jest.Mock).mockImplementation(async ({ queries }) => queries.some((q: string) => q.includes('"attribute":"dateSent"')) ? used :
     records.map(record => ({ company: account.company, ...record })));
   databases.createDocument.mockResolvedValue({ $id: "saved" });

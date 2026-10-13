@@ -36,7 +36,7 @@ export async function checkLinkedinDuplicateAction(input: {
     const docs = await listLinkedinRequestsForProfile(databases, targetUrl, normalizeCompany(account.company));
     let active: LinkedinRequest | null = null;
     for (const doc of docs) {
-    if (await isBlockingLinkedinRequest(databases, doc)) {
+    if (isBlockingLinkedinRequest(doc)) {
       if (!active || doc.status === "accepted") active = doc;
       if (doc.status === "accepted") break;
     }
@@ -44,6 +44,7 @@ export async function checkLinkedinDuplicateAction(input: {
 
     return {
     isDuplicate: Boolean(active),
+    canResend: !active && docs.some(doc => doc.status === "withdrawn"),
     activeRequestId: active?.$id ?? null,
     activeStatus: active?.status ?? null,
     activeAgentId: active?.agentId ?? null,
@@ -104,10 +105,13 @@ export async function createLinkedinRequestAction(input: {
     const existingByCompany = await listLinkedinRequestsForProfile(databases, targetUrl, company);
     let activeByCompany: LinkedinRequest | null = null;
     for (const doc of existingByCompany) {
-    if (await isBlockingLinkedinRequest(databases, doc)) {
+    if (isBlockingLinkedinRequest(doc)) {
       if (!activeByCompany || doc.status === "accepted") activeByCompany = doc;
       if (doc.status === "accepted") break;
     }
+    }
+    if (activeByCompany) {
+      throw new Error("This profile already has an active request for this company. Withdraw it before sending another request.");
     }
 
     const alreadySentResponse = await databases.listDocuments(
@@ -122,7 +126,6 @@ export async function createLinkedinRequestAction(input: {
             ],
           );
     const alreadySent = (alreadySentResponse.documents as unknown as LinkedinRequest[]).filter((doc) => {
-            if (activeByCompany && doc.$id === activeByCompany.$id) return false;
             const isActive = doc.isActive ?? true;
             return isActive && doc.status !== "withdrawn";
           }).length;
@@ -140,11 +143,7 @@ export async function createLinkedinRequestAction(input: {
       Permission.read(Role.label("admin")),
     ];
 
-    if (activeByCompany && activeByCompany.status === "accepted") {
-      throw new Error("This URL is already accepted for this company.");
-    }
-
-    const docToUpdate = activeByCompany || (existingByCompany.length > 0 ? existingByCompany[0] : null);
+    const docToUpdate = existingByCompany.length > 0 ? existingByCompany[0] : null;
 
     if (docToUpdate) {
       const canonicalKeyOccupied = existingByCompany.some(doc => doc.$id !== docToUpdate.$id &&
