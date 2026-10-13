@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ProtectedRoute } from "@/components/protected-route";
+import { LinkedinExtensionSection } from "@/components/linkedin-extension-guide";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -487,6 +488,7 @@ function LinkedinRequestsContent() {
 
   return (
     <div className="container mx-auto space-y-6">
+      <LinkedinExtensionSection />
       <Card>
         <CardHeader>
           <CardTitle>Linkedin Request</CardTitle>

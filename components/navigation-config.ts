@@ -19,6 +19,7 @@ import {
   PhoneCall,
   ShieldCheck,
   Settings,
+  FlaskConical,
   Target,
   TrendingUp,
   UserCog,
@@ -58,6 +59,7 @@ export const appIcons = {
   attendanceReport: ClipboardList,
   chat: MessageSquare,
   settings: Settings,
+  beta: FlaskConical,
   teamReport: FileSpreadsheet,
   linkedinRequests: Link2,
   linkedinAccounts: UserCog,
@@ -113,6 +115,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'hierarchy', label: 'Hierarchy', href: '/hierarchy', icon: appIcons.hierarchy },
   { key: 'user-management', label: 'Users', href: '/users', icon: appIcons.users },
   { key: 'settings', label: 'Settings', href: '/settings', icon: appIcons.settings },
+  { key: 'beta', label: 'Beta', href: '/beta', icon: appIcons.beta },
   { key: 'assigned-report', label: 'Assigned Report', href: '/assigned-report', icon: appIcons.assignedReport },
   { key: 'calendar', label: 'Reminders', href: '/reminders', icon: appIcons.calendar },
 ];

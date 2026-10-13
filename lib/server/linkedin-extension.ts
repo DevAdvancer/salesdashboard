@@ -11,6 +11,7 @@ import { validateLeadUniquenessAction } from "@/app/actions/lead/validation";
 import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import { normalizeProfileUrl, sameProfile } from "@/lib/utils/linkedin-extension-url";
 import { canUseLinkedinExtension, LinkedinExtensionError, projectExtensionHistory } from "./linkedin-extension-policy";
+import { hasLinkedinHelperAccess } from "./beta-feature-access";
 import type { LinkedinAccount, LinkedinRequest } from "@/lib/types";
 import type { ExtensionBootstrap, ExtensionCheck, ExtensionRecord, ExtensionState } from "@/lib/types/linkedin-extension";
 
@@ -27,6 +28,9 @@ async function context() {
     throw new LinkedinExtensionError(401, "Sign in to CRM in the connected tab, then retry.");
   });
   if (!canUseLinkedinExtension(actor)) throw new LinkedinExtensionError(403, "Your CRM role or department cannot use LinkedIn Requests.");
+  if (!(await hasLinkedinHelperAccess(databases, actor.$id))) {
+    throw new LinkedinExtensionError(403, "Ask an admin to enable LinkedIn Helper in Beta before using the extension.");
+  }
   return { actor, databases, today: getCurrentEasternIsoDate() };
 }
 
@@ -89,9 +93,10 @@ async function inspect(input: { accountId: string; targetUrl: string }) {
 
 type Inspection = Awaited<ReturnType<typeof inspect>>;
 function result(value: Inspection, includeHistory = false): ExtensionCheck {
-  const { actor, today, account, targetUrl, records, state, quota } = value;
+  const { actor, today, account, targetUrl, records, latest, state, quota } = value;
   return { today, targetUrl, user: { id: actor.$id, name: actor.name }, account: projectAccount(account), state, ...quota,
     canRecord: state === "new" || state === "resend_available",
+    previousRequest: latest ? { status: latest.status, dateSent: latest.dateSent } : null,
     // Opaque revision proves the user checked the exact account/profile/history before saving.
     revision: createHash("sha256").update(JSON.stringify([actor.$id, account.$id, targetUrl, today,
       records.map(r => [r.$id, r.$updatedAt, r.status, r.dateSent, r.agentId])])).digest("hex"),
@@ -145,5 +150,6 @@ export async function recordLinkedinExtension(input: {
     (current.latest.isActive ?? true) && current.latest.status !== "withdrawn";
   const used = checked.used + (wasCountedToday ? 0 : 1);
   return { ...checked, mode, state: "active_request", canRecord: false, history: [],
+    previousRequest: { status: "sent", dateSent: `${current.today}T00:00:00.000Z` },
     used, remaining: checked.limit === null ? null : Math.max(0, checked.limit - used) };
 }

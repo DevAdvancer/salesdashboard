@@ -10,6 +10,7 @@ export const COMPONENT_ACCESS: RoleAccessMap = {
   'user-management': ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead'],
   'field-management': [],
   settings: ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent', 'lead_generation', 'compliance'],
+  beta: ['admin'],
   'branch-management': ['admin', 'developer', 'monitor', 'operations'],
   mock: ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent'],
   'assessment-support': ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent'],

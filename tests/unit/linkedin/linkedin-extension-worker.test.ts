@@ -5,7 +5,7 @@ const origin = "http://localhost:5000";
 const account = { id: "account", name: "Account", company: "Silverspace", type: "main" as const, connectionLimit: 100, used: 42, limit: 100, remaining: 58 };
 const bootstrap: ExtensionBootstrap = { user: { id: "agent", name: "Agent" }, today: "2026-10-06", accounts: [account] };
 const checked: ExtensionCheck = { user: bootstrap.user, today: bootstrap.today, account, targetUrl: "https://www.linkedin.com/in/person",
-  state: "new", canRecord: true, revision: "revision", history: [], used: 42, limit: 100, remaining: 58 };
+  state: "new", canRecord: true, revision: "revision", history: [], previousRequest: null, used: 42, limit: 100, remaining: 58 };
 const check: ExtensionInput = { operation: "check", accountId: account.id, targetUrl: checked.targetUrl };
 const record: ExtensionInput = { ...check, operation: "record", revision: checked.revision, confirmResend: false };
 

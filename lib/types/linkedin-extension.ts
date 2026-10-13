@@ -15,6 +15,7 @@ export interface ExtensionHistory {
 export interface ExtensionCheck extends ExtensionQuota {
   user: ExtensionUser; today: string; targetUrl: string; account: ExtensionAccount;
   state: ExtensionState; canRecord: boolean; revision: string; history: ExtensionHistory[];
+  previousRequest: { status: ExtensionHistory["status"]; dateSent: string } | null;
 }
 export interface ExtensionRecord extends ExtensionCheck { mode: "created" | "resent" | "existing" }
 export type ExtensionInput = { operation: "check" | "history"; accountId: string; targetUrl: string } |

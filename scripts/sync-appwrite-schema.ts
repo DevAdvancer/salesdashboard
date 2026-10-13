@@ -71,6 +71,14 @@ function isNotFoundError(error: unknown): boolean {
 
 // Collection schema definitions - matches lib/types/index.ts
 const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: SchemaIndex[] }> = {
+  [COLLECTIONS.BETA_FEATURE_ACCESS]: {
+    attributes: [
+      { key: 'feature', type: 'string', required: true, size: 50 },
+      { key: 'userId', type: 'string', required: true, size: 255 },
+      { key: 'enabled', type: 'boolean', required: true },
+    ],
+    indexes: [{ key: 'feature_user_idx', type: 'unique', attributes: ['feature', 'userId'] }],
+  },
   [COLLECTIONS.USERS]: {
     attributes: [
       { key: 'name', type: 'string', required: true, size: 255 },

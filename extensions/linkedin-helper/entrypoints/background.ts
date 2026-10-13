@@ -6,6 +6,17 @@ import { CrmReadCoordinator } from "../lib/crm-read-coordinator";
 
 interface FetchResult { status: number; data?: unknown; error?: string }
 const crmTabs = new Map<number, string>();
+const VERSION_ATTRIBUTE = "data-crm-hub-linkedin-helper-version";
+
+async function markCrmTab(tabId: number, origin: string) {
+  if (!(await browser.permissions.contains({ origins: [crmPermissionPattern(origin)] }))) return;
+  try {
+    await browser.scripting.executeScript({ target: { tabId }, world: "ISOLATED",
+      func: (expectedOrigin: string, attribute: string, version: string) => {
+        if (location.origin === expectedOrigin) document.documentElement.setAttribute(attribute, version);
+      }, args: [origin, VERSION_ATTRIBUTE, browser.runtime.getManifest().version] });
+  } catch { /* A loading or protected tab cannot publish its version yet. */ }
+}
 
 /** Serialized into the CRM tab: never reference imports or outer runtime variables here. */
 async function fetchFromCrm(expectedOrigin: string, input: ExtensionInput | null): Promise<FetchResult> {
@@ -40,7 +51,9 @@ async function handle(message: ExtensionMessage, reads: CrmReadCoordinator): Pro
   const settings = await browser.storage.local.get("crmOrigin");
   const origin = normalizeCrmOrigin(settings.crmOrigin);
   if (message.type === "ensure-crm") {
-    if (!(await getCrmTab(origin))) await browser.tabs.create({ url: `${origin}/linkedin-requests`, active: false });
+    const tab = await getCrmTab(origin);
+    if (tab?.id !== undefined) await markCrmTab(tab.id, origin);
+    else await browser.tabs.create({ url: `${origin}/linkedin-requests`, active: false });
     return { ok: true };
   }
   if (message.type === "open-crm") {
@@ -57,8 +70,6 @@ async function handle(message: ExtensionMessage, reads: CrmReadCoordinator): Pro
   if (!(await browser.permissions.contains({ origins: [crmPermissionPattern(origin)] }))) {
     throw new Error("Reconnect to grant access to this CRM hostname.");
   }
-  const tab = await getCrmTab(origin);
-  if (tab?.id === undefined) throw new Error("Open CRM and sign in. Keep that tab open while using the extension.");
   return reads.request(origin, input ? { ...input, targetUrl: normalizeProfileUrl(input.targetUrl) } : undefined, message.fresh === true);
 }
 
@@ -66,6 +77,7 @@ async function fetchCrm(origin: string, input?: ExtensionInput): Promise<Extensi
   try {
     const tab = await getCrmTab(origin);
     if (tab?.id === undefined) throw new Error("Open CRM and sign in. Keep that tab open while using the extension.");
+    await markCrmTab(tab.id, origin);
     const results = await browser.scripting.executeScript({ target: { tabId: tab.id },
       world: "ISOLATED", func: fetchFromCrm, args: [origin, input ?? null] });
     const result = results[0]?.result;
@@ -85,9 +97,16 @@ export default defineBackground(() => {
     async load() { const stored = await browser.storage.session.get("crmReads"); return Array.isArray(stored.crmReads) ? stored.crmReads : []; },
     async save(entries) { await browser.storage.session.set({ crmReads: entries }); },
   }, fetchCrm);
-  browser.tabs.onUpdated.addListener((tabId, change) => {
+  browser.tabs.onUpdated.addListener((tabId, change, tab) => {
     const origin = crmTabs.get(tabId);
     if (origin && (change.status === "loading" || change.url)) void reads.invalidate(origin);
+    if (change.status === "complete" && tab.url) {
+      void browser.storage.local.get("crmOrigin").then(stored => {
+        if (!stored.crmOrigin) return;
+        const expected = normalizeCrmOrigin(stored.crmOrigin);
+        if (new URL(tab.url!).origin === expected) return markCrmTab(tabId, expected);
+      }).catch(() => {});
+    }
   });
   browser.tabs.onRemoved.addListener(tabId => {
     const origin = crmTabs.get(tabId);

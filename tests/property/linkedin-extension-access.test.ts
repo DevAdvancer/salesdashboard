@@ -4,6 +4,11 @@ import { VALID_ROLES, type LinkedinRequest } from "@/lib/types";
 import { isRoleEligibleForComponent } from "@/lib/constants/component-access";
 
 describe("LinkedIn extension access invariants", () => {
+  it("keeps the Beta management page admin only for every role", () => {
+    fc.assert(fc.property(fc.constantFrom(...VALID_ROLES), role => {
+      expect(isRoleEligibleForComponent('beta', role)).toBe(role === 'admin');
+    }));
+  });
   it("never admits inactive users or resume users and follows the existing component roles", () => {
     fc.assert(fc.property(fc.constantFrom(...VALID_ROLES), fc.constantFrom("sales", "resume"), fc.boolean(),
       (role, department, isActive) => {

@@ -49,18 +49,26 @@ export function useLinkedinHelper() {
     async function initialize() {
       const stored = await browser.storage.local.get("crmOrigin");
       const origin = stored.crmOrigin ? normalizeCrmOrigin(stored.crmOrigin) : null;
-      let detected = "";
-      try { const profile = await detectProfile(); detected = profile.url; profileTab.current = profile.tabId; } catch { /* Manual entry is available. */ }
       if (cancelled) return;
-      setState(previous => ({ ...previous, crmUrl: origin || initial.crmUrl, origin, profile: detected,
+      setState(previous => ({ ...previous, crmUrl: origin || initial.crmUrl, origin,
         connection: origin ? "connecting" : "disconnected" }));
+      // Profile detection can be slow on LinkedIn. It must not hold up the CRM connection.
+      const detecting = detectProfile().then(profile => {
+        if (cancelled || version !== generation.current) return "";
+        profileTab.current = profile.tabId;
+        setState(previous => ({ ...previous, profile: profile.url }));
+        return profile.url;
+      }).catch(() => "");
       if (!origin) return;
       const loaded = await loadConnection(origin);
-      const profile = detected || await rememberedProfile(origin, loaded.data.user.id);
       if (cancelled || version !== generation.current) return;
-      // Account loading establishes the connection; history can take longer on LinkedIn.
-      setState(previous => ({ ...previous, bootstrap: loaded.data, accountId: loaded.selectedAccountId, profile,
+      setState(previous => ({ ...previous, bootstrap: loaded.data, accountId: loaded.selectedAccountId,
         connection: "connected", note: loaded.note }));
+      void detecting.then(async detected => {
+        if (detected) return;
+        const profile = await rememberedProfile(origin, loaded.data.user.id);
+        if (!cancelled && version === generation.current) setState(previous => ({ ...previous, profile: previous.profile || profile }));
+      }).catch(() => { /* Profile restoration is optional. */ });
     }
     initialize().catch((error: unknown) => {
       if (!cancelled) setState(previous => ({ ...previous, connection: connectionAfterError(previous.connection, error), checked: null,
@@ -95,7 +103,7 @@ export function useLinkedinHelper() {
 
   async function refreshConnection(origin: string) {
     invalidate();
-    setState(previous => ({ ...previous, connection: "connecting" }));
+    setState(previous => ({ ...previous, connection: previous.bootstrap ? "connected" : "connecting" }));
     const loaded = await loadConnection(origin, true);
     if (!mounted.current) return;
     setState(previous => ({ ...previous, bootstrap: loaded.data, accountId: loaded.selectedAccountId,
@@ -153,6 +161,9 @@ export function useLinkedinHelper() {
         noteKind: data.mode === "existing" ? "info" : "success" }));
     }); },
     openCrm() { void perform(async () => { await sendBridge({ type: "open-crm" }); }); },
+    openProfile() { void perform(async () => {
+      await browser.tabs.create({ url: normalizeProfileUrl(state.profile) });
+    }); },
   };
 }
 

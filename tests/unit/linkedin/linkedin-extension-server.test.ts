@@ -13,6 +13,7 @@ jest.mock("node-appwrite", () => ({
 }));
 jest.mock("@/lib/server/appwrite", () => ({ createAdminClient: jest.fn() }));
 jest.mock("@/lib/server/current-user", () => ({ getAuthenticatedUserDoc: jest.fn() }));
+jest.mock("@/lib/server/beta-feature-access", () => ({ hasLinkedinHelperAccess: jest.fn() }));
 jest.mock("@/lib/server/appwrite-pagination", () => ({ listAllDocuments: jest.fn() }));
 jest.mock("@/app/actions/linkedin/accounts", () => ({ listMyLinkedinAccountsAction: jest.fn() }));
 jest.mock("@/app/actions/linkedin/requests", () => ({ createLinkedinRequestAction: jest.fn() }));
@@ -23,6 +24,7 @@ jest.mock("@/app/actions/lead/validation", () => ({ validateLeadUniquenessAction
 
 import { createAdminClient } from "@/lib/server/appwrite";
 import { getAuthenticatedUserDoc } from "@/lib/server/current-user";
+import { hasLinkedinHelperAccess } from "@/lib/server/beta-feature-access";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import { listMyLinkedinAccountsAction } from "@/app/actions/linkedin/accounts";
 import { createLinkedinRequestAction } from "@/app/actions/linkedin/requests";
@@ -43,6 +45,7 @@ beforeEach(() => {
   records = []; used = [];
   (createAdminClient as jest.Mock).mockResolvedValue({ databases });
   (getAuthenticatedUserDoc as jest.Mock).mockResolvedValue({ $id: "agent-1", name: "Agent", role: "agent", department: "sales", isActive: true });
+  (hasLinkedinHelperAccess as jest.Mock).mockResolvedValue(true);
   (listMyLinkedinAccountsAction as jest.Mock).mockResolvedValue([account]);
   (assertAccessibleLinkedinAccount as jest.Mock).mockResolvedValue(account);
   (validateLeadUniquenessAction as jest.Mock).mockResolvedValue({ isValid: true });
@@ -62,6 +65,7 @@ it("checking never writes or resends and recognizes a legacy tracking URL", asyn
   records = [{ $id: "old", agentId: "other", targetUrl: "https://linkedin.com/in/person/?trk=old", status: "sent", isActive: true }];
   const data = await checkLinkedinExtension(input, true);
   expect(data.state).toBe("active_request");
+  expect(data.previousRequest).toMatchObject({ status: "sent" });
   expect(data.history[0].requestId).toBeNull();
   expect(databases.createDocument).not.toHaveBeenCalled();
   expect(createLinkedinRequestAction).not.toHaveBeenCalled();
@@ -76,6 +80,11 @@ it("refuses inactive, resume, and monitoring actors before any account read", as
 it("rejects expired delegation", async () => {
   (assertAccessibleLinkedinAccount as jest.Mock).mockRejectedValue(new Error("Unauthorized"));
   await expect(checkLinkedinExtension(input)).rejects.toMatchObject({ status: 403 });
+});
+it("rejects a user whose beta extension access was revoked", async () => {
+  (hasLinkedinHelperAccess as jest.Mock).mockResolvedValue(false);
+  await expect(checkLinkedinExtension(input)).rejects.toMatchObject({ status: 403 });
+  expect(assertAccessibleLinkedinAccount).not.toHaveBeenCalled();
 });
 it("requires a fresh check and rechecks lead duplicates on save", async () => {
   const checked = await checkLinkedinExtension(input);
@@ -134,7 +143,8 @@ it("rejects malformed URLs and unauthenticated sessions", async () => {
 
 it("direct recording inspects once, hides history, and returns the updated allowance", async () => {
   const saved = await recordLinkedinExtension({ ...input, confirmResend: false });
-  expect(saved).toMatchObject({ mode: "created", state: "active_request", canRecord: false, used: 1, remaining: 2, history: [] });
+  expect(saved).toMatchObject({ mode: "created", state: "active_request", canRecord: false, used: 1, remaining: 2, history: [],
+    previousRequest: { status: "sent", dateSent: "2026-10-05T00:00:00.000Z" } });
   expect(validateLeadUniquenessAction).toHaveBeenCalledTimes(1);
   const companyReads = (listAllDocuments as jest.Mock).mock.calls.filter(([args]) => args.queries.some((q: string) => q.includes('"attribute":"company"')));
   expect(companyReads).toHaveLength(1);
@@ -167,7 +177,7 @@ it("availability checks hide history until it is requested", async () => {
 
 it("substring candidates for longer profile slugs are not mistaken for duplicates", async () => {
   records = [{ $id: "other", targetUrl: "https://www.linkedin.com/in/person-other", status: "sent", agentId: "other" }];
-  expect((await checkLinkedinExtension(input)).state).toBe("new");
+  expect(await checkLinkedinExtension(input)).toMatchObject({ state: "new", previousRequest: null });
 });
 
 it("falls back for unsupported contains queries without skipping legacy duplicate protection", async () => {

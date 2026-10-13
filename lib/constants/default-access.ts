@@ -6,6 +6,7 @@ export type ComponentKey =
   | 'user-management'
   | 'field-management'
   | 'settings'
+  | 'beta'
   | 'branch-management'
   | 'mock'
   | 'assessment-support'
@@ -46,6 +47,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'user-management', role: 'admin', allowed: true },
   { componentKey: 'field-management', role: 'admin', allowed: false },
   { componentKey: 'settings', role: 'admin', allowed: true },
+  { componentKey: 'beta', role: 'admin', allowed: true },
   { componentKey: 'branch-management', role: 'admin', allowed: true },
   { componentKey: 'mock', role: 'admin', allowed: true },
   { componentKey: 'assessment-support', role: 'admin', allowed: true },

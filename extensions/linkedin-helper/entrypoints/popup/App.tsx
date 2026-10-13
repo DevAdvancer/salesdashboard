@@ -8,9 +8,13 @@ const descriptions: Record<ExtensionState, [string, string]> = {
   new: ["Ready to record", "No blocking request was found for this company. Record after you send the invitation."],
   active_request: ["Already exists", "An active request exists for this company. View history for details."],
   lead_exists: ["Existing CRM lead", "A lead with this profile already exists. Manage it in CRM."],
-  resend_available: ["Previous request found", "The existing CRM rules allow a resend. Confirm below after sending the new invitation."],
+  resend_available: ["Previous CRM request found", "This profile has an earlier CRM request. Review it before sending another invitation."],
   limit_reached: ["Daily allowance reached", "Choose another assigned account or return on the next Eastern business date."],
   missing_limit: ["Account limit not configured", "Ask your team lead or administrator to configure a connection limit."],
+};
+const resultTones: Record<ExtensionState, "ready" | "existing" | "blocked"> = {
+  new: "ready", active_request: "existing", lead_exists: "existing", resend_available: "existing",
+  limit_reached: "blocked", missing_limit: "blocked",
 };
 
 export function App() {
@@ -19,7 +23,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showSilverspace, setShowSilverspace] = useState(true);
   const { state } = helper;
-  const { connected, quota, title, isResend, canRecord } = getView(state);
+  const { connected, quota, title, resultState, isResend, canRecord } = getView(state);
   useEffect(() => {
     const timer = setInterval(() => { setShowSilverspace(previous => !previous); }, 4500);
     return () => clearInterval(timer);
@@ -50,13 +54,16 @@ export function App() {
         <div className="row"><input id="profile" type="text" value={state.profile} disabled={state.pending}
           onChange={event => helper.setProfile(event.target.value)} placeholder="https://www.linkedin.com/in/…" spellCheck={false} />
           <button id="detect" className="secondary" disabled={state.pending} onClick={helper.detect}>Detect</button></div>
-        {title && <div className="result" data-state={state.checked?.canRecord ? "ready" : "blocked"}><span>{title[0]}</span><p>{title[1]}</p></div>}
+        {title && <div className="result" data-state={resultState}><span>{title[0]}</span><p>{title[1]}</p>
+          {state.checked?.previousRequest && <p>CRM record: {state.checked.previousRequest.status} · {state.checked.previousRequest.dateSent.slice(0, 10)}</p>}</div>}
         {isResend && <div className="confirmation"><label><input type="checkbox" checked={state.confirmResend} disabled={state.pending}
-          onChange={event => helper.setConfirmResend(event.target.checked)} /> I sent a new invitation and want to update the existing CRM request.</label></div>}
+          onChange={event => helper.setConfirmResend(event.target.checked)} /> I sent another invitation on LinkedIn and want to update this CRM request.</label></div>}
         <div className="actions"><button id="record" disabled={!canRecord} onClick={helper.record}>{isResend ? "Record resend" : "Record request sent"}</button></div>
         <div className="actions"><button id="check" className="secondary" disabled={state.pending || !state.accountId || !state.profile.trim()} onClick={helper.check}>Check before inviting</button>
           <button id="history" className="secondary" disabled={state.pending || !state.accountId || !state.profile.trim()} onClick={helper.history}>View history</button></div>
-        <p className="hint">Send the invitation on LinkedIn first, then record it here.</p>
+        <div className="actions"><button id="open-profile" className="secondary" disabled={state.pending || !state.profile.trim()}
+          onClick={helper.openProfile}>Open profile on LinkedIn</button></div>
+        <p className="hint">Send the invitation on LinkedIn first, then record it here. CRM history does not show LinkedIn&apos;s invitation status.</p>
         {state.historyVisible && state.checked && <History key={state.checked.revision} items={state.checked.history} />}
       </div>}
       <p id="message" role="status" aria-live="polite" data-kind={state.noteKind}>{state.note}</p>
@@ -86,10 +93,17 @@ function getView(state: ReturnType<typeof useLinkedinHelper>["state"]) {
   const connected = state.connection === "connected" && state.bootstrap !== null;
   const quota = state.checked || state.bootstrap?.accounts.find(account => account.id === state.accountId);
   const title = state.noteKind === "success" && state.checked?.state === "active_request"
-    ? ["Added successfully", "The sent invitation is recorded in CRM. View history whenever you need it."]
+    ? ["Request recorded", "The invitation you sent is recorded in CRM."]
     : state.checked ? descriptions[state.checked.state] : null;
-  const isResend = state.checked?.state === "resend_available";
+  const resultState = state.noteKind === "success" && state.checked?.state === "active_request" ? "sent" :
+    state.checked ? resultTones[state.checked.state] : "ready";
+  const isResend = state.checked?.state === "resend_available" && !!state.checked.previousRequest;
+  return { connected, quota, title, resultState, isResend, canRecord: canRecordRequest(state, connected, isResend) };
+}
+
+function canRecordRequest(state: ReturnType<typeof useLinkedinHelper>["state"], connected: boolean, isResend: boolean) {
   const canRecord = connected && !state.pending && !!state.accountId && !!state.profile.trim() &&
-    (!state.checked || state.checked.canRecord) && (!isResend || state.confirmResend);
-  return { connected, quota, title, isResend, canRecord };
+    (!state.checked || state.checked.canRecord) &&
+    (state.checked?.state !== "resend_available" || (isResend && state.confirmResend));
+  return canRecord;
 }

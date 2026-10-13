@@ -15,6 +15,7 @@ export type ComponentKey =
   | 'user-management'
   | 'field-management'
   | 'settings'
+  | 'beta'
   | 'branch-management'
   | 'mock'
   | 'assessment-support'

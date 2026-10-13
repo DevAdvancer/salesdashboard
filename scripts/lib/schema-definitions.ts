@@ -38,6 +38,14 @@ export type CollectionSchema = {
  * attribute and index definitions.
  */
 export const collectionSchemas: Record<string, CollectionSchema> = {
+  beta_feature_access: {
+    attributes: [
+      { key: 'feature', type: 'string', required: true, size: 50 },
+      { key: 'userId', type: 'string', required: true, size: 255 },
+      { key: 'enabled', type: 'boolean', required: true },
+    ],
+    indexes: [{ key: 'feature_user_idx', type: 'unique', attributes: ['feature', 'userId'] }],
+  },
   // ─── Users ───────────────────────────────────────────────────────────────
   users: {
     attributes: [

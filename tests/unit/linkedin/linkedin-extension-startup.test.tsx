@@ -20,7 +20,7 @@ const bootstrap: ExtensionBootstrap = {
 };
 const checked: ExtensionCheck = {
   user: bootstrap.user, today: bootstrap.today, account: bootstrap.accounts[0], targetUrl: "https://www.linkedin.com/in/person",
-  state: "new", canRecord: true, revision: "revision", history: [], used: 42, limit: 100, remaining: 58,
+  state: "new", canRecord: true, revision: "revision", history: [], previousRequest: null, used: 42, limit: 100, remaining: 58,
 };
 
 function deferred<T>() {
@@ -50,6 +50,15 @@ it("shows connected accounts while a LinkedIn history check is still pending", a
   expect(result.current.state).toMatchObject({ bootstrap, accountId: "account", pending: true, checked: null, note: "Loading history…" });
   await act(async () => { check.resolve(checked); });
   expect(result.current.state).toMatchObject({ connection: "connected", pending: false, checked, note: "" });
+});
+
+it("connects before slow LinkedIn profile detection finishes", async () => {
+  const detection = deferred<{ url: string; tabId: number }>();
+  (detectProfile as jest.Mock).mockReturnValue(detection.promise);
+  const { result } = renderHook(() => useLinkedinHelper());
+  await waitFor(() => expect(result.current.state).toMatchObject({ connection: "connected", pending: false }));
+  await act(async () => { detection.resolve({ url: checked.targetUrl, tabId: 7 }); });
+  expect(result.current.state.profile).toBe(checked.targetUrl);
 });
 
 it("keeps the account connection and allows retry after a failed history lookup", async () => {

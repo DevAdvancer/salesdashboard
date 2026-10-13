@@ -12,6 +12,8 @@
     "test:coverage": "jest --coverage",
     "setup:appwrite": "tsx scripts/sync-appwrite-schema.ts",
     "setup:appwrite:dry": "tsx scripts/sync-appwrite-schema.ts --dry-run",
+    "setup:beta-access:dry": "tsx scripts/setup-beta-feature-access.ts",
+    "setup:beta-access:apply": "tsx scripts/setup-beta-feature-access.ts --apply",
     "setup:appwrite:targets": "tsx scripts/setup-monthly-targets.ts",
     "setup:appwrite:targets:dry": "tsx scripts/setup-monthly-targets.ts --dry-run",
     "setup:report-emails:dry": "tsx scripts/setup-report-email-settings.ts",
