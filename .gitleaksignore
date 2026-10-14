@@ -14,3 +14,6 @@
 7317fbed59ef23f6ee343dbca5262e850fd50796:lib/services/lead/utils.ts:linkedin-client-secret:46
 f6399b0411c7bd70f08f2acf21cbe42c704773f3:app/leads/new/page.tsx:linkedin-client-secret:876
 f6399b0411c7bd70f08f2acf21cbe42c704773f3:app/leads/new/page.tsx:linkedin-client-secret:877
+
+# The dashboard's `dateFilterType === 'month'` comparison was misidentified as a LinkedIn client ID.
+c42fb25a7cff14cce2befb1ebc1fdcd67879284f:app/dashboard/page.tsx:linkedin-client-id:340
