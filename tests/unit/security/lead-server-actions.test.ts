@@ -912,6 +912,34 @@ describe('lead server action authorization', () => {
     expect(mockUpdateDocument).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['email', 'new@example.com'],
+    ['phone', '5553334444'],
+    ['linkedinProfileUrl', 'https://linkedin.com/in/other'],
+  ])('rejects changes to a saved %s', async (field, replacement) => {
+    mockGetDocument
+      .mockResolvedValueOnce({ $id: 'teamLead-1', role: 'team_lead', branchIds: ['branch-1'] })
+      .mockResolvedValueOnce({
+        $id: 'lead-1',
+        data: JSON.stringify({
+          firstName: 'Current',
+          email: 'current@example.com',
+          phone: '5551112222',
+          linkedinProfileUrl: 'https://linkedin.com/in/current',
+        }),
+        ownerId: 'teamLead-1',
+        assignedToId: 'agent-1',
+        branchId: 'branch-1',
+        isClosed: false,
+        status: 'Interested',
+      });
+
+    const { updateLeadAction } = await import('@/app/actions/lead/mutations');
+    await expect(updateLeadAction('lead-1', { [field]: replacement }, 'teamLead-1'))
+      .rejects.toMatchObject({ code: 'INVALID_INPUT', field });
+    expect(mockUpdateDocument).not.toHaveBeenCalled();
+  });
+
   it('blocks duplicate lead edits and notifies admins and team leads only', async () => {
     mockGetDocument
       .mockResolvedValueOnce({
@@ -927,7 +955,7 @@ describe('lead server action authorization', () => {
         data: JSON.stringify({
           firstName: 'Current',
           email: 'current@example.com',
-          phone: '(555) 111-2222',
+          phone: '',
           linkedinProfileUrl: 'https://linkedin.com/in/current',
         }),
         ownerId: 'teamLead-1',
@@ -1022,7 +1050,7 @@ describe('lead server action authorization', () => {
           firstName: 'Current',
           email: 'current@example.com',
           phone: '(555) 111-2222',
-          linkedinProfileUrl: 'https://linkedin.com/in/current',
+          linkedinProfileUrl: '',
         }),
         ownerId: 'teamLead-1',
         assignedToId: 'agent-1',

@@ -485,6 +485,7 @@ export function LegacyNewLeadContent() {
 
           {/* Dynamic Lead Form */}
           <DynamicLeadForm
+            lockLinkedinProfileUrl={Boolean(linkedinTargetUrl)}
             key={`${linkedinRequestId || "manual"}-${linkedinRequestCompanyResolved || ""}`}
             formConfig={formFields}
             onSubmit={handleSubmit}

@@ -23,6 +23,7 @@ import {
   isAmountMissing,
 } from "@/lib/utils/lead-close-gate";
 import { shouldShowRequiredAsterisk } from "@/lib/utils/required-lead-fields";
+import { isLeadContactLocked } from "@/lib/utils/lead-contact-lock";
 import {
   formatFollowUpDateTime,
   formatFollowUpStatus,
@@ -57,6 +58,7 @@ export function LeadInfoCard({
   const isOperations = user.role === "operations";
   const isMonitor = user.role === "monitor";
   const isLeadOwner = lead.ownerId === user.$id;
+  const savedLeadData = JSON.parse(lead.data) as LeadData;
 
   const leadGenerationVisibleKeys = new Set([
     "firstName",
@@ -84,7 +86,11 @@ export function LeadInfoCard({
     // can view (mirrors the server-side `assertLeadUpdateAllowed` policy
     // in app/actions/lead.ts). Operations is read-only.
     const isReadOnly =
-      !isEditing || lead?.isClosed || user?.role === "operations" || field.key === "source";
+      !isEditing || lead?.isClosed || user?.role === "operations" || field.key === "source" ||
+      (isLinkedinProfileField(field)
+        ? isLeadContactLocked(savedLeadData, "linkedinProfileUrl")
+        : (field.key === "email" || field.key === "phone") &&
+          isLeadContactLocked(savedLeadData, field.key));
     const fieldError = fieldErrors[field.key];
 
     switch (field.type) {

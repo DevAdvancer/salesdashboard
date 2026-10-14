@@ -570,6 +570,7 @@ function HistoryDetailContent() {
             </div>
           ) : !paymentRecord ? (
             <ClientPaymentCreateCard
+              leadData={leadData}
               paymentInitPlanValues={paymentInitPlanValues}
               handlePaymentInitPlanChange={handlePaymentInitPlanChange}
               paymentInitPersonalValues={paymentInitPersonalValues}
@@ -581,6 +582,7 @@ function HistoryDetailContent() {
             />
           ) : (
             <ClientIntakeCard
+              leadData={leadData}
               clientIntakeFields={clientIntakeFields}
               clientIntakeValues={clientIntakeValues}
               handleClientIntakeChange={handleClientIntakeChange}

@@ -11,6 +11,8 @@ import { logAction } from "@/lib/services/audit-service";
 import { assertAuthenticatedUserId, getAuthenticatedAccount } from "@/lib/server/current-user";
 import { notifyDuplicateLeadUpdateAttemptAction } from "@/app/actions/lead-duplicates";
 import { normalizeLinkedinProfileUrl } from "@/lib/utils/linkedin";
+import { getChangedLockedLeadContactField } from "@/lib/utils/lead-contact-lock";
+import { sameProfile } from "@/lib/utils/linkedin-extension-url";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import { recordLgHandoffAction } from "@/app/actions/lg-handoffs";
 import { markPriorNotInterestedRowsReopened, notInterestedLeadAction, backoutLeadAction } from "@/lib/actions/lead/status";
@@ -58,6 +60,12 @@ export async function restoreNotInterestedDuplicateLead(input: {
                 ...currentData,
                 ...createInput.data,
             };
+    const lockedField = getChangedLockedLeadContactField(currentData, mergedData);
+    if (lockedField) {
+        throw new LeadActionError('INVALID_INPUT', `${lockedField} cannot be changed after it is saved.`, {
+            field: lockedField,
+        });
+    }
     if (!createInput.data.linkedinRequestId) {
         delete (mergedData as Record<string, unknown>).linkedinRequestId;
     }
@@ -165,6 +173,22 @@ export async function createLeadAction(ownerId: string, input: CreateLeadInput, 
 
         if (isOperationsRole(actorDoc.role)) {
             throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
+        }
+
+        if (typeof input.data.linkedinRequestId === 'string' && input.data.linkedinRequestId.trim()) {
+            const request = await databases.getDocument(
+                DATABASE_ID,
+                COLLECTIONS.LINKEDIN_REQUESTS,
+                input.data.linkedinRequestId.trim(),
+            ) as unknown as { targetUrl: string };
+            const submittedUrl = typeof input.data.linkedinProfileUrl === 'string'
+                ? input.data.linkedinProfileUrl
+                : '';
+            if (!sameProfile(request.targetUrl, submittedUrl)) {
+                throw new LeadActionError('INVALID_INPUT', 'LinkedIn URL must match the connected request.', {
+                    field: 'linkedinProfileUrl',
+                });
+            }
         }
 
         assertRequiredLeadData(input.data);
@@ -411,6 +435,14 @@ export async function updateLeadAction(leadId: string, data: Partial<LeadData>, 
 
         const currentData = JSON.parse(currentLead.data) as LeadData;
         const updatedData = { ...currentData, ...data };
+
+        const lockedField = getChangedLockedLeadContactField(currentData, updatedData);
+        if (lockedField) {
+            const labels = { email: 'Email', phone: 'Phone number', linkedinProfileUrl: 'LinkedIn URL' };
+            throw new LeadActionError('INVALID_INPUT', `${labels[lockedField]} cannot be changed after it is saved.`, {
+                field: lockedField,
+            });
+        }
 
         assertRequiredLeadData(updatedData);
 

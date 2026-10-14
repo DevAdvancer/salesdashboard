@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { LeadAssignmentDropdown } from "@/components/lead-assignment-dropdown";
 import { shouldShowRequiredAsterisk } from "@/lib/utils/required-lead-fields";
+import { isLinkedinProfileField } from "@/lib/utils/lead-linkedin-field";
 
 const REFERRAL_SOURCE_NORMALIZED = "referral";
 
@@ -30,6 +31,7 @@ interface DynamicLeadFormProps {
   formConfig: FormField[];
   onSubmit: (data: Record<string, unknown>) => void | Promise<void>;
   defaultValues?: Record<string, unknown>;
+  lockLinkedinProfileUrl?: boolean;
   submitLabel?: string;
   isLoading?: boolean;
   /**
@@ -85,6 +87,7 @@ export function DynamicLeadForm({
   formConfig,
   onSubmit,
   defaultValues = {},
+  lockLinkedinProfileUrl = false,
   submitLabel = "Submit",
   isLoading = false,
   externalErrors,
@@ -269,6 +272,7 @@ export function DynamicLeadForm({
             </Label>
             <Input
               id={field.key}
+              readOnly={lockLinkedinProfileUrl && isLinkedinProfileField(field)}
               type={
                 field.type === "email"
                   ? "email"

@@ -11,6 +11,8 @@ import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
 import type { ClientPaymentPlan, ClientPaymentRecord, ClientPaymentUpdate, Lead, PaymentStatus, User } from "@/lib/types";
 import { getActor, ensureComponentAccess, isAdminLikeReadRole, assertCanMutateClientPayments, parseJsonOr, canActorAccessLead, mapRecord, findRecordByLeadId, mapLeadDocumentToLead, buildSyntheticLead, toComparableIsoDate, PaymentInsightRecord, AdminClientHistoryRow, PaymentsReportRow } from "./shared";
 import { logger } from '@/lib/utils/logger';
+import { mergeLockedClientContactDetails } from '@/lib/utils/lead-contact-lock';
+import type { LeadData } from '@/lib/types';
 
 
 export async function getClientPaymentRecordAction(actorId: string, leadId: string): Promise<ClientPaymentRecord | null> {
@@ -41,6 +43,14 @@ export async function upsertClientPaymentRecordAction(input: {
     const { databases } = await createAdminClient();
     const now = new Date().toISOString();
     const existing = await findRecordByLeadId(input.leadId);
+    const lead = await databases.getDocument(DATABASE_ID, COLLECTIONS.LEADS, input.leadId) as unknown as Lead;
+    const leadData = JSON.parse(lead.data || '{}') as LeadData;
+    const savedClientDetails = existing
+      ? parseJsonOr<Record<string, unknown>>(existing.personalDetails ?? existing.personalDetailsJson, {})
+      : {};
+    const personalDetails = mergeLockedClientContactDetails(
+      leadData, savedClientDetails, input.personalDetails ?? {},
+    );
     const status = input.initialStatus ?? (existing?.status as PaymentStatus) ?? "not_paid";
     const updates = existing ? parseJsonOr<ClientPaymentUpdate[]>(existing.updates, []) : [];
     const shouldCreateInitialUpdate = updates.length === 0;
@@ -64,7 +74,7 @@ export async function upsertClientPaymentRecordAction(input: {
             : updates;
     const payload = {
             leadId: input.leadId,
-            personalDetails: JSON.stringify(input.personalDetails ?? {}),
+            personalDetails: JSON.stringify(personalDetails),
             paymentPlan: JSON.stringify(input.paymentPlan ?? { percent: 0, months: 0, upfrontAmount: 0 }),
             status,
             updates: JSON.stringify(nextUpdates),
@@ -164,9 +174,17 @@ export async function updateClientPersonalDetailsAction(input: {
     }
 
     const { databases } = await createAdminClient();
+    const lead = await databases.getDocument(DATABASE_ID, COLLECTIONS.LEADS, input.leadId) as unknown as Lead;
+    const leadData = JSON.parse(lead.data || '{}') as LeadData;
+    const savedClientDetails = parseJsonOr<Record<string, unknown>>(
+      existing.personalDetails ?? existing.personalDetailsJson, {},
+    );
+    const personalDetails = mergeLockedClientContactDetails(
+      leadData, savedClientDetails, input.personalDetails ?? {},
+    );
     const now = new Date().toISOString();
     const doc = await databases.updateDocument(DATABASE_ID, COLLECTIONS.CLIENT_PAYMENTS, existing.$id, {
-            personalDetails: JSON.stringify(input.personalDetails ?? {}),
+            personalDetails: JSON.stringify(personalDetails),
             updatedAt: now,
             updatedById: actor.$id,
             updatedByName: actor.name,

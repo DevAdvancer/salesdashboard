@@ -276,6 +276,32 @@ describe("client payment amount persistence and report", () => {
     });
   });
 
+  it("rejects a client details update that changes a saved lead email", async () => {
+    mockGetDocument.mockImplementation((_databaseId, collectionId) => Promise.resolve(
+      collectionId === "users"
+        ? { $id: "admin-1", name: "Admin", role: "admin", branchIds: [] }
+        : { $id: "lead-1", data: JSON.stringify({ email: "saved@example.com" }) },
+    ));
+    mockListDocuments.mockResolvedValue({ documents: [{
+      $id: "payment-1",
+      leadId: "lead-1",
+      personalDetails: "{}",
+      paymentPlan: "{}",
+      updates: "[]",
+      status: "partially_paid",
+    }] });
+
+    const { updateClientPersonalDetailsAction } = await import(
+      "@/app/actions/client-payments/record"
+    );
+    await expect(updateClientPersonalDetailsAction({
+      actorId: "admin-1",
+      leadId: "lead-1",
+      personalDetails: { email: "changed@example.com" },
+    })).rejects.toThrow("Email cannot be changed");
+    expect(mockUpdateDocument).not.toHaveBeenCalled();
+  });
+
   it("persists amount on addClientPaymentUpdateAction for admin", async () => {
     mockGetDocument
       .mockResolvedValueOnce({

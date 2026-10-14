@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { FormField, ClientPaymentRecord } from "@/lib/types";
+import type { FormField, ClientPaymentRecord, LeadData } from "@/lib/types";
+import { getLeadContactValue, isLockedLeadContactField } from "@/lib/utils/lead-contact-lock";
 
 interface ClientIntakeCardProps {
   clientIntakeFields: FormField[];
@@ -13,6 +14,7 @@ interface ClientIntakeCardProps {
   canEditClientPayments: boolean;
   clientIntakeSaving: boolean;
   paymentRecord: ClientPaymentRecord | null;
+  leadData: LeadData;
   isAdmin: boolean;
   isTeamLead: boolean;
   handleSaveClientIntake: () => void;
@@ -25,12 +27,17 @@ export function ClientIntakeCard({
   canEditClientPayments,
   clientIntakeSaving,
   paymentRecord,
+  leadData,
   isAdmin,
   isTeamLead,
   handleSaveClientIntake,
 }: ClientIntakeCardProps) {
   const renderClientIntakeField = (field: FormField) => {
-    const valueRaw = clientIntakeValues[field.key];
+    const savedContactValue = isLockedLeadContactField(field.key)
+      ? getLeadContactValue((paymentRecord?.personalDetails ?? {}) as LeadData, field.key) ||
+        getLeadContactValue(leadData, field.key)
+      : "";
+    const valueRaw = savedContactValue || clientIntakeValues[field.key];
     const value =
       valueRaw === null || valueRaw === undefined
         ? ""
@@ -54,6 +61,7 @@ export function ClientIntakeCard({
       !paymentRecord ||
       (paymentRecord.status !== "fully_paid" &&
         paymentRecord.status !== "partially_paid") ||
+      Boolean(savedContactValue) ||
       (isLockedField && !canEditAgreementUpfront);
 
     if (field.type === "textarea") {

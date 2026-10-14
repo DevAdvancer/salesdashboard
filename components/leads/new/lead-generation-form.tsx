@@ -566,6 +566,7 @@ export function LeadGenerationNewLeadContent() {
               </Label>
               <input
                 id="linkedinProfileUrl"
+                readOnly={Boolean(linkedinTargetUrl)}
                 aria-invalid={Boolean(fieldErrors.linkedinProfileUrl)}
                 className={`flex h-10 w-full rounded-md border ${
                   fieldErrors.linkedinProfileUrl ? "border-red-500" : "border-input"

@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { FormField } from "@/lib/types";
+import type { FormField, LeadData } from "@/lib/types";
+import { getLeadContactValue, isLockedLeadContactField } from "@/lib/utils/lead-contact-lock";
 
 interface ClientPaymentCreateCardProps {
   paymentInitPlanValues: Record<string, unknown>;
@@ -13,6 +14,7 @@ interface ClientPaymentCreateCardProps {
   handlePaymentInitPersonalChange: (key: string, value: unknown) => void;
   paymentPlanFields: FormField[];
   clientIntakeFields: FormField[];
+  leadData: LeadData;
   paymentInitSaving: boolean;
   handleCreatePaymentRecord: () => void;
 }
@@ -24,6 +26,7 @@ export function ClientPaymentCreateCard({
   handlePaymentInitPersonalChange,
   paymentPlanFields,
   clientIntakeFields,
+  leadData,
   paymentInitSaving,
   handleCreatePaymentRecord,
 }: ClientPaymentCreateCardProps) {
@@ -33,7 +36,11 @@ export function ClientPaymentCreateCard({
     onChange: (key: string, value: unknown) => void,
     disabled: boolean,
   ) => {
-    const rawValue = values[field.key];
+    const savedContactValue = values === paymentInitPersonalValues && isLockedLeadContactField(field.key)
+      ? getLeadContactValue(leadData, field.key)
+      : "";
+    const rawValue = savedContactValue || values[field.key];
+    disabled = disabled || Boolean(savedContactValue);
     const value =
       rawValue === null || rawValue === undefined
         ? ""
