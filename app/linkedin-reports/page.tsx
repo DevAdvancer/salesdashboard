@@ -108,7 +108,11 @@ function LinkedinReportsContent() {
       });
       toast({
         title: "Auto-Withdraw Completed",
-        description: `Evaluated: ${result.evaluated} requests, Auto-withdrawn: ${result.autoWithdrawn}, Errors: ${result.errors}`,
+        description: `Evaluated: ${result.evaluated}, withdrawn: ${result.autoWithdrawn}, errors: ${result.errors}. ` +
+          (result.autoWithdrawn === 0 ? "No report needed." : result.reportEmailSent
+            ? `Report emailed to ${result.reportRecipientCount} Settings recipient(s).`
+            : result.reportRecipientCount === 0 ? "No report recipients configured in Settings."
+              : "Report email could not be sent."),
       });
       void loadReport();
     } catch (error: unknown) {
@@ -434,7 +438,7 @@ function LinkedinReportsContent() {
             <Button variant="outline" onClick={handleExport} disabled={exporting || loading || !teamLeadId}>
               {exporting ? "Exporting..." : "Export Excel"}
             </Button>
-            {canReadLikeAdmin && (
+            {(user?.role === "admin" || user?.role === "developer") && (
               <>
                 <Button
                   variant="destructive"

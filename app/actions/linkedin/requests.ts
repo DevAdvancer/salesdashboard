@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/server/appwrite";
 import { assertAuthenticatedUserId, getAuthenticatedUserDoc } from "@/lib/server/current-user";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import type { Lead, LinkedinAccount, LinkedinAccountType, LinkedinRequest, LinkedinRequestStatus, User } from "@/lib/types";
-import { LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS, LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS, shouldAutoWithdrawLinkedinRequest, LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS, LINKEDIN_SENT_AUTO_WITHDRAW_DAYS } from "@/lib/utils/linkedin-withdrawal-reminders";
+import { LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS, LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS } from "@/lib/utils/linkedin-withdrawal-reminders";
 import { workingDaysInRange } from "@/lib/utils/dashboard-kpi";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import { getLinkedinAccountUsage } from "@/lib/server/linkedin-account-usage";
@@ -15,7 +15,9 @@ import { normalizeCompany, normalizeUrl, parseDateOnly, toUtcDayStartIso, toUtcD
 import { parseIsoDateLocal, daysInMonthLocal } from "../lead/sync-helpers";
 import { listLinkedinRequestsForProfile } from "./shared";
 import { normalizeProfileUrl } from "@/lib/utils/linkedin-extension-url";
+import { isWithdrawnLinkedinRequest } from "@/lib/utils/linkedin-request-state";
 import { listLinkedinReportRequests } from "@/lib/server/linkedin-report-requests";
+import { runLinkedinWithdrawalSweep, sendLinkedinWithdrawalReport } from "@/lib/server/linkedin-auto-withdraw";
 
 function linkedinRequestSearch(value: string) {
     const text = value.trim();
@@ -53,7 +55,7 @@ export async function checkLinkedinDuplicateAction(input: {
 
     return {
     isDuplicate: Boolean(active),
-    canResend: !active && docs.some(doc => doc.status === "withdrawn"),
+    canResend: !active && docs.some(isWithdrawnLinkedinRequest),
     activeRequestId: active?.$id ?? null,
     activeStatus: active?.status ?? null,
     activeAgentId: active?.agentId ?? null,
@@ -610,6 +612,10 @@ export async function markLinkedinRequestAcceptedAction(input: {
     throw new Error("Unauthorized");
     }
 
+    if (isWithdrawnLinkedinRequest(existing)) {
+    throw new Error("This request is withdrawn and cannot be accepted.");
+    }
+
     if (existing.status === "accepted") {
     if (!existing.acceptedAt || existing.isActive === false) {
       const updated = await databases.updateDocument(
@@ -626,7 +632,7 @@ export async function markLinkedinRequestAcceptedAction(input: {
     return existing;
     }
 
-    if (existing.status === "withdrawn" || existing.isActive === false) {
+    if (existing.isActive === false) {
     throw new Error("This request is withdrawn and cannot be accepted.");
     }
 
@@ -983,10 +989,7 @@ export async function exportLinkedinRequestsForAdminAction(input: {
 /**
  * Runs the LinkedIn auto-withdrawal logic on-demand.
  *
- * Evaluates all active `sent` requests older than
- * LINKEDIN_SENT_AUTO_WITHDRAW_DAYS (20 days) and marks them withdrawn,
- * and all `accepted` requests without a lead older than
- * LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS (11 days).
+ * Withdraws expired requests and all active requests owned by inactive agents.
  *
  * Can be triggered:
  *  - from the LinkedIn Reports admin UI (manual run)
@@ -998,68 +1001,19 @@ export async function runLinkedinAutoWithdrawAction(input: {
     }): Promise<AutoWithdrawResult> {
     await assertAuthenticatedUserId(input.currentUserId);
     const actor = await getAuthenticatedUserDoc();
-    const isAllowed = actor.role === "admin" ||
-            actor.role === "developer" ||
-            actor.role === "operations" ||
-            actor.role === "monitor";
+    const isAllowed = actor.role === "admin" || actor.role === "developer";
     if (!isAllowed) {
     throw new Error("Only admins can run auto-withdraw.");
     }
 
     const { databases } = await createAdminClient();
     const now = new Date();
-    const nowIso = now.toISOString();
-    const response = await databases.listDocuments(
-            DATABASE_ID,
-            COLLECTIONS.LINKEDIN_REQUESTS,
-            [
-              Query.equal("isActive", true),
-              Query.equal("status", ["sent", "accepted"]),
-              Query.select(["$id", "status", "leadId", "dateSent", "acceptedAt", "company", "targetUrl", "isActive"]),
-              // A genuinely large limit (5000) is required here for background processing by cron
-              Query.limit(5000),
-            ],
-          );
-    let evaluated = 0;
-    let autoWithdrawn = 0;
-    let errors = 0;
-    for (const doc of response.documents as unknown as LinkedinRequest[]) {
-    // Skip accepted requests that already have a linked lead
-    if (doc.status === "accepted" && doc.leadId) continue;
-
-    evaluated += 1;
-
-    if (!shouldAutoWithdrawLinkedinRequest({ request: doc, now })) continue;
-
-    try {
-      const isAcceptedWithoutLead = doc.status === "accepted" && !doc.leadId;
-      const reason = isAcceptedWithoutLead
-        ? `No lead was created within ${LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS} days after connection acceptance.`
-        : `Connection was not accepted/withdrawn within ${LINKEDIN_SENT_AUTO_WITHDRAW_DAYS} days after sending.`;
-
-      // Mark withdrawn
-      await databases.updateDocument(
-        DATABASE_ID,
-        COLLECTIONS.LINKEDIN_REQUESTS,
-        doc.$id,
-        {
-          status: "withdrawn",
-          isActive: false,
-          withdrawnAt: nowIso,
-        },
-      );
-
-      // Audit logs have been removed
-
-      // We no longer send a general chat message for auto-withdrawals to avoid spamming admins.
-
-      autoWithdrawn += 1;
-    } catch {
-      errors += 1;
-    }
-    }
-
-    return { evaluated, autoWithdrawn, errors, processedAt: nowIso };
+    const result = await runLinkedinWithdrawalSweep(databases, now);
+    const report = await sendLinkedinWithdrawalReport(databases, result.withdrawn, now)
+      .catch(() => ({ emailSent: false, recipientCount: 0 }));
+    return { evaluated: result.evaluated, autoWithdrawn: result.withdrawn.length,
+      errors: result.errors.length, processedAt: now.toISOString(),
+      reportEmailSent: report.emailSent, reportRecipientCount: report.recipientCount };
 }
 
 export async function getLinkedinAccountUsageTodayAction(input: {

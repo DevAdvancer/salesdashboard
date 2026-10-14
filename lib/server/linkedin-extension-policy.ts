@@ -1,5 +1,6 @@
 import { isRoleEligibleForComponent } from "@/lib/constants/component-access";
 import type { LinkedinRequest, User } from "@/lib/types";
+import { isWithdrawnLinkedinRequest } from "@/lib/utils/linkedin-request-state";
 
 export function canUseLinkedinExtension(user: Pick<User, "role" | "department" | "isActive">) {
   return user.isActive !== false && (user.department ?? "sales") === "sales" &&
@@ -12,7 +13,7 @@ export function projectExtensionHistory(request: LinkedinRequest, actorId: strin
   return {
     requestId: own ? request.$id : null,
     own,
-    status: request.status,
+    status: isWithdrawnLinkedinRequest(request) ? "withdrawn" : request.status,
     dateSent: request.dateSent,
     acceptedAt: request.acceptedAt,
     withdrawnAt: request.withdrawnAt ?? null,

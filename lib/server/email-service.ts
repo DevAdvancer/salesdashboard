@@ -299,7 +299,10 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-export async function sendNotificationEmail({ to, subject, html, text, allowAllRecipients = false }: { to: string; subject: string; html: string; text?: string; allowAllRecipients?: boolean }) {
+export async function sendNotificationEmail({ to, subject, html, text, allowAllRecipients = false, attachments = [] }: {
+  to: string; subject: string; html: string; text?: string; allowAllRecipients?: boolean;
+  attachments?: Array<{ filename: string; content: string; contentType: string }>;
+}) {
   const requested = to.split(',').map(e => e.trim()).filter(e => allowAllRecipients || (
     e.toLowerCase() !== 'unassigned@silverspaceinc.com' &&
     e.toLowerCase() !== 'teamlead@silverspaceinc.com'
@@ -327,6 +330,7 @@ export async function sendNotificationEmail({ to, subject, html, text, allowAllR
       subject,
       html,
       text,
+      attachments,
       xMailer: false, // Disables X-Mailer header to prevent Outlook from flagging as automated spam
       headers: {
         'X-Priority': '3',

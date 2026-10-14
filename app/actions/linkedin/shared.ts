@@ -10,6 +10,7 @@ import { expandIsoDateToEnd, expandIsoDateToStart } from "@/lib/utils/iso-date-r
 import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
 import { getAgentsByTeamLead, getAssignableUsers, getUserByIdOrNull } from "@/lib/services/user-service";
 import { normalizeProfileUrl, sameProfile } from "@/lib/utils/linkedin-extension-url";
+import { isWithdrawnLinkedinRequest } from "@/lib/utils/linkedin-request-state";
 
 export function normalizeCompany(value: string) {
     return value.trim();
@@ -138,7 +139,7 @@ export async function getLinkedinRequestLeadOutcomeLabel(databases: Awaited<Retu
 export function isBlockingLinkedinRequest(request: LinkedinRequest) {
     // Only a recorded withdrawal releases a company/profile for another request.
     // An overdue request stays active until the withdrawal is saved.
-    return request.status !== "withdrawn";
+    return !isWithdrawnLinkedinRequest(request);
 }
 
 export async function createGeneralChatMessage(databases: Awaited<ReturnType<typeof createAdminClient>>["databases"], input: {
@@ -380,4 +381,6 @@ export type AutoWithdrawResult = {
       autoWithdrawn: number;
       errors: number;
       processedAt: string;
+      reportEmailSent?: boolean;
+      reportRecipientCount?: number;
     };

@@ -4,6 +4,13 @@ const mockGetDocument = jest.fn();
 const mockUpdateDocument = jest.fn();
 const mockListDocuments = jest.fn();
 const mockUsersUpdateStatus = jest.fn();
+const mockWithdrawLinkedinRequestsForAgent = jest.fn();
+const mockSendLinkedinWithdrawalReport = jest.fn();
+
+jest.mock('@/lib/server/linkedin-auto-withdraw', () => ({
+  withdrawLinkedinRequestsForAgent: (...args: unknown[]) => mockWithdrawLinkedinRequestsForAgent(...args),
+  sendLinkedinWithdrawalReport: (...args: unknown[]) => mockSendLinkedinWithdrawalReport(...args),
+}));
 
 jest.mock('@/lib/server/current-user', () => ({
   assertAuthenticatedUserId: (...args: unknown[]) => mockAssertAuthenticatedUserId(...args),
@@ -58,6 +65,8 @@ describe('setAgentActiveAction authorization and cascading deactivation', () => 
 
     // Default mock response for lists/documents
     mockListDocuments.mockResolvedValue({ documents: [], total: 0 });
+    mockWithdrawLinkedinRequestsForAgent.mockResolvedValue({ planned: [], withdrawn: [], errors: [] });
+    mockSendLinkedinWithdrawalReport.mockResolvedValue({ emailSent: false, recipientCount: 0 });
   });
 
   it('allows admin to toggle active status of any agent', async () => {
@@ -184,5 +193,22 @@ describe('setAgentActiveAction authorization and cascading deactivation', () => 
       'li-acc-1',
       { isActive: false }
     );
+    expect(mockWithdrawLinkedinRequestsForAgent).toHaveBeenCalledWith(expect.anything(),
+      { $id: 'agent-1', name: 'Agent' }, expect.any(Date));
+  });
+
+  it('reports requests withdrawn during agent inactivation', async () => {
+    mockAssertAuthenticatedUserId.mockResolvedValue({ $id: 'admin-1' });
+    mockGetDocument.mockImplementation(async (_db, _coll, id) => id === 'admin-1'
+      ? { $id: 'admin-1', role: 'admin', name: 'Admin' }
+      : { $id: 'agent-1', role: 'agent', name: 'Agent' });
+    const withdrawn = [{ request: { $id: 'request-1' }, agentName: 'Agent', reason: 'inactive agent' }];
+    mockWithdrawLinkedinRequestsForAgent.mockResolvedValue({ planned: withdrawn, withdrawn, errors: [] });
+    mockSendLinkedinWithdrawalReport.mockResolvedValue({ emailSent: true, recipientCount: 2 });
+    const { setAgentActiveAction } = await import('@/app/actions/user');
+    const result = await setAgentActiveAction({ currentUserId: 'admin-1',
+      userId: 'agent-1', isActive: false });
+    expect(result).toMatchObject({ linkedinWithdrawn: 1, withdrawalErrors: 0, reportEmailSent: true });
+    expect(mockSendLinkedinWithdrawalReport).toHaveBeenCalledWith(expect.anything(), withdrawn, expect.any(Date));
   });
 });

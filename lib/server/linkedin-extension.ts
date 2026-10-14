@@ -10,6 +10,7 @@ import { createLinkedinRequestAction } from "@/app/actions/linkedin/requests";
 import { logAuditAction, assertAccessibleLinkedinAccount, isBlockingLinkedinRequest, sameLinkedinCompany } from "@/app/actions/linkedin/shared";
 import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import { normalizeProfileUrl, sameProfile } from "@/lib/utils/linkedin-extension-url";
+import { isWithdrawnLinkedinRequest } from "@/lib/utils/linkedin-request-state";
 import { canUseLinkedinExtension, LinkedinExtensionError, projectExtensionHistory } from "./linkedin-extension-policy";
 import { hasLinkedinHelperAccess } from "./beta-feature-access";
 import type { LinkedinAccount, LinkedinRequest } from "@/lib/types";
@@ -93,7 +94,8 @@ function result(value: Inspection, includeHistory = false): ExtensionCheck {
   const { actor, today, account, targetUrl, records, latest, state, quota } = value;
   return { today, targetUrl, user: { id: actor.$id, name: actor.name }, account: projectAccount(account), state, ...quota,
     canRecord: state === "new" || state === "resend_available",
-    previousRequest: latest ? { status: latest.status, dateSent: latest.dateSent } : null,
+    previousRequest: latest ? { status: isWithdrawnLinkedinRequest(latest) ? "withdrawn" : latest.status,
+      dateSent: latest.dateSent } : null,
     // Opaque revision proves the user checked the exact account/profile/history before saving.
     revision: createHash("sha256").update(JSON.stringify([actor.$id, account.$id, targetUrl, today,
       records.map(r => [r.$id, r.$updatedAt, r.status, r.dateSent, r.agentId])])).digest("hex"),

@@ -309,7 +309,7 @@ function SettingsContent() {
         <Card>
           <CardHeader>
             <CardTitle>Scheduled report emails</CardTitle>
-            <CardDescription>Daily Summary and Target Report emails go only to the addresses listed here. Leave this empty to pause report emails.</CardDescription>
+            <CardDescription>Daily Summary, Target Report, and LinkedIn withdrawal report emails go only to the addresses listed here. Leave this empty to pause report emails.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <Label htmlFor="report-emails">Recipient email addresses</Label>

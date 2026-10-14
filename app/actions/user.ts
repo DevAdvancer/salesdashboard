@@ -10,6 +10,7 @@ import { COLLECTIONS } from '@/lib/constants/appwrite';
 import { normalizeEmail } from '@/lib/utils/user-hierarchy';
 import { getErrorMessage } from '@/lib/utils';
 import { getUsersByIds } from '@/lib/services/user-service';
+import { sendLinkedinWithdrawalReport, withdrawLinkedinRequestsForAgent } from '@/lib/server/linkedin-auto-withdraw';
 
 // Constants
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
@@ -736,6 +737,10 @@ export async function setAgentActiveAction(input: {
     }
 
     const { users, databases } = await createAdminClient();
+    let linkedinWithdrawn = 0;
+    let withdrawalErrors = 0;
+    let reportEmailSent = false;
+    let reportRecipientCount = 0;
 
     try {
         await users.updateStatus(userId, isActive);
@@ -790,6 +795,23 @@ export async function setAgentActiveAction(input: {
             } catch (err) {
                 logger.error({ error: err, userId }, "Failed to deactivate LinkedIn accounts for inactive user");
             }
+
+            try {
+                const now = new Date();
+                const result = await withdrawLinkedinRequestsForAgent(databases,
+                    { $id: targetUserDoc.$id, name: String(targetUserDoc.name ?? userId) }, now);
+                linkedinWithdrawn = result.withdrawn.length;
+                withdrawalErrors = result.errors.length;
+                if (withdrawalErrors > 0) {
+                    logger.error({ userId, errors: result.errors }, "Failed to withdraw some LinkedIn requests for inactive user");
+                }
+                const report = await sendLinkedinWithdrawalReport(databases, result.withdrawn, now);
+                reportEmailSent = report.emailSent;
+                reportRecipientCount = report.recipientCount;
+            } catch (err) {
+                withdrawalErrors += 1;
+                logger.error({ error: err, userId }, "Failed to complete LinkedIn withdrawal for inactive user");
+            }
         }
 
         await logAuditAction(
@@ -805,7 +827,7 @@ export async function setAgentActiveAction(input: {
         // Inactivating a user affects which leads they're visible for.
         invalidateDepartmentScopedUserIds();
 
-        return { success: true };
+        return { success: true, linkedinWithdrawn, withdrawalErrors, reportEmailSent, reportRecipientCount };
     } catch (error: unknown) {
         console.error("Agent active status update failed", error);
         throw new Error("Failed to update agent active status: " + getErrorMessage(error));

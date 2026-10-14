@@ -50,7 +50,8 @@ beforeEach(() => {
   (hasLinkedinHelperAccess as jest.Mock).mockResolvedValue(true);
   (listMyLinkedinAccountsAction as jest.Mock).mockResolvedValue([account]);
   (assertAccessibleLinkedinAccount as jest.Mock).mockResolvedValue(account);
-  (isBlockingLinkedinRequest as jest.Mock).mockImplementation(r => r.status !== "withdrawn");
+  (isBlockingLinkedinRequest as jest.Mock).mockImplementation(r =>
+    r.status !== "withdrawn" && !(r.isActive === false && r.withdrawnAt));
   (listAllDocuments as jest.Mock).mockImplementation(async () =>
     records.map(record => ({ company: account.company, ...record })));
   databases.listDocuments.mockImplementation(async () => ({ total: used.length, documents: [] }));
@@ -127,6 +128,15 @@ it("explicit resend reuses the legacy URL and existing action without adding a r
   expect(createLinkedinRequestAction).toHaveBeenCalledWith({ currentUserId: "agent-1", accountId: account.$id,
     targetUrl: records[0].targetUrl, dateSent: "2026-10-05" });
   expect(databases.createDocument).not.toHaveBeenCalled();
+});
+it("offers resend when an inactive accepted row has a recorded withdrawal", async () => {
+  records = [{ $id: "old", agentId: "agent-1", targetUrl: input.targetUrl,
+    status: "accepted", isActive: false, withdrawnAt: "2026-10-13T04:00:00.000Z",
+    $updatedAt: "2026-10-14T20:39:05.852Z" }];
+  const checked = await checkLinkedinExtension(input, true);
+  expect(checked).toMatchObject({ state: "resend_available", canRecord: true,
+    previousRequest: { status: "withdrawn" } });
+  expect(checked.history[0].status).toBe("withdrawn");
 });
 it("rejects changed ownership/history between check and save", async () => {
   const checked = await checkLinkedinExtension(input);

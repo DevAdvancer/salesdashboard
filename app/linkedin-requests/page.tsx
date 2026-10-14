@@ -37,6 +37,7 @@ import { daysSinceLinkedinRequestDate, daysSinceLinkedinRequestEvent, formatLink
 import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import { DISPLAY_TIME_ZONE_CHANGE_EVENT, getDisplayTimeZone } from "@/lib/utils/display-time-zone";
 import { normalizeProfileUrl } from "@/lib/utils/linkedin-extension-url";
+import { isWithdrawnLinkedinRequest } from "@/lib/utils/linkedin-request-state";
 import {
   LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS,
   LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS,
@@ -729,7 +730,10 @@ function LinkedinRequestsContent() {
                     (r.isActive ?? true) &&
                     !r.leadId &&
                     acceptedDaysPassed >= LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS;
-                  const statusLabel = leadStatusLabel
+                  const withdrawn = isWithdrawnLinkedinRequest(r);
+                  const statusLabel = withdrawn
+                    ? "Withdrawn"
+                    : leadStatusLabel
                     ? leadStatusLabel
                     : r.status === "accepted"
                       ? r.leadId
@@ -737,7 +741,7 @@ function LinkedinRequestsContent() {
                         : acceptedDaysPassed < LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS
                           ? `Accepted - ${acceptedLeadDaysLeft} days left to create lead`
                           : `Accepted - withdraw now (${acceptedAutoDaysLeft} days before auto-withdraw)`
-                      : r.status === "withdrawn" || r.isActive === false
+                      : r.isActive === false
                         ? "Withdrawn"
                         : sentDaysPassed < LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS
                           ? `Sent - ${sentDaysLeft} days left to withdraw`
@@ -751,7 +755,7 @@ function LinkedinRequestsContent() {
                       </TableCell>
                       <TableCell>{statusLabel}</TableCell>
                       <TableCell>
-                        {r.status === "accepted" ? (
+                        {!withdrawn && r.status === "accepted" ? (
                           <div className="flex flex-wrap gap-2">
                             {r.leadId ? (
                               <Button

@@ -454,7 +454,7 @@ export function useUserManagement() {
       title: isActive ? `Reactivate ${agent.name}?` : `Inactivate ${agent.name}?`,
       description: isActive
         ? "They will be able to log in again."
-        : "They will be removed from their team, hidden from hierarchy, and blocked from logging in.",
+        : "They will be blocked from logging in. Their active LinkedIn requests and assigned LinkedIn accounts will be deactivated.",
       confirmText: isActive ? "Reactivate" : "Inactivate",
       cancelText: "Cancel",
       destructive: !isActive,
@@ -466,7 +466,7 @@ export function useUserManagement() {
       setError(null);
 
       const { setAgentActiveAction } = await import("@/app/actions/user");
-      await setAgentActiveAction({
+      const result = await setAgentActiveAction({
         userId: agent.$id,
         isActive,
         currentUserId: user.$id,
@@ -475,6 +475,11 @@ export function useUserManagement() {
       databases.clearReadCacheForCollection(process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!);
       invalidateUsersCache();
       await fetchUsers();
+      if (!isActive && result.withdrawalErrors > 0) {
+        setError(`${result.withdrawalErrors} LinkedIn withdrawal(s) failed. Run Auto-Withdraw from LinkedIn Reports to retry.`);
+      } else if (!isActive && result.linkedinWithdrawn > 0 && result.reportRecipientCount > 0 && !result.reportEmailSent) {
+        setError(`${result.linkedinWithdrawn} LinkedIn request(s) were withdrawn, but the report email was not sent. Check Settings recipients and email delivery.`);
+      }
     } catch (err: unknown) {
       console.error("Error updating agent active status:", err);
       setError(err instanceof Error ? err.message : "Failed to update agent active status");

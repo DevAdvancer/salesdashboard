@@ -1,22 +1,22 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { ID, Query } from 'node-appwrite';
+import { Query } from 'node-appwrite';
 import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { createAdminClient } from '@/lib/server/appwrite';
+import { listAllDocuments } from '@/lib/server/appwrite-pagination';
+import { applyLinkedinWithdrawals, listActiveLinkedinRequests,
+  planLinkedinWithdrawals, sendLinkedinWithdrawalReport } from '@/lib/server/linkedin-auto-withdraw';
 import { getRequestCount, withRequestMeter } from '@/lib/server/appwrite-request-meter';
 import {
   loadNotificationCountsSince,
   notificationDedupKey,
 } from '@/lib/server/notification-dedup';
 import { createNotificationsForRecipients } from '@/lib/server/notifications';
-import type { LinkedinRequest, User } from '@/lib/types';
+import type { User } from '@/lib/types';
 import {
   buildLinkedinWithdrawalReminder,
   getLinkedinReminderPolicy,
-  shouldAutoWithdrawLinkedinRequest,
   shouldSendLinkedinWithdrawalReminder,
-  LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS,
   LINKEDIN_ACCEPTED_WITHDRAWAL_REMINDER_TYPE,
-  LINKEDIN_SENT_AUTO_WITHDRAW_DAYS,
   LINKEDIN_WITHDRAWAL_REMINDER_TYPE,
 } from '@/lib/utils/linkedin-withdrawal-reminders';
 
@@ -66,44 +66,6 @@ function getTodayStartIso(now: Date) {
   ).toISOString();
 }
 
-async function getAdminRecipientIds(
-  databases: Awaited<ReturnType<typeof createAdminClient>>['databases'],
-) {
-  const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
-    Query.equal('role', 'admin'),
-    Query.limit(500),
-  ]);
-
-  return (response.documents as unknown as User[])
-    .filter((user) => (user as unknown as { isActive?: unknown }).isActive !== false)
-    .map((user) => user.$id);
-}
-
-async function createGeneralChatMessage(
-  databases: Awaited<ReturnType<typeof createAdminClient>>['databases'],
-  body: string,
-) {
-  await databases.createDocument(DATABASE_ID, COLLECTIONS.CHAT_MESSAGES, ID.unique(), {
-    channel: 'general',
-    body,
-    createdById: 'system',
-    createdByName: 'System',
-    createdAt: new Date().toISOString(),
-  });
-}
-
-async function autoWithdrawLinkedinRequest(
-  databases: Awaited<ReturnType<typeof createAdminClient>>['databases'],
-  request: LinkedinRequest,
-  nowIso: string,
-) {
-  await databases.updateDocument(DATABASE_ID, COLLECTIONS.LINKEDIN_REQUESTS, request.$id, {
-    status: 'withdrawn',
-    isActive: false,
-    withdrawnAt: nowIso,
-  });
-}
-
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
@@ -121,24 +83,17 @@ export async function GET(request: NextRequest) {
 
 async function runWithdrawalReminderSweep() {
   const now = new Date();
-  const nowIso = now.toISOString();
   const todayStartIso = getTodayStartIso(now);
   const { databases } = await createAdminClient();
   
   const todayKey = todayStartIso.slice(0, 10);
   const holidays = await import("@/lib/server/holiday-calendar").then(m => m.listHolidayDateKeys({ databases, from: todayKey, to: todayKey }));
   const isWorking = await import("@/lib/utils/holiday-calendar").then(m => m.isWorkingDateKey(todayKey, holidays));
-  if (!isWorking) {
-    return NextResponse.json({ ok: true, skipped: true, reason: "Not a working day" });
-  }
 
-  const adminRecipientIds = await getAdminRecipientIds(databases);
-
-  const allUsersRes = await databases.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
-    Query.limit(500),
-  ]);
+  const allUsers = await listAllDocuments<User>({ databases, databaseId: DATABASE_ID,
+    collectionId: COLLECTIONS.USERS, queries: [Query.select(['$id', 'name', 'isActive'])] });
   const activeUserIds = new Set(
-    (allUsersRes.documents as any[])
+    allUsers
       .filter((u) => u.isActive !== false)
       .map((u) => u.$id)
   );
@@ -149,41 +104,41 @@ async function runWithdrawalReminderSweep() {
     sinceIso: todayStartIso,
   });
 
-  const response = await databases.listDocuments(
-    DATABASE_ID,
-    COLLECTIONS.LINKEDIN_REQUESTS,
-    [
-      Query.equal('isActive', true),
-      Query.equal('status', ['sent', 'accepted']),
-      Query.limit(5000),
-    ],
-  );
+  const activeRequests = await listActiveLinkedinRequests(databases);
+  const planned = planLinkedinWithdrawals(activeRequests, allUsers, now);
+  const withdrawal = await applyLinkedinWithdrawals(databases, planned, now);
+  const plannedIds = new Set(planned.map(entry => entry.request.$id));
+  if (!isWorking) {
+    const report = await sendLinkedinWithdrawalReport(databases, withdrawal.withdrawn, now)
+      .catch(() => ({ emailSent: false, recipientCount: 0 }));
+    return NextResponse.json({ ok: true, remindersSkipped: true, reason: "Not a working day",
+      autoWithdrawn: withdrawal.withdrawn.length, withdrawalErrors: withdrawal.errors.length,
+      reportEmailSent: report.emailSent, reportRecipientCount: report.recipientCount });
+  }
 
   let evaluated = 0;
   let remindersSent = 0;
-  let autoWithdrawn = 0;
+  const autoWithdrawn = withdrawal.withdrawn.length;
   
   // Track auto-withdrawals by user to send a single summary notification
   const autoWithdrawalsByUser = new Map<string, { count: number, agentId: string, teamLeadId?: string | null }>();
 
-  for (const requestDoc of response.documents as unknown as LinkedinRequest[]) {
+  for (const entry of withdrawal.withdrawn) {
+    const requestDoc = entry.request;
+    const agentId = requestDoc.agentId;
+    if (!autoWithdrawalsByUser.has(agentId)) {
+      autoWithdrawalsByUser.set(agentId, { count: 0, agentId, teamLeadId: requestDoc.teamLeadId });
+    }
+    autoWithdrawalsByUser.get(agentId)!.count += 1;
+  }
+
+  for (const requestDoc of activeRequests) {
+    if (plannedIds.has(requestDoc.$id)) continue;
     if (requestDoc.status === 'accepted' && requestDoc.leadId) {
       continue;
     }
 
     evaluated += 1;
-    if (shouldAutoWithdrawLinkedinRequest({ request: requestDoc, now })) {
-      await autoWithdrawLinkedinRequest(databases, requestDoc, nowIso);
-      autoWithdrawn += 1;
-      
-      const agentId = requestDoc.agentId;
-      if (!autoWithdrawalsByUser.has(agentId)) {
-        autoWithdrawalsByUser.set(agentId, { count: 0, agentId, teamLeadId: requestDoc.teamLeadId });
-      }
-      autoWithdrawalsByUser.get(agentId)!.count += 1;
-      continue;
-    }
-
     const policy = getLinkedinReminderPolicy(requestDoc);
     if (!policy) {
       continue;
@@ -241,7 +196,7 @@ async function runWithdrawalReminderSweep() {
         {
           type: 'linkedin_auto_withdrawn',
           title: 'Linkedin Auto-Withdrawn',
-          body: `${data.count} Linkedin request(s) were auto-withdrawn due to expiration.`,
+          body: `${data.count} Linkedin request(s) were auto-withdrawn due to expiration or account inactivation.`,
           targetId: null,
           targetType: null,
         }
@@ -249,12 +204,18 @@ async function runWithdrawalReminderSweep() {
     }
   }
 
+  const report = await sendLinkedinWithdrawalReport(databases, withdrawal.withdrawn, now)
+    .catch(() => ({ emailSent: false, recipientCount: 0 }));
+
   return NextResponse.json({
     ok: true,
     todayStartIso,
     evaluated,
     remindersSent,
     autoWithdrawn,
+    withdrawalErrors: withdrawal.errors.length,
+    reportEmailSent: report.emailSent,
+    reportRecipientCount: report.recipientCount,
     appwriteRequests: getRequestCount(),
   });
 }

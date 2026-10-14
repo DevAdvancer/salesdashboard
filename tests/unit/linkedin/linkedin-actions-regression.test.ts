@@ -244,6 +244,42 @@ describe('LinkedIn Server Actions Regression', () => {
         .toMatchObject({ isDuplicate: false, canResend: true });
     });
 
+    it('allows a recorded withdrawal whose legacy status still says accepted', async () => {
+      mockGetAuthenticatedUserDoc.mockResolvedValue({ $id: 'agent-1', role: 'agent', name: 'Agent' });
+      mockGetDocument.mockResolvedValue({ $id: 'account-1', assignedUserId: 'agent-1',
+        company: 'Vizva INC', isActive: true, connectionLimit: 20 });
+      const request = { $id: 'withdrawn-request', company: 'Vizva INC',
+        targetUrl: 'https://www.linkedin.com/in/caitlyn-maung-748273215',
+        status: 'accepted', isActive: false, withdrawnAt: '2026-10-13T04:00:00.000Z',
+        acceptedAt: '2026-08-28T21:18:14.186Z', agentId: 'agent-1', accountId: 'account-1' };
+      mockListDocuments.mockImplementation(async (_database, collection) =>
+        collection === 'linkedin_requests' ? { documents: [request], total: 1 } : { documents: [] });
+      mockUpdateDocument.mockResolvedValue({ ...request, status: 'sent', isActive: true });
+      const { checkLinkedinDuplicateAction, createLinkedinRequestAction } =
+        await import('@/app/actions/linkedin/requests');
+      const input = { currentUserId: 'agent-1', accountId: 'account-1', targetUrl: request.targetUrl };
+
+      expect(await checkLinkedinDuplicateAction(input))
+        .toMatchObject({ isDuplicate: false, canResend: true });
+      expect(await createLinkedinRequestAction({ ...input, dateSent: '2026-10-14' }))
+        .toMatchObject({ mode: 'resent' });
+      expect(mockUpdateDocument).toHaveBeenCalledWith('database', 'linkedin_requests', request.$id,
+        expect.objectContaining({ status: 'sent', isActive: true, acceptedAt: null, withdrawnAt: null }),
+        expect.any(Array));
+    });
+
+    it('keeps an inactive request blocked without a recorded withdrawal', async () => {
+      mockGetDocument.mockResolvedValue({ $id: 'account-1', assignedUserId: 'agent-1',
+        company: 'Vizva INC', isActive: true });
+      mockListDocuments.mockResolvedValue({ documents: [{ $id: 'inactive-no-withdrawal',
+        company: 'Vizva INC', targetUrl: 'https://www.linkedin.com/in/person',
+        status: 'accepted', isActive: false, withdrawnAt: null }] });
+      const { checkLinkedinDuplicateAction } = await import('@/app/actions/linkedin/requests');
+      expect(await checkLinkedinDuplicateAction({ currentUserId: 'agent-1', accountId: 'account-1',
+        targetUrl: 'https://www.linkedin.com/in/person' }))
+        .toMatchObject({ isDuplicate: true, canResend: false });
+    });
+
     it.each([
       { status: 'sent', leadId: null },
       { status: 'accepted', leadId: 'lead-1' },
@@ -409,6 +445,31 @@ describe('LinkedIn Server Actions Regression', () => {
         dateSent: '2026-07-27',
         targetUrl: 'https://linkedin.com/in/test',
       })).rejects.toThrow('Unauthorized');
+    });
+  });
+
+  describe('markLinkedinRequestAcceptedAction', () => {
+    it('does not reactivate a request with a recorded withdrawal', async () => {
+      mockGetAuthenticatedUserDoc.mockResolvedValue({ $id: 'agent-1', name: 'Agent' });
+      mockGetDocument.mockResolvedValue({ $id: 'withdrawn-request', agentId: 'agent-1',
+        status: 'accepted', isActive: false, withdrawnAt: '2026-10-13T04:00:00.000Z' });
+      const { markLinkedinRequestAcceptedAction } = await import('@/app/actions/linkedin/requests');
+      await expect(markLinkedinRequestAcceptedAction({ currentUserId: 'agent-1',
+        requestId: 'withdrawn-request' })).rejects.toThrow('withdrawn and cannot be accepted');
+      expect(mockUpdateDocument).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('runLinkedinAutoWithdrawAction', () => {
+    it('denies all read-only and agent roles before touching requests', async () => {
+      const { runLinkedinAutoWithdrawAction } = await import('@/app/actions/linkedin/requests');
+      await fc.assert(fc.asyncProperty(fc.constantFrom('monitor', 'operations',
+        'team_lead', 'agent', 'lead_generation'), async role => {
+        mockGetAuthenticatedUserDoc.mockResolvedValue({ $id: 'user-1', role });
+        await expect(runLinkedinAutoWithdrawAction({ currentUserId: 'user-1' }))
+          .rejects.toThrow('Only admins can run auto-withdraw');
+      }));
+      expect(mockCreateAdminClient).not.toHaveBeenCalled();
     });
   });
 });
