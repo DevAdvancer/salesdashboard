@@ -16,6 +16,7 @@ import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import { computeLinkedinStatsForDate } from "@/lib/server/stats-aggregator";
 import { listLinkedinReportRequests } from "@/lib/server/linkedin-report-requests";
 import { summarizeLinkedinRequests } from "@/lib/utils/linkedin-report-summary";
+import { listLinkedinReportLeadActivity } from "@/lib/server/linkedin-report-leads";
 
 export async function getLinkedinWeeklyReportAction(input: {
   currentUserId: string;
@@ -33,39 +34,30 @@ export async function getLinkedinWeeklyReportAction(input: {
   assertLinkedinReportTeamScope(user, effectiveTeamLeadId);
 
   const { databases } = await createAdminClient();
-  const requests = await listLinkedinReportRequests({ databases,
-    startDate: input.startDate, endDate: input.endDate, teamLeadId: effectiveTeamLeadId });
-  const agentIds = [...new Set(requests.map(request => request.agentId).filter(Boolean))];
+  const [requests, leadActivity] = await Promise.all([
+    listLinkedinReportRequests({ databases, startDate: input.startDate,
+      endDate: input.endDate, teamLeadId: effectiveTeamLeadId }),
+    listLinkedinReportLeadActivity({ databases, startDate: input.startDate,
+      endDate: input.endDate, teamLeadId: effectiveTeamLeadId }),
+  ]);
+  const agentIds = [...new Set([...requests, ...leadActivity.map(item => item.request)]
+    .map(request => request.agentId).filter(Boolean))];
   const salesAgentIds = await getSalesUserIds(databases, agentIds);
   const visible = requests.filter(request => salesAgentIds.has(request.agentId));
-  const accountIds = [...new Set(visible.map(request => request.accountId).filter(Boolean))];
-  const leadIds = [...new Set(visible.map(request => request.leadId).filter((id): id is string => Boolean(id)))];
+  const visibleActivity = leadActivity.filter(item => salesAgentIds.has(item.request.agentId));
+  const accountIds = [...new Set([...visible, ...visibleActivity.map(item => item.request)]
+    .map(request => request.accountId).filter(Boolean))];
   const accounts = new Map<string, LinkedinAccount>();
-  const wonLeadIds = new Set<string>();
-  await Promise.all([
-    (async () => {
-      for (let i = 0; i < accountIds.length; i += 100) {
-        const page = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LINKEDIN_ACCOUNTS,
-          [Query.equal("$id", accountIds.slice(i, i + 100)), Query.limit(100)]);
-        for (const account of page.documents as unknown as LinkedinAccount[]) accounts.set(account.$id, account);
-      }
-    })(),
-    (async () => {
-      for (let i = 0; i < leadIds.length; i += 100) {
-        const page = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS,
-          [Query.equal("$id", leadIds.slice(i, i + 100)), Query.limit(100)]);
-        for (const lead of page.documents as unknown as Lead[]) {
-          const status = typeof lead.status === "string" ? lead.status.trim().toLowerCase().replace(/\s+/g, "") : "";
-          if (lead.isClosed && status === "won") wonLeadIds.add(lead.$id);
-        }
-      }
-    })(),
-  ]);
+  for (let i = 0; i < accountIds.length; i += 100) {
+    const page = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LINKEDIN_ACCOUNTS,
+      [Query.equal("$id", accountIds.slice(i, i + 100)), Query.limit(100)]);
+    for (const account of page.documents as unknown as LinkedinAccount[]) accounts.set(account.$id, account);
+  }
 
   return {
     startDate: input.startDate,
     endDate: input.endDate,
-    rows: summarizeLinkedinRequests(visible, accounts, wonLeadIds),
+    rows: summarizeLinkedinRequests(visible, accounts, visibleActivity),
   };
 }
 

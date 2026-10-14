@@ -27,6 +27,7 @@ jest.mock("@/lib/services/user-service", () => ({
 jest.mock("node-appwrite", () => ({
   Query: {
     equal: jest.fn((key, value) => `equal:${key}:${JSON.stringify(value)}`),
+    select: jest.fn((value) => `select:${JSON.stringify(value)}`),
     greaterThanEqual: jest.fn((key, value) => `gte:${key}:${JSON.stringify(value)}`),
     lessThanEqual: jest.fn((key, value) => `lte:${key}:${JSON.stringify(value)}`),
     lessThan: jest.fn((key, value) => `lt:${key}:${JSON.stringify(value)}`),

@@ -14,6 +14,16 @@ function dateKey(value: string): string {
   return value;
 }
 
+export function linkedinReportUtcBounds(startDate: string, endDate: string) {
+  const start = dateKey(startDate);
+  const end = dateKey(endDate);
+  if (end < start) throw new Error("End date must be on or after start date.");
+  const [year, month, day] = end.split("-").map(Number);
+  const wideEnd = new Date(Date.UTC(year, month - 1, day + 2)).toISOString().slice(0, 10);
+  return { start, end, startUtc: `${start}T00:00:00.000Z`,
+    endUtcExclusive: `${wideEnd}T00:00:00.000Z` };
+}
+
 /** Fetch the exact request set shown by LinkedIn Reports and its export. */
 export async function listLinkedinReportRequests(input: {
   databases: Awaited<ReturnType<typeof createAdminClient>>["databases"];
@@ -21,14 +31,11 @@ export async function listLinkedinReportRequests(input: {
   endDate: string;
   teamLeadId?: string | null;
 }): Promise<LinkedinRequest[]> {
-  const start = dateKey(input.startDate);
-  const end = dateKey(input.endDate);
-  if (end < start) throw new Error("End date must be on or after start date.");
-  const [year, month, day] = end.split("-").map(Number);
-  const wideEnd = new Date(Date.UTC(year, month - 1, day + 2)).toISOString().slice(0, 10);
+  const { start, end, startUtc, endUtcExclusive } =
+    linkedinReportUtcBounds(input.startDate, input.endDate);
   const queries = [
-    Query.greaterThanEqual("$createdAt", `${start}T00:00:00.000Z`),
-    Query.lessThan("$createdAt", `${wideEnd}T00:00:00.000Z`),
+    Query.greaterThanEqual("$createdAt", startUtc),
+    Query.lessThan("$createdAt", endUtcExclusive),
     Query.orderAsc("$id"),
   ];
   if (input.teamLeadId && input.teamLeadId !== "all") {

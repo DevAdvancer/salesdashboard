@@ -476,9 +476,12 @@ function LinkedinReportsContent() {
             <div className="text-sm text-muted-foreground">
               Cold Calls: {totals.coldCalls} ·
               Requests Created: {totals.sent} · Connections Accepted: {totals.accepted} ·
-              Leads Generated: {totals.leadsGenerated} · Closures (Won): {totals.closures} ·
+              Leads Generated: {totals.leadsGenerated} · Closures (Signed): {totals.closures} ·
               Not Accepted: {totals.notAccepted} · Withdrawn: {totals.withdrawn}
             </div>
+            <p className="text-xs text-muted-foreground">
+              Requests use their creation date. Leads and signed closures use the lead creation and closure dates in Eastern time.
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -499,7 +502,7 @@ function LinkedinReportsContent() {
                 <TableHead>Cold Calls</TableHead>
                 <TableHead>Connections Accepted</TableHead>
                 <TableHead>Leads Generated</TableHead>
-                <TableHead>Closures (Won)</TableHead>
+                <TableHead>Closures (Signed)</TableHead>
                 <TableHead>Not Accepted</TableHead>
                 <TableHead>Withdrawn</TableHead>
                 <TableHead>Sent / Lead</TableHead>
