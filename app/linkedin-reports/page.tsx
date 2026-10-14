@@ -96,7 +96,7 @@ function LinkedinReportsContent() {
   const [exporting, setExporting] = useState(false);
   const [autoWithdrawing, setAutoWithdrawing] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const lastLoadedTeamLeadRef = useRef<string | null>(null);
+  const reportLoadId = useRef(0);
 
   const executeAutoWithdraw = async () => {
     if (!user) return;
@@ -226,6 +226,7 @@ function LinkedinReportsContent() {
     if (!range.from) return;
     const startDate = range.from;
     const endDate = range.to ?? range.from;
+    const loadId = ++reportLoadId.current;
     try {
       setLoading(true);
       const effectiveTeamLeadId =
@@ -240,16 +241,14 @@ function LinkedinReportsContent() {
         startDate,
         endDate,
       });
-      setRows(result.rows);
+      if (loadId === reportLoadId.current) setRows(result.rows);
     } catch (error: unknown) {
-      toast({
-        title: "Failed to load report",
-        description: getErrorMessage(error),
-        variant: "destructive",
-      });
-      setRows([]);
+      if (loadId === reportLoadId.current) {
+        toast({ title: "Failed to load report", description: getErrorMessage(error), variant: "destructive" });
+        setRows([]);
+      }
     } finally {
-      setLoading(false);
+      if (loadId === reportLoadId.current) setLoading(false);
     }
   }, [range.from, range.to, teamLeadId, toast, user]);
 
@@ -358,11 +357,7 @@ function LinkedinReportsContent() {
   }, [loadAccounts, loadAgents]);
 
   useEffect(() => {
-    // Only load on initial mount when teamLeadId is first resolved
-    if (lastLoadedTeamLeadRef.current === null && teamLeadId) {
-      lastLoadedTeamLeadRef.current = teamLeadId;
-      void loadReport();
-    }
+    void loadReport();
   }, [teamLeadId, loadReport]);
 
   const totals = useMemo(() => {
@@ -437,7 +432,7 @@ function LinkedinReportsContent() {
               {loading ? "Applying..." : "Apply"}
             </Button>
             <Button variant="outline" onClick={handleExport} disabled={exporting || loading || !teamLeadId}>
-              {exporting ? "Exporting..." : "Export CSV"}
+              {exporting ? "Exporting..." : "Export Excel"}
             </Button>
             {canReadLikeAdmin && (
               <>
@@ -480,7 +475,7 @@ function LinkedinReportsContent() {
             )}
             <div className="text-sm text-muted-foreground">
               Cold Calls: {totals.coldCalls} ·
-              Connections Sent: {totals.sent} · Connections Accepted: {totals.accepted} ·
+              Requests Created: {totals.sent} · Connections Accepted: {totals.accepted} ·
               Leads Generated: {totals.leadsGenerated} · Closures (Won): {totals.closures} ·
               Not Accepted: {totals.notAccepted} · Withdrawn: {totals.withdrawn}
             </div>
@@ -490,7 +485,7 @@ function LinkedinReportsContent() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Weekly Summary</CardTitle>
+          <CardTitle>Request Summary</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -500,7 +495,7 @@ function LinkedinReportsContent() {
                 <TableHead>Company</TableHead>
                 <TableHead>Account</TableHead>
                 <TableHead>Type</TableHead>
-                <TableHead>Connections Sent</TableHead>
+                <TableHead>Requests Created</TableHead>
                 <TableHead>Cold Calls</TableHead>
                 <TableHead>Connections Accepted</TableHead>
                 <TableHead>Leads Generated</TableHead>

@@ -7,8 +7,9 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import { checkAndNotifyAdminAttendanceEscalationsAction } from '@/app/actions/attendance/notifications';
 import { LoaderOverlay } from '@/components/loader/LoaderOverlay';
+import { MAINTENANCE_MANAGER_EMAIL, MAINTENANCE_MANAGER_USER_ID } from '@/lib/constants/maintenance';
 
-const PUBLIC_ROUTES = ['/login', '/referral'];
+const PUBLIC_ROUTES = ['/login', '/referral', '/maintenance'];
 const ADMIN_ATTENDANCE_PING_COOLDOWN_MS = 30 * 60 * 1000;
 const ADMIN_ATTENDANCE_PING_STORAGE_KEY = 'crm:last-admin-attendance-ping-at';
 
@@ -16,13 +17,43 @@ const ADMIN_ATTENDANCE_PING_STORAGE_KEY = 'crm:last-admin-attendance-ping-at';
 import { useUIStore } from '@/lib/hooks/useUIStore';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, activeDashboard } = useAuth();
+  const { user, loading, activeDashboard, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
   const { isSidebarCollapsed, setSidebarCollapsed } = useUIStore();
   const lastRedirectPath = useRef<string | null>(null);
   const lastAttendancePingAt = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    let checking = false;
+    const checkMaintenance = async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const response = await fetch('/api/maintenance/status', { cache: 'no-store' });
+        if (!response.ok || cancelled) return;
+        const status = await response.json() as { active: boolean };
+        if (cancelled) return;
+        const manager = user?.$id === MAINTENANCE_MANAGER_USER_ID &&
+          user.email.toLowerCase() === MAINTENANCE_MANAGER_EMAIL && user.role === 'admin';
+        if (status.active && !manager) {
+          if (user) await logout();
+          if (!cancelled && pathname !== '/maintenance') router.replace('/maintenance');
+        } else if (!status.active && pathname === '/maintenance') {
+          router.replace(user ? '/dashboard' : '/login');
+        }
+      } catch {
+        // A temporary status error should not force a logout.
+      } finally {
+        checking = false;
+      }
+    };
+    void checkMaintenance();
+    const interval = window.setInterval(checkMaintenance, 10_000);
+    return () => { cancelled = true; window.clearInterval(interval); };
+  }, [logout, pathname, router, user]);
 
   useEffect(() => {
     // Post-login landing page depends on the user's active dashboard. Resume-

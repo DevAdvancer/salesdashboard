@@ -44,7 +44,7 @@ describe('AuthContext - Signup Flow (disabled)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (account.createJWT as jest.Mock).mockResolvedValue({ jwt: 'test-jwt' });
-    global.fetch = jest.fn().mockResolvedValue({ ok: true }) as unknown as typeof fetch;
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ active: false }) }) as unknown as typeof fetch;
   });
 
   const wrapper = ({ children }: { children: React.ReactNode }) => (

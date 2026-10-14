@@ -13,11 +13,19 @@ import { getAgentsByTeamLead, getAssignableUsers, getUserByIdOrNull } from "@/li
 import { normalizeCompany, normalizeUrl, parseDateOnly, toUtcDayStartIso, toUtcDayEndIso, daysBetweenUtc, assertDateIso, normalizeLeadOutcomeStatus, getLeadOutcomeLabel, getLinkedinRequestLeadSnapshot, getLinkedinRequestLeadOutcomeLabel, isBlockingLinkedinRequest, createGeneralChatMessage, logAuditAction, canManageLinkedinAccounts, canSeeLinkedinReports, canReadLinkedinAccountsLikeAdmin, resolveLinkedinReportTeamLeadId, assertLinkedinReportTeamScope, assertAgentIsInTeam, getEtDateKey, getLinkedinAccountDoc, getTeamLeadAssignedUserIds, listDelegatedSourceUserIdsForToday, assertAccessibleLinkedinAccount, getSalesUserIds, resolveScopeUsersForLinkedin, LinkedinConnectionKpiRow, AutoWithdrawResult } from "./shared";
 import { parseIsoDateLocal, daysInMonthLocal } from "../lead/sync-helpers";
 import { listLinkedinRequestsForProfile } from "./shared";
-import { normalizeProfileUrl, sameProfile } from "@/lib/utils/linkedin-extension-url";
+import { normalizeProfileUrl } from "@/lib/utils/linkedin-extension-url";
+import { listLinkedinReportRequests } from "@/lib/server/linkedin-report-requests";
 
-function normalizedProfileSearch(value: string | undefined): string | null {
-    if (!value?.trim()) return null;
-    try { return normalizeProfileUrl(value); } catch { return null; }
+function linkedinRequestSearch(value: string) {
+    const text = value.trim();
+    let targetText = text;
+    try { targetText = new URL(normalizeProfileUrl(text)).pathname; } catch { /* Partial text still searches both fields. */ }
+    return {
+      query: Query.or([Query.contains("targetUrl", targetText), Query.contains("company", text)]),
+      matches: (request: LinkedinRequest) =>
+        request.targetUrl?.toLowerCase().includes(targetText.toLowerCase()) ||
+        request.company?.toLowerCase().includes(text.toLowerCase()),
+    };
 }
 
 export async function checkLinkedinDuplicateAction(input: {
@@ -577,42 +585,24 @@ export async function listMyLinkedinRequestsAction(input: {
       queries.push(Query.equal("dateSent", assertDateIso(input.dateSent)));
     }
 
-    const profileSearch = normalizedProfileSearch(input.searchQuery);
-    if (profileSearch) {
-      const search = (targeted: boolean) => listAllDocuments<LinkedinRequest>({
+    const searchText = input.searchQuery?.trim();
+    if (searchText) {
+      const search = linkedinRequestSearch(searchText);
+      const find = (query: string | null) => listAllDocuments<LinkedinRequest>({
         databases, databaseId: DATABASE_ID, collectionId: COLLECTIONS.LINKEDIN_REQUESTS,
-        queries: [...queries, ...(targeted ? [Query.contains("targetUrl", new URL(profileSearch).pathname)] : [])],
-        maxPages: 100,
+        queries: [...queries, ...(query ? [query] : [])],
+        maxPages: query ? 5 : 1000,
       });
-      const candidates = await search(true).catch(error => {
-        if ((error as { code?: number }).code === 400) return search(false);
+      const candidates = await find(search.query).catch(error => {
+        if ((error as { code?: number }).code === 400) return find(null).then(rows => rows.filter(search.matches));
         throw error;
       });
-      return candidates.filter(request => sameProfile(request.targetUrl, profileSearch)).slice(0, 500);
+      return candidates.slice(0, 500);
     }
 
-    if (!input.searchQuery) {
-      queries.push(Query.limit(Math.min(Math.max(input.limit ?? 10, 1), 500)));
-      const response = await databases.listDocuments(
-        DATABASE_ID,
-        COLLECTIONS.LINKEDIN_REQUESTS,
-        queries,
-      );
-      return response.documents as unknown as LinkedinRequest[];
-    } else {
-      queries.push(Query.limit(500)); // Still limit max for memory
-      const response = await databases.listDocuments(
-        DATABASE_ID,
-        COLLECTIONS.LINKEDIN_REQUESTS,
-        queries,
-      );
-      const all = response.documents as unknown as LinkedinRequest[];
-      const q = input.searchQuery.trim().toLowerCase();
-      return all.filter((r) => 
-        (r.targetUrl && r.targetUrl.toLowerCase().includes(q)) || 
-        (r.company && r.company.toLowerCase().includes(q))
-      );
-    }
+    queries.push(Query.limit(Math.min(Math.max(input.limit ?? 10, 1), 500)));
+    const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LINKEDIN_REQUESTS, queries);
+    return response.documents as unknown as LinkedinRequest[];
 }
 
 export async function markLinkedinRequestAcceptedAction(input: {
@@ -794,13 +784,11 @@ export async function listLinkedinRequestsForAdminAction(input: {
             Query.orderDesc("$createdAt"),
           ];
 
-    const profileSearch = normalizedProfileSearch(input.searchQuery);
+    const searchText = input.searchQuery?.trim();
+    const search = searchText ? linkedinRequestSearch(searchText) : null;
     const resultLimit = Math.min(Math.max(input.limit ?? 100, 1), 500);
-    if (input.searchQuery) {
-        queries.push(profileSearch
-          ? Query.contains("targetUrl", new URL(profileSearch).pathname)
-          : Query.search("targetUrl", input.searchQuery.trim()));
-        if (!profileSearch) queries.push(Query.limit(resultLimit));
+    if (search) {
+        queries.push(search.query);
     } else {
         queries.push(Query.limit(10));
     }
@@ -819,16 +807,16 @@ export async function listLinkedinRequestsForAdminAction(input: {
 
     const { databases } = await createAdminClient();
     let docs: LinkedinRequest[];
-    if (profileSearch) {
-      const search = (querySet: string[]) => listAllDocuments<LinkedinRequest>({
-        databases, databaseId: DATABASE_ID, collectionId: COLLECTIONS.LINKEDIN_REQUESTS,
-        queries: querySet, maxPages: 100,
+    if (search) {
+      const find = (querySet: string[]) => listAllDocuments<LinkedinRequest>({
+        databases, databaseId: DATABASE_ID, collectionId: COLLECTIONS.LINKEDIN_REQUESTS, queries: querySet,
+        maxPages: querySet.includes(search.query) ? Math.ceil(resultLimit / 100) : 1000,
       });
-      const candidates = await search(queries).catch(error => {
-        if ((error as { code?: number }).code === 400) return search(queries.slice(0, -1));
+      const candidates = await find(queries).catch(error => {
+        if ((error as { code?: number }).code === 400) return find(queries.slice(0, -1)).then(rows => rows.filter(search.matches));
         throw error;
       });
-      docs = candidates.filter(request => sameProfile(request.targetUrl, profileSearch)).slice(0, resultLimit);
+      docs = candidates.slice(0, resultLimit);
     } else {
       const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LINKEDIN_REQUESTS, queries);
       docs = response.documents as unknown as LinkedinRequest[];
@@ -860,35 +848,12 @@ export async function exportLinkedinRequestsForAdminAction(input: {
 
     const effectiveTeamLeadId = resolveLinkedinReportTeamLeadId(user, input.teamLeadId);
     assertLinkedinReportTeamScope(user, effectiveTeamLeadId);
-    const start = toUtcDayStartIso(input.startDate);
-    const end = toUtcDayEndIso(input.endDate);
-    const queries = [
-            Query.greaterThanEqual("dateSent", start),
-            Query.lessThanEqual("dateSent", end),
-            Query.orderDesc("dateSent"),
-            Query.orderDesc("$createdAt"),
-          ];
-    if (effectiveTeamLeadId && effectiveTeamLeadId !== "all") {
-    queries.unshift(Query.equal("teamLeadId", effectiveTeamLeadId));
-    }
-
-    if (input.agentId) {
-    queries.unshift(Query.equal("agentId", input.agentId));
-    }
-
-    if (input.status && input.status !== "all") {
-    queries.unshift(Query.equal("status", input.status));
-    }
-
     const { databases } = await createAdminClient();
-    const docs = await listAllDocuments<LinkedinRequest>({
-            databases,
-            databaseId: DATABASE_ID,
-            collectionId: COLLECTIONS.LINKEDIN_REQUESTS,
-            queries,
-            maxPages: 100 // 100 pages * 100 limit = 10,000
-          });
-    const uniqueDocs = Array.from(new Map(docs.map((r) => [r.$id, r] as const)).values());
+    const docs = await listLinkedinReportRequests({ databases,
+      startDate: input.startDate, endDate: input.endDate, teamLeadId: effectiveTeamLeadId });
+    const uniqueDocs = docs.filter(request =>
+      (!input.agentId || request.agentId === input.agentId) &&
+      (!input.status || input.status === "all" || request.status === input.status));
     const agentIds = Array.from(
             new Set(uniqueDocs.map((r) => r.agentId).filter(Boolean)),
           );

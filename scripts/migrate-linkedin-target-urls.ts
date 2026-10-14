@@ -7,7 +7,7 @@ import dotenv from 'dotenv';
 import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { normalizeProfileUrl } from '../lib/utils/linkedin-extension-url';
+import { normalizeStoredProfileUrl } from '../lib/utils/linkedin-extension-url';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local'), quiet: true });
 dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
@@ -48,7 +48,7 @@ async function main() {
   const byLogicalCompany = new Map<string, RequestRow[]>();
   for (const row of rows) {
     try {
-      const after = normalizeProfileUrl(row.targetUrl);
+      const after = normalizeStoredProfileUrl(row.targetUrl);
       const key = JSON.stringify([row.company ?? '', after, row.isActive ?? true]);
       byProfile.set(key, [...(byProfile.get(key) ?? []), row.$id]);
       const logicalCompany = (row.company ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -65,7 +65,9 @@ async function main() {
   // Preserve colliding history rows; the app still matches their URL variants.
   const rowById = new Map(rows.map(row => [row.$id, row]));
   const existingHistoryGroups = [...byProfile.values()].filter(ids => ids.length > 1);
-  const conflictedIds = new Set(existingHistoryGroups.flat());
+  const logicalHistoryGroups = [...byLogicalCompany.values()].filter(group => group.length > 1);
+  const conflictedIds = new Set([...existingHistoryGroups.flat(),
+    ...logicalHistoryGroups.flatMap(group => group.map(row => row.$id))]);
   const changeById = new Map(changes.map(change => [change.id, change]));
   const representativeChanges = existingHistoryGroups.flatMap(ids => {
     if (ids.some(id => !changeById.has(id))) return [];

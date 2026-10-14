@@ -52,7 +52,7 @@ describe('Task 2.6: Authentication Flows', () => {
     mockAccount.get.mockRejectedValue(new Error('No session'));
     // login()/checkSession() mint a JWT and POST it to /api/auth/appwrite-session.
     mockAccount.createJWT.mockResolvedValue({ jwt: 'test-jwt' } as any);
-    global.fetch = jest.fn().mockResolvedValue({ ok: true }) as unknown as typeof fetch;
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ active: false }) }) as unknown as typeof fetch;
   });
 
   const wrapper = ({ children }: { children: ReactNode }) => (

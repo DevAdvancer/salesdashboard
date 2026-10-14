@@ -29,6 +29,7 @@ jest.mock("node-appwrite", () => ({
     equal: jest.fn((key, value) => `equal:${key}:${JSON.stringify(value)}`),
     greaterThanEqual: jest.fn((key, value) => `gte:${key}:${JSON.stringify(value)}`),
     lessThanEqual: jest.fn((key, value) => `lte:${key}:${JSON.stringify(value)}`),
+    lessThan: jest.fn((key, value) => `lt:${key}:${JSON.stringify(value)}`),
     limit: jest.fn((limit) => `limit:${limit}`),
     orderAsc: jest.fn((key) => `orderAsc:${key}`),
     orderDesc: jest.fn((key) => `orderDesc:${key}`),
@@ -88,8 +89,8 @@ describe("Linkedin reports team lead scoping", () => {
 
     expect(mockListDocuments).toHaveBeenCalledWith(
       expect.any(String),
-      COLLECTIONS.LINKEDIN_DAILY_STATS,
-      expect.arrayContaining([`equal:agentId:["tl-1"]`]),
+      COLLECTIONS.LINKEDIN_REQUESTS,
+      expect.arrayContaining([`equal:teamLeadId:"tl-1"`]),
     );
   });
 

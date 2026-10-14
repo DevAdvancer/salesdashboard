@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { updateOwnProfileAction } from '@/app/actions/profile';
 import { getReportEmailSettingsAction, saveReportEmailSettingsAction } from '@/app/actions/report-email-settings';
 import { ProtectedRoute } from '@/components/protected-route';
+import { MaintenanceSettings } from '@/components/maintenance-settings';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -17,6 +18,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { account, databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { listBranches } from '@/lib/services/branch-service';
+import { MAINTENANCE_MANAGER_EMAIL, MAINTENANCE_MANAGER_USER_ID } from '@/lib/constants/maintenance';
 import type { UserRole } from '@/lib/types';
 
 function formatRoleLabel(role: UserRole) {
@@ -57,6 +59,8 @@ function SettingsContent() {
   const [loadingReportEmails, setLoadingReportEmails] = useState(false);
   const [savingReportEmails, setSavingReportEmails] = useState(false);
   const canManageReportEmails = user?.role === 'admin' && user.email.toLowerCase() === 'abhirupvizva@gmail.com';
+  const canManageMaintenance = user?.$id === MAINTENANCE_MANAGER_USER_ID &&
+    user.role === 'admin' && user.email.toLowerCase() === MAINTENANCE_MANAGER_EMAIL;
 
   useEffect(() => {
     if (!canManageReportEmails) return;
@@ -314,6 +318,8 @@ function SettingsContent() {
           </CardContent>
         </Card>
       )}
+
+      {canManageMaintenance && <MaintenanceSettings />}
 
       <div className="grid gap-6 xl:grid-cols-3">
         <Card className="xl:col-span-2">

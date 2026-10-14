@@ -68,3 +68,23 @@ export function formatEasternDateTime(value: string | Date | null | undefined): 
     hour12: true,
   }).format(date);
 }
+
+/** Interpret a datetime-local value as an Eastern wall-clock time. */
+export function easternWallTimeToIso(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!match) throw new Error("Choose a valid Eastern date and time.");
+  const [year, month, day, hour, minute] = match.slice(1).map(Number);
+  const localKey = `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}`;
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: EASTERN_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  });
+  const matching = [4, 5].map(offset => new Date(Date.UTC(year, month - 1, day, hour + offset, minute)))
+    .filter(candidate => {
+      const parts = Object.fromEntries(formatter.formatToParts(candidate)
+        .filter(part => part.type !== "literal").map(part => [part.type, part.value]));
+      return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}` === localKey;
+    });
+  if (!matching.length) throw new Error("That Eastern time does not exist. Choose another time.");
+  return matching[0].toISOString();
+}

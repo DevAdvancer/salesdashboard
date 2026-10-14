@@ -65,6 +65,7 @@ export const COLLECTIONS = {
   TARGET_MONTH_BOUNDS: process.env.NEXT_PUBLIC_APPWRITE_TARGET_MONTH_BOUNDS_COLLECTION_ID || 'target_month_bounds',
   // Single server-managed document containing the recipients for scheduled report emails.
   REPORT_EMAIL_SETTINGS: process.env.NEXT_PUBLIC_APPWRITE_REPORT_EMAIL_SETTINGS_COLLECTION_ID || 'report_email_settings',
+  MAINTENANCE_SETTINGS: process.env.NEXT_PUBLIC_APPWRITE_MAINTENANCE_SETTINGS_COLLECTION_ID || 'maintenance_settings',
   // Admin-managed per-user access to beta features, enforced by server actions and routes.
   BETA_FEATURE_ACCESS: process.env.NEXT_PUBLIC_APPWRITE_BETA_FEATURE_ACCESS_COLLECTION_ID || 'beta_feature_access',
 };

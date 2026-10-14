@@ -10,9 +10,26 @@ export function normalizeProfileUrl(value: unknown): string {
       !/^(www\.)?linkedin\.com$/i.test(url.hostname)) {
     throw new Error("Use a public linkedin.com/in/ profile URL.");
   }
-  const match = /^\/in\/([a-zA-Z0-9_-]+)\/?$/.exec(url.pathname);
+  const match = /^\/in\/([^/]+)(?:\/(?:overlay|details)\/[^/]+)?\/?$/i.exec(url.pathname);
   if (!match) throw new Error("Open a public LinkedIn profile (/in/…). Sales Navigator URLs are not supported yet.");
-  return `https://www.linkedin.com/in/${match[1]}`;
+  let slug: string;
+  try { slug = decodeURIComponent(match[1]).normalize("NFC").toLowerCase(); }
+  catch { throw new Error("Enter a valid LinkedIn profile URL."); }
+  if (!slug || slug.length > 255 || slug === "." || slug === ".." ||
+      /[\s\\/?#\u0000-\u001f\u007f]/u.test(slug)) {
+    throw new Error("Enter a valid LinkedIn profile URL.");
+  }
+  return `https://www.linkedin.com/in/${encodeURIComponent(slug)}`;
+}
+
+/** Recover one public profile from legacy rows that contain pasted text or a mistyped host. */
+export function normalizeStoredProfileUrl(value: string): string {
+  try { return normalizeProfileUrl(value); } catch { /* Legacy values only. */ }
+  const occurrences = value.match(/(?:linkedin|inkedin|linlinkedin)\.com\/in\//gi) ?? [];
+  if (occurrences.length !== 1) throw new Error("No single public LinkedIn profile URL");
+  const match = /(?:https?:\/\/)?(?:www\.|w\/ww\.)?(?:linkedin|inkedin|linlinkedin)\.com\/in\/([^/\s?#"']+)/i.exec(value);
+  if (!match) throw new Error("No single public LinkedIn profile URL");
+  return normalizeProfileUrl(`https://www.linkedin.com/in/${match[1]}`);
 }
 
 export function normalizeCrmOrigin(value: unknown): string {

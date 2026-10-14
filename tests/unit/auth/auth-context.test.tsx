@@ -33,7 +33,7 @@ describe('AuthContext', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockFetch.mockResolvedValue({ ok: true });
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ active: false }) });
     global.fetch = mockFetch as unknown as typeof fetch;
     mockAccount.createJWT.mockResolvedValue({ jwt: 'jwt-token' } as any);
   });

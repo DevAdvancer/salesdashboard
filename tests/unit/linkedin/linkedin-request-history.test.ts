@@ -26,6 +26,7 @@ jest.mock("node-appwrite", () => ({
   Query: {
     equal: jest.fn((key, value) => `equal:${key}:${JSON.stringify(value)}`),
     contains: jest.fn((key, value) => `contains:${key}:${JSON.stringify(value)}`),
+    or: jest.fn((queries) => `or:${JSON.stringify(queries)}`),
     limit: jest.fn((limit) => `limit:${limit}`),
     orderAsc: jest.fn((key) => `orderAsc:${key}`),
     orderDesc: jest.fn((key) => `orderDesc:${key}`),
@@ -126,8 +127,23 @@ describe("Linkedin request history", () => {
     const { listMyLinkedinRequestsAction } = await import("@/app/actions/linkedin/requests");
     const result = await listMyLinkedinRequestsAction({ currentUserId: "agent-1",
       searchQuery: "https://www.linkedin.com/in/haf-48/" });
-    expect(result).toEqual([saved]);
+    expect(result).toEqual([saved, expect.objectContaining({ $id: "neighbor" })]);
     expect(mockListDocuments).toHaveBeenNthCalledWith(2, expect.any(String), expect.any(String),
-      expect.arrayContaining(["contains:targetUrl:\"/in/haf-48\""]));
+      expect.arrayContaining([expect.stringContaining('contains:targetUrl:') ]));
+  });
+
+  it("uses contains search for company text instead of filtering only the first page", async () => {
+    const saved = { $id: "company-match", agentId: "agent-1", company: "Silverspace INC",
+      targetUrl: "https://www.linkedin.com/in/person" };
+    mockListDocuments.mockResolvedValueOnce({ documents: [], total: 0 })
+      .mockResolvedValueOnce({ documents: [saved], total: 1 });
+    const { listMyLinkedinRequestsAction } = await import("@/app/actions/linkedin/requests");
+    const { Query } = await import("node-appwrite");
+
+    expect(await listMyLinkedinRequestsAction({ currentUserId: "agent-1", searchQuery: "space" }))
+      .toEqual([saved]);
+    expect(Query.contains).toHaveBeenCalledWith("company", "space");
+    expect(Query.contains).toHaveBeenCalledWith("targetUrl", "space");
+    expect(Query.or).toHaveBeenCalled();
   });
 });

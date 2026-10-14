@@ -5,6 +5,7 @@ import { account, databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { User, UserRole, Department, AuthContext as AuthContextType } from '@/lib/types';
 import { deleteAppwritePresence } from '@/lib/utils/appwrite-presences';
 import { clearBrowserQueryClient } from '@/lib/queries/client';
+import { MAINTENANCE_MANAGER_EMAIL, MAINTENANCE_MANAGER_USER_ID } from '@/lib/constants/maintenance';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const SERVER_SESSION_SYNC_COOLDOWN_MS = 5 * 60 * 1000;
@@ -140,6 +141,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const session = await account.get();
         if (session) {
+          const maintenanceResponse = await fetch('/api/maintenance/status', { cache: 'no-store' });
+          if (maintenanceResponse.ok) {
+            const maintenance = await maintenanceResponse.json() as { active?: boolean };
+            if (maintenance.active && (session.$id !== MAINTENANCE_MANAGER_USER_ID ||
+              session.email?.trim().toLowerCase() !== MAINTENANCE_MANAGER_EMAIL)) {
+              await account.deleteSession('current').catch(() => {});
+              await clearServerSession();
+              if (!cancelled) setUser(null);
+              return;
+            }
+          }
           // Parallelize: server session sync + user doc fetch both depend on
           // the local cookie already set by account.get(); no sequential order required.
           // We still need the sync promise to settle before un-gating the
@@ -233,12 +245,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Login function
   const login = useCallback(async (email: string, password: string) => {
+    let createdSession = false;
     try {
+      const maintenanceResponse = await fetch('/api/maintenance/status', { cache: 'no-store' });
+      if (maintenanceResponse.ok) {
+        const maintenance = await maintenanceResponse.json() as { active?: boolean };
+        if (maintenance.active && email.trim().toLowerCase() !== MAINTENANCE_MANAGER_EMAIL) {
+          throw new Error('CRM maintenance is in progress. Try again after the scheduled end time.');
+        }
+      }
       // Re-gate for the new session.
       setServerSessionReady(false);
 
       // Create email session
       await account.createEmailPasswordSession(email, password);
+      createdSession = true;
 
       // Get account details
       const accountDetails = await account.get();
@@ -265,6 +286,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return userDoc;
     } catch (error) {
       console.error('Login error:', error);
+      if (createdSession) {
+        try { await account.deleteSession('current'); } catch { /* Session may already be gone. */ }
+        await clearServerSession();
+      }
       // On login failure we still un-gate (with a false user) so protected
       // pages can render the unauthenticated state without hanging.
       setServerSessionReady(true);
@@ -278,14 +303,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (user?.$id) {
         await deleteAppwritePresence({ presenceId: user.$id }).catch(() => {});
       }
-      await account.deleteSession('current');
+      await account.deleteSession('current').catch(() => {});
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
       await clearServerSession();
       databases.clearReadCache?.();
       clearBrowserQueryClient();
       setUser(null);
-    } catch (error) {
-      console.error('Logout error:', error);
-      throw error;
     }
   }, [clearServerSession, user]);
 

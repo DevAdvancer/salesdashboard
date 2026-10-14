@@ -1,6 +1,7 @@
 import { Account, Client } from "node-appwrite";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { getMaintenanceStatus, isMaintenanceManager } from "@/lib/server/maintenance";
 
 const APPWRITE_JWT_COOKIE = "crm_appwrite_jwt";
 
@@ -18,10 +19,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing session token" }, { status: 400 });
   }
 
+  let authenticated: Awaited<ReturnType<Account["get"]>>;
   try {
-    await new Account(createJwtClient(jwt)).get();
+    authenticated = await new Account(createJwtClient(jwt)).get();
   } catch {
     return NextResponse.json({ error: "Invalid session token" }, { status: 401 });
+  }
+  const maintenance = await getMaintenanceStatus();
+  if (maintenance.active && !isMaintenanceManager(authenticated)) {
+    return NextResponse.json({ error: "CRM maintenance is in progress", endsAt: maintenance.endsAt },
+      { status: 503, headers: { "Cache-Control": "no-store" } });
   }
 
   const cookieStore = await cookies();

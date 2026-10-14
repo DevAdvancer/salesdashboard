@@ -568,8 +568,9 @@ function LinkedinRequestsContent() {
                     setTargetUrl(e.target.value);
                     setCheckedRequestState(null);
                   }}
-                  placeholder="Paste profile URL"
+                  placeholder="https://linkedin.com/in/username"
                 />
+                <p className="text-xs text-muted-foreground">Use a public LinkedIn profile URL with /in/username. The app standardizes the address when you check or add it.</p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">

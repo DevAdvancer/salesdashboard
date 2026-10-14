@@ -29,6 +29,7 @@ jest.mock('node-appwrite', () => ({
   Query: {
     equal: jest.fn((key, value) => `equal:${key}:${JSON.stringify(value)}`),
     contains: jest.fn((key, value) => `contains:${key}:${JSON.stringify(value)}`),
+    or: jest.fn((queries) => `or:${JSON.stringify(queries)}`),
     greaterThanEqual: jest.fn((key, value) => `gte:${key}:${value}`),
     lessThanEqual: jest.fn((key, value) => `lte:${key}:${value}`),
     limit: jest.fn((limit) => `limit(${limit})`),
@@ -105,7 +106,7 @@ describe('LinkedIn Server Actions Regression', () => {
       expect(Query.equal).not.toHaveBeenCalledWith('teamLeadId', expect.anything());
     });
 
-    it('normalizes a profile URL search before querying request history', async () => {
+    it('searches for a profile URL substring and company name', async () => {
       mockGetAuthenticatedUserDoc.mockResolvedValueOnce({ $id: 'admin-1', role: 'admin' });
       mockListDocuments.mockResolvedValue({ documents: [] });
       const { listLinkedinRequestsForAdminAction } = await import('@/app/actions/linkedin/requests');
@@ -114,6 +115,8 @@ describe('LinkedIn Server Actions Regression', () => {
         startDate: '2026-10-01', endDate: '2026-10-31',
         searchQuery: 'https://www.linkedin.com/in/haf-48/' });
       expect(Query.contains).toHaveBeenCalledWith('targetUrl', '/in/haf-48');
+      expect(Query.contains).toHaveBeenCalledWith('company', 'https://www.linkedin.com/in/haf-48/');
+      expect(Query.or).toHaveBeenCalled();
     });
 
     it('forces team lead scope for a team lead role', async () => {

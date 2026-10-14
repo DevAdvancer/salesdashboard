@@ -3,6 +3,7 @@ import { createAdminClient, createSessionClient } from "@/lib/server/appwrite";
 import { bumpRequestCount } from "@/lib/server/appwrite-request-meter";
 import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
 import type { User } from "@/lib/types";
+import { getMaintenanceStatus, isMaintenanceManager } from "@/lib/server/maintenance";
 
 import { cache } from "react";
 
@@ -12,7 +13,12 @@ export const getAuthenticatedAccount = cache(async () => {
   // meter would miss the one request every authenticated server entry point
   // makes.
   bumpRequestCount();
-  return account.get();
+  const authenticated = await account.get();
+  const maintenance = await getMaintenanceStatus();
+  if (maintenance.active && !isMaintenanceManager(authenticated)) {
+    throw new Error("CRM maintenance is in progress. Try again after the scheduled end time.");
+  }
+  return authenticated;
 });
 
 export async function assertAuthenticatedUserId(userId: string | null | undefined) {

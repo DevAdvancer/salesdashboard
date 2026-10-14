@@ -34,7 +34,7 @@ describe('Session Persistence and Restoration - Task 2.5', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockAccount.createJWT.mockResolvedValue({ jwt: 'test-jwt' } as any);
-    global.fetch = jest.fn().mockResolvedValue({ ok: true }) as unknown as typeof fetch;
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ active: false }) }) as unknown as typeof fetch;
   });
 
   const wrapper = ({ children }: { children: ReactNode }) => (
