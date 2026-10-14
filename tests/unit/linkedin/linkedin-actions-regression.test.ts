@@ -1,4 +1,5 @@
 export {};
+import fc from 'fast-check';
 
 const mockAssertAuthenticatedUserId = jest.fn();
 const mockCreateAdminClient = jest.fn();
@@ -65,6 +66,7 @@ describe('LinkedIn Server Actions Regression', () => {
         getDocument: mockGetDocument,
         createDocument: mockCreateDocument,
         updateDocument: mockUpdateDocument,
+        clearReadCacheForCollection: jest.fn(),
       },
     });
   });
@@ -83,6 +85,21 @@ describe('LinkedIn Server Actions Regression', () => {
       await listMyLinkedinRequestsAction({ currentUserId: 'agent-1' });
 
       expect(Query.equal).toHaveBeenCalledWith('agentId', ['agent-1']);
+    });
+  });
+
+  describe('getLinkedinAccountUsageTodayAction', () => {
+    it('never reveals usage for an account owned by another agent', async () => {
+      mockGetDocument.mockImplementation(async (_database: string, _collection: string, id: string) =>
+        ({ $id: id, assignedUserId: 'other-agent' }));
+      mockListDocuments.mockResolvedValue({ documents: [] });
+      const { getLinkedinAccountUsageTodayAction } = await import('@/app/actions/linkedin/requests');
+
+      await fc.assert(fc.asyncProperty(fc.uuid(), async (accountId) => {
+        await expect(getLinkedinAccountUsageTodayAction({ currentUserId: 'agent-1', accountId,
+          dateSent: '2026-10-14T00:00:00.000Z' })).rejects.toThrow('Unauthorized');
+        expect(mockListDocuments).not.toHaveBeenCalledWith('database', 'linkedin_requests', expect.anything());
+      }), { numRuns: 20 });
     });
   });
 
@@ -175,6 +192,19 @@ describe('LinkedIn Server Actions Regression', () => {
   });
 
   describe('createLinkedinRequestAction', () => {
+    it('blocks a fresh request when the account has already sent more than its limit', async () => {
+      mockGetAuthenticatedUserDoc.mockResolvedValue({ $id: 'agent-1', role: 'agent', name: 'Agent' });
+      mockGetDocument.mockResolvedValue({ $id: 'account-1', assignedUserId: 'agent-1',
+        company: 'Silverspace INC', isActive: true, connectionLimit: 20 });
+      mockListDocuments.mockResolvedValueOnce({ documents: [] })
+        .mockResolvedValueOnce({ total: 23, documents: [] });
+      const { createLinkedinRequestAction } = await import('@/app/actions/linkedin/requests');
+
+      await expect(createLinkedinRequestAction({ currentUserId: 'agent-1', accountId: 'account-1',
+        dateSent: '2026-10-14', targetUrl: 'https://www.linkedin.com/in/new-person' }))
+        .rejects.toThrow('Daily limit reached');
+      expect(mockCreateDocument).not.toHaveBeenCalled();
+    });
     it('checks the same canonical profile when the user omits the protocol and www', async () => {
       mockGetDocument.mockResolvedValue({ $id: 'account-1', assignedUserId: 'agent-1',
         company: 'Vizva INC', isActive: true });

@@ -7,6 +7,8 @@ import type { Lead, LinkedinAccount, LinkedinAccountType, LinkedinRequest, Linke
 import { LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS, LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS, shouldAutoWithdrawLinkedinRequest, LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS, LINKEDIN_SENT_AUTO_WITHDRAW_DAYS } from "@/lib/utils/linkedin-withdrawal-reminders";
 import { workingDaysInRange } from "@/lib/utils/dashboard-kpi";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
+import { getLinkedinAccountUsageByAccount } from "@/lib/server/linkedin-account-usage";
+import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import { expandIsoDateToEnd, expandIsoDateToStart } from "@/lib/utils/iso-date-range";
 import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
 import { getAgentsByTeamLead, getAssignableUsers, getUserByIdOrNull } from "@/lib/services/user-service";
@@ -33,6 +35,18 @@ export async function listMyLinkedinAccountsAction(input: {
             ],
           );
     return response.documents as unknown as LinkedinAccount[];
+}
+
+export async function listMyLinkedinAccountsWithUsageAction(input: { currentUserId: string }) {
+    await assertAuthenticatedUserId(input.currentUserId);
+    const { databases } = await createAdminClient();
+    databases.clearReadCacheForCollection(COLLECTIONS.LINKEDIN_ACCOUNTS);
+    const accounts = await listMyLinkedinAccountsAction(input);
+    const today = getCurrentEasternIsoDate();
+    const sentByAccountId = await getLinkedinAccountUsageByAccount(
+      databases, accounts.map((account) => account.$id), `${today}T00:00:00.000Z`,
+    );
+    return { accounts, sentByAccountId, today };
 }
 
 export async function upsertLinkedinAccountAction(input: {

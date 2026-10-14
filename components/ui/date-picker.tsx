@@ -16,7 +16,7 @@ type CalendarDay = {
   isCurrentMonth: boolean
 }
 
-const MONTH_LABEL = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", 
+const MONTH_LABEL = new Intl.DateTimeFormat("en-US", {
   month: "long",
   year: "numeric",
 })
@@ -68,7 +68,7 @@ function buildMonthDays(month: Date): CalendarDay[] {
 function formatDisplayDate(value?: string) {
   const date = parseDateValue(value)
   if (!date) return ""
-  return date.toLocaleDateString("en-US", { timeZone: "America/New_York", 
+  return date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",

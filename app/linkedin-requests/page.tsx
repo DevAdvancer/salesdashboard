@@ -20,12 +20,11 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { listMyLinkedinAccountsAction } from "@/app/actions/linkedin/accounts";
+import { listMyLinkedinAccountsWithUsageAction } from "@/app/actions/linkedin/accounts";
 import {
   checkLinkedinDuplicateAction,
   createLinkedinRequestAction,
   getBackoutStatusForLeadIdsAction,
-  getLinkedinAccountUsageTodayAction,
   getLinkedinConnectionHistoryAction,
   listMyLinkedinRequestsAction,
   markLinkedinRequestAcceptedAction,
@@ -36,6 +35,7 @@ import type { LinkedinAccount, LinkedinRequest } from "@/lib/types";
 import { getErrorMessage } from "@/lib/utils";
 import { daysSinceLinkedinRequestDate, daysSinceLinkedinRequestEvent, formatLinkedinRequestSentDate, getLinkedinRequestDateFilterValue } from "@/lib/utils/linkedin-request-dates";
 import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
+import { DISPLAY_TIME_ZONE_CHANGE_EVENT, getDisplayTimeZone } from "@/lib/utils/display-time-zone";
 import { normalizeProfileUrl } from "@/lib/utils/linkedin-extension-url";
 import {
   LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS,
@@ -78,9 +78,10 @@ function LinkedinRequestsContent() {
   const { user, serverSessionReady } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
-  const [accounts, setAccounts] = useState<LinkedinAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [dateSent, setDateSent] = useState(todayDateInputValue());
+  const [today, setToday] = useState(todayDateInputValue);
+  const [displayTimeZone, setDisplayTimeZone] = useState("America/New_York");
   const [targetUrl, setTargetUrl] = useState("");
   const [coldCallEnabled, setColdCallEnabled] = useState(false);
   const [coldCallPhone, setColdCallPhone] = useState("");
@@ -100,31 +101,52 @@ function LinkedinRequestsContent() {
   const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
-  const today = todayDateInputValue();
-  const todayIso = useMemo(() => new Date(today).toISOString(), [today]);
+  useEffect(() => {
+    const refreshDate = () => setToday(todayDateInputValue());
+    const refreshZone = () => setDisplayTimeZone(getDisplayTimeZone());
+    refreshZone();
+    const interval = window.setInterval(refreshDate, 30_000);
+    window.addEventListener(DISPLAY_TIME_ZONE_CHANGE_EVENT, refreshZone);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener(DISPLAY_TIME_ZONE_CHANGE_EVENT, refreshZone);
+    };
+  }, []);
+
+  useEffect(() => { setDateSent(today); }, [today]);
+
+  const queryClient = useQueryClient();
+  const accountUsageQuery = useQuery({
+    queryKey: ['linkedin-account-usage', user?.$id, today],
+    queryFn: () => listMyLinkedinAccountsWithUsageAction({ currentUserId: user!.$id }),
+    enabled: !!user && serverSessionReady,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchInterval: 30 * 1000,
+  });
+  const accounts: LinkedinAccount[] = accountUsageQuery.data?.accounts ?? [];
+  const sentByAccountId = accountUsageQuery.data?.sentByAccountId;
+
+  useEffect(() => {
+    if (selectedAccountId && !accounts.some((account) => account.$id === selectedAccountId) &&
+      accountUsageQuery.data) setSelectedAccountId("");
+  }, [accountUsageQuery.data, accounts, selectedAccountId]);
 
   const selectedAccount = useMemo(
     () => accounts.find((a) => a.$id === selectedAccountId) ?? null,
     [accounts, selectedAccountId],
   );
 
-  const queryClient = useQueryClient();
   const dashboardQuery = useQuery({
-    queryKey: ['linkedin-dashboard-data', user?.$id, selectedAccountId, todayIso, appliedFilterUrl, filterDate],
+    queryKey: ['linkedin-dashboard-data', user?.$id, appliedFilterUrl, filterDate],
     queryFn: async () => {
-      if (!user || !serverSessionReady) return { requests: [], leadOutcomeByLeadId: {}, usedToday: 0 };
+      if (!user || !serverSessionReady) return { requests: [], leadOutcomeByLeadId: {} };
       
-      const accountLimit = typeof selectedAccount?.connectionLimit === "number" 
-        ? selectedAccount.connectionLimit 
-        : 100;
-
       return await loadLinkedinRequestDashboardDataAction({
         currentUserId: user.$id,
-        accountId: selectedAccountId || null,
         dateSent: filterDate || null,
-        todayIso,
         searchQuery: appliedFilterUrl || undefined,
-        limit: accountLimit,
+        limit: 100,
       });
     },
     enabled: !!user && serverSessionReady,
@@ -135,14 +157,6 @@ function LinkedinRequestsContent() {
   const requests = dashboardQuery.data?.requests || [];
   const leadOutcomeByLeadId = dashboardQuery.data?.leadOutcomeByLeadId || {};
   
-  const [localUsedToday, setLocalUsedToday] = useState(0);
-  
-  useEffect(() => {
-    if (dashboardQuery.data?.usedToday !== undefined) {
-      setLocalUsedToday(dashboardQuery.data.usedToday);
-    }
-  }, [dashboardQuery.data?.usedToday]);
-
   // --- Cooldown rate-limiter: prevents rapid double-clicks on any action ---
   const COOLDOWN_MS = 2000;
   const lastActionAt = useRef<Record<string, number>>({});
@@ -165,39 +179,9 @@ function LinkedinRequestsContent() {
     typeof selectedAccount?.connectionLimit === "number"
       ? selectedAccount.connectionLimit
       : null;
-  const usedToday = localUsedToday;
+  const usedToday = selectedAccount ? sentByAccountId?.[selectedAccount.$id] ?? null : null;
   const remainingToday =
-    dailyLimit === null ? null : Math.max(dailyLimit - usedToday, 0);
-
-  const loadAccounts = useCallback(async () => {
-    if (!user) return;
-    try {
-      const next = await listMyLinkedinAccountsAction({
-        currentUserId: user.$id,
-      });
-      setAccounts(next);
-      if (!selectedAccountId && next.length > 0) {
-        setSelectedAccountId(next[0].$id);
-      }
-    } catch (error: unknown) {
-      toast({
-        title: "Failed to load Linkedin IDs",
-        description: getErrorMessage(error),
-        variant: "destructive",
-      });
-      setAccounts([]);
-    }
-  }, [selectedAccountId, toast, user]);
-
-  useEffect(() => {
-    // Gate on serverSessionReady so the crm_appwrite_jwt cookie is in place
-    // before listMyLinkedinAccountsAction fires — otherwise createSessionClient
-    // falls through to the legacy a_session_* cookie loop and 500s.
-    if (!user || !serverSessionReady) return;
-    void loadAccounts();
-  }, [loadAccounts, serverSessionReady, user]);
-
-
+    dailyLimit === null || usedToday === null ? null : Math.max(dailyLimit - usedToday, 0);
 
   const onCheck = async () => {
     if (!user) return;
@@ -344,7 +328,7 @@ function LinkedinRequestsContent() {
       setCheckedRequestState(null);
       setColdCallEnabled(false);
       setColdCallPhone("");
-      setLocalUsedToday(prev => prev + 1);
+      void queryClient.invalidateQueries({ queryKey: ['linkedin-account-usage'] });
       void queryClient.invalidateQueries({ queryKey: ['linkedin-dashboard-data'] });
     } catch (error: unknown) {
       toast({
@@ -472,7 +456,13 @@ function LinkedinRequestsContent() {
           <CardTitle>Linkedin Request</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {accounts.length === 0 ? (
+          {accountUsageQuery.isError ? (
+            <div className="text-sm text-destructive">
+              Unable to load LinkedIn IDs and today&apos;s counts. Please refresh the page.
+            </div>
+          ) : accountUsageQuery.isPending ? (
+            <div className="text-sm text-muted-foreground">Loading LinkedIn IDs and today&apos;s counts…</div>
+          ) : accounts.length === 0 ? (
             <div className="text-sm text-muted-foreground">
               No Linkedin IDs assigned to your account yet. Please ask your Team
               Lead / Admin to assign a Main ID (and optional Sudo IDs).
@@ -490,6 +480,7 @@ function LinkedinRequestsContent() {
                     setCheckedRequestState(null);
                   }}
                   className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                  <option value="">Select the LinkedIn ID used to send</option>
                   {accounts.map((a) => (
                     <option key={a.$id} value={a.$id}>
                       {a.accountType.toUpperCase()} · {a.idName} · {a.company}
@@ -508,18 +499,26 @@ function LinkedinRequestsContent() {
                   minDate={today}
                   maxDate={today}
                 />
+                <p className="text-xs text-muted-foreground">Daily requests follow Eastern Time (EST/EDT).</p>
               </div>
             </div>
           )}
 
-          {accounts.length > 0 && selectedAccount && (
-            <div className="text-sm text-muted-foreground">
-              {selectedAccount.licenseType
-                ? `License: ${selectedAccount.licenseType} · `
-                : ""}
-              {dailyLimit === null
-                ? "Limit: Not set (ask Team Lead/Admin)"
-                : `Limit: ${dailyLimit} · Used today: ${usedToday} · Remaining: ${remainingToday}`}
+          {accounts.length > 0 && (
+            <div className="grid gap-2 md:grid-cols-2" aria-label="Today's LinkedIn request counts">
+              {accounts.map((account) => {
+                const sent = sentByAccountId?.[account.$id];
+                const limit = typeof account.connectionLimit === "number" ? account.connectionLimit : null;
+                const remaining = limit === null || sent === undefined ? null : Math.max(limit - sent, 0);
+                return (
+                  <div key={account.$id} className="rounded-xl border border-border px-4 py-3 text-sm">
+                    <div className="font-medium">{account.accountType.toUpperCase()} · {account.idName}</div>
+                    <div className="text-muted-foreground">
+                      Limit: {limit ?? "Not set"} · Sent today: {sent ?? "Loading…"} · Remaining: {remaining ?? "Loading…"}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -608,7 +607,10 @@ function LinkedinRequestsContent() {
             <CardTitle>Requests</CardTitle>
             <Button
               variant="outline"
-              onClick={() => void queryClient.invalidateQueries({ queryKey: ['linkedin-dashboard-data'] })}
+              onClick={() => {
+                void queryClient.invalidateQueries({ queryKey: ['linkedin-dashboard-data'] });
+                void queryClient.invalidateQueries({ queryKey: ['linkedin-account-usage'] });
+              }}
               disabled={loadingList || !user}>
               {loadingList ? "Refreshing..." : "Refresh"}
             </Button>
@@ -785,7 +787,7 @@ function LinkedinRequestsContent() {
                             <span className="text-sm text-muted-foreground">
                               Accepted{" "}
                               {r.acceptedAt
-                                ? `(${new Date(r.acceptedAt).toLocaleDateString("en-US", { timeZone: "America/New_York" })})`
+                                ? `(${new Date(r.acceptedAt).toLocaleDateString("en-US", { timeZone: displayTimeZone })})`
                                 : ""}
                             </span>
                           </div>
@@ -936,7 +938,7 @@ function LinkedinRequestsContent() {
                                   ) : null}
                                   <span className="text-muted-foreground">
                                     {log.createdAt
-                                      ? `(${new Date(log.createdAt).toLocaleString("en-US", { timeZone: "America/New_York" })})`
+                                      ? `(${new Date(log.createdAt).toLocaleString("en-US", { timeZone: displayTimeZone })})`
                                       : ""}
                                   </span>
                                 </div>

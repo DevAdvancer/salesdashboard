@@ -3,6 +3,7 @@ jest.mock("node-appwrite", () => ({
     equal: (attribute: string, value: unknown) => JSON.stringify({ attribute, value }),
     contains: (attribute: string, value: unknown) => JSON.stringify({ contains: attribute, value }),
     select: (fields: string[]) => JSON.stringify({ select: fields }),
+    limit: (value: number) => JSON.stringify({ limit: value }),
     orderDesc: (attribute: string) => JSON.stringify({ orderDesc: attribute }),
   },
   Permission: {
@@ -34,7 +35,8 @@ import { bootstrapLinkedinExtension, checkLinkedinExtension, recordLinkedinExten
 import { COLLECTIONS } from "@/lib/constants/appwrite";
 
 const account = { $id: "account-1", assignedUserId: "agent-1", company: "Silverspace", idName: "Account A", accountType: "main", isActive: true, connectionLimit: 3 };
-const databases = { clearReadCacheForCollection: jest.fn(), createDocument: jest.fn() };
+const databases = { clearReadCacheForCollection: jest.fn(), createDocument: jest.fn(),
+  listDocuments: jest.fn() };
 const input = { accountId: account.$id, targetUrl: "https://linkedin.com/in/person/?trk=test" };
 let records: any[];
 let used: any[];
@@ -49,8 +51,9 @@ beforeEach(() => {
   (listMyLinkedinAccountsAction as jest.Mock).mockResolvedValue([account]);
   (assertAccessibleLinkedinAccount as jest.Mock).mockResolvedValue(account);
   (isBlockingLinkedinRequest as jest.Mock).mockImplementation(r => r.status !== "withdrawn");
-  (listAllDocuments as jest.Mock).mockImplementation(async ({ queries }) => queries.some((q: string) => q.includes('"attribute":"dateSent"')) ? used :
+  (listAllDocuments as jest.Mock).mockImplementation(async () =>
     records.map(record => ({ company: account.company, ...record })));
+  databases.listDocuments.mockImplementation(async () => ({ total: used.length, documents: [] }));
   databases.createDocument.mockResolvedValue({ $id: "saved" });
 });
 afterEach(() => jest.useRealTimers());

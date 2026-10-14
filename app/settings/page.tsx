@@ -20,6 +20,7 @@ import { useAuth } from '@/lib/contexts/auth-context';
 import { listBranches } from '@/lib/services/branch-service';
 import { MAINTENANCE_MANAGER_EMAIL, MAINTENANCE_MANAGER_USER_ID } from '@/lib/constants/maintenance';
 import type { UserRole } from '@/lib/types';
+import { DEFAULT_DISPLAY_TIME_ZONE, DISPLAY_TIME_ZONES, getDisplayTimeZone, saveDisplayTimeZone } from '@/lib/utils/display-time-zone';
 
 function formatRoleLabel(role: UserRole) {
   if (role === 'team_lead') return 'Team Lead';
@@ -55,6 +56,7 @@ function SettingsContent() {
   const [branchNames, setBranchNames] = useState<string[]>([]);
   const [teamLeadName, setTeamLeadName] = useState<string | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [displayTimeZone, setDisplayTimeZone] = useState(DEFAULT_DISPLAY_TIME_ZONE);
   const [reportEmails, setReportEmails] = useState('');
   const [loadingReportEmails, setLoadingReportEmails] = useState(false);
   const [savingReportEmails, setSavingReportEmails] = useState(false);
@@ -89,6 +91,7 @@ function SettingsContent() {
   useEffect(() => {
     const savedTheme = localStorage.getItem('salesdashboard-theme') === 'dark' ? 'dark' : 'light';
     setTheme(savedTheme);
+    setDisplayTimeZone(getDisplayTimeZone());
     document.documentElement.classList.toggle('dark', savedTheme === 'dark');
     document.documentElement.style.colorScheme = savedTheme;
   }, []);
@@ -102,6 +105,12 @@ function SettingsContent() {
       title: `${nextTheme === 'dark' ? 'Dark' : 'Light'} theme saved`,
       description: 'Your dashboard will use this theme next time you sign in.',
     });
+  };
+
+  const updateDisplayTimeZone = (value: string) => {
+    saveDisplayTimeZone(value);
+    setDisplayTimeZone(value);
+    toast({ title: 'Display time zone saved' });
   };
 
   useEffect(() => {
@@ -376,9 +385,20 @@ function SettingsContent() {
         <Card>
           <CardHeader>
             <CardTitle>Appearance</CardTitle>
-            <CardDescription>Choose the dashboard theme saved on this device.</CardDescription>
+            <CardDescription>Choose your display preferences for this device.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="display-time-zone">Display time zone</Label>
+              <select id="display-time-zone" value={displayTimeZone}
+                onChange={(event) => updateDisplayTimeZone(event.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground">
+                {DISPLAY_TIME_ZONES.map((zone) => <option key={zone.value} value={zone.value}>{zone.label}</option>)}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                LinkedIn activity times use this zone. Daily request limits and dates follow Eastern Time (EST/EDT).
+              </p>
+            </div>
             <div className="grid grid-cols-2 gap-2 rounded-[1.5rem] bg-[var(--soft-cloud)] p-1">
               <button
                 type="button"

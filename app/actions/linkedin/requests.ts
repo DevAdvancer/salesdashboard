@@ -7,6 +7,7 @@ import type { Lead, LinkedinAccount, LinkedinAccountType, LinkedinRequest, Linke
 import { LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS, LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS, shouldAutoWithdrawLinkedinRequest, LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS, LINKEDIN_SENT_AUTO_WITHDRAW_DAYS } from "@/lib/utils/linkedin-withdrawal-reminders";
 import { workingDaysInRange } from "@/lib/utils/dashboard-kpi";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
+import { getLinkedinAccountUsage } from "@/lib/server/linkedin-account-usage";
 import { expandIsoDateToEnd, expandIsoDateToStart } from "@/lib/utils/iso-date-range";
 import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
 import { getAgentsByTeamLead, getAssignableUsers, getUserByIdOrNull } from "@/lib/services/user-service";
@@ -85,6 +86,7 @@ export async function createLinkedinRequestAction(input: {
     }
 
     const { databases } = await createAdminClient();
+    databases.clearReadCacheForCollection(COLLECTIONS.LINKEDIN_ACCOUNTS);
     const account = await assertAccessibleLinkedinAccount(databases, user.$id, input.accountId);
     if (account.isActive === false) {
     throw new Error(
@@ -110,6 +112,7 @@ export async function createLinkedinRequestAction(input: {
     );
     }
 
+    databases.clearReadCacheForCollection(COLLECTIONS.LINKEDIN_REQUESTS);
     const existingByCompany = await listLinkedinRequestsForProfile(databases, targetUrl, company);
     let activeByCompany: LinkedinRequest | null = null;
     for (const doc of existingByCompany) {
@@ -122,21 +125,7 @@ export async function createLinkedinRequestAction(input: {
       throw new Error("This profile already has an active request for this company. Withdraw it before sending another request.");
     }
 
-    const alreadySentResponse = await databases.listDocuments(
-            DATABASE_ID,
-            COLLECTIONS.LINKEDIN_REQUESTS,
-            [
-              Query.equal("accountId", account.$id),
-              Query.equal("dateSent", dateSent),
-              Query.select(["$id", "isActive", "status"]),
-              // 200 is sufficient since typical connection limits are ~100
-              Query.limit(200),
-            ],
-          );
-    const alreadySent = (alreadySentResponse.documents as unknown as LinkedinRequest[]).filter((doc) => {
-            const isActive = doc.isActive ?? true;
-            return isActive && doc.status !== "withdrawn";
-          }).length;
+    const alreadySent = await getLinkedinAccountUsage(databases, account.$id, dateSent);
     if (alreadySent >= connectionLimit) {
     throw new Error(
       `Daily limit reached for this Linkedin ID (${connectionLimit}). Try another ID.`,
@@ -1081,31 +1070,14 @@ export async function getLinkedinAccountUsageTodayAction(input: {
   await assertAuthenticatedUserId(input.currentUserId);
   const dateSent = assertDateIso(input.dateSent);
   const { databases } = await createAdminClient();
-
-  const response = await databases.listDocuments(
-    DATABASE_ID,
-    COLLECTIONS.LINKEDIN_REQUESTS,
-    [
-      Query.equal("accountId", input.accountId),
-      Query.equal("dateSent", dateSent),
-      Query.select(["$id", "isActive", "status"]),
-      Query.limit(500),
-    ],
-  );
-
-  const usage = (response.documents as unknown as LinkedinRequest[]).filter((doc) => {
-    const isActive = doc.isActive ?? true;
-    return isActive && doc.status !== "withdrawn";
-  }).length;
-
-  return usage;
+  databases.clearReadCacheForCollection(COLLECTIONS.LINKEDIN_ACCOUNTS);
+  await assertAccessibleLinkedinAccount(databases, input.currentUserId, input.accountId);
+  return getLinkedinAccountUsage(databases, input.accountId, dateSent);
 }
 
 export async function loadLinkedinRequestDashboardDataAction(input: {
   currentUserId: string;
-  accountId: string | null;
   dateSent: string | null;
-  todayIso: string;
   searchQuery?: string;
   limit?: number;
 }) {
@@ -1136,19 +1108,8 @@ export async function loadLinkedinRequestDashboardDataAction(input: {
     }
   }
 
-  // 3. Fetch today's usage for the selected account
-  let usedToday = 0;
-  if (input.accountId) {
-    usedToday = await getLinkedinAccountUsageTodayAction({
-      currentUserId: input.currentUserId,
-      accountId: input.accountId,
-      dateSent: input.todayIso,
-    });
-  }
-
   return {
     requests,
     leadOutcomeByLeadId,
-    usedToday,
   };
 }

@@ -3,6 +3,7 @@ import { Permission, Query, Role } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
 import { getAuthenticatedUserDoc } from "@/lib/server/current-user";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
+import { getLinkedinAccountUsage } from "@/lib/server/linkedin-account-usage";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { listMyLinkedinAccountsAction } from "@/app/actions/linkedin/accounts";
 import { createLinkedinRequestAction } from "@/app/actions/linkedin/requests";
@@ -34,12 +35,7 @@ async function context() {
 }
 
 async function usage(databases: Databases, account: LinkedinAccount, today: string) {
-  const records = await listAllDocuments<LinkedinRequest>({
-    databases, databaseId: DATABASE_ID, collectionId: COLLECTIONS.LINKEDIN_REQUESTS,
-    queries: [Query.equal("accountId", account.$id), Query.equal("dateSent", `${today}T00:00:00.000Z`),
-      Query.select(["$id", "isActive", "status"])],
-  });
-  const used = records.filter(r => (r.isActive ?? true) && r.status !== "withdrawn").length;
+  const used = await getLinkedinAccountUsage(databases, account.$id, `${today}T00:00:00.000Z`);
   const limit = typeof account.connectionLimit === "number" && Number.isFinite(account.connectionLimit)
     ? Math.max(0, Math.floor(account.connectionLimit)) : null;
   return { used, limit, remaining: limit === null ? null : Math.max(0, limit - used) };
@@ -148,7 +144,7 @@ export async function recordLinkedinExtension(input: {
   }
   // The completed write is authoritative. Avoid repeating every scan just to construct its response.
   const wasCountedToday = current.latest?.dateSent === `${current.today}T00:00:00.000Z` &&
-    (current.latest.isActive ?? true) && current.latest.status !== "withdrawn";
+    current.latest.accountId === current.account.$id;
   const used = checked.used + (wasCountedToday ? 0 : 1);
   return { ...checked, mode, state: "active_request", canRecord: false, history: [],
     previousRequest: { status: "sent", dateSent: `${current.today}T00:00:00.000Z` },

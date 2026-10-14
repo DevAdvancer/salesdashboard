@@ -2,7 +2,14 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 
-import { DateTimePicker } from "@/components/ui/date-picker";
+import { DatePicker, DateTimePicker } from "@/components/ui/date-picker";
+
+describe("DatePicker", () => {
+  it("displays the selected calendar day without shifting it to the previous Eastern day", () => {
+    render(<DatePicker value="2026-10-14" onChange={jest.fn()} />);
+    expect(screen.getByRole("button", { name: /Oct 14, 2026/ })).toBeInTheDocument();
+  });
+});
 
 describe("DateTimePicker", () => {
   it("lets users pick a date, time, and AM/PM without a clipped popup", async () => {
