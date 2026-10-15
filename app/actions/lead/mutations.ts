@@ -33,6 +33,7 @@ import { REQUIRED_LEAD_FIELD_LABELS, isValidId, normalizeDuplicateFieldValue, is
 import { parseIsoDateLocal, daysInMonthLocal } from "./sync-helpers";
 import { createNotificationsForRecipients } from "@/lib/server/notifications";
 import { getLeadDisplayName } from "@/lib/actions/lead/utils";
+import { isSalesTeamLeadAssignee } from '@/lib/utils/lead-assignment';
 
 export async function restoreNotInterestedDuplicateLead(input: {
         databases: Awaited<ReturnType<typeof createAdminClient>>['databases'];
@@ -173,6 +174,13 @@ export async function createLeadAction(ownerId: string, input: CreateLeadInput, 
 
         if (isOperationsRole(actorDoc.role)) {
             throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
+        }
+
+        if (actorDoc.role === 'lead_generation' && input.assignedToId && input.assignedToId !== finalOwnerId) {
+            const assignee = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, input.assignedToId);
+            if (!isSalesTeamLeadAssignee(assignee as unknown as import('@/lib/types').User)) {
+                throw new LeadActionError('PERMISSION_DENIED', 'Lead generation can only assign leads to active Sales department team leads.');
+            }
         }
 
         if (typeof input.data.linkedinRequestId === 'string' && input.data.linkedinRequestId.trim()) {

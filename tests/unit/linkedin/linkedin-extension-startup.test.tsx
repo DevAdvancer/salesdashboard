@@ -32,6 +32,7 @@ function deferred<T>() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: jest.fn().mockResolvedValue(undefined) } });
   (browser.storage.local.get as jest.Mock).mockResolvedValue({ crmOrigin: "http://localhost:5000" });
   (detectProfile as jest.Mock).mockResolvedValue({ url: checked.targetUrl, tabId: 7 });
   (loadConnection as jest.Mock).mockResolvedValue({ data: bootstrap, selectedAccountId: "account", note: "" });
@@ -125,4 +126,26 @@ it("records directly without an initial history request", async () => {
   expect(requestCrm).toHaveBeenCalledTimes(1);
   expect(requestCrm).toHaveBeenCalledWith({ operation: "record", accountId: "account", targetUrl: checked.targetUrl, confirmResend: false });
   expect(result.current.state).toMatchObject({ historyVisible: false, noteKind: "success" });
+  expect(navigator.clipboard.writeText).toHaveBeenCalledWith(checked.targetUrl);
+});
+
+it.each(['created', 'resent'])("keeps a successful %s saved when clipboard access fails", async mode => {
+  (navigator.clipboard.writeText as jest.Mock).mockRejectedValue(new Error('Denied'));
+  (requestCrm as jest.Mock).mockResolvedValue({ ...checked, mode, state: 'active_request', canRecord: false });
+  const { result } = renderHook(() => useLinkedinHelper());
+  await waitFor(() => expect(result.current.state.pending).toBe(false));
+  await act(async () => { result.current.record(); });
+  expect(result.current.state.checked?.canRecord).toBe(false);
+  expect(result.current.state.note).toContain('the request is saved');
+  expect(result.current.state.noteKind).toBe('success');
+});
+
+it('does not overwrite the clipboard for an existing or failed record', async () => {
+  (requestCrm as jest.Mock).mockResolvedValueOnce({ ...checked, mode: 'existing' }).mockRejectedValueOnce(new Error('Failed'));
+  const { result } = renderHook(() => useLinkedinHelper());
+  await waitFor(() => expect(result.current.state.pending).toBe(false));
+  await act(async () => { result.current.record(); });
+  expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
+  await act(async () => { result.current.record(); });
+  expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
 });

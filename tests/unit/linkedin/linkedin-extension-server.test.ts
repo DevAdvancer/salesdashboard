@@ -85,10 +85,10 @@ it("rejects expired delegation", async () => {
   (assertAccessibleLinkedinAccount as jest.Mock).mockRejectedValue(new Error("Unauthorized"));
   await expect(checkLinkedinExtension(input)).rejects.toMatchObject({ status: 403 });
 });
-it("rejects a user whose beta extension access was revoked", async () => {
+it("allows eligible users without a beta grant", async () => {
   (hasLinkedinHelperAccess as jest.Mock).mockResolvedValue(false);
-  await expect(checkLinkedinExtension(input)).rejects.toMatchObject({ status: 403 });
-  expect(assertAccessibleLinkedinAccount).not.toHaveBeenCalled();
+  await expect(checkLinkedinExtension(input)).resolves.toMatchObject({ canRecord: true });
+  expect(hasLinkedinHelperAccess).not.toHaveBeenCalled();
 });
 it("allows the same profile through another company's LinkedIn account", async () => {
   records = [{ $id: "other-company-request", targetUrl: "https://www.linkedin.com/in/person",

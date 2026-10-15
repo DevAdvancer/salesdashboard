@@ -812,7 +812,7 @@ describe('lead server action authorization', () => {
     const { assignLeadAction } = await import('@/lib/actions/lead/assignment');
 
     await expect(assignLeadAction('lead-1', 'agent-2', 'leadgen-1', 'Lead Gen')).rejects.toThrow(
-      'Lead generation can only assign leads to team leads.'
+      'Lead generation can only assign leads to active Sales department team leads.'
     );
     expect(mockUpdateDocument).not.toHaveBeenCalled();
   });

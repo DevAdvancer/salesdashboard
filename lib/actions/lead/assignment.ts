@@ -10,6 +10,7 @@ import { recordLgHandoffAction } from '@/app/actions/lg-handoffs';
 import { getHierarchyPermissionsServer, assertAssignmentAllowed } from './visibility';
 import { getLeadDisplayName, getLeadResumeFileId } from './utils';
 import { logger } from '@/lib/utils/logger';
+import { isSalesTeamLeadAssignee } from '@/lib/utils/lead-assignment';
 
 type AdminDatabases = Awaited<ReturnType<typeof createAdminClient>>['databases'];
 
@@ -214,6 +215,7 @@ export async function listLeadAssignableAgentsAction(
             name: doc.name,
             email: doc.email,
             role: doc.role,
+            department: doc.department ?? 'sales',
             teamLeadId: doc.teamLeadId || null,
             branchIds: doc.branchIds || [],
             branchId: doc.branchId || null,
@@ -221,5 +223,6 @@ export async function listLeadAssignableAgentsAction(
             $createdAt: doc.$createdAt,
             $updatedAt: doc.$updatedAt,
         } as User))
-        .filter((candidate) => candidate.isActive && candidate.$id !== actorId);
+        .filter((candidate) => candidate.isActive && candidate.$id !== actorId &&
+            (actorDoc.role !== 'lead_generation' || isSalesTeamLeadAssignee(candidate)));
 }

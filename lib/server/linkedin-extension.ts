@@ -12,7 +12,6 @@ import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import { normalizeProfileUrl, sameProfile } from "@/lib/utils/linkedin-extension-url";
 import { isWithdrawnLinkedinRequest } from "@/lib/utils/linkedin-request-state";
 import { canUseLinkedinExtension, LinkedinExtensionError, projectExtensionHistory } from "./linkedin-extension-policy";
-import { hasLinkedinHelperAccess } from "./beta-feature-access";
 import type { LinkedinAccount, LinkedinRequest } from "@/lib/types";
 import type { ExtensionBootstrap, ExtensionCheck, ExtensionRecord, ExtensionState } from "@/lib/types/linkedin-extension";
 
@@ -29,9 +28,6 @@ async function context() {
     throw new LinkedinExtensionError(401, "Sign in to CRM in the connected tab, then retry.");
   });
   if (!canUseLinkedinExtension(actor)) throw new LinkedinExtensionError(403, "Your CRM role or department cannot use LinkedIn Requests.");
-  if (!(await hasLinkedinHelperAccess(databases, actor.$id))) {
-    throw new LinkedinExtensionError(403, "Ask an admin to enable LinkedIn Helper in Beta before using the extension.");
-  }
   return { actor, databases, today: getCurrentEasternIsoDate() };
 }
 

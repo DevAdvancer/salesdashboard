@@ -225,7 +225,7 @@ function LeadDetailContent() {
           user.role === "admin" || user.role === "developer"
             ? candidate.role === "agent" || candidate.role === "team_lead"
             : user.role === "lead_generation"
-              ? candidate.role === "team_lead"
+              ? candidate.role === "team_lead" && (candidate.department ?? "sales") === "sales" && candidate.isActive !== false
               : candidate.role === "agent"
         );
       } else if (

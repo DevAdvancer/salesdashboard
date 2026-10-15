@@ -1,4 +1,4 @@
-# CRM HUB LinkedIn Helper
+# LinkedIn Helper
 
 Chrome/Edge Manifest V3 extension built with **WXT + React + TypeScript**. This replaces the earlier plain JavaScript implementation. Its source, dependencies, Bun lockfile, generated types, and browser bundles are isolated in this folder.
 
@@ -16,12 +16,12 @@ bun run zip
 1. Open `chrome://extensions` (Chrome) or `edge://extensions` (Edge).
 2. Enable **Developer mode** and click **Load unpacked**.
 3. Select **`extensions/linkedin-helper/.output/chrome-mv3`**, which contains the generated `manifest.json`. Do not select this source folder.
-4. Pin **CRM HUB LinkedIn Helper** to the toolbar.
+4. Pin **LinkedIn Helper** to the toolbar.
 5. Sign in to CRM in the same regular browser profile and keep that tab open.
-6. Ask an admin to enable LinkedIn Helper for your user on the CRM **Beta** page. Open a public LinkedIn profile, click the extension, open **Connection settings** using the header icon, choose `crm.silverspaceinc.tech` or `localhost:5000`, and click **Connect**. The production URL is the default for a fresh installation; your last connected environment is remembered. Approve access to your CRM hostname if prompted.
-7. Choose the LinkedIn account you are actually using. Optionally **Check before inviting**; use **Open profile on LinkedIn** to go to the selected profile. After manually sending the invitation on LinkedIn, click **Record request sent**. Use **View history** for full CRM history.
+6. Open a public LinkedIn profile, click the extension, open **Connection settings** using the header icon, choose `crm.silverspaceinc.tech` or `localhost:5000`, and click **Connect**. The production URL is the default for a fresh installation; your last connected environment is remembered. Approve access to your CRM hostname if prompted.
+7. Choose the LinkedIn account you are actually using. Optionally **Check before inviting**; use **Open profile on LinkedIn** to go to the selected profile. After manually sending the invitation on LinkedIn, click **Record request sent**. Once CRM confirms the save, the profile URL is copied to your clipboard. Use **View history** for full CRM history.
 
-The ready-to-extract ZIP is generated at `.output/crm-hub-linkedin-helper-1.6.0-chrome.zip` and copied to `public/downloads/` for the CRM installation guide. Extract it into a folder and load that folder as unpacked. The ZIP contains only the compiled extension, not source, dependencies, or credentials. It is not a signed Web Store package.
+The ready-to-extract ZIP is generated at `.output/crm-hub-linkedin-helper-1.7.0-chrome.zip` and copied to `public/downloads/` for the CRM installation guide. Extract it into a folder and load that folder as unpacked. The ZIP contains only the compiled extension, not source, dependencies, or credentials. It is not a signed Web Store package.
 
 The updated CRM must provide `/api/extension/linkedin`. Use the local CRM (`bun run dev` from the repository root, http://localhost:5000) until the additive endpoint is deployed through your normal release process. Installing the extension does not install this endpoint on an already deployed CRM. Nothing here commits, pushes, deploys, or migrates Appwrite data.
 
@@ -54,7 +54,7 @@ The browser-independent contract and URL rules are shared with the backend throu
 - Opening the popup detects the active public `/in/` profile without checking history. Manual URL entry remains available. Tracking parameters and trailing slashes are removed. The popup follows the CRM's neutral palette and bundles its Silverspace and Vizva logos.
 - The compact popup is 360 pixels wide and at most 560 pixels tall, with a slim scrollbar in its content area. Header and footer remain visible. Connection settings are hidden behind the header icon. The header logos crossfade every 4.5 seconds using the sidebar's timing; reduced-motion preferences disable the animation. The extension toolbar icon and popup favicon use the CRM's Silverspace favicon.
 - The popup follows the active LinkedIn page's light or dark background, checking presentation every two seconds while open. This uses the existing `activeTab`/`scripting` permissions and reads only computed background colors. When page access is unavailable, it retains the last detected theme for the browser session or falls back to system preference. It never changes the LinkedIn page's theme.
-- When connected to CRM, this build publishes its version in the current CRM tab so LinkedIn Requests can display a best-effort installation status. Older builds have no version signal and appear as "Not detected in this tab". The CRM server checks the admin-managed beta allowlist on every extension request.
+- When connected to CRM, this build publishes its version in the current CRM tab so LinkedIn Requests can display a best-effort installation status. Older builds have no version signal and appear as "Not detected in this tab". LinkedIn Helper is available to all eligible LinkedIn Requests users; the server retains role, department, active-user, and account checks.
 - CRM account loading starts without waiting for LinkedIn profile detection. Recording is available after accounts load. One server inspection checks duplicates, existing leads, assignment and allowance before a new write. A quick check shows the status and date of a matching earlier CRM request; full history is loaded only with **View history**. A new request does not show the resend confirmation. **Check before inviting** remains an optional read-only availability check.
 - Closing the popup does not cancel a dispatched check. Reopening on the same account/profile joins that check; completed account and history responses are reused for up to 30 seconds. Browser-session storage retains completed responses through worker suspension, and the last entered profile is restored for the same CRM user if there is no active LinkedIn profile.
 - **Refresh**, **Check before inviting**, and **View history** bypass completed cached responses. Saves always reach CRM, clear cached reads, and are never automatically retried. Auth rejections, detected CRM tab navigation/closure, and a changed CRM user invalidate cached responses.

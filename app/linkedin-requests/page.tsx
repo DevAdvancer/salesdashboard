@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ProtectedRoute } from "@/components/protected-route";
 import { LinkedinExtensionSection } from "@/components/linkedin-extension-guide";
+import { LinkedinDailyExport } from "@/components/linkedin-daily-export";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,6 +81,7 @@ function LinkedinRequestsContent() {
   const { toast } = useToast();
   const router = useRouter();
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+  const [helperDetected, setHelperDetected] = useState(false);
   const [dateSent, setDateSent] = useState(todayDateInputValue());
   const [today, setToday] = useState(todayDateInputValue);
   const [displayTimeZone, setDisplayTimeZone] = useState("America/New_York");
@@ -95,7 +97,7 @@ function LinkedinRequestsContent() {
     ReturnType<typeof getLinkedinConnectionHistoryAction>
   > | null>(null);
   const [adding, setAdding] = useState(false);
-  const [filterDate, setFilterDate] = useState<string>("");
+  const [filterDate, setFilterDate] = useState<string>(todayDateInputValue);
   const [filterStatus, setFilterStatus] = useState<"all" | "sent" | "accepted" | "withdrawn">("all");
   const [filterUrl, setFilterUrl] = useState<string>("");
   const [appliedFilterUrl, setAppliedFilterUrl] = useState<string>("");
@@ -451,7 +453,8 @@ function LinkedinRequestsContent() {
 
   return (
     <div className="container mx-auto space-y-6">
-      <LinkedinExtensionSection />
+      {!helperDetected && <LinkedinExtensionSection onDetection={setHelperDetected} />}
+      <LinkedinDailyExport />
       <Card>
         <CardHeader>
           <CardTitle>Linkedin Request</CardTitle>
@@ -964,6 +967,7 @@ function LinkedinRequestsContent() {
           </div>
         </div>
       )}
+      {helperDetected && <LinkedinExtensionSection onDetection={setHelperDetected} />}
     </div>
   );
 }

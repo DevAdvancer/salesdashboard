@@ -11,7 +11,7 @@ export function normalizeProfileUrl(value: unknown): string {
     throw new Error("Use a public linkedin.com/in/ profile URL.");
   }
   const match = /^\/in\/([^/]+)(?:\/(?:overlay|details)\/[^/]+)?\/?$/i.exec(url.pathname);
-  if (!match) throw new Error("Open a public LinkedIn profile (/in/…). Sales Navigator URLs are not supported yet.");
+  if (!match?.[1]) throw new Error("Open a public LinkedIn profile (/in/…). Sales Navigator URLs are not supported yet.");
   let slug: string;
   try { slug = decodeURIComponent(match[1]).normalize("NFC").toLowerCase(); }
   catch { throw new Error("Enter a valid LinkedIn profile URL."); }

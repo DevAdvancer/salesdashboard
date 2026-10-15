@@ -5,6 +5,7 @@ import { validateLeadUniqueness } from '@/lib/services/lead-validator';
 import { logAction } from '@/lib/services/audit-service';
 import { getUserById } from '@/lib/services/user-service';
 import { getErrorMessage } from '@/lib/utils';
+import { isSalesTeamLeadAssignee } from '@/lib/utils/lead-assignment';
 import { isAllowedLeadStatusTransition, normalizeLeadStatus } from '@/lib/utils/lead-status-workflow';
 
 import { getLead } from './queries';
@@ -396,6 +397,15 @@ export async function assignLead(
     await assertActorCanMutateLead(actorId);
 
     const currentLead = await getLead(leadId);
+    if (actorId) {
+      const actor = await getUserById(actorId);
+      if (actor.role === 'lead_generation') {
+        const assignee = await getUserById(agentId);
+        if (currentLead.ownerId !== actorId || !isSalesTeamLeadAssignee(assignee)) {
+          throw new Error('Lead generation can only assign their own leads to active Sales department team leads.');
+        }
+      }
+    }
     let leadName = '';
     try {
       leadName = getLeadAuditName(JSON.parse(currentLead.data) as LeadData);

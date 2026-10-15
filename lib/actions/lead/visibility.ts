@@ -3,6 +3,7 @@ import { BUCKETS, COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { Permission, Role, ID, Query } from 'node-appwrite';
 import { Lead, User } from '@/lib/types';
 import { logger } from '@/lib/utils/logger';
+import { isSalesTeamLeadAssignee } from '@/lib/utils/lead-assignment';
 
 type AdminDatabases = Awaited<ReturnType<typeof createAdminClient>>['databases'];
 type HierarchyUserDocument = {
@@ -126,11 +127,8 @@ export async function assertAssignmentAllowed(actor: User, agent: User, lead: Le
         if (!actorOwnsLead) {
             throw new Error('Permission denied');
         }
-        if (agent.role !== 'team_lead') {
-            throw new Error('Lead generation can only assign leads to team leads.');
-        }
-        if (agent.isActive === false) {
-            throw new Error('Inactive team leads cannot be assigned leads.');
+        if (!isSalesTeamLeadAssignee(agent)) {
+            throw new Error('Lead generation can only assign leads to active Sales department team leads.');
         }
         return;
     }

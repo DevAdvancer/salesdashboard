@@ -155,9 +155,18 @@ export function useLinkedinHelper() {
       const data = await requestCrm<ExtensionRecord>({ operation: "record", accountId: state.accountId,
         targetUrl, ...(checked ? { revision: checked.revision } : {}), confirmResend: state.confirmResend });
       if (data.user.id !== state.bootstrap?.user.id) throw new Error("The signed-in CRM user changed. Refresh accounts before continuing.");
+      let copyNote = "";
+      if (data.mode === "created" || data.mode === "resent") {
+        try {
+          await navigator.clipboard.writeText(data.targetUrl);
+          copyNote = " Profile URL copied.";
+        } catch {
+          copyNote = " Could not copy the profile URL. Copy it from the profile field; the request is saved.";
+        }
+      }
       if (mounted.current) setState(previous => ({ ...withResult(previous, data), historyVisible: false,
         note: data.mode === "existing" ? "No request added. Review the profile status." :
-          `${data.mode === "resent" ? "Resend" : "Request"} recorded · ${data.remaining ?? "?"} remaining.`,
+          `${data.mode === "resent" ? "Resend" : "Request"} recorded · ${data.remaining ?? "?"} remaining.${copyNote}`,
         noteKind: data.mode === "existing" ? "info" : "success" }));
     }); },
     openCrm() { void perform(async () => { await sendBridge({ type: "open-crm" }); }); },
