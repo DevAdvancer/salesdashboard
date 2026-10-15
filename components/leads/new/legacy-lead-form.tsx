@@ -25,6 +25,7 @@ import {
   getLinkedinProfileDefaultValues,
   getLinkedinProfileValue,
   isLinkedinProfileField,
+  normalizeLinkedinProfileFormField,
 } from "@/lib/utils/lead-linkedin-field";
 import { parseLeadActionError } from "@/lib/utils/lead-action-error";
 import { formatUsPhone } from "./phone-utils";
@@ -149,7 +150,7 @@ export function LegacyNewLeadContent() {
       setError(null);      // Default to a fallback array if cached action fails.
       const cachedConfig = await getCachedFormConfigAction().catch(() => ({ fields: [] }));
       const config = cachedConfig as { fields: any[] };
-      const fields = config.fields;
+      const fields = config.fields.map(normalizeLinkedinProfileFormField);
       const sorted = fields.sort((a, b) => a.order - b.order);
       const adjusted = isLinkedinRequestLead
         ? sorted.map((field) =>

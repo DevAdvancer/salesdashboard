@@ -15,6 +15,12 @@ const LINKEDIN_PROFILE_FIELD_KEYS = new Set([
  */
 const LEGACY_LINKEDIN_READ_ONLY_KEYS = new Set(["field_16"]);
 
+export function normalizeLinkedinProfileFormField(field: FormField): FormField {
+  return LEGACY_LINKEDIN_READ_ONLY_KEYS.has(field.key)
+    ? { ...field, key: "linkedinProfileUrl" }
+    : field;
+}
+
 function normalizeFieldText(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }

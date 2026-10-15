@@ -2,6 +2,7 @@ import {
   getLinkedinProfileDefaultValues,
   getLinkedinProfileValue,
   isLinkedinProfileField,
+  normalizeLinkedinProfileFormField,
 } from "@/lib/utils/lead-linkedin-field";
 import { FormField } from "@/lib/types";
 
@@ -79,6 +80,20 @@ describe("lead linkedin field helpers", () => {
     ).toEqual({
       linkedinProfileUrl: "https://linkedin.com/in/new-value",
     });
+  });
+
+  it("prefills the rendered legacy field using canonical storage and keeps it recognizable for locking", () => {
+    const field = normalizeLinkedinProfileFormField(legacyField16Field);
+    const defaults = getLinkedinProfileDefaultValues(
+      [field],
+      "https://linkedin.com/in/accepted-request",
+    );
+
+    expect(field.key).toBe("linkedinProfileUrl");
+    expect(defaults[field.key]).toBe("https://linkedin.com/in/accepted-request");
+    expect(isLinkedinProfileField(field)).toBe(true);
+    expect(defaults).not.toHaveProperty("field_16");
+    expect(legacyField16Field.key).toBe("field_16");
   });
 });
 
