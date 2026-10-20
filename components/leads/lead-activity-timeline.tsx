@@ -1,5 +1,6 @@
 'use client';
 
+import { getLeadLifecycleEvents } from '@/lib/utils/lead-payment-cycle';
 import { Activity } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -106,6 +107,11 @@ export function LeadActivityTimeline({ lead }: LeadActivityTimelineProps) {
     };
   }, [lead.$id, lead.$updatedAt]);
 
+  const lifecycleEvents = useMemo(() => {
+    try { return getLeadLifecycleEvents(JSON.parse(lead.data || '{}')).slice().reverse(); }
+    catch { return []; }
+  }, [lead.data]);
+
   const events = useMemo(() => {
     return [
       { label: 'Created', value: lead.$createdAt },
@@ -125,10 +131,21 @@ export function LeadActivityTimeline({ lead }: LeadActivityTimelineProps) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {events.length === 0 && followUpLogs.length === 0 ? (
+        {events.length === 0 && followUpLogs.length === 0 && lifecycleEvents.length === 0 ? (
           <p className="text-sm text-muted-foreground">No timeline activity yet.</p>
         ) : (
           <div className="space-y-4">
+            {lifecycleEvents.map(event => (
+              <div key={event.id} className="border-l-2 border-primary pl-4 text-sm">
+                <p className="font-medium">{event.type === 'reopened' ? 'Lead reopened' : event.type === 'updated' ? 'Lead details updated' : 'Lead closed'}</p>
+                <p className="text-xs text-muted-foreground">{formatDate(event.createdAt)} · {event.actorName}</p>
+                {Object.entries(event.changes ?? {}).map(([field, change]) => (
+                  <p key={field} className="break-words text-xs text-muted-foreground">
+                    {field}: {JSON.stringify(change.from)} → {JSON.stringify(change.to)}
+                  </p>
+                ))}
+              </div>
+            ))}
             {followUpLogs.length > 0 ? (
               <div className="space-y-3">
                 <p className="text-sm font-semibold">Follow-Up Updates</p>

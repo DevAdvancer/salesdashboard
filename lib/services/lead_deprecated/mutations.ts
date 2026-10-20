@@ -1,4 +1,4 @@
-import { Permission, Role } from 'appwrite';
+import { ID, Permission, Role } from 'appwrite';
 import { databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { Lead, CreateLeadInput, LeadData } from '@/lib/types';
 import { validateLeadUniqueness } from '@/lib/services/lead-validator';
@@ -7,7 +7,7 @@ import { getUserById } from '@/lib/services/user-service';
 import { getErrorMessage } from '@/lib/utils';
 import { isSalesTeamLeadAssignee } from '@/lib/utils/lead-assignment';
 import { isAllowedLeadStatusTransition, normalizeLeadStatus } from '@/lib/utils/lead-status-workflow';
-import { recordLeadLifecycleEvent } from '@/lib/utils/lead-payment-cycle';
+import { recordLeadLifecycleEvent, recordReopenedLeadChanges, getReopenedLeadMetadataPatch } from '@/lib/utils/lead-payment-cycle';
 
 import { getLead } from './queries';
 import { getHierarchyPermissions } from './visibility';
@@ -141,11 +141,10 @@ export async function updateLead(
     const currentLead = await getLead(leadId);
     const currentData = JSON.parse(currentLead.data) as LeadData;
 
-    const updatedData = { ...currentData, ...data };
-    for (const key of ['lifecycleHistory', 'paymentCycleId']) {
-      if (key in currentData) updatedData[key] = currentData[key];
-      else delete updatedData[key];
-    }
+    const updatedData = recordReopenedLeadChanges(
+      currentLead, { ...currentData, ...data }, actorId || currentLead.ownerId,
+      actorName || actorId || currentLead.ownerId, new Date().toISOString(), ID.unique(),
+    );
 
     const nextStatus = (updatedData as any).status;
     if (nextStatus) {
@@ -445,6 +444,10 @@ export async function assignLead(
       leadId,
       {
         assignedToId: agentId,
+        ...getReopenedLeadMetadataPatch(
+          currentLead, { assignedToId: agentId }, actorId || currentLead.ownerId,
+          actorName || actorId || currentLead.ownerId, new Date().toISOString(), ID.unique(),
+        ),
       },
       permissions
     );

@@ -1,4 +1,6 @@
 "use server";
+
+import { getFollowupsPaymentAmount } from "@/lib/utils/followups-payment-amount";
 import { getPaymentCycleAttribution } from '@/lib/utils/lead-payment-cycle';
 
 import { Query } from "node-appwrite";
@@ -597,8 +599,8 @@ export async function getWeeklyReportAction(input: {
 
   followupRecords.forEach((record) => {
     const leadId = typeof record.leadId === "string" ? record.leadId : "";
-    const amount = Number(record.amount) || 0;
-    if (!leadId || amount <= 0) return;
+    const amount = getFollowupsPaymentAmount(record);
+    if (!leadId || amount === 0) return;
 
     let targetAgentId = "";
 

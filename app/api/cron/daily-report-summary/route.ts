@@ -1,3 +1,4 @@
+import { getFollowupsPaymentAmount } from "@/lib/utils/followups-payment-amount";
 import { NextResponse, type NextRequest } from "next/server";
 import { Query } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
@@ -38,17 +39,14 @@ export async function GET(request: NextRequest) {
   const { databases } = await createAdminClient();
   const todayKey = getTodayEst();
   const holidays = await listHolidayDateKeys({ databases, from: todayKey, to: todayKey });
-  
   if (!isWorkingDateKey(todayKey, holidays)) {
     return NextResponse.json({ ok: true, skipped: true, reason: "Not a working day" });
   }
 
   const reportEmails = await getReportEmails(databases);
-  
   if (reportEmails.length === 0) {
     return NextResponse.json({ ok: true, skipped: true, reason: "No report recipients configured" });
   }
-  
   const startIso = `${todayKey}T00:00:00.000Z`;
   const endIso = `${todayKey}T23:59:59.999Z`;
 
@@ -77,7 +75,6 @@ export async function GET(request: NextRequest) {
     pageLimit: 100,
     maxPages: 500,
   });
-  
   const validClosed = closedLeads.filter((l: any) => {
     const c = l.closedAt ?? l.$updatedAt;
     return c >= startIso && c <= endIso;
@@ -111,7 +108,6 @@ export async function GET(request: NextRequest) {
     if (l.ownerId) allUserIds.add(l.ownerId);
     if (l.assignedToId) allUserIds.add(l.assignedToId);
   });
-  
   // Need leads for followups to find agent ID
   const followupLeadIds = Array.from(new Set(followupsDocs.map((f: any) => f.leadId).filter(Boolean)));
   const followupLeads: any[] = [];
@@ -194,11 +190,10 @@ export async function GET(request: NextRequest) {
     if (actorId && actorId !== "unassigned") {
       const stat = agentStats.get(actorId) || { leadsClosedCount: 0, followupsCount: 0, revenueTotal: 0 };
       stat.followupsCount += 1;
-      stat.revenueTotal += (Number(f.amount) || 0);
+      stat.revenueTotal += getFollowupsPaymentAmount(f);
       agentStats.set(actorId, stat);
     }
   });
-  
   const paymentDocs = await listAllDocuments<any>({
     databases,
     databaseId: DATABASE_ID,
@@ -221,7 +216,6 @@ export async function GET(request: NextRequest) {
     });
     allPaymentLeadDocs.push(...chunkDocs);
   }
-  
   const leadDataMap = new Map<string, { company: string, leadStatus: string, leadAmount: number, closedAt: string | null }>();
   for (const lead of allPaymentLeadDocs) {
     let company = "";
@@ -245,15 +239,13 @@ export async function GET(request: NextRequest) {
     } catch {}
     leadDataMap.set(lead.$id, { company, leadStatus: lead.status || "", leadAmount, closedAt: lead.closedAt || null });
   }
-  
   const companyMap = new Map<string, { company: string, total: number, upfront: number, pending: number, remaining: number, count: number }>();
-  
   // Group followups by lead for the payments table
   const leadFollowupsMap = new Map<string, number>();
   for (const fDoc of followupsDocs) {
     const fLeadId = fDoc.leadId || "";
     if (fLeadId) {
-      leadFollowupsMap.set(fLeadId, (leadFollowupsMap.get(fLeadId) || 0) + (Number(fDoc.amount) || 0));
+      leadFollowupsMap.set(fLeadId, (leadFollowupsMap.get(fLeadId) || 0) + getFollowupsPaymentAmount(fDoc));
     }
   }
 
@@ -304,7 +296,6 @@ export async function GET(request: NextRequest) {
     ex.count += 1;
     companyMap.set(key, ex);
   }
-  
   const techPayments = await listAllDocuments<any>({
     databases,
     databaseId: DATABASE_ID,
@@ -328,7 +319,6 @@ export async function GET(request: NextRequest) {
   );
 
   let html = `<h2>Daily Report Summary - ${todayKey}</h2>`;
-  
   html += `<h3>Leads Generated Today</h3>`;
   if (generatedMap.size === 0) {
     html += `<p>No leads generated today.</p>`;
@@ -406,7 +396,6 @@ export async function GET(request: NextRequest) {
 
   const toEmails = reportEmails.join(",");
   const subject = `Daily Report Summary - ${todayKey}`;
-  
   await sendNotificationEmail({ to: toEmails, subject, html, allowAllRecipients: true });
 
   return NextResponse.json({ ok: true, sentTo: reportEmails.length });

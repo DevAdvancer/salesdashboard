@@ -1,5 +1,7 @@
 'use server';
 
+import { getReopenedLeadMetadataPatch } from "@/lib/utils/lead-payment-cycle";
+
 import { createAdminClient } from '@/lib/server/appwrite';
 import { createNotificationsForRecipients } from '@/lib/server/notifications';
 import { BUCKETS, COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
@@ -107,6 +109,10 @@ export async function assignLeadAction(
             leadId,
             {
                 assignedToId: agentId,
+                ...getReopenedLeadMetadataPatch(
+                    currentLead, { assignedToId: agentId }, actorId, actorDoc.name || actorName,
+                    new Date().toISOString(), ID.unique(),
+                ),
             },
             permissions
         );

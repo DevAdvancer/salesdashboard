@@ -351,6 +351,22 @@ describe('lead server action authorization', () => {
     );
   });
 
+  it('persists reopened lead field changes in the same document update', async () => {
+    const reopenEvent = { id: 'reopen', type: 'reopened', actorId: 'admin', actorName: 'Admin',
+      createdAt: '2026-10-20T12:00:00Z', status: 'Reopened', previousStatus: 'Won', previousClosedAt: '2026-10-01T12:00:00Z' };
+    mockGetDocument.mockResolvedValueOnce({ $id: 'admin', name: 'Admin', role: 'admin', department: 'sales' })
+      .mockResolvedValueOnce({ $id: 'lead-1', ownerId: 'admin', status: 'Reopened', isClosed: false,
+        data: JSON.stringify({ firstName: 'Current', lastName: 'Lead', email: 'current@example.com',
+          phone: '5551112222', paymentCycleId: 'cycle-2', lifecycleHistory: [reopenEvent] }) });
+    const { updateLeadAction } = await import('@/app/actions/lead/mutations');
+    await updateLeadAction('lead-1', { firstName: 'Changed' }, 'admin', 'Admin');
+    const saved = JSON.parse(mockUpdateDocument.mock.calls.find(call => call[1] === 'leads')[3].data);
+    expect(saved.paymentCycleId).toBe('cycle-2');
+    expect(saved.lifecycleHistory).toEqual([reopenEvent, expect.objectContaining({
+      type: 'updated', actorId: 'admin', actorName: 'Admin', changes: { firstName: { from: 'Current', to: 'Changed' } },
+    })]);
+  });
+
   it('rejects monitor lead edits when the monitor does not own the lead', async () => {
     mockGetDocument
       .mockResolvedValueOnce({

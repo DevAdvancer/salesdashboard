@@ -40,12 +40,11 @@ const databases = { clearReadCacheForCollection: jest.fn(), createDocument: jest
 const input = { accountId: account.$id, targetUrl: "https://linkedin.com/in/person/?trk=test" };
 let records: any[];
 let used: any[];
-let leads: any[];
 
 beforeEach(() => {
   jest.resetAllMocks();
   jest.useFakeTimers().setSystemTime(new Date("2026-10-06T02:00:00Z")); // Oct 5 in Eastern time.
-  records = []; used = []; leads = [];
+  records = []; used = [];
   (createAdminClient as jest.Mock).mockResolvedValue({ databases });
   (getAuthenticatedUserDoc as jest.Mock).mockResolvedValue({ $id: "agent-1", name: "Agent", role: "agent", department: "sales", isActive: true });
   (hasLinkedinHelperAccess as jest.Mock).mockResolvedValue(true);
@@ -53,7 +52,7 @@ beforeEach(() => {
   (assertAccessibleLinkedinAccount as jest.Mock).mockResolvedValue(account);
   (isBlockingLinkedinRequest as jest.Mock).mockImplementation(r =>
     r.status !== "withdrawn" && !(r.isActive === false && r.withdrawnAt));
-  (listAllDocuments as jest.Mock).mockImplementation(async ({ collectionId }) => collectionId === COLLECTIONS.LEADS ? leads :
+  (listAllDocuments as jest.Mock).mockImplementation(async () =>
     records.map(record => ({ company: account.company, ...record })));
   databases.listDocuments.mockImplementation(async () => ({ total: used.length, documents: [] }));
   databases.createDocument.mockResolvedValue({ $id: "saved" });
@@ -197,23 +196,4 @@ it("falls back for unsupported contains queries without skipping legacy duplicat
   expect((await checkLinkedinExtension(input)).state).toBe("new");
   expect((listAllDocuments as jest.Mock).mock.calls.some(([args]) =>
     !args.queries.some((q: string) => q.includes('"contains"')))).toBe(true);
-});
-
-it("blocks a profile found only in a legacy CRM lead and exposes no lead details", async () => {
-  leads = [{ $id: "private-lead", ownerId: "other", data: JSON.stringify({ field_16: "https://linkedin.com/in/PERSON/?trk=old", email: "private@example.com" }) }];
-  const data = await checkLinkedinExtension(input);
-  expect(data).toMatchObject({ state: "existing_lead", canRecord: false, leadExists: true, knownToCrm: true });
-  expect(JSON.stringify(data)).not.toMatch(/private-lead|private@example.com/);
-  await expect(recordLinkedinExtension({ ...input, revision: data.revision, confirmResend: false })).rejects.toMatchObject({ status: 409 });
-  expect(databases.createDocument).not.toHaveBeenCalled();
-});
-
-it("distinguishes another company's history from a profile unknown to CRM", async () => {
-  records = [{ $id: "other-company", company: "Vizva", targetUrl: input.targetUrl, status: "sent" }];
-  expect(await checkLinkedinExtension(input)).toMatchObject({ state: "new", knownToCrm: true, leadExists: false });
-});
-
-it("refuses an automatic recording under a different CRM session user before writing", async () => {
-  await expect(recordLinkedinExtension({ ...input, confirmResend: false, expectedUserId: "previous-agent" })).rejects.toMatchObject({ status: 409 });
-  expect(databases.createDocument).not.toHaveBeenCalled();
 });

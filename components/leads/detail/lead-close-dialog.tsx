@@ -79,6 +79,11 @@ export function LeadCloseDialog({
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {leadData.paymentCycleId && (
+            <p className="mb-4 text-sm text-muted-foreground">
+              Closing this reopened lead adds a new payment record to Payment History. Earlier payments are preserved.
+            </p>
+          )}
           {closeStep === 1 && (
             <div className="space-y-4">
               <div>

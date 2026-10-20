@@ -1,3 +1,4 @@
+import { getFollowupsPaymentAmount } from "@/lib/utils/followups-payment-amount";
 import { getTargetMonthBound } from "@/app/actions/target-month-bounds";
 import { NextResponse, type NextRequest } from "next/server";
 import { getPaymentCycleAttribution } from '@/lib/utils/lead-payment-cycle';
@@ -58,7 +59,6 @@ export async function GET(request: NextRequest) {
   const monthKey = todayKey.slice(0, 7); // e.g. "2026-09"
 
   const reportEmails = await getReportEmails(databases);
-  
   if (reportEmails.length === 0) {
     return NextResponse.json({ ok: true, skipped: true, reason: "No report recipients configured" });
   }
@@ -179,7 +179,6 @@ export async function GET(request: NextRequest) {
 
   const followupsByAgentId: Record<string, number> = {};
   const readableSet = new Set(readableAgentIds);
-  
   const followupsDocs = await listAllDocuments<any>({
     databases,
     databaseId: DATABASE_ID,
@@ -197,7 +196,6 @@ export async function GET(request: NextRequest) {
       .map((d) => typeof d.leadId === "string" ? d.leadId : "")
       .filter((id) => id && !id.startsWith("manual_followup:"))
   ));
-  
   const followupLeadById = new Map<string, any>();
   if (followupLeadIds.length > 0) {
     for (let i = 0; i < followupLeadIds.length; i += CHUNK) {
@@ -216,8 +214,8 @@ export async function GET(request: NextRequest) {
 
   for (const doc of followupsDocs) {
     const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
-    const amount = typeof doc.amount === "number" ? doc.amount : 0;
-    if (!leadId || amount <= 0) continue;
+    const amount = getFollowupsPaymentAmount(doc);
+    if (!leadId || amount === 0) continue;
 
     let targetAgentId = "";
     const creditedAgentId = typeof doc.creditedAgentId === "string" && doc.creditedAgentId.trim() !== "" ? doc.creditedAgentId : null;
@@ -334,7 +332,7 @@ export async function GET(request: NextRequest) {
 
     const followupsForThisLead = followupsDocs
       .filter((doc) => doc.leadId === leadId && cycle.isCurrent)
-      .reduce((sum, doc) => sum + (Number(doc.amount) || 0), 0);
+      .reduce((sum, doc) => sum + getFollowupsPaymentAmount(doc), 0);
 
     for (const [agentId, initialAmount] of agentTotals.entries()) {
       let amount = initialAmount;
@@ -389,9 +387,7 @@ export async function GET(request: NextRequest) {
   });
 
   const isMonthOver = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() === now.getDate();
-  
   let html = `<h2>Target Report - ${monthKey}</h2>`;
-  
   html += `<table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%; max-width: 800px;">
     <tr style="background-color: #f9fafb;">
       <th style="text-align: left;">TL / Agent</th>
@@ -444,7 +440,6 @@ export async function GET(request: NextRequest) {
 
   const toEmails = reportEmails.join(",");
   const subject = `Target Report - ${monthKey}`;
-  
   await sendNotificationEmail({ to: toEmails, subject, html, allowAllRecipients: true });
 
   return NextResponse.json({ ok: true, sentTo: reportEmails.length });

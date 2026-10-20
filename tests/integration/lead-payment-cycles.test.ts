@@ -1,11 +1,11 @@
 import { COLLECTIONS } from '@/lib/constants/appwrite';
 import type { Lead } from '@/lib/types';
 import { getPaymentCycleAttribution, recordLeadLifecycleEvent } from '@/lib/utils/lead-payment-cycle';
-import { createPreviousFollowupsPaymentAction } from '@/app/actions/previous-followups-payments';
+import { createPreviousFollowupsPaymentAction, updatePreviousFollowupsPaymentAction } from '@/app/actions/previous-followups-payments';
 import { FOLLOWUPS_PAYMENT_COMPANIES } from '@/lib/types';
 import { getClientPaymentRecordAction, upsertClientPaymentRecordAction, addClientPaymentUpdateAction } from '@/app/actions/client-payments/record';
 import { listClientPaymentSummariesAction } from '@/app/actions/client-payments/list';
-import { listPaymentsReportAction } from '@/app/actions/client-payments/insights';
+import { listPaymentsReportAction, listAllPaymentInsightsAction } from '@/app/actions/client-payments/insights';
 
 const mockDocs = new Map<string, any>();
 jest.mock('node-appwrite', () => ({
@@ -18,12 +18,14 @@ jest.mock('node-appwrite', () => ({
   },
 }));
 const mockCreateDocument = jest.fn(async (_db, collection, id, payload) => {
+  if (collection === COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS && payload.amount < 0) throw new Error('Appwrite amount must be nonnegative');
   if (mockDocs.has(id)) throw Object.assign(new Error('Conflict'), { code: 409 });
   const doc = { ...payload, $id: id, $createdAt: payload.createdAt };
   mockDocs.set(id, doc);
   return doc;
 });
 const mockUpdateDocument = jest.fn(async (_db, collection, id, payload) => {
+  if (collection === COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS && payload.amount < 0) throw new Error('Appwrite amount must be nonnegative');
   const doc = { ...mockDocs.get(id), ...payload };
   mockDocs.set(id, doc);
   return doc;
@@ -38,7 +40,7 @@ jest.mock('@/lib/server/appwrite', () => ({
     listDocuments: async (_db, collection, rawQueries) => {
       const queries = rawQueries.map(q => JSON.parse(q));
       let rows = [...mockDocs.values()].filter(d => collection === COLLECTIONS.CLIENT_PAYMENTS
-        ? Boolean(d.paymentPlan) : collection === COLLECTIONS.LEADS ? Boolean(d.data) : Boolean(d.role));
+        ? Boolean(d.paymentPlan) : collection === COLLECTIONS.LEADS ? Boolean(d.data) : collection === COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS ? typeof d.amount === 'number' : Boolean(d.role));
       for (const q of queries) {
         if (q.method === 'equal') rows = rows.filter(d => q.values.includes(d[q.attribute]));
         if (q.method === 'orderDesc') rows.sort((a, b) => String(b[q.attribute]).localeCompare(String(a[q.attribute])));
@@ -121,11 +123,39 @@ describe('closure payment cycles', () => {
     expect(refunded.updates.reduce((sum, u) => sum + (u.amount ?? 0), 0)).toBe(1400);
   });
 
-  it('persists an explicit refund status and negative amount on a followup row', async () => {
+  it('stores a nonnegative refund magnitude and returns the signed amount', async () => {
     const row = await createPreviousFollowupsPaymentAction({ actorId: 'admin',
       company: FOLLOWUPS_PAYMENT_COMPANIES[0], candidateName: 'Client', amount: 200,
       date: '2026-10-19', status: 'refunded' });
     expect(row).toMatchObject({ amount: -200, status: 'refunded' });
+    expect(mockDocs.get(row.$id)).toMatchObject({ amount: 200, status: 'refunded' });
+  });
+
+  it('edits a refund, preserves its sign on unrelated edits, and can change it back to paid', async () => {
+    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({ ok: true } as Response);
+    try {
+      const row = await createPreviousFollowupsPaymentAction({ actorId: 'admin',
+        company: FOLLOWUPS_PAYMENT_COMPANIES[0], candidateName: 'Client', amount: 200,
+        date: '2026-10-19', status: 'paid' });
+      const refund = await updatePreviousFollowupsPaymentAction({ actorId: 'admin', paymentId: row.$id, status: 'refunded', amount: -250 });
+      expect(refund.amount).toBe(-250);
+      expect(mockDocs.get(row.$id).amount).toBe(250);
+      const edited = await updatePreviousFollowupsPaymentAction({ actorId: 'admin', paymentId: row.$id, remark: 'Refund confirmed' });
+      expect(edited.amount).toBe(-250);
+      const paid = await updatePreviousFollowupsPaymentAction({ actorId: 'admin', paymentId: row.$id, status: 'paid' });
+      expect(paid).toMatchObject({ amount: 250, status: 'paid' });
+    } finally { fetchSpy.mockRestore(); }
+  });
+
+  it('deducts a stored positive refund in payment reports', async () => {
+    await upsertClientPaymentRecordAction(input);
+    await createPreviousFollowupsPaymentAction({ actorId: 'admin',
+      company: FOLLOWUPS_PAYMENT_COMPANIES[0], candidateName: 'Client', amount: 200,
+      date: '2026-10-19', status: 'refunded' });
+    const rows = await listAllPaymentInsightsAction('admin');
+    expect(rows).toEqual(expect.arrayContaining([expect.objectContaining({
+      totalPaid: -200, status: 'refunded', followupsMonthlyAmounts: { '2026-10': -200 },
+    })]));
   });
 
   it('keeps the original closure date and assignee when the lead is later reassigned', () => {

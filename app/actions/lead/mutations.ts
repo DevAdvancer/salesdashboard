@@ -34,7 +34,7 @@ import { parseIsoDateLocal, daysInMonthLocal } from "./sync-helpers";
 import { createNotificationsForRecipients } from "@/lib/server/notifications";
 import { getLeadDisplayName } from "@/lib/actions/lead/utils";
 import { isSalesTeamLeadAssignee } from '@/lib/utils/lead-assignment';
-import { recordLeadLifecycleEvent } from '@/lib/utils/lead-payment-cycle';
+import { recordLeadLifecycleEvent, recordReopenedLeadChanges } from '@/lib/utils/lead-payment-cycle';
 
 export async function restoreNotInterestedDuplicateLead(input: {
         databases: Awaited<ReturnType<typeof createAdminClient>>['databases'];
@@ -443,12 +443,10 @@ export async function updateLeadAction(leadId: string, data: Partial<LeadData>, 
         await assertLeadUpdateAllowed(databases, actorDoc, currentLead);
 
         const currentData = JSON.parse(currentLead.data) as LeadData;
-        const updatedData = { ...currentData, ...data };
-        // Lifecycle/cycle identifiers are managed by close/reopen, never by form input.
-        for (const key of ['lifecycleHistory', 'paymentCycleId']) {
-            if (key in currentData) updatedData[key] = currentData[key];
-            else delete updatedData[key];
-        }
+        const updatedData = recordReopenedLeadChanges(
+            currentLead, { ...currentData, ...data }, actorId,
+            actorDoc.name || actorName || actorId, new Date().toISOString(), ID.unique(),
+        );
 
         const lockedField = getChangedLockedLeadContactField(currentData, updatedData);
         if (lockedField) {

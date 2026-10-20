@@ -300,6 +300,7 @@ function LeadDetailContent() {
   useEffect(() => {
     if (!showCloseDialog) return;
     setCloseStep(1);
+    setInitialPaymentStatus("");
     void loadCloseConfigs();
   }, [showCloseDialog, loadCloseConfigs]);
 

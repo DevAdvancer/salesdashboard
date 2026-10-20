@@ -7,10 +7,6 @@
  * without touching another user's cache.
  */
 export const queryKeys = {
-  linkedinHelper: {
-    access: (userId: string) => ['linkedin-helper', 'access', userId] as const,
-    betaUsers: (userId: string) => ['linkedin-helper', 'beta-users', userId] as const,
-  },
   leads: {
     all: ["leads"] as const,
     list: (

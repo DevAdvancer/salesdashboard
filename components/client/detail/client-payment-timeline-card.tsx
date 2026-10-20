@@ -24,8 +24,11 @@ export function ClientPaymentTimelineCard({ paymentRecord }: ClientPaymentTimeli
     }))),
     ...(paymentRecord.lifecycleEvents ?? []).map((event) => ({
       ...event,
-      title: event.type === 'reopened' ? 'Lead reopened' : `Lead closed — ${event.status}`,
-      cycle: '', amount: null, note: null,
+      title: event.type === 'reopened' ? 'Lead reopened' : event.type === 'updated' ? 'Lead details updated' : `Lead closed — ${event.status}`,
+      cycle: '', amount: null,
+      note: event.changes ? Object.entries(event.changes).map(([field, change]) =>
+        `${field}: ${JSON.stringify(change.from)} → ${JSON.stringify(change.to)}`
+      ).join(' • ') : null,
     })),
   ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const formatDate = (date: string) => new Intl.DateTimeFormat('en-US', {

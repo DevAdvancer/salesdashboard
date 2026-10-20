@@ -1,4 +1,6 @@
 "use server";
+
+import { getFollowupsPaymentAmount } from "@/lib/utils/followups-payment-amount";
 import crypto from "crypto";
 import { upsertPendingAmountAction } from "@/app/actions/pending-amounts";
 import { ID, Query } from "node-appwrite";
@@ -174,7 +176,7 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
       typeof fDoc.company === "string" && fDoc.company.trim()
         ? fDoc.company.trim()
         : "Unknown";
-    const amount = Number(fDoc.amount) || 0;
+    const amount = getFollowupsPaymentAmount(fDoc);
     const date = typeof fDoc.date === "string" ? fDoc.date : "";
     const detail = {
       company,
@@ -351,7 +353,7 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
       upfrontAmount: 0,
       months: 0,
       percent: 0,
-      status: "fully_paid",
+      status: followup.amount < 0 ? "refunded" : "fully_paid",
       createdAt: followup.createdAt,
       wasPartiallyPaid: false,
       totalPaid: followup.amount,

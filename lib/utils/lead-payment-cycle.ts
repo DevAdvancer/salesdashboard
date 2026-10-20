@@ -2,13 +2,14 @@ import type { ClientPaymentPlan, Lead, LeadData } from '@/lib/types';
 
 export interface LeadLifecycleEvent {
   id: string;
-  type: 'closed' | 'reopened';
+  type: 'closed' | 'reopened' | 'updated';
   createdAt: string;
   actorId: string;
   actorName: string;
   status: string;
   previousStatus: string;
   previousClosedAt: string | null;
+  changes?: Record<string, { from: unknown; to: unknown }>;
 }
 
 export function getLeadLifecycleEvents(data: LeadData): LeadLifecycleEvent[] {
@@ -18,7 +19,7 @@ export function getLeadLifecycleEvents(data: LeadData): LeadLifecycleEvent[] {
     if (!event || typeof event !== 'object') return false;
     const row = event as Record<string, unknown>;
     return typeof row.id === 'string' && typeof row.createdAt === 'string' &&
-      (row.type === 'closed' || row.type === 'reopened');
+      (row.type === 'closed' || row.type === 'reopened' || row.type === 'updated');
   });
 }
 
@@ -37,6 +38,49 @@ export function recordLeadLifecycleEvent(
       previousStatus: lead.status, previousClosedAt: lead.closedAt ?? null,
     }],
   };
+}
+
+/** Keep saved edits in the same durable history as the reopened payment cycle. */
+export function recordReopenedLeadChanges(
+  lead: Lead, nextData: LeadData, actorId: string, actorName: string, now: string, id: string, metadata: Partial<Lead> = {},
+): LeadData {
+  const previous: LeadData = JSON.parse(lead.data || '{}');
+  const history = getLeadLifecycleEvents(previous);
+  // These fields are server-owned, including when no edit event is needed.
+  const result = { ...nextData };
+  for (const key of ['lifecycleHistory', 'paymentCycleId']) {
+    if (key in previous) result[key] = previous[key];
+    else delete result[key];
+  }
+  if (!history.some(event => event.type === 'reopened')) return result;
+  const changes: Record<string, { from: unknown; to: unknown }> = {};
+  for (const key of new Set([...Object.keys(previous), ...Object.keys(result)])) {
+    if (key === 'lifecycleHistory' || key === 'paymentCycleId') continue;
+    if (JSON.stringify(previous[key]) !== JSON.stringify(result[key])) {
+      changes[key] = { from: previous[key] ?? null, to: result[key] ?? null };
+    }
+  }
+  for (const key of Object.keys(metadata) as Array<keyof Lead>) {
+    if (JSON.stringify(lead[key]) !== JSON.stringify(metadata[key])) {
+      changes[key] = { from: lead[key] ?? null, to: metadata[key] ?? null };
+    }
+  }
+  if (!Object.keys(changes).length) return result;
+  result.lifecycleHistory = [...history, {
+    id, type: 'updated', actorId, actorName, createdAt: now,
+    status: String(result.status || lead.status), previousStatus: lead.status,
+    previousClosedAt: lead.closedAt ?? null, changes,
+  }];
+  return result;
+}
+
+export function getReopenedLeadMetadataPatch(
+  lead: Lead, metadata: Partial<Lead>, actorId: string, actorName: string, now: string, id: string,
+): { data?: string } {
+  const previous: LeadData = JSON.parse(lead.data || '{}');
+  const next = recordReopenedLeadChanges(lead, previous, actorId, actorName, now, id, metadata);
+  return JSON.stringify(next.lifecycleHistory) === JSON.stringify(previous.lifecycleHistory)
+    ? {} : { data: JSON.stringify(next) };
 }
 
 export function getPaymentCycleId(data: LeadData): string {

@@ -19,3 +19,17 @@ it('shows payments from both closure cycles, the reopen actor, and a refund', ()
   expect(screen.getByText(/Payment Amount: \$-1,500/)).toBeInTheDocument();
   expect(screen.getByText('Updated by: Team Lead')).toBeInTheDocument();
 });
+
+it('shows saved lead changes alongside the payment history', () => {
+  render(<ClientPaymentTimelineCard paymentRecord={{ $id: 'new', leadId: 'lead', personalDetails: {},
+    paymentPlan: { percent: 12, months: 4, upfrontAmount: 500 }, status: 'not_paid',
+    createdAt: '2026-10-20T16:00:00Z', updates: [], lifecycleEvents: [{
+      id: 'edit', type: 'updated', actorId: 'agent', actorName: 'Agent', status: 'Reopened',
+      previousStatus: 'Reopened', previousClosedAt: '2026-10-01T15:00:00Z',
+      createdAt: '2026-10-20T15:00:00Z', changes: { leadAmount: { from: 100, to: 500 } },
+    }],
+  }} />);
+  expect(screen.getByText('Lead details updated')).toBeInTheDocument();
+  expect(screen.getByText(/leadAmount: 100 → 500/)).toBeInTheDocument();
+  expect(screen.getByText('Updated by: Agent')).toBeInTheDocument();
+});

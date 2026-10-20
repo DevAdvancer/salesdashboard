@@ -11,7 +11,6 @@ import { logAuditAction, assertAccessibleLinkedinAccount, isBlockingLinkedinRequ
 import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import { normalizeProfileUrl, sameProfile } from "@/lib/utils/linkedin-extension-url";
 import { isWithdrawnLinkedinRequest } from "@/lib/utils/linkedin-request-state";
-import { linkedinProfileHasLead } from "./linkedin-extension-leads";
 import { canUseLinkedinExtension, LinkedinExtensionError, projectExtensionHistory } from "./linkedin-extension-policy";
 import type { LinkedinAccount, LinkedinRequest } from "@/lib/types";
 import type { ExtensionBootstrap, ExtensionCheck, ExtensionRecord, ExtensionState } from "@/lib/types/linkedin-extension";
@@ -71,26 +70,25 @@ async function inspect(input: { accountId: string; targetUrl: string }) {
     if ((error as { code?: number }).code === 400) return queryRecords(false);
     throw error;
   });
-  const [companyRecords, quota, leadExists] = await Promise.all([
-    companyPromise, usage(databases, account, today), linkedinProfileHasLead(databases, targetUrl),
+  const [companyRecords, quota] = await Promise.all([
+    companyPromise, usage(databases, account, today),
   ]);
-  if (companyRecords.length >= 100_000) throw new LinkedinExtensionError(503, "CRM profile lookup is incomplete. Sending is blocked; contact your administrator.");
   const records = companyRecords.filter(record => sameProfile(record.targetUrl, targetUrl) &&
     sameLinkedinCompany(record.company, account.company));
   const blocking = records.map(record => ({ record, blocks: isBlockingLinkedinRequest(record) }));
   const active = (blocking.find(item => item.blocks && item.record.status === "accepted") ||
     blocking.find(item => item.blocks))?.record;
   const latest = records[0];
-  const state: ExtensionState = leadExists ? "existing_lead" : active ? "active_request" :
+  const state: ExtensionState = active ? "active_request" :
     quota.limit === null ? "missing_limit" : quota.remaining === 0 ? "limit_reached" :
     latest ? "resend_available" : "new";
-  return { actor, databases, today, account, targetUrl, records, latest, state, quota, leadExists, knownToCrm: leadExists || companyRecords.some(record => sameProfile(record.targetUrl, targetUrl)) };
+  return { actor, databases, today, account, targetUrl, records, latest, state, quota };
 }
 
 type Inspection = Awaited<ReturnType<typeof inspect>>;
 function result(value: Inspection, includeHistory = false): ExtensionCheck {
   const { actor, today, account, targetUrl, records, latest, state, quota } = value;
-  return { today, targetUrl, user: { id: actor.$id, name: actor.name }, account: projectAccount(account), state, ...quota, leadExists: value.leadExists, knownToCrm: value.knownToCrm,
+  return { today, targetUrl, user: { id: actor.$id, name: actor.name }, account: projectAccount(account), state, ...quota,
     canRecord: state === "new" || state === "resend_available",
     previousRequest: latest ? { status: isWithdrawnLinkedinRequest(latest) ? "withdrawn" : latest.status,
       dateSent: latest.dateSent } : null,
@@ -105,10 +103,9 @@ export async function checkLinkedinExtension(input: { accountId: string; targetU
 }
 
 export async function recordLinkedinExtension(input: {
-  accountId: string; targetUrl: string; revision?: string; confirmResend: boolean; expectedUserId?: string;
+  accountId: string; targetUrl: string; revision?: string; confirmResend: boolean;
 }): Promise<ExtensionRecord> {
   const current = await inspect(input);
-  if (input.expectedUserId && input.expectedUserId !== current.actor.$id) throw new LinkedinExtensionError(409, "The CRM user changed. Review this invitation before recording.");
   const checked = result(current);
   if (input.revision && checked.revision !== input.revision) throw new LinkedinExtensionError(409, "The profile history or business date changed. Check again before recording.");
   if (!input.revision && (!checked.canRecord || current.latest)) return { ...checked, mode: "existing" };

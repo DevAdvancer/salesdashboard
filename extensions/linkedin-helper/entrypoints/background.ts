@@ -3,8 +3,6 @@ import { defineBackground } from "wxt/utils/define-background";
 import { crmPermissionPattern, normalizeCrmOrigin, normalizeProfileUrl } from "crm-shared/utils/linkedin-extension-url";
 import type { ExtensionBootstrap, ExtensionCheck, ExtensionInput, ExtensionMessage, ExtensionResponse } from "crm-shared/types/linkedin-extension";
 import { CrmReadCoordinator } from "../lib/crm-read-coordinator";
-import { PageTracking, type PageMessage, type TrackingAttempt, type TrackingLock, type TrackingPreview } from "../lib/page-tracking";
-import { assertCurrentLinkedinProfile, ProfileChangedError } from '../lib/page-context';
 
 interface FetchResult { status: number; data?: unknown; error?: string }
 const crmTabs = new Map<number, string>();
@@ -28,7 +26,7 @@ async function fetchFromCrm(expectedOrigin: string, input: ExtensionInput | null
   try {
     const response = await fetch(`${expectedOrigin}/api/extension/linkedin`, {
       method: input ? "POST" : "GET", credentials: "same-origin", cache: "no-store",
-      headers: { "X-CRM-Extension": "linkedin-helper-v1", "X-CRM-Extension-Channel": "beta", ...(input ? { "Content-Type": "application/json" } : {}) },
+      headers: { "X-CRM-Extension": "linkedin-helper-v1", ...(input ? { "Content-Type": "application/json" } : {}) },
       ...(input ? { body: JSON.stringify(input) } : {}), signal: controller.signal,
     });
     const data: unknown = await response.json().catch(() => ({ error: response.status === 404
@@ -94,100 +92,34 @@ async function fetchCrm(origin: string, input?: ExtensionInput): Promise<Extensi
   }
 }
 
-async function observeCrmContext(origin: string, response: ExtensionResponse, tracking: PageTracking) {
-  if (!response.ok) {
-    if ([401, 403].includes(response.status || 0)) await tracking.invalidate(origin);
-    return;
-  }
-  const data = response.data;
-  if (typeof data !== 'object' || !data || !('user' in data)) return;
-  const user = data.user;
-  if (typeof user !== 'object' || !user || !('id' in user)) return;
-  const stored = await browser.storage.local.get('trackingLock') as { trackingLock?: TrackingLock };
-  if (stored.trackingLock?.origin === origin && user.id !== stored.trackingLock.userId) await tracking.invalidate(origin);
-}
-
 export default defineBackground(() => {
   const reads = new CrmReadCoordinator({
     async load() { const stored = await browser.storage.session.get("crmReads"); return Array.isArray(stored.crmReads) ? stored.crmReads : []; },
     async save(entries) { await browser.storage.session.set({ crmReads: entries }); },
   }, fetchCrm);
-  const tracking = new PageTracking({
-    async lock() { return (await browser.storage.local.get("trackingLock")).trackingLock as TrackingLock || null; },
-    async setLock(lock) { await browser.storage.local.set({ trackingLock: lock }); },
-    async attempts() { return (await browser.storage.session.get("trackingAttempts")).trackingAttempts as TrackingAttempt[] || []; },
-    async saveAttempts(attempts) { await browser.storage.session.set({ trackingAttempts: attempts }); },
-    async previews() { return (await browser.storage.session.get('trackingPreviews')).trackingPreviews as TrackingPreview[] || []; },
-    async savePreviews(previews) { await browser.storage.session.set({ trackingPreviews: previews }); },
-  }, async <T>(origin: string, input?: ExtensionInput) => {
-    if (!(await browser.permissions.contains({ origins: [crmPermissionPattern(origin)] }))) throw new Error("Reconnect CRM to grant access.");
-    const response = await reads.request(origin, input, true);
-    await observeCrmContext(origin, response, tracking);
-    if (!response.ok || !response.data) throw new Error(!response.ok ? response.error : "CRM returned no data.");
-    return response.data as T;
-  });
   browser.tabs.onUpdated.addListener((tabId, change, tab) => {
     const origin = crmTabs.get(tabId);
-    if (origin && (change.status === "loading" || change.url)) { void reads.invalidate(origin); void tracking.invalidate(origin); }
+    if (origin && (change.status === "loading" || change.url)) void reads.invalidate(origin);
     if (change.status === "complete" && tab.url) {
-      void browser.storage.local.get("crmOrigin").then(async stored => {
+      void browser.storage.local.get("crmOrigin").then(stored => {
         if (!stored.crmOrigin) return;
         const expected = normalizeCrmOrigin(stored.crmOrigin);
-        if (new URL(tab.url!).origin === expected) {
-          await tracking.invalidate(expected);
-          return markCrmTab(tabId, expected);
-        }
+        if (new URL(tab.url!).origin === expected) return markCrmTab(tabId, expected);
       }).catch(() => {});
     }
   });
   browser.tabs.onRemoved.addListener(tabId => {
     const origin = crmTabs.get(tabId);
     crmTabs.delete(tabId);
-    if (origin) { void reads.invalidate(origin); void tracking.invalidate(origin); }
+    if (origin) void reads.invalidate(origin);
   });
-  browser.runtime.onMessage.addListener((message: ExtensionMessage | PageMessage, sender, sendResponse) => {
-    const popup = sender.url === browser.runtime.getURL("/popup.html");
-    let linkedin = false;
-    try {
-      const url = new URL(sender.url || "");
-      linkedin = url.protocol === "https:" && ["www.linkedin.com", "linkedin.com"].includes(url.hostname) && !url.port &&
-        sender.frameId === 0 && sender.tab?.id !== undefined && !sender.tab.incognito;
-    } catch { /* Reject malformed sender metadata. */ }
-    const pageOperation = ["page-status", "page-prepare", "page-sent", "page-cancel", "page-validate", "page-recover"].includes(message?.type);
-    if (sender.id !== browser.runtime.id || (!popup && !linkedin) || (linkedin && !pageOperation)) {
+  browser.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendResponse) => {
+    if (sender.id !== browser.runtime.id || sender.url !== browser.runtime.getURL("/popup.html")) {
       sendResponse({ ok: false, error: "Untrusted extension sender." });
       return false;
     }
     // The worker owns each request and persists the result before replying, even if the popup closes.
-    const work = async () => {
-      const settings = await browser.storage.local.get("crmOrigin");
-      const origin = normalizeCrmOrigin(settings.crmOrigin);
-      if (message.type === "tracking-config" && popup) return { ok: true, data: await tracking.configure(origin, message.accountId) };
-      if (message.type === "tracking-clear" && popup) { await tracking.clearReviewed(message.attemptId); return { ok: true }; }
-      if (pageOperation && linkedin) {
-        const input = message as PageMessage;
-        if (!(await browser.permissions.contains({ origins: [crmPermissionPattern(origin)] }))) throw new Error('Reconnect CRM to grant access.');
-        await assertCurrentLinkedinProfile(sender.tab!.id!, input.targetUrl, tabId => browser.tabs.get(tabId));
-        return { ok: true, data: await tracking.handle(origin, sender.tab!.id!, input) };
-      }
-      if (!popup || pageOperation) throw new Error("Untrusted extension operation.");
-      const input = message as ExtensionMessage;
-      if (input.type === 'crm-api' && input.input?.operation === 'check') {
-        if (!(await browser.permissions.contains({ origins: [crmPermissionPattern(origin)] }))) throw new Error('Reconnect CRM to grant access.');
-        const check = await tracking.readPreview(origin, input.input.accountId, input.input.targetUrl, input.fresh === true);
-        if (check) return { ok: true, data: check };
-      }
-      if (input.type === 'crm-api' && input.input?.operation === 'record') await tracking.invalidate(origin);
-      try {
-        const response = await handle(input, reads);
-        await observeCrmContext(origin, response, tracking);
-        return response;
-      } finally { if (input.type === 'crm-api' && input.input?.operation === 'record') await tracking.invalidate(origin); }
-    };
-    // Slow availability reads for a previous profile must not hold up the current
-    // profile or a confirmed save. Keep every mutation in the serialized queue.
-    ((pageOperation && message.type !== 'page-status') || message.type === "tracking-config" || message.type === "tracking-clear" ? tracking.run(work) : work()).then(sendResponse).catch((error: unknown) => sendResponse({ ok: false,
-      ...(error instanceof ProfileChangedError ? { code: error.code } : {}),
+    handle(message, reads).then(sendResponse).catch((error: unknown) => sendResponse({ ok: false,
       error: error instanceof Error ? error.message : "The extension could not complete this action." }));
     return true;
   });

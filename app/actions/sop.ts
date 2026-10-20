@@ -1,5 +1,7 @@
 "use server";
 
+import { getReopenedLeadMetadataPatch } from "@/lib/utils/lead-payment-cycle";
+
 import { ID, Query } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
 import { createNotificationsForRecipients } from "@/lib/server/notifications";
@@ -171,6 +173,10 @@ export async function updateLeadFollowUpAction(input: {
       nextAction,
       lastContactedAt,
       followUpStatus,
+      ...getReopenedLeadMetadataPatch(
+        previousLead, { nextFollowUpAt, nextAction, lastContactedAt, followUpStatus }, actor.$id, actor.name,
+        new Date().toISOString(), ID.unique(),
+      ),
     }
   );
 

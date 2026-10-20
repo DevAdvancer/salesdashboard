@@ -1,4 +1,6 @@
 "use server";
+
+import { getFollowupsPaymentAmount } from "@/lib/utils/followups-payment-amount";
 import { getPaymentCycleAttribution } from '@/lib/utils/lead-payment-cycle';
 import { getTargetMonthBound } from "@/app/actions/target-month-bounds";
 
@@ -283,8 +285,8 @@ export async function getTargetReportAction(input: {
 
   for (const doc of docs) {
     const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
-    const amount = typeof doc.amount === "number" ? doc.amount : 0;
-    if (!leadId || amount <= 0) continue;
+    const amount = getFollowupsPaymentAmount(doc);
+    if (!leadId || amount === 0) continue;
 
     let targetAgentId = "";
 
@@ -409,7 +411,7 @@ export async function getTargetReportAction(input: {
     // Deduct followups
     const followupsForThisLead = docs
       .filter((doc) => doc.leadId === leadId && cycle.isCurrent)
-      .reduce((sum, doc) => sum + (Number(doc.amount) || 0), 0);
+      .reduce((sum, doc) => sum + getFollowupsPaymentAmount(doc), 0);
 
     for (const [agentId, grossAmount] of agentTotals.entries()) {
       let amount = grossAmount - followupsForThisLead;

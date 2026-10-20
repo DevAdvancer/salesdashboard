@@ -1,5 +1,7 @@
 "use server";
 
+import { getFollowupsPaymentAmount, getStoredFollowupsPaymentAmount } from "@/lib/utils/followups-payment-amount";
+
 import { ID, Query } from "node-appwrite";
 import { readFile } from "node:fs/promises";
 import { createAdminClient } from "@/lib/server/appwrite";
@@ -70,11 +72,11 @@ function buildFollowupRepairPayload(doc: Record<string, unknown>): Record<string
         : FOLLOWUPS_PAYMENT_COMPANIES[0],
     candidateName:
       typeof doc.candidateName === "string" ? doc.candidateName : "",
-    amount: Math.floor(Number(doc.amount) || 0),
+    amount: getStoredFollowupsPaymentAmount(Number(doc.amount) || 0),
     date: typeof doc.date === "string" ? doc.date : "",
     status:
-      typeof doc.status === "string" && doc.status.trim()
-        ? doc.status
+      doc.status === "refunded" || Number(doc.amount) < 0
+        ? "refunded"
         : FOLLOWUPS_PAYMENT_STATUS,
     createdAt:
       typeof doc.createdAt === "string" && doc.createdAt.trim()
@@ -275,7 +277,7 @@ function mapFollowupsDoc(doc: any): PreviousFollowupsPayment {
     leadId: doc.leadId,
     company,
     candidateName: doc.candidateName,
-    amount: Number(doc.amount) || 0,
+    amount: getFollowupsPaymentAmount(doc),
     date: doc.date,
     remark: doc.paymentRemark || doc.remark || null,
     status: doc.status === 'refunded' || Number(doc.amount) < 0 ? 'refunded' : FOLLOWUPS_PAYMENT_STATUS,
@@ -339,7 +341,7 @@ export async function createPreviousFollowupsPaymentAction(input: {
     leadId: input.leadId?.trim() || makeManualLeadId(),
     company: normalizeCompany(input.company),
     candidateName: input.candidateName.trim(),
-    amount: input.status === 'refunded' ? -Math.abs(Math.floor(Number(input.amount) || 0)) : Math.floor(Number(input.amount) || 0),
+    amount: getStoredFollowupsPaymentAmount(input.amount),
     date: input.date,
     status: input.status === 'refunded' || Number(input.amount) < 0 ? 'refunded' : FOLLOWUPS_PAYMENT_STATUS,
     createdAt: new Date().toISOString(),
@@ -428,13 +430,14 @@ export async function updatePreviousFollowupsPaymentAction(input: {
   if (input.leadId !== undefined) payload.leadId = input.leadId?.trim() || makeManualLeadId();
   if (input.company !== undefined && input.company !== null) payload.company = normalizeCompany(input.company);
   if (input.candidateName !== undefined) payload.candidateName = (input.candidateName || '').trim();
-  if (input.amount !== undefined) payload.amount = Math.floor(Number(input.amount) || 0);
   if (input.date !== undefined) payload.date = input.date;
   if (input.remark !== undefined) payload.paymentRemark = input.remark?.trim() || "";
   if (input.creditedAgentId !== undefined) payload.creditedAgentId = input.creditedAgentId || null;
-  payload.status = input.status === 'refunded' || Number(input.amount ?? existing.amount) < 0
-    ? 'refunded' : (input.status ?? (existing.status === 'refunded' ? 'refunded' : FOLLOWUPS_PAYMENT_STATUS));
-  if (payload.status === 'refunded') payload.amount = -Math.abs(Math.floor(Number(input.amount ?? existing.amount) || 0));
+  payload.status = input.status ?? (
+    Number(input.amount ?? existing.amount) < 0 || existing.status === 'refunded'
+      ? 'refunded' : FOLLOWUPS_PAYMENT_STATUS
+  );
+  payload.amount = getStoredFollowupsPaymentAmount(Number(input.amount ?? existing.amount));
 
   const doc = await updateFollowupsDocumentWithFallback(
     databases,
@@ -534,7 +537,6 @@ export async function deletePreviousFollowupsPaymentAction(input: {
 
 export async function getCreditableAgentsAction(actorId: string): Promise<Array<{ id: string; name: string }>> {
   const actor = await getActor(actorId);
-  
   if (actor.role === "admin" || actor.role === "developer" || actor.role === "operations") {
     const { getAllActiveUsers } = await import("@/lib/services/user-service");
     const users = await getAllActiveUsers();

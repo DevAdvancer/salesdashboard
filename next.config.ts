@@ -1,9 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  outputFileTracingIncludes: {
-    '/api/extension/linkedin/download': ['./releases/linkedin-helper/LinkedIn Helper.zip', './public/downloads/crm-hub-linkedin-helper-1.7.0-chrome.zip'],
-  },
   async headers() {
     return [
       {
