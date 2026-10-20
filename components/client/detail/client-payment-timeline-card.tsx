@@ -16,21 +16,13 @@ export function ClientPaymentTimelineCard({ paymentRecord }: ClientPaymentTimeli
     return "Not Paid";
   };
   const records = [paymentRecord, ...(paymentRecord.previousRecords ?? [])];
-  const entries = [
-    ...records.flatMap((record) => record.updates.map((update) => ({
+  const entries = records
+    .flatMap((record) => record.updates.map((update) => ({
       ...update,
       title: `Status changed to ${formatPaymentStatusLabel(update.status)}`,
       cycle: record.createdAt,
-    }))),
-    ...(paymentRecord.lifecycleEvents ?? []).map((event) => ({
-      ...event,
-      title: event.type === 'reopened' ? 'Lead reopened' : event.type === 'updated' ? 'Lead details updated' : `Lead closed — ${event.status}`,
-      cycle: '', amount: null,
-      note: event.changes ? Object.entries(event.changes).map(([field, change]) =>
-        `${field}: ${JSON.stringify(change.from)} → ${JSON.stringify(change.to)}`
-      ).join(' • ') : null,
-    })),
-  ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    })))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const formatDate = (date: string) => new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York', dateStyle: 'medium', timeStyle: 'short',
   }).format(new Date(date));
