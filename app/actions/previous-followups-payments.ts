@@ -278,7 +278,7 @@ function mapFollowupsDoc(doc: any): PreviousFollowupsPayment {
     amount: Number(doc.amount) || 0,
     date: doc.date,
     remark: doc.paymentRemark || doc.remark || null,
-    status: FOLLOWUPS_PAYMENT_STATUS,
+    status: doc.status === 'refunded' || Number(doc.amount) < 0 ? 'refunded' : FOLLOWUPS_PAYMENT_STATUS,
     createdAt: doc.createdAt,
     createdById: doc.createdById ?? null,
     creditedAgentId: doc.creditedAgentId ?? null,
@@ -311,12 +311,14 @@ export async function createPreviousFollowupsPaymentAction(input: {
   date: string;
   remark?: string | null;
   creditedAgentId?: string | null;
+  status?: FollowupsPaymentStatus;
 }): Promise<PreviousFollowupsPayment> {
   const actor = await getActor(input.actorId);
   ensureComponentAccess(actor.role, "followups-payments");
   assertCanMutateFollowups(actor);
 
   const { databases } = await createAdminClient();
+  if (input.status && input.status !== 'paid' && input.status !== 'refunded') throw new Error('Invalid payment status');
 
   let finalCreatedById = actor.$id;
   let finalCreatedByName = actor.name;
@@ -337,9 +339,9 @@ export async function createPreviousFollowupsPaymentAction(input: {
     leadId: input.leadId?.trim() || makeManualLeadId(),
     company: normalizeCompany(input.company),
     candidateName: input.candidateName.trim(),
-    amount: Math.floor(Number(input.amount) || 0),
+    amount: input.status === 'refunded' ? -Math.abs(Math.floor(Number(input.amount) || 0)) : Math.floor(Number(input.amount) || 0),
     date: input.date,
-    status: FOLLOWUPS_PAYMENT_STATUS,
+    status: input.status === 'refunded' || Number(input.amount) < 0 ? 'refunded' : FOLLOWUPS_PAYMENT_STATUS,
     createdAt: new Date().toISOString(),
     createdById: finalCreatedById,
     createdByName: finalCreatedByName,
@@ -371,6 +373,7 @@ export async function updatePreviousFollowupsPaymentAction(input: {
   date?: string | null;
   remark?: string | null;
   creditedAgentId?: string | null;
+  status?: FollowupsPaymentStatus;
 }): Promise<PreviousFollowupsPayment> {
   // #region debug-point C:action-entry
   await reportFollowupDebug(
@@ -397,6 +400,7 @@ export async function updatePreviousFollowupsPaymentAction(input: {
   const { databases } = await createAdminClient();
 
   const existing = await databases.getDocument(DATABASE_ID, COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS, input.paymentId);
+  if (input.status && input.status !== 'paid' && input.status !== 'refunded') throw new Error('Invalid payment status');
 
   let finalCreatedById = existing.createdById;
   let finalCreatedByName = existing.createdByName;
@@ -428,7 +432,9 @@ export async function updatePreviousFollowupsPaymentAction(input: {
   if (input.date !== undefined) payload.date = input.date;
   if (input.remark !== undefined) payload.paymentRemark = input.remark?.trim() || "";
   if (input.creditedAgentId !== undefined) payload.creditedAgentId = input.creditedAgentId || null;
-  payload.status = FOLLOWUPS_PAYMENT_STATUS;
+  payload.status = input.status === 'refunded' || Number(input.amount ?? existing.amount) < 0
+    ? 'refunded' : (input.status ?? (existing.status === 'refunded' ? 'refunded' : FOLLOWUPS_PAYMENT_STATUS));
+  if (payload.status === 'refunded') payload.amount = -Math.abs(Math.floor(Number(input.amount ?? existing.amount) || 0));
 
   const doc = await updateFollowupsDocumentWithFallback(
     databases,

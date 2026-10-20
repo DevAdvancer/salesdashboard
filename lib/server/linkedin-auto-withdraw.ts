@@ -97,8 +97,9 @@ function csvCell(value: string) {
 
 export async function sendLinkedinWithdrawalReport(
   databases: Databases, withdrawn: LinkedinWithdrawal[], now: Date,
+  options: { sendEmpty?: boolean; failedCount?: number } = {},
 ) {
-  if (withdrawn.length === 0) return { emailSent: false, recipientCount: 0 };
+  if (withdrawn.length === 0 && !options.sendEmpty) return { emailSent: false, recipientCount: 0 };
   const recipients = await getReportEmails(databases);
   if (recipients.length === 0) return { emailSent: false, recipientCount: 0 };
   const date = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York",
@@ -107,7 +108,7 @@ export async function sendLinkedinWithdrawalReport(
     <td>${escapeHtml(agentName)}</td><td>${escapeHtml(request.company)}</td>
     <td>${escapeHtml(request.targetUrl)}</td><td>${escapeHtml(reason)}</td></tr>`).join("");
   const html = `<h2>LinkedIn withdrawal report - ${escapeHtml(date)}</h2>
-    <p>${withdrawn.length} request(s) withdrawn. The attached CSV contains the complete list.</p>
+    <p>${withdrawn.length} request(s) withdrawn.${options.failedCount ? ` ${options.failedCount} request(s) could not be withdrawn.` : ''} The attached CSV contains the complete list of actual withdrawals.</p>
     <table border="1" cellpadding="6" cellspacing="0"><thead><tr>
     <th>Agent</th><th>Company</th><th>Profile</th><th>Reason</th>
     </tr></thead><tbody>${rows}</tbody></table>`;

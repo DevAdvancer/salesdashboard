@@ -77,17 +77,20 @@ export async function listClientPaymentSummariesAction(input: {
     const allowedLeadIdsArray = Array.from(allowedLeadIds);
     for (let i = 0; i < allowedLeadIdsArray.length; i += CHUNK_SIZE) {
     const chunk = allowedLeadIdsArray.slice(i, i + CHUNK_SIZE);
-    const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.CLIENT_PAYMENTS, [
-      Query.equal("leadId", chunk),
-      Query.limit(chunk.length),
-    ]);
-    paymentDocuments.push(...response.documents);
+    const docs = await listAllDocuments<any>({
+      databases, databaseId: DATABASE_ID, collectionId: COLLECTIONS.CLIENT_PAYMENTS,
+      queries: [Query.equal('leadId', chunk), Query.orderDesc('createdAt')],
+    });
+    paymentDocuments.push(...docs);
     }
 
     const results: Array<{ leadId: string; status: PaymentStatus; personalDetails: Record<string, unknown>; paymentPlan: ClientPaymentPlan }> = [];
+    const seen = new Set<string>();
     for (const doc of paymentDocuments) {
     const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
     if (!leadId || !allowedLeadIds.has(leadId)) continue;
+    if (seen.has(leadId)) continue;
+    seen.add(leadId);
     const personalDetails = parseJsonOr<Record<string, unknown>>(doc.personalDetails ?? doc.personalDetailsJson, {});
     const paymentPlan = parseJsonOr<ClientPaymentPlan>(doc.paymentPlan ?? doc.paymentPlanJson, { percent: 0, months: 0, upfrontAmount: 0 });
     const status = (doc.status as PaymentStatus) ?? "not_paid";

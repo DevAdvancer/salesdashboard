@@ -7,6 +7,7 @@ import { getUserById } from '@/lib/services/user-service';
 import { getErrorMessage } from '@/lib/utils';
 import { isSalesTeamLeadAssignee } from '@/lib/utils/lead-assignment';
 import { isAllowedLeadStatusTransition, normalizeLeadStatus } from '@/lib/utils/lead-status-workflow';
+import { recordLeadLifecycleEvent } from '@/lib/utils/lead-payment-cycle';
 
 import { getLead } from './queries';
 import { getHierarchyPermissions } from './visibility';
@@ -141,6 +142,10 @@ export async function updateLead(
     const currentData = JSON.parse(currentLead.data) as LeadData;
 
     const updatedData = { ...currentData, ...data };
+    for (const key of ['lifecycleHistory', 'paymentCycleId']) {
+      if (key in currentData) updatedData[key] = currentData[key];
+      else delete updatedData[key];
+    }
 
     const nextStatus = (updatedData as any).status;
     if (nextStatus) {
@@ -276,13 +281,17 @@ export async function closeLead(
       permissions.push(Permission.read(Role.user(actorId)));
     }
 
+    const closedAt = new Date().toISOString();
+    const closureData = recordLeadLifecycleEvent(currentLead, 'closed', actorId || currentLead.ownerId,
+      actorName || 'System', closedStatus, closedAt, crypto.randomUUID());
     const lead = await databases.updateDocument(
       DATABASE_ID,
       COLLECTIONS.LEADS,
       leadId,
       {
         isClosed: true,
-        closedAt: new Date().toISOString(),
+        closedAt,
+        data: JSON.stringify(closureData),
         status: closedStatus,
         ...(shouldAssignClosingAgent ? { assignedToId: actorId } : {}),
       },
@@ -334,6 +343,9 @@ export async function reopenLead(
     await assertActorCanMutateLead(actorId);
 
     const currentLead = await getLead(leadId);
+    if (!currentLead.isClosed && currentLead.status === 'Reopened') return currentLead;
+    const reopenedData = recordLeadLifecycleEvent(currentLead, 'reopened', actorId || currentLead.ownerId,
+      actorName || 'System', 'Reopened', new Date().toISOString(), crypto.randomUUID());
     let leadName = '';
     try {
       leadName = getLeadAuditName(JSON.parse(currentLead.data) as LeadData);
@@ -359,6 +371,7 @@ export async function reopenLead(
       {
         isClosed: false,
         status: 'Reopened',
+        data: JSON.stringify(reopenedData),
       },
       permissions
     );

@@ -69,3 +69,25 @@ it('emails only actual withdrawals to Settings recipients and escapes profile da
       content: expect.stringContaining('https://www.linkedin.com/in/person') })],
   }));
 });
+
+it('sends the Monday zero-withdrawal CSV to every address returned by Settings', async () => {
+  (getReportEmails as jest.Mock).mockResolvedValue(['one@example.com', 'two@example.com']);
+  (sendNotificationEmail as jest.Mock).mockResolvedValue({ messageId: 'sent' });
+  expect(await sendLinkedinWithdrawalReport({} as never, [], now, { sendEmpty: true }))
+    .toEqual({ emailSent: true, recipientCount: 2 });
+  expect(sendNotificationEmail).toHaveBeenLastCalledWith(expect.objectContaining({
+    to: 'one@example.com,two@example.com', allowAllRecipients: true,
+    html: expect.stringContaining('0 request(s) withdrawn.'),
+    attachments: [expect.objectContaining({ content: 'Agent,Company,Profile,Reason,Request ID' })],
+  }));
+});
+
+it('includes the failure count without claiming failed requests were withdrawn', async () => {
+  (getReportEmails as jest.Mock).mockResolvedValue(['reports@example.com']);
+  (sendNotificationEmail as jest.Mock).mockResolvedValue({ messageId: 'sent' });
+  await sendLinkedinWithdrawalReport({} as never, [], now, { sendEmpty: true, failedCount: 2 });
+  expect(sendNotificationEmail).toHaveBeenLastCalledWith(expect.objectContaining({
+    html: expect.stringContaining('2 request(s) could not be withdrawn.'),
+    attachments: [expect.objectContaining({ content: 'Agent,Company,Profile,Reason,Request ID' })],
+  }));
+});

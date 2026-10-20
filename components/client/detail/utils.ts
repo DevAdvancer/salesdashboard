@@ -57,6 +57,7 @@ export function renderReadOnlyValue(value: unknown): string {
 }
 
 export function formatPaymentStatusLabel(status: PaymentStatus): string {
+  if (status === 'refunded') return 'Refunded';
   if (status === "fully_paid") return "Fully Paid";
   if (status === "partially_paid") return "Partially Paid";
   if (status === "non_upfront") return "Non-Upfront";

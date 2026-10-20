@@ -383,17 +383,11 @@ function LeadDetailContent() {
         statusChanged &&
         normalizeStatusText(nextStatus) === "signedclosure"
       ) {
-        await closeLead(leadId, "Signed/Closure", user.$id, user.name);
-        clearLeadReadCache();
-        toast({
-          title: "Success",
-          description: "Lead closed successfully",
-        });
+        // Collect this closure's payment details through the same flow as Close Lead.
+        setCloseStatus('Signed/Closure');
         setIsEditing(false);
-        queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
-        queryClient.invalidateQueries({ queryKey: ['assigned-report'] });
         await loadLead();
-        router.push("/leads");
+        setShowCloseDialog(true);
         return;
       }
       clearLeadReadCache();

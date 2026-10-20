@@ -494,7 +494,11 @@ function HistoryDetailContent() {
         leadId,
         personalDetails: merged,
       });
-      setPaymentRecord(updated);
+      setPaymentRecord((previous) => ({
+        ...updated,
+        previousRecords: previous?.previousRecords,
+        lifecycleEvents: previous?.lifecycleEvents,
+      }));
       setClientIntakeValues(updated.personalDetails ?? {});
       toast({ title: "Success", description: "Client details saved." });
       queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });

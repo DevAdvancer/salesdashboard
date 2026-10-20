@@ -168,8 +168,9 @@ export default function PreviousFollowupsPaymentsPage() {
 
     setIsSaving(true);
     try {
+      let savedPayment: PreviousFollowupsPayment;
       if (editingPayment) {
-        await updatePreviousFollowupsPaymentAction({
+        savedPayment = await updatePreviousFollowupsPaymentAction({
           actorId: user.$id,
           paymentId: editingPayment.$id,
           leadId: payment.leadId,
@@ -179,13 +180,14 @@ export default function PreviousFollowupsPaymentsPage() {
           date: payment.date,
           remark: payment.remark,
           creditedAgentId: payment.creditedAgentId,
+          status: payment.status === 'refunded' ? 'refunded' : 'paid',
         });
         toast({
           title: "Payment updated",
           description: "The followup payment was updated successfully.",
         });
       } else {
-        await createPreviousFollowupsPaymentAction({
+        savedPayment = await createPreviousFollowupsPaymentAction({
           actorId: user.$id,
           leadId: payment.leadId,
           company: payment.company,
@@ -194,6 +196,7 @@ export default function PreviousFollowupsPaymentsPage() {
           date: payment.date,
           remark: payment.remark,
           creditedAgentId: payment.creditedAgentId,
+          status: payment.status === 'refunded' ? 'refunded' : 'paid',
         });
         toast({
           title: "Payment added",
@@ -210,9 +213,15 @@ export default function PreviousFollowupsPaymentsPage() {
             status: payment.status,
             note: payment.remark || "Followup payment added",
             amount: payment.amount,
+            sourceFollowupId: savedPayment.$id,
           });
         } catch (e) {
           console.error("Failed to update client payment status", e);
+          toast({
+            title: 'Followup saved; client status update failed',
+            description: e instanceof Error ? e.message : 'Please retry the client payment update.',
+            variant: 'destructive',
+          });
         }
       }
 

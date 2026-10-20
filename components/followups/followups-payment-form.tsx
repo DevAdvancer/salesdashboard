@@ -64,11 +64,11 @@ export function FollowupsPaymentForm({
     payment?.candidateName || "",
   );
   const [amount, setAmount] = useState(payment ? Math.abs(payment.amount).toString() : "0");
-  const [isRefund, setIsRefund] = useState(payment ? payment.amount < 0 : false);
+  const [isRefund, setIsRefund] = useState(payment ? payment.status === 'refunded' || payment.amount < 0 : false);
   const [date, setDate] = useState(payment?.date || getCurrentEasternIsoDate());
   const [remark, setRemark] = useState(payment?.remark || "");
 
-  const [status, setStatus] = useState<PaymentStatus>("not_paid");
+  const [status, setStatus] = useState<PaymentStatus>(payment?.status === 'refunded' || (payment?.amount ?? 0) < 0 ? 'refunded' : 'not_paid');
   const [hasPaymentRecord, setHasPaymentRecord] = useState(false);
 
   // Client Selection State
@@ -170,7 +170,10 @@ export function FollowupsPaymentForm({
         if (!cancelled) {
           if (record) {
             setHasPaymentRecord(true);
-            setStatus(record.status || "not_paid");
+            if (payment?.status !== 'refunded' && (payment?.amount ?? 0) >= 0) {
+              setStatus(record.status || "not_paid");
+              setIsRefund(record.status === 'refunded');
+            }
           } else {
             setHasPaymentRecord(false);
             setStatus("not_paid");
@@ -225,7 +228,7 @@ export function FollowupsPaymentForm({
       amount: (parseFloat(amount) || 0) * (isRefund ? -1 : 1),
       date,
       remark: remark || null,
-      status: mode === "client" && selectedLeadId ? status : undefined,
+      status: isRefund ? 'refunded' : status,
       hasPaymentRecord,
       creditedAgentId: creditedAgentId === "none" ? null : (creditedAgentId || null),
     });
@@ -374,20 +377,24 @@ export function FollowupsPaymentForm({
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <label className="text-sm font-semibold text-foreground">Status</label>
+          <label htmlFor="followup-payment-status" className="text-sm font-semibold text-foreground">Status</label>
           <Select
             value={status}
-            onValueChange={(value) => setStatus(value as PaymentStatus)}
-            disabled={mode !== "client" || !selectedLeadId || !hasPaymentRecord}
+            onValueChange={(value) => {
+              setStatus(value as PaymentStatus);
+              setIsRefund(value === 'refunded');
+            }}
+            disabled={mode === 'client' && !selectedLeadId}
           >
-            <SelectTrigger>
-              <SelectValue placeholder="Select status" />
+            <SelectTrigger id="followup-payment-status">
+              {status === 'refunded' ? <span>Refunded</span> : <SelectValue placeholder="Select status" />}
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="not_paid">Not Paid</SelectItem>
               <SelectItem value="partially_paid">Partially Paid</SelectItem>
               <SelectItem value="non_upfront">Non-Upfront</SelectItem>
               <SelectItem value="fully_paid">Fully Paid</SelectItem>
+              <SelectItem value="refunded">Refunded</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -399,7 +406,10 @@ export function FollowupsPaymentForm({
               type="checkbox"
               id="isRefund"
               checked={isRefund}
-              onChange={(e) => setIsRefund(e.target.checked)}
+              onChange={(e) => {
+                setIsRefund(e.target.checked);
+                setStatus(e.target.checked ? 'refunded' : 'not_paid');
+              }}
             />
             <label htmlFor="isRefund" className="text-sm text-muted-foreground">
               Is this a refund?

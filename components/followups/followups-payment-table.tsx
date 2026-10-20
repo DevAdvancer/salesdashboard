@@ -82,7 +82,7 @@ export function FollowupsPaymentTable({
                 <Badge
                   variant="secondary"
                   className="bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-400">
-                  Paid
+                  {payment.status === 'refunded' ? 'Refunded' : 'Paid'}
                 </Badge>
               </TableCell>
               {canEdit && (

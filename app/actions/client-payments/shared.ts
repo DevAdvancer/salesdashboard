@@ -120,6 +120,7 @@ export async function findRecordByLeadId(leadId: string) {
     const { databases } = await createAdminClient();
     const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.CLIENT_PAYMENTS, [
             Query.equal("leadId", leadId),
+            Query.orderDesc('createdAt'),
             Query.limit(1),
           ]);
     return response.documents[0] ?? null;

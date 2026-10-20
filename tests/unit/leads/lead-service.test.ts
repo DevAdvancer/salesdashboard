@@ -593,10 +593,11 @@ describe('Lead Service', () => {
         'test-database',
         'test-leads-collection',
         leadId,
-        {
+        expect.objectContaining({
           isClosed: false,
           status: 'Reopened',
-        },
+          data: expect.any(String),
+        }),
         expect.arrayContaining([
           Permission.read(Role.user(mockManagerId)),
           Permission.update(Role.user(mockManagerId)),

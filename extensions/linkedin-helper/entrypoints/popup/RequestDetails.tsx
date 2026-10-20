@@ -1,4 +1,4 @@
-import type { ExtensionAccount, ExtensionHistory, ExtensionQuota } from "crm-shared/types/linkedin-extension";
+import type { ExtensionAccount, ExtensionQuota } from "crm-shared/types/linkedin-extension";
 
 export function AccountPicker({ accounts, value, disabled, onChange }: {
   accounts: Array<ExtensionAccount & ExtensionQuota>; value: string; disabled: boolean; onChange: (value: string) => void;
@@ -15,7 +15,6 @@ export function AccountPicker({ accounts, value, disabled, onChange }: {
     <p className="hint">Choose the account you use on LinkedIn.</p>
   </>;
 }
-
 function CompanyBadge({ company }: { company: string }) {
   const logo = /silver/i.test(company) ? "/silverspace.png" : /vizva/i.test(company) ? "/vizva.png" : null;
   return <div className="company-badge">{logo && <img src={logo} alt={`${company} logo`} />}<span>{company}</span></div>;
@@ -31,22 +30,4 @@ export function Quota({ quota, today }: { quota?: ExtensionQuota; today: string 
     <div className="progress"><div id="progress-fill" style={{ width: `${progress}%` }} /></div>
     <span className="hint">{used} used{limit === null ? "" : ` of ${limit}`} today</span>
   </div>;
-}
-
-export function History({ items }: { items: ExtensionHistory[] }) {
-  return <details open={items.length > 0}>
-    <summary>Connection history ({items.length})</summary>
-    <p className="hint">History for the selected company. Other agents&apos; personal details are hidden.</p>
-    {!items.length && <p className="history-empty">No previous request for this company.</p>}
-    {items.map((item, index) => <div key={`${item.requestId || "other"}-${index}`}>
-      <div className="history-row"><span>{item.status}{item.isActive ? "" : " · inactive"} · {item.own ? "You" : "Another agent"}</span>
-        <span>{item.dateSent?.slice(0, 10) || "Date unavailable"}</span></div>
-      {item.acceptedAt && <p className="hint">Accepted: {formatEvent(item.acceptedAt)} ET</p>}
-      {item.withdrawnAt && <p className="hint">Withdrawn: {formatEvent(item.withdrawnAt)} ET</p>}
-    </div>)}
-  </details>;
-}
-
-function formatEvent(value: string) {
-  return new Date(value).toLocaleString("en-US", { timeZone: "America/New_York" });
 }

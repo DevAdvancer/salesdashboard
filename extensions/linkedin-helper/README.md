@@ -1,91 +1,76 @@
-# LinkedIn Helper
+# LinkedIn Helper v1.8.9 (selected-user beta)
 
-Chrome/Edge Manifest V3 extension built with **WXT + React + TypeScript**. This replaces the earlier plain JavaScript implementation. Its source, dependencies, Bun lockfile, generated types, and browser bundles are isolated in this folder.
+Chrome/Edge Manifest V3 extension built with WXT, React, TypeScript, and its own Bun package. Agents click LinkedIn's Connect/Send buttons; the extension checks CRM in the background and records a confirmed invitation automatically. It never stops, delays, or replays LinkedIn clicks or keyboard input. Interrupted tracked invitations have a scoped recovery action; there is no general manual recording or connection-history control.
 
 ## Build and install
 
-From this folder:
+From `extensions/linkedin-helper`:
 
 ```powershell
 bun install --frozen-lockfile
 bun run typecheck
-bun run build
 bun run zip
 ```
 
-1. Open `chrome://extensions` (Chrome) or `edge://extensions` (Edge).
-2. Enable **Developer mode** and click **Load unpacked**.
-3. Select **`extensions/linkedin-helper/.output/chrome-mv3`**, which contains the generated `manifest.json`. Do not select this source folder.
-4. Pin **LinkedIn Helper** to the toolbar.
-5. Sign in to CRM in the same regular browser profile and keep that tab open.
-6. Open a public LinkedIn profile, click the extension, open **Connection settings** using the header icon, choose `crm.silverspaceinc.tech` or `localhost:5000`, and click **Connect**. The production URL is the default for a fresh installation; your last connected environment is remembered. Approve access to your CRM hostname if prompted.
-7. Choose the LinkedIn account you are actually using. Optionally **Check before inviting**; use **Open profile on LinkedIn** to go to the selected profile. After manually sending the invitation on LinkedIn, click **Record request sent**. Once CRM confirms the save, the profile URL is copied to your clipboard. Use **View history** for full CRM history.
+1. `bun run zip` creates `.output/LinkedIn Helper.zip` and automatically copies the identical beta to `releases/linkedin-helper/LinkedIn Helper.zip`, outside `public`. The authenticated `/api/extension/linkedin/download` route serves this beta only to selected eligible users and the unchanged v1.7.0 ZIP to everyone else. The CRM download button always saves it as **LinkedIn Helper.zip**; the beta manifest version is 1.8.9. The ZIP has `manifest.json` at its root, so Windows Extract All creates a **LinkedIn Helper** folder without an extra nested/versioned folder.
+2. For a first installation, open `chrome://extensions` or `edge://extensions`, enable Developer mode, choose Load unpacked, and select the extracted **LinkedIn Helper** folder containing `manifest.json`. Keep that folder in a permanent location. For source builds, load `.output/chrome-mv3`.
+3. For an update, replace/overwrite the files in the existing unpacked folder and click Reload on the installed extension, then reload existing LinkedIn tabs. Keep the existing loaded folder path, even if its older name differs: no folder renaming, extension removal, or Load unpacked again is needed. Avoid extracting into a numbered duplicate folder or nesting a new folder inside the loaded folder. This preserves the local account lock. Resolve interrupted invitations in CRM before updating: Chrome clears session tracking on extension reload/update, so an older missing request cannot be recovered from its cleared attempt. Existing tabs do not automatically receive a newly installed content script.
+4. Sign in to CRM in the same regular browser profile and keep that tab open.
+5. Open LinkedIn Helper → Connection settings → choose production or `http://localhost:5000` → Connect. Approve CRM hostname access if prompted.
+6. Select the account actually signed in on LinkedIn, then **Lock account for this browser profile**. Account selection does not switch or verify LinkedIn's login.
+7. Open a public LinkedIn profile. The one-line status bar shows **Available**, **Present in CRM**, **Already sent**, or **Resend available**, with the remaining allowance. It refreshes automatically when switching profiles, including LinkedIn's single-page navigation. Click the bar to see details or explicitly confirm a resend.
+8. Click Connect or More → Connect → Send on LinkedIn. After a stable Pending transition on that profile, the extension records the request. The bar shows **Sent** and the remaining allowance; account details stay available by clicking it.
 
-The ready-to-extract ZIP is generated at `.output/crm-hub-linkedin-helper-1.7.0-chrome.zip` and copied to `public/downloads/` for the CRM installation guide. Extract it into a folder and load that folder as unpacked. The ZIP contains only the compiled extension, not source, dependencies, or credentials. It is not a signed Web Store package.
+The popup also follows the active profile automatically. Old profile checks cannot overwrite the new profile's status. Failed on-page availability checks retry with a bounded delay; recording an invitation is never retried automatically.
 
-The updated CRM must provide `/api/extension/linkedin`. Use the local CRM (`bun run dev` from the repository root, http://localhost:5000) until the additive endpoint is deployed through your normal release process. Installing the extension does not install this endpoint on an already deployed CRM. Nothing here commits, pushes, deploys, or migrates Appwrite data.
+## Beta distribution
 
-If the old extension is installed, remove it from your browser before loading the WXT build. Its unpacked path changes, so Chrome may assign a new extension ID; reconnect and choose your account again.
+An active admin selects individual users on **Beta → LinkedIn Helper beta**. Only active Sales users eligible for LinkedIn Requests can enroll. The `linkedin-helper-1.8-beta` program uses the existing `beta_feature_access` collection and starts empty; retired `linkedin-helper` grants are ignored. No user is enrolled by a code deployment. Revocation stops beta CRM reads and saves on the next API request; install the stable download to resume v1.7 use. It cannot remotely remove a previously downloaded ZIP or uninstall an unpacked extension.
 
-## Development
+The guide resolves the authenticated user's channel on mount, focus, and every minute. The download always reauthorizes independently, ignores client-supplied versions, disables caching, and uses a fixed filename. The beta bridge identifies itself with `X-CRM-Extension-Channel: beta` and is checked before reading or saving; v1.7 retains its original API contract without a beta grant. This controls CRM distribution and the packaged client's access; unpacked source is not DRM. Keep every beta ZIP outside `public/downloads`; Next's output tracing includes the private release in the download function.
 
-`bun run dev` starts WXT development mode with React updates. For installation and smoke testing, use the production build in `.output/chrome-mv3`; the development bundle includes WXT development permissions and tooling. After rebuilding, click **Reload** on the browser's extensions page and reopen the popup. Restarting the browser alone can leave its previous background worker script cached.
+Profile operations are validated against the browser's current tab URL, not the original content-script document URL, which can be stale after LinkedIn single-page navigation. Temporary navigation mismatches show **Checking…** and retry automatically. Sender identity, top-level frame, HTTPS LinkedIn origin, non-incognito tab, locked account, and original invitation-attempt bindings remain required.
 
-Source layout:
+This version requires the updated `/api/extension/linkedin` backend. Deploy it through the normal release process before distributing the ZIP to production users. Installing the ZIP does not deploy the backend. No Appwrite schema migration or production backfill is needed.
 
-```text
-entrypoints/background.ts      typed service worker and CRM session bridge
-entrypoints/popup/App.tsx      React popup
-entrypoints/popup/RequestDetails.tsx  account, allowance, and history views
-entrypoints/popup/main.tsx     React mount
-entrypoints/popup/style.css    popup styles
-lib/crm-client.ts              typed messaging, storage, and tab helpers
-lib/crm-read-coordinator.ts    worker-owned checks and short-lived session results
-lib/use-linkedin-helper.ts     React workflow, request guards, and state
-lib/use-page-theme.ts          active LinkedIn presentation theme detection
-wxt.config.ts                 manifest, React module, shared-code alias
-```
+## Account lock and allowance
 
-The browser-independent contract and URL rules are shared with the backend through `crm-shared`, an alias for the repository's `lib` folder. The CRM does not import extension source. The root TypeScript config excludes the extension project; root lint excludes its generated files and nested dependencies. The root CRM dependencies and lockfiles remain unchanged. This nested package uses `bun.lock` and has no npm lockfile to maintain.
+- Each Chrome/Edge browser profile has an independent local lock, bound to the CRM origin, CRM user, and assigned/delegated account. The lock persists through browser restarts. No password, JWT, API key, or LinkedIn cookie is stored.
+- The dropdown stays disabled until **Unlock account** is selected. An exhausted/inactive/unassigned account is never silently replaced.
+- Each opened profile checks automatically, including background tabs. Up to 100 profile checks are shared across tabs and the popup for five minutes, scoped to the CRM origin, user, locked account, canonical profile URL, and Eastern business date. Session storage retains results across worker suspension. Duplicate in-flight checks join one request. Returning to a tab reuses its saved result quietly; another profile retains its own result. Explicit Recheck bypasses completed results. Expiry, CRM navigation/session changes, account changes, rejected access, or completed/uncertain saves invalidate reuse. Invitation attempts still belong exclusively to their original tab. Final CRM recording always validates current server authorization, duplicates, leads, revision, and allowance.
+- An exhausted/missing CRM limit, unavailable account, signed-out/unavailable CRM, or missing lock prevents CRM tracking/recording; LinkedIn controls remain available. The configured limit uses Eastern business dates and is separate from LinkedIn's invitation restrictions.
+- The worker serializes tracking mutations. One pending invitation per locked account prevents competing CRM recording attempts in this browser profile. Additional LinkedIn sends remain usable but need review in CRM if tracking is occupied.
+- The agent must deliberately unlock and select the account they are actually using to switch accounts. Keep the LinkedIn website login and CRM account lock aligned.
 
-## Behavior
+## Invitation detection and recovery
 
-- Dropdown lists active assigned accounts and today's attendance-based delegated accounts. Selection is remembered per CRM origin and authenticated CRM user. Unavailable remembered accounts are not silently replaced.
-- Opening the popup detects the active public `/in/` profile without checking history. Manual URL entry remains available. Tracking parameters and trailing slashes are removed. The popup follows the CRM's neutral palette and bundles its Silverspace and Vizva logos.
-- The compact popup is 360 pixels wide and at most 560 pixels tall, with a slim scrollbar in its content area. Header and footer remain visible. Connection settings are hidden behind the header icon. The header logos crossfade every 4.5 seconds using the sidebar's timing; reduced-motion preferences disable the animation. The extension toolbar icon and popup favicon use the CRM's Silverspace favicon.
-- The popup follows the active LinkedIn page's light or dark background, checking presentation every two seconds while open. This uses the existing `activeTab`/`scripting` permissions and reads only computed background colors. When page access is unavailable, it retains the last detected theme for the browser session or falls back to system preference. It never changes the LinkedIn page's theme.
-- When connected to CRM, this build publishes its version in the current CRM tab so LinkedIn Requests can display a best-effort installation status. Older builds have no version signal and appear as "Not detected in this tab". LinkedIn Helper is available to all eligible LinkedIn Requests users; the server retains role, department, active-user, and account checks.
-- CRM account loading starts without waiting for LinkedIn profile detection. Recording is available after accounts load. One server inspection checks duplicates, existing leads, assignment and allowance before a new write. A quick check shows the status and date of a matching earlier CRM request; full history is loaded only with **View history**. A new request does not show the resend confirmation. **Check before inviting** remains an optional read-only availability check.
-- Closing the popup does not cancel a dispatched check. Reopening on the same account/profile joins that check; completed account and history responses are reused for up to 30 seconds. Browser-session storage retains completed responses through worker suspension, and the last entered profile is restored for the same CRM user if there is no active LinkedIn profile.
-- **Refresh**, **Check before inviting**, and **View history** bypass completed cached responses. Saves always reach CRM, clear cached reads, and are never automatically retried. Auth rejections, detected CRM tab navigation/closure, and a changed CRM user invalidate cached responses.
-- Checking is read-only. Results include existing-lead blocking, active-request blocking, resend eligibility and allowance; history is returned only for the separate history operation. Successful recordings are green, existing CRM requests are red, and allowance/configuration blocks are amber. CRM history does not establish the current LinkedIn invitation status.
-- Eligible old requests need an explicit resend checkbox. Resending uses the existing CRM action and preserves its stored legacy URL. Active requests are not silently reassigned.
-- History is for the selected company's requests; other agents' personal details are hidden. Existing timestamps do not reconstruct every overwritten resend.
-- Allowance uses the CRM's Eastern business date and configured limit. It is not LinkedIn's actual invitation quota. Account selection does not switch the LinkedIn website's login.
-- No invitations are automatically sent, accepted, or withdrawn.
+The content script runs on LinkedIn so it can follow single-page navigation, but sends CRM checks only for supported public `/in/` profile URLs. It identifies the viewed profile's header and its More menu, including a menu rendered outside the header. A newly opened menu is associated only with a recent click on that profile's More button. If React replaces that trigger while mounting the menu, ownership is rebound to the viewed profile's replacement More button. Clicking inside the owned menu does not discard that binding; unrelated menus still cannot confirm or start this profile's tracking. Native closed popovers do not count as visible menus. Suggested-profile invitations and unsupported surfaces remain usable but are not attributed to the viewed profile. Feed, Sales Navigator, Recruiter, and unsupported/localized layouts are outside this observer's scope.
 
-## Authentication and permissions
+The extension observes the user's original click and starts CRM checks independently. It never calls preventDefault/stopPropagation, disables LinkedIn controls, or synthesizes/replays a click. Connect can open a dialog and Send can finish while CRM is still responding; removing the More menu's Connect item during that process does not discard the tracking attempt. It does not initiate outreach on its own. A click, a closed dialog, an unrelated Pending button, or an unrelated toast does not count as a send. Recording requires the viewed profile to transition to Pending after the observed user click and remain there for at least 1.6 seconds without a visible failure alert. This is a website UI signal, not an official LinkedIn delivery receipt. The observed October 2026 LinkedIn layout uses plain links for Pending (href points back to the profile, without role=button); those links are included alongside buttons and menu items. Hidden controls and suggested-profile links do not confirm the viewed profile’s invitation.
 
-The worker injects a narrowly defined same-origin fetch into the open CRM tab's isolated extension world. Cookies stay in the browser. No password, API key, or copied JWT is stored. The backend identifies the actor from the CRM session and checks current role, department, active status, assignment, and delegation.
+Worker-session storage retains the attempt's account, actor, profile, tab, revision, and state through service-worker suspension. A cancelled invitation is not recorded. Refreshing status preserves observation of a live attempt. An interrupted armed attempt can be recovered from the original profile tab: expand the status bar, confirm you sent using the named locked account, then choose **Record confirmed invitation**. The viewed profile must show Pending continuously for at least 1.6 seconds without an invitation dialog or visible failure. Recovery checks the original user, account, profile, tab and revision with fresh allowance; a different business date or history blocks it. A save already marked saving/uncertain is never retried by this action. Resolve those cases in CRM, then explicitly clear the reviewed attempt in the popup. Account changes remain blocked until pending attempts are resolved. [Chrome clears session storage](https://developer.chrome.com/docs/extensions/reference/api/storage) on extension reload/update/disable and browser restart, so review interrupted invitations before those actions.
 
-Production permissions are `activeTab`, `storage`, and `scripting`. Local development hosts are declared upfront; the selected production HTTPS hostname is requested on Connect. HTTPS hosts in the manifest are optional, not blanket granted access. Chrome grants permissions per hostname across ports; tab selection and fetching still pin the exact configured origin. There is no LinkedIn content script or page scraping.
+## Recording speed
 
-Incognito tabs are unsupported. You can close the popup while working; keep the signed-in CRM tab open. Session caches contain recent display data, not credentials, and are cleared by a browser restart or extension reload. If the CRM session expires, open CRM, sign in, and reconnect or refresh the extension. Writes are never automatically retried after an uncertain response: check the profile before retrying.
+DOM changes wake the observer after a coalesced 50 ms; the 400 ms interval remains a navigation fallback. Pending stability is observed while CRM prepares the attempt, then a timer wakes at the 1.6-second deadline instead of waiting for another poll. Visibility/style checks are limited to Pending candidates in the profile card and associated menus rather than unrelated feed controls.
 
-## Backend and limitations
+For an already checked profile, the usual flow is one initial check followed by one final record request; Connect and the waiting state add no CRM checks. Verified previews are stored in extension-session storage, scoped to origin, tab, profile, CRM user/account and Eastern date, capped at 40 entries with a five-minute lifetime. They are advisory, not write authorization. A normal confirmed send makes one record request. The record endpoint freshly checks the expected CRM user, account authorization, allowance, leads, history/revision, and duplicates; the worker no longer repeats that full inspection in a separate pre-save check. Explicit recovery retains its additional review check. Read-only status requests do not occupy the mutation queue, so an old profile check cannot hold up the next profile or a save. Locks and attempt snapshots are read again before returning an independent status result. Every final record request rechecks fresh quota, lead matching, actor/assignment and duplicate history on the server, even when preparation reused the checked preview.
 
-The additive `/api/extension/linkedin` endpoint uses the existing Appwrite collections, document shape, and permissions. GET loads accounts and usage; POST checks, loads history, or records a request. It requires same-origin browser metadata plus a bridge header, returns `Cache-Control: no-store`, and rejects client-supplied actor IDs. Direct new recording needs no earlier revision; explicit resends require a current checked revision and confirmation. Recording inspects once and returns its completed write and updated allowance without a second inspection.
+## CRM checks and privacy
 
-Stable company/profile document IDs prevent concurrent new creates from this extension from creating a second extension record. A revision binds the actor, account, URL, Eastern date, and current history; changes require another check.
+- Lead matching scans paginated `$id`/`data` projections and compares canonical URLs across `linkedinProfileUrl`, `linkedinProfile`, and legacy `field_16`, including old case and encoding. A truncated scan fails closed. Only existence is returned; other agents' lead details never enter the extension.
+- Requests retain the CRM's company-level duplicate and withdrawal/resend rules. Another company's request is not described as a profile unknown to CRM.
+- New writes keep the existing request schema, stable profile/company IDs, document permissions, and the existing audit hook (persistent audit storage is disabled in this repository). Automatic saves pass an expected CRM user ID that is checked before writing.
+- No history list, other-agent attribution, general manual record button, or clipboard write permission is included in the extension UI. The legacy history API remains compatible with older installations.
+- The worker accepts page tracking messages only from its own extension's top-level, non-incognito HTTPS LinkedIn content script. It checks the current tab URL against the target and binds save/cancel/recovery operations to the original tab and attempt. Only the extension popup can configure or clear a lock/attempt.
+- The CRM bridge performs narrowly scoped same-origin fetches in an open signed-in CRM tab. The server still authorizes current role, department, user activity, account assignment, and attendance-based delegation.
 
-The existing CRM pages, services, server actions, and access rules remain unchanged. Its usual refresh may be needed to show newly recorded rows. No schema migration or production backfill is needed.
+## Limits
 
-Known inherited limits:
-
-- Daily allowance is rechecked before saving, but without distributed transactions simultaneous writes for different profiles can exceed it. Writes from the unchanged CRM and extension can race on duplicate/resend operations. Resolving this across both clients requires changing the existing mutation path and database support.
-- Profile matching uses Appwrite's string `contains` filter on the profile path, then exact URL normalization to retain legacy tracking-link protection. Older deployments rejecting that query with HTTP 400 fall back to the original company scan. No database migration is applied. Large result sets or deployments using the fallback may still take longer.
-- Lead duplication reuses the CRM validator's existing one-year/1,000-record search window.
-- Only public `linkedin.com/in/...` and `www.linkedin.com/in/...` URLs are supported. Sales Navigator, Recruiter, localized hosts, and company pages are unsupported.
+- Observation operates while the updated extension and content script are active on supported English public profile pages. Disabling the extension, using another browser, or inviting from other LinkedIn surfaces is outside its observation scope.
+- There is no distributed quota reservation across browser profiles, the CRM manual workflow, or server instances. Concurrent sends from those other clients can race; the server rechecks before saving and surfaces rejected/uncertain recordings for review.
+- Lead URLs live in JSON, so accurate legacy matching requires scanning projected lead data. Large collections may make checks slower. This release adds no schema/index migration.
+- Existing request queries use a string-contains filter, then canonical matching. HTTP 400 falls back to a paginated scan for older Appwrite deployments.
 
 ## Verification
 
@@ -96,6 +81,7 @@ bun run lint
 bun run test --runInBand
 bunx tsc --noEmit
 bun run build
+bun run dev
 ```
 
-From this folder, run `bun run typecheck` and `bun run zip`. Jest remains the repository's test runner. Extension browser save scenarios are verified using mocked CRM responses so they never write to production Appwrite.
+From the extension folder, run `bun run typecheck` and `bun run zip`. Jest verifies cancelled/failed dialogs, CRM-only quota rejection and nonblocking invitation clicks, competing tabs, account/user binding, duplicate saves, recovery, status colors, and automatic recording against mocked CRM responses. Do not send real LinkedIn invitations or write production CRM data as a smoke test.

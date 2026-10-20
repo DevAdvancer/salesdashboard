@@ -34,6 +34,7 @@ import { parseIsoDateLocal, daysInMonthLocal } from "./sync-helpers";
 import { createNotificationsForRecipients } from "@/lib/server/notifications";
 import { getLeadDisplayName } from "@/lib/actions/lead/utils";
 import { isSalesTeamLeadAssignee } from '@/lib/utils/lead-assignment';
+import { recordLeadLifecycleEvent } from '@/lib/utils/lead-payment-cycle';
 
 export async function restoreNotInterestedDuplicateLead(input: {
         databases: Awaited<ReturnType<typeof createAdminClient>>['databases'];
@@ -443,6 +444,11 @@ export async function updateLeadAction(leadId: string, data: Partial<LeadData>, 
 
         const currentData = JSON.parse(currentLead.data) as LeadData;
         const updatedData = { ...currentData, ...data };
+        // Lifecycle/cycle identifiers are managed by close/reopen, never by form input.
+        for (const key of ['lifecycleHistory', 'paymentCycleId']) {
+            if (key in currentData) updatedData[key] = currentData[key];
+            else delete updatedData[key];
+        }
 
         const lockedField = getChangedLockedLeadContactField(currentData, updatedData);
         if (lockedField) {
@@ -632,6 +638,12 @@ export async function reopenLeadAction(leadId: string, actorId?: string, actorNa
         // Get the current lead
         const currentLead = await databases.getDocument(DATABASE_ID, LEADS_COLLECTION_ID, leadId) as unknown as Lead;
         await assertLeadReopenAllowed(databases, actorDoc, currentLead);
+        if (!currentLead.isClosed && currentLead.status === 'Reopened') return currentLead;
+        const now = new Date().toISOString();
+        const reopenedData = recordLeadLifecycleEvent(
+            currentLead, 'reopened', actorId, actorDoc.name || actorName || actorId,
+            'Reopened', now, ID.unique(),
+        );
 
         // Build permissions with update access restored
         const { Permission, Role } = await import("node-appwrite");
@@ -656,6 +668,7 @@ export async function reopenLeadAction(leadId: string, actorId?: string, actorNa
             {
                 isClosed: false,
                 status: 'Reopened',
+                data: JSON.stringify(reopenedData),
             },
             newPermissions
         );

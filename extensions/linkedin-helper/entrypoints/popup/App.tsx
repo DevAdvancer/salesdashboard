@@ -2,18 +2,20 @@ import { useEffect, useState } from "react";
 import type { ExtensionState } from "crm-shared/types/linkedin-extension";
 import { useLinkedinHelper } from "../../lib/use-linkedin-helper";
 import { usePageTheme } from "../../lib/use-page-theme";
-import { AccountPicker, History, Quota } from "./RequestDetails";
+import { AccountPicker, Quota } from "./RequestDetails";
+import { profileStatusLabel } from '../../lib/profile-status';
 
 const descriptions: Record<ExtensionState, [string, string]> = {
-  new: ["Ready to record", "No blocking request was found for this company. Record after you send the invitation."],
-  active_request: ["Already exists", "An active request exists for this company. View history for details."],
-  resend_available: ["Previous CRM request found", "This profile has an earlier CRM request. Review it before sending another invitation."],
+  new: ["Ready to send", "Use Connect/Send on LinkedIn. A confirmed invitation is recorded automatically."],
+  existing_lead: ["Already in CRM", "This profile already exists as a CRM lead. CRM will not add another request."],
+  active_request: ["Already sent", "An active CRM request already exists for this company. CRM will not add another request."],
+  resend_available: ["Resend available", "Confirm the resend in the extension dialog on LinkedIn before sending."],
   limit_reached: ["Daily allowance reached", "Choose another assigned account or return on the next Eastern business date."],
   missing_limit: ["Account limit not configured", "Ask your team lead or administrator to configure a connection limit."],
 };
-const resultTones: Record<ExtensionState, "ready" | "existing" | "blocked"> = {
-  new: "ready", active_request: "existing", resend_available: "existing",
-  limit_reached: "blocked", missing_limit: "blocked",
+const resultTones: Record<ExtensionState, "sent" | "existing" | "blocked"> = {
+  new: "sent", existing_lead: "existing", active_request: "existing", resend_available: "blocked",
+  limit_reached: "existing", missing_limit: "existing",
 };
 
 export function App() {
@@ -22,7 +24,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showSilverspace, setShowSilverspace] = useState(true);
   const { state } = helper;
-  const { connected, quota, title, resultState, isResend, canRecord } = getView(state);
+  const { connected, quota, title, resultState } = getView(state);
   useEffect(() => {
     const timer = setInterval(() => { setShowSilverspace(previous => !previous); }, 4500);
     return () => clearInterval(timer);
@@ -47,29 +49,34 @@ export function App() {
       {connected && state.bootstrap && <div id="workspace">
         <div className="section-heading"><span>Hello, {state.bootstrap.user.name}</span>
           <button id="refresh" className="text-button" disabled={state.pending} onClick={helper.refresh}>Refresh</button></div>
-        <AccountPicker accounts={state.bootstrap.accounts} value={state.accountId} disabled={state.pending} onChange={helper.selectAccount} />
+        <AccountPicker accounts={state.bootstrap.accounts} value={state.accountId} disabled={state.pending || state.locked} onChange={helper.selectAccount} />
+        <div className="actions"><button id="account-lock" disabled={state.pending || (!state.locked && !state.accountId)}
+          onClick={state.locked ? helper.unlockAccount : helper.lockAccount}>{state.locked ? "Unlock account" : "Lock account for this browser profile"}</button></div>
+        <p className="hint">{state.locked ? "Locked. Confirmed LinkedIn invitations are recorded from this account automatically." : "Choose the account signed in on LinkedIn, then lock it to enable CRM tracking."} LinkedIn controls remain available. Each Chrome/Edge browser profile keeps its own lock.</p>
+        {state.attempts.map(attempt => <ReviewAttempt key={attempt.id} attempt={attempt} pending={state.pending} clear={helper.clearAttempt} />)}
         <Quota quota={quota} today={state.checked?.today || state.bootstrap.today} />
         <label htmlFor="profile">Profile URL</label>
         <div className="row"><input id="profile" type="text" value={state.profile} disabled={state.pending}
           onChange={event => helper.setProfile(event.target.value)} placeholder="https://www.linkedin.com/in/…" spellCheck={false} />
           <button id="detect" className="secondary" disabled={state.pending} onClick={helper.detect}>Detect</button></div>
-        {title && <div className="result" data-state={resultState}><span>{title[0]}</span><p>{title[1]}</p>
-          {state.checked?.previousRequest && <p>CRM record: {state.checked.previousRequest.status} · {state.checked.previousRequest.dateSent.slice(0, 10)}</p>}</div>}
-        {isResend && <div className="confirmation"><label><input type="checkbox" checked={state.confirmResend} disabled={state.pending}
-          onChange={event => helper.setConfirmResend(event.target.checked)} /> I sent another invitation on LinkedIn and want to update this CRM request.</label></div>}
-        <div className="actions"><button id="record" disabled={!canRecord} onClick={helper.record}>{isResend ? "Record resend" : "Record request sent"}</button></div>
-        <div className="actions"><button id="check" className="secondary" disabled={state.pending || !state.accountId || !state.profile.trim()} onClick={helper.check}>Check before inviting</button>
-          <button id="history" className="secondary" disabled={state.pending || !state.accountId || !state.profile.trim()} onClick={helper.history}>View history</button></div>
+        {title && <div className="result" data-state={resultState} role="status" title={title[1]}><span>{title[0]}</span></div>}
+        <div className="actions"><button id="check" className="secondary" disabled={state.pending || !state.accountId || !state.profile.trim()} onClick={helper.check}>Check send status</button></div>
         <div className="actions"><button id="open-profile" className="secondary" disabled={state.pending || !state.profile.trim()}
           onClick={helper.openProfile}>Open profile on LinkedIn</button></div>
-        <p className="hint">Send the invitation on LinkedIn first, then record it here. CRM history does not show LinkedIn&apos;s invitation status.</p>
-        {state.historyVisible && state.checked && <History key={state.checked.revision} items={state.checked.history} />}
+        <p className="hint">Status follows the profile you open. The bar shows CRM recording availability; it does not block LinkedIn invitations. Click it for details.</p>
       </div>}
       <p id="message" role="status" aria-live="polite" data-kind={state.noteKind}>{state.note}</p>
     </main>
     <footer><button className="text-button" disabled={state.pending} onClick={helper.openCrm}>Open CRM</button>
-      <span>Manual outreach</span></footer>
+      <span>Automatic recording</span></footer>
   </>;
+}
+
+function ReviewAttempt({ attempt, pending, clear }: { attempt: { id: string; targetUrl: string }; pending: boolean; clear: (id: string) => void }) {
+  const [reviewed, setReviewed] = useState(false);
+  return <section className="confirmation"><p>An invitation needs review: <a href={attempt.targetUrl} target="_blank" rel="noreferrer">Open profile</a></p>
+    <label><input type="checkbox" checked={reviewed} onChange={event => setReviewed(event.target.checked)} /> I checked LinkedIn and CRM and resolved any missing request.</label>
+    <button className="secondary" disabled={pending || !reviewed} onClick={() => clear(attempt.id)}>Clear reviewed attempt</button></section>;
 }
 
 function PopupHeader({ showSilverspace, connected, connection, settingsOpen, toggleSettings }: {
@@ -91,18 +98,7 @@ function PopupHeader({ showSilverspace, connected, connection, settingsOpen, tog
 function getView(state: ReturnType<typeof useLinkedinHelper>["state"]) {
   const connected = state.connection === "connected" && state.bootstrap !== null;
   const quota = state.checked || state.bootstrap?.accounts.find(account => account.id === state.accountId);
-  const title = state.noteKind === "success" && state.checked?.state === "active_request"
-    ? ["Request recorded", "The invitation you sent is recorded in CRM."]
-    : state.checked ? descriptions[state.checked.state] : null;
-  const resultState = state.noteKind === "success" && state.checked?.state === "active_request" ? "sent" :
-    state.checked ? resultTones[state.checked.state] : "ready";
-  const isResend = state.checked?.state === "resend_available" && !!state.checked.previousRequest;
-  return { connected, quota, title, resultState, isResend, canRecord: canRecordRequest(state, connected, isResend) };
-}
-
-function canRecordRequest(state: ReturnType<typeof useLinkedinHelper>["state"], connected: boolean, isResend: boolean) {
-  const canRecord = connected && !state.pending && !!state.accountId && !!state.profile.trim() &&
-    (!state.checked || state.checked.canRecord) &&
-    (state.checked?.state !== "resend_available" || (isResend && state.confirmResend));
-  return canRecord;
+  const title = state.checked ? [profileStatusLabel(state.checked), descriptions[state.checked.state][1]] : null;
+  const resultState = state.checked ? resultTones[state.checked.state] : 'ready';
+  return { connected, quota, title, resultState };
 }

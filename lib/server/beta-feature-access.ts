@@ -4,7 +4,8 @@ import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { createAdminClient } from '@/lib/server/appwrite';
 import { listAllDocuments } from '@/lib/server/appwrite-pagination';
 
-export const LINKEDIN_HELPER_FEATURE = 'linkedin-helper';
+// A new program starts with no participants; grants from the retired beta do not opt users in.
+export const LINKEDIN_HELPER_FEATURE = 'linkedin-helper-1.8-beta';
 type Databases = Awaited<ReturnType<typeof createAdminClient>>['databases'];
 type AccessRecord = { userId: string; feature: string; enabled: boolean };
 

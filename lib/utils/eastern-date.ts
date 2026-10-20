@@ -73,7 +73,8 @@ export function formatEasternDateTime(value: string | Date | null | undefined): 
 export function easternWallTimeToIso(value: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
   if (!match) throw new Error("Choose a valid Eastern date and time.");
-  const [year, month, day, hour, minute] = match.slice(1).map(Number);
+  // The successful regex has exactly these five numeric capture groups.
+  const [year, month, day, hour, minute] = match.slice(1).map(Number) as [number, number, number, number, number];
   const localKey = `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}`;
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone: EASTERN_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
@@ -85,6 +86,7 @@ export function easternWallTimeToIso(value: string): string {
         .filter(part => part.type !== "literal").map(part => [part.type, part.value]));
       return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}` === localKey;
     });
-  if (!matching.length) throw new Error("That Eastern time does not exist. Choose another time.");
-  return matching[0].toISOString();
+  const first = matching[0];
+  if (!first) throw new Error("That Eastern time does not exist. Choose another time.");
+  return first.toISOString();
 }

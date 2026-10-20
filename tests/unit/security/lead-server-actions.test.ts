@@ -549,6 +549,13 @@ describe('lead server action authorization', () => {
 
     await expect(reopenLeadAction('lead-1', 'tl-1', 'TL')).resolves.toBeTruthy();
     expect(mockUpdateDocument).toHaveBeenCalled();
+    const payload = mockUpdateDocument.mock.calls[0][3];
+    const data = JSON.parse(payload.data);
+    expect(data.paymentCycleId).toBe('unique-id');
+    expect(data.lifecycleHistory).toEqual([expect.objectContaining({
+      type: 'reopened', actorId: 'tl-1', previousStatus: 'Closed',
+      previousClosedAt: '2024-01-15T10:00:00.000Z',
+    })]);
   });
 
   it('rejects teamLead lead assignment to agents outside their branch scope', async () => {

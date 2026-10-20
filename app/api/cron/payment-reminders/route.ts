@@ -7,6 +7,7 @@ import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
 import { getTodayEst } from "@/lib/utils/est-date";
 import { isWorkingDateKey } from "@/lib/utils/holiday-calendar";
 import type { LeadData, PaymentStatus } from "@/lib/types";
+import { isCurrentPaymentCycle } from '@/lib/utils/lead-payment-cycle';
 
 function getAuthorizationToken(request: NextRequest) {
   const header = request.headers.get("authorization");
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest) {
     evaluated += 1;
 
     const status = (paymentDoc.status as PaymentStatus) ?? "not_paid";
-    if (status === "fully_paid") continue;
+    if (status === "fully_paid" || status === 'refunded') continue;
 
     const lastActivityAtRaw = paymentDoc.updatedAt ?? paymentDoc.createdAt;
     const lastActivityAt = typeof lastActivityAtRaw === "string" ? lastActivityAtRaw : paymentDoc.createdAt;
@@ -94,6 +95,10 @@ export async function GET(request: NextRequest) {
     }
 
     if (!lead?.isClosed) continue;
+    const cycleData = safeParseLeadData(lead.data);
+    let plan = {};
+    try { plan = JSON.parse(paymentDoc.paymentPlan ?? paymentDoc.paymentPlanJson ?? '{}'); } catch {}
+    if (!isCurrentPaymentCycle(plan as import('@/lib/types').ClientPaymentPlan, cycleData)) continue;
 
     const assignedToId = typeof lead.assignedToId === "string" ? lead.assignedToId : null;
     const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : null;

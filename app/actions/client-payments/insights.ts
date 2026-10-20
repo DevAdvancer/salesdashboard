@@ -10,6 +10,7 @@ import { isRoleEligibleForComponent } from "@/lib/constants/component-access";
 import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
 import type { ClientPaymentPlan, ClientPaymentRecord, ClientPaymentUpdate, Lead, PaymentStatus, User } from "@/lib/types";
 import { getActor, ensureComponentAccess, isAdminLikeReadRole, assertCanMutateClientPayments, parseJsonOr, canActorAccessLead, mapRecord, findRecordByLeadId, mapLeadDocumentToLead, buildSyntheticLead, toComparableIsoDate, PaymentInsightRecord, AdminClientHistoryRow, PaymentsReportRow } from "./shared";
+import { latestPaymentIdsByLead } from '@/lib/utils/lead-payment-cycle';
 
 
 /**
@@ -216,6 +217,8 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
     }
 
     const results: PaymentInsightRecord[] = [];
+    const latestPaymentIds = latestPaymentIdsByLead(paymentDocs);
+    const handledFollowups = new Set<string>();
     for (const doc of paymentDocs as any[]) {
     const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
     if (!leadId) continue;
@@ -235,7 +238,7 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
       updates.some((u) => u.status === "partially_paid");
 
     // Sum actual paid amounts from the updates (the real money collected).
-    const paidUpdates = updates.filter((u: any) => typeof u.amount === "number" && u.amount > 0);
+    const paidUpdates = updates.filter((u: any) => typeof u.amount === "number" && Number.isFinite(u.amount));
     const totalPaid = paidUpdates.reduce((sum: number, u: any) => sum + u.amount, 0);
     const paidUpdateCount = paidUpdates.length;
 
@@ -247,19 +250,21 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
       if (!u.createdAt) continue;
       const monthKey = u.createdAt.slice(0, 7); // "YYYY-MM"
       const amount = u.amount ?? 0;
-      if (amount > 0) {
+      if (amount !== 0) {
         paidMonthlyAmounts[monthKey] = (paidMonthlyAmounts[monthKey] || 0) + amount;
       }
     }
 
     const leadMeta = leadDataMap.get(leadId);
+    const isLatest = latestPaymentIds.get(leadId) === doc.$id;
+    const cycleClosedAt = paymentPlan.closure?.closedAt ?? doc.createdAt ?? leadMeta?.closedAt ?? null;
 
     // Apply date range filter if dates are provided.
     // Fall back to the payment record's createdAt when the lead has no
     // closedAt — otherwise records without a closing date are silently
     // dropped and never appear in the dashboard.
     if (normalizedFrom || normalizedTo) {
-      const closedDate = toComparableIsoDate(leadMeta?.closedAt)
+      const closedDate = toComparableIsoDate(cycleClosedAt)
         || toComparableIsoDate(typeof doc.$createdAt === "string" ? doc.$createdAt : null);
       
       let outOfRange = false;
@@ -275,7 +280,8 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
         // followup payments collected inside the range. We extract those and
         // yield them as standalone followups so the revenue still appears in
         // the pending column (without inflating the upfront/total contract values).
-        const followups = followupsDetailsMap.get(leadId) || [];
+        const followups = !handledFollowups.has(leadId) && isLatest ? (followupsDetailsMap.get(leadId) || []) : [];
+        if (isLatest) handledFollowups.add(leadId);
         for (const f of followups) {
           if (normalizedFrom && f.date && f.date < normalizedFrom) continue;
           if (normalizedTo && f.date && f.date > normalizedTo) continue;
@@ -302,10 +308,10 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
       company: leadMeta?.company ?? "Unknown",
       source: leadMeta?.source ?? "",
       leadStatus: leadMeta?.leadStatus ?? "",
-      branchId: leadMeta?.branchId ?? null,
+      branchId: paymentPlan.closure?.branchId ?? leadMeta?.branchId ?? null,
       isFollowupOnly: false,
       isClosed: leadMeta?.isClosed === true,
-      closedAt: leadMeta?.closedAt ?? null,
+      closedAt: cycleClosedAt,
       upfrontAmount: paymentPlan.upfrontAmount,
       months: paymentPlan.months,
       percent: paymentPlan.percent,
@@ -314,14 +320,14 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
       wasPartiallyPaid,
       totalPaid: paidUpdateCount > 0 ? totalPaid : null,
       paidUpdateCount,
-      pendingTotal: pendingMap.get(leadId)?.totalPending ?? null,
-      latestPendingMonth: pendingMap.get(leadId)?.latestMonth ?? null,
+      pendingTotal: isLatest ? (pendingMap.get(leadId)?.totalPending ?? null) : null,
+      latestPendingMonth: isLatest ? (pendingMap.get(leadId)?.latestMonth ?? null) : null,
       paidMonthlyAmounts,
-      followupsMonthlyAmounts: followupsMap.get(leadId)?.monthlyAmounts ?? {},
-      leadAmount: leadMeta?.leadAmount ?? 0,
-      followupsTotal: followupsMap.get(leadId)?.total ?? 0,
-      followupsCount: followupsMap.get(leadId)?.count ?? 0,
-      followupsPayments: followupsDetailsMap.get(leadId) || [],
+      followupsMonthlyAmounts: isLatest ? (followupsMap.get(leadId)?.monthlyAmounts ?? {}) : {},
+      leadAmount: paymentPlan.closure?.leadAmount ?? leadMeta?.leadAmount ?? 0,
+      followupsTotal: isLatest ? (followupsMap.get(leadId)?.total ?? 0) : 0,
+      followupsCount: isLatest ? (followupsMap.get(leadId)?.count ?? 0) : 0,
+      followupsPayments: isLatest ? (followupsDetailsMap.get(leadId) || []) : [],
     });
     }
 
@@ -463,7 +469,7 @@ export async function listAdminClientHistoryRowsAction(actorId: string): Promise
     rows.push({
       rowId: typeof doc.$id === "string" ? doc.$id : crypto.randomUUID(),
       leadId: lead.$id,
-      lead,
+      lead: { ...lead, closedAt: paymentPlan.closure?.closedAt ?? doc.createdAt ?? lead.closedAt },
       paymentStatus: status,
       personalDetails,
       paymentPlan,
@@ -569,6 +575,10 @@ export async function listPaymentsReportAction(input: {
     }
 
     // Fetch user names
+    for (const payment of paymentDocs) {
+      const plan = parseJsonOr<ClientPaymentPlan>(payment.paymentPlan ?? payment.paymentPlanJson, { percent: 0, months: 0, upfrontAmount: 0 });
+      if (plan.closure?.ownerId) allAgentIds.add(plan.closure.ownerId);
+    }
     const userNameMap = new Map<string, string>();
     const userPrimaryBranchMap = new Map<string, string | null>();
     const agentIdsArray = Array.from(allAgentIds);
@@ -603,7 +613,7 @@ export async function listPaymentsReportAction(input: {
     const status = (doc.status as PaymentStatus) ?? "not_paid";
     const updates = parseJsonOr<ClientPaymentUpdate[]>(doc.updates ?? doc.updatesJson, []);
     const head = updates[0] ?? null;
-    const closedAt = leadClosedAtMap.get(leadId) ?? null;
+    const closedAt = paymentPlan.closure?.closedAt ?? doc.createdAt ?? leadClosedAtMap.get(leadId) ?? null;
     // Fall back to the payment record's createdAt when the lead has no
     // closedAt — otherwise records without a closing date are silently
     // dropped and never appear in the report.
@@ -633,12 +643,12 @@ export async function listPaymentsReportAction(input: {
       leadId,
       company: leadDataMap.get(leadId) ?? "Unknown",
       legalName: leadLegalNameMap.get(leadId) ?? "",
-      agentId: leadOwnerIdMap.get(leadId) ?? null,
-      agentName: userNameMap.get(leadOwnerIdMap.get(leadId) || "") ?? null,
+      agentId: paymentPlan.closure?.ownerId ?? leadOwnerIdMap.get(leadId) ?? null,
+      agentName: userNameMap.get(paymentPlan.closure?.ownerId ?? leadOwnerIdMap.get(leadId) ?? '') ?? null,
       closedAt,
       status,
       paymentPlan,
-      leadAmount: leadAmountMap.get(leadId) ?? 0,
+      leadAmount: paymentPlan.closure?.leadAmount ?? leadAmountMap.get(leadId) ?? 0,
       totalPaid: paidUpdateCount > 0 ? totalPaid : null,
       paidUpdateCount,
       createdAt: typeof doc.$createdAt === "string" ? doc.$createdAt : new Date().toISOString(),

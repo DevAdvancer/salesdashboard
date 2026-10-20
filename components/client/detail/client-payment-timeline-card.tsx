@@ -1,7 +1,6 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { format } from "date-fns";
 import type { ClientPaymentRecord, PaymentStatus } from "@/lib/types";
 
 interface ClientPaymentTimelineCardProps {
@@ -13,8 +12,25 @@ export function ClientPaymentTimelineCard({ paymentRecord }: ClientPaymentTimeli
     if (status === "fully_paid") return "Fully Paid";
     if (status === "partially_paid") return "Partially Paid";
     if (status === "non_upfront") return "Non-Upfront";
+    if (status === "refunded") return "Refunded";
     return "Not Paid";
   };
+  const records = [paymentRecord, ...(paymentRecord.previousRecords ?? [])];
+  const entries = [
+    ...records.flatMap((record) => record.updates.map((update) => ({
+      ...update,
+      title: `Status changed to ${formatPaymentStatusLabel(update.status)}`,
+      cycle: record.createdAt,
+    }))),
+    ...(paymentRecord.lifecycleEvents ?? []).map((event) => ({
+      ...event,
+      title: event.type === 'reopened' ? 'Lead reopened' : `Lead closed — ${event.status}`,
+      cycle: '', amount: null, note: null,
+    })),
+  ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const formatDate = (date: string) => new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', dateStyle: 'medium', timeStyle: 'short',
+  }).format(new Date(date));
 
   return (
     <Card>
@@ -22,25 +38,27 @@ export function ClientPaymentTimelineCard({ paymentRecord }: ClientPaymentTimeli
         <CardTitle>Payment History</CardTitle>
       </CardHeader>
       <CardContent>
-        {paymentRecord.updates.length === 0 ? (
+        {entries.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No updates recorded yet.
           </p>
         ) : (
           <div className="space-y-4">
-            {paymentRecord.updates.map((update) => (
+            {entries.map((update) => (
               <div
                 key={update.id}
                 className="flex flex-col space-y-1 border-l-2 border-primary pl-4 py-2">
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-sm">
-                    Status changed to{" "}
-                    {formatPaymentStatusLabel(update.status)}
+                    {update.title}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {format(new Date(update.createdAt), "MMM d, yyyy h:mm a")}
+                    {formatDate(update.createdAt)} ET
                   </span>
                 </div>
+                {records.length > 1 && update.cycle && (
+                  <p className="text-xs text-muted-foreground">Payment cycle: {formatDate(update.cycle)} ET</p>
+                )}
                 {update.amount !== undefined && update.amount !== null && (
                   <p className="text-sm text-emerald-600 font-medium">
                     Payment Amount: ${update.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}

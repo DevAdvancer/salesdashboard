@@ -714,7 +714,7 @@ All routes under `app/api/`.
 | Route | Schedule | Description |
 |---|---|---|
 | `/api/cron/payment-reminders` | Configurable | Sends payment reminder emails for overdue payment plans |
-| `/api/cron/linkedin-withdrawal-reminders` | Configurable | Reminds agents to withdraw stale LinkedIn requests |
+| `/api/cron/linkedin-withdrawal-reminders` | Monday, 14:00 UTC | Automatically withdraws eligible CRM requests and emails a CSV report to Settings recipients; no agent reminders |
 
 ### Other
 
@@ -883,9 +883,9 @@ Consists of three sections:
 
 3. **LinkedIn Reports** (`/linkedin-reports`) — aggregated outreach stats.
 
-### Withdrawal Reminder Cron
+### Automatic Withdrawal Cron
 
-`/api/cron/linkedin-withdrawal-reminders` — runs on schedule and sends reminders to agents who have LinkedIn requests stuck in `sent` status past a configurable threshold.
+`/api/cron/linkedin-withdrawal-reminders` retains its existing URL and Monday schedule for compatibility. It automatically marks eligible CRM requests withdrawn using the shared expiration/inactive-agent policy, then emails a CSV report to the report addresses configured in Settings. The scheduled report is sent even when there are zero withdrawals and includes any failure count. The endpoint does not create due reminders or agent completion notifications; a failed withdrawal or report delivery returns a non-success status. It changes CRM records only, not invitations on LinkedIn. The separate Friday warning job remains independent.
 
 ---
 

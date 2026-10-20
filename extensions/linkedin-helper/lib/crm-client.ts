@@ -1,6 +1,7 @@
 import { browser } from "wxt/browser";
 import { normalizeCrmOrigin, normalizeProfileUrl } from "crm-shared/utils/linkedin-extension-url";
 import type { ExtensionBootstrap, ExtensionInput, ExtensionMessage, ExtensionResponse } from "crm-shared/types/linkedin-extension";
+import type { TrackingAttempt, TrackingLock } from "./page-tracking";
 
 export class BridgeError extends Error {
   constructor(message: string, public status?: number) { super(message); }
@@ -20,14 +21,17 @@ export async function requestCrm<T>(input?: ExtensionInput, fresh = false): Prom
 
 export async function loadConnection(origin: string, fresh = false) {
   const data = await requestCrm<ExtensionBootstrap>(undefined, fresh);
-  const stored = await browser.storage.local.get("selectedAccounts") as { selectedAccounts?: Record<string, string> };
+  const stored = await browser.storage.local.get(["selectedAccounts", "trackingLock"]) as { selectedAccounts?: Record<string, string>; trackingLock?: TrackingLock };
+  const locked = stored.trackingLock?.origin === normalizeCrmOrigin(origin) && stored.trackingLock.userId === data.user.id;
   const previous = stored.selectedAccounts?.[`${normalizeCrmOrigin(origin)}|${data.user.id}`];
   const available = data.accounts.filter(account => account.remaining !== 0 && account.limit !== null);
-  const selectedAccountId = available.some(account => account.id === previous) ? previous! : previous ? "" : available[0]?.id || "";
+  const selectedAccountId = locked ? stored.trackingLock!.accountId : available.some(account => account.id === previous) ? previous! : "";
   const note = !data.accounts.length ? "No active accounts are assigned or delegated to you. Ask your team lead." :
     !available.length ? "No account has an available allowance. Ask your team lead or return tomorrow." :
     previous && !selectedAccountId ? "Your previous account is unavailable. Choose the LinkedIn account you are using." : "";
-  return { data, selectedAccountId, note };
+  const pending = await browser.storage.session.get("trackingAttempts");
+  const attempts = (pending.trackingAttempts as TrackingAttempt[] || []);
+  return { data, selectedAccountId, note, locked, attempts };
 }
 
 export async function rememberAccount(origin: string, userId: string, accountId: string) {

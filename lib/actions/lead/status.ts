@@ -9,6 +9,7 @@ import { assertAuthenticatedUserId } from '@/lib/server/current-user';
 import { assertLeadAccessAllowed, getHierarchyPermissionsServer } from './visibility';
 import { getUnassignedOwnerId, getLeadLinkedinRequestId, resolveBranchIdForEvent, getLeadDisplayName } from './utils';
 import { logger } from '@/lib/utils/logger';
+import { recordLeadLifecycleEvent } from '@/lib/utils/lead-payment-cycle';
 
 type AdminDatabases = Awaited<ReturnType<typeof createAdminClient>>['databases'];
 
@@ -470,13 +471,15 @@ export async function closeLeadAction(
             permissions.push(...assignedHierarchyPerms);
         }
 
-        let updatedDataJson = currentLead.data;
-        try {
-            const parsed = JSON.parse(currentLead.data || "{}");
-            parsed.closedById = actorId;
-            parsed.closedByName = actorName;
-            updatedDataJson = JSON.stringify(parsed);
-        } catch {}
+        if (currentLead.isClosed) return { success: true, lead: currentLead };
+        const closedAt = new Date().toISOString();
+        const parsed = recordLeadLifecycleEvent(
+            currentLead, 'closed', actorId, actorDoc?.name || actorName,
+            closedStatus, closedAt, ID.unique(),
+        );
+        parsed.closedById = actorId;
+        parsed.closedByName = actorDoc?.name || actorName;
+        const updatedDataJson = JSON.stringify(parsed);
 
         const lead = await databases.updateDocument(
             DATABASE_ID,
@@ -484,7 +487,7 @@ export async function closeLeadAction(
             leadId,
             {
                 isClosed: true,
-                closedAt: new Date().toISOString(),
+                closedAt,
                 status: closedStatus,
                 data: updatedDataJson,
                 ...(shouldAssignClosingAgent ? { assignedToId: actorId } : {}),

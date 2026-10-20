@@ -113,7 +113,10 @@ export function reopenLead(
   actorId?: string,
   actorName?: string
 ): Promise<Lead> {
-  return reopenLeadAction(leadId, actorId, actorName).finally(clearLeadReadCache);
+  return reopenLeadAction(leadId, actorId, actorName).finally(() => {
+    clearClientReadCache();
+    clearLeadReadCache();
+  });
 }
 
 export function updateLead(

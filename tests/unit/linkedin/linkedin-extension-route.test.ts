@@ -2,6 +2,8 @@
 jest.mock("@/lib/server/linkedin-extension", () => ({
   bootstrapLinkedinExtension: jest.fn(), checkLinkedinExtension: jest.fn(), recordLinkedinExtension: jest.fn(),
 }));
+jest.mock('@/app/actions/beta', () => ({ getMyLinkedinHelperAccessAction: jest.fn() }));
+import { getMyLinkedinHelperAccessAction } from '@/app/actions/beta';
 import { NextRequest } from "next/server";
 import { GET, POST } from "@/app/api/extension/linkedin/route";
 import { bootstrapLinkedinExtension, checkLinkedinExtension, recordLinkedinExtension } from "@/lib/server/linkedin-extension";
@@ -49,4 +51,23 @@ it("allows direct recording while history remains an explicit operation", async 
   (checkLinkedinExtension as jest.Mock).mockResolvedValue({ history: [] });
   await POST(new NextRequest(url, { method: "POST", headers, body: JSON.stringify({ operation: "history", accountId: "a", targetUrl: "url" }) }));
   expect(checkLinkedinExtension).toHaveBeenCalledWith(expect.objectContaining({ operation: "history" }), true);
+});
+
+it('enforces beta grants for reads and saves while v1.7 continues without a grant lookup', async () => {
+  (bootstrapLinkedinExtension as jest.Mock).mockResolvedValue({ accounts: [] });
+  (recordLinkedinExtension as jest.Mock).mockResolvedValue({ mode: 'created' });
+  const betaHeaders = { ...headers, 'x-crm-extension-channel': 'beta' };
+  (getMyLinkedinHelperAccessAction as jest.Mock).mockResolvedValue(false);
+  expect((await GET(new NextRequest(url, { headers: betaHeaders }))).status).toBe(403);
+  const body = JSON.stringify({ operation: 'record', accountId: 'a', targetUrl: 'url' });
+  expect((await POST(new NextRequest(url, { method: 'POST', headers: betaHeaders, body }))).status).toBe(403);
+  expect(recordLinkedinExtension).not.toHaveBeenCalled();
+  expect(bootstrapLinkedinExtension).not.toHaveBeenCalled();
+  (getMyLinkedinHelperAccessAction as jest.Mock).mockResolvedValue(true);
+  expect((await GET(new NextRequest(url, { headers: betaHeaders }))).status).toBe(200);
+  expect((await POST(new NextRequest(url, { method: 'POST', headers: betaHeaders, body }))).status).toBe(200);
+  (getMyLinkedinHelperAccessAction as jest.Mock).mockClear();
+  expect((await GET(new NextRequest(url, { headers }))).status).toBe(200);
+  expect((await POST(new NextRequest(url, { method: 'POST', headers, body }))).status).toBe(200);
+  expect(getMyLinkedinHelperAccessAction).not.toHaveBeenCalled();
 });

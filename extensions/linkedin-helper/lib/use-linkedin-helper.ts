@@ -1,19 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { browser } from "wxt/browser";
 import { crmPermissionPattern, normalizeCrmOrigin, normalizeProfileUrl } from "crm-shared/utils/linkedin-extension-url";
-import type { ExtensionBootstrap, ExtensionCheck, ExtensionRecord } from "crm-shared/types/linkedin-extension";
+import type { ExtensionBootstrap, ExtensionCheck } from "crm-shared/types/linkedin-extension";
 import { BridgeError, detectProfile, loadConnection, rememberAccount, rememberedProfile, rememberProfile, requestCrm, sendBridge } from "./crm-client";
+import type { TrackingAttempt } from "./page-tracking";
 
 interface HelperState {
   crmUrl: string; origin: string | null; connection: "disconnected" | "connecting" | "connected";
   bootstrap: ExtensionBootstrap | null; accountId: string; profile: string; checked: ExtensionCheck | null;
-  confirmResend: boolean; historyVisible: boolean; pending: boolean; note: string; noteKind: "info" | "error" | "success";
+  pending: boolean; note: string; noteKind: "info" | "error" | "success";
+  locked: boolean; attempts: TrackingAttempt[];
 }
 const initial: HelperState = { crmUrl: "https://crm.silverspaceinc.tech", origin: null, connection: "disconnected",
-  bootstrap: null, accountId: "", profile: "", checked: null, confirmResend: false, historyVisible: false, pending: true, note: "", noteKind: "info" };
+  bootstrap: null, accountId: "", profile: "", checked: null, pending: true, note: "", noteKind: "info", locked: false, attempts: [] };
 
 function withResult(state: HelperState, data: ExtensionCheck): HelperState {
-  return { ...state, profile: data.targetUrl, checked: data, confirmResend: false,
+  return { ...state, profile: data.targetUrl, checked: data,
     bootstrap: state.bootstrap ? { ...state.bootstrap, today: data.today,
       accounts: state.bootstrap.accounts.map(account => account.id === data.account.id ?
         { ...account, used: data.used, limit: data.limit, remaining: data.remaining } : account) } : null };
@@ -23,23 +25,28 @@ export function useLinkedinHelper() {
   const [state, setState] = useState<HelperState>(initial);
   const generation = useRef(0);
   const running = useRef(true);
-  const profileTab = useRef<number | null>(null);
   const mounted = useRef(true);
+  const activeProfile = useRef('');
+  const detectionGeneration = useRef(0);
 
   const invalidate = useCallback(() => {
     generation.current++;
-    setState(previous => ({ ...previous, checked: null, confirmResend: false, historyVisible: false, note: "" }));
+    setState(previous => ({ ...previous, checked: null, note: "", noteKind: 'info' }));
   }, []);
 
-  const checkProfile = useCallback(async (accountId: string, rawUrl: string, userId: string, fresh = false, history = false) => {
+  const checkProfile = useCallback(async (accountId: string, rawUrl: string, userId: string, fresh = false) => {
     invalidate();
     if (!accountId) throw new Error("Choose an assigned LinkedIn account first.");
     const targetUrl = normalizeProfileUrl(rawUrl);
     const version = generation.current;
-    setState(previous => ({ ...previous, note: history ? "Loading history…" : "Checking availability…" }));
-    const data = await requestCrm<ExtensionCheck>({ operation: history ? "history" : "check", accountId, targetUrl }, fresh);
+    setState(previous => ({ ...previous, note: "Checking availability…" }));
+    let data: ExtensionCheck;
+    try { data = await requestCrm<ExtensionCheck>({ operation: "check", accountId, targetUrl }, fresh); }
+    catch (error) { if (!mounted.current || version !== generation.current) return; throw error; }
+    if (!mounted.current || version !== generation.current) return;
     if (data.user.id !== userId) throw new BridgeError("The signed-in CRM user changed. Refresh accounts before continuing.", 401);
-    if (mounted.current && version === generation.current) setState(previous => withResult({ ...previous, note: "", historyVisible: history }, data));
+    if (data.targetUrl !== targetUrl) throw new Error('The profile changed during the check. Detect the current profile and retry.');
+    if (mounted.current && version === generation.current) setState(previous => withResult({ ...previous, note: "" }, data));
   }, [invalidate]);
 
   useEffect(() => {
@@ -53,9 +60,10 @@ export function useLinkedinHelper() {
       setState(previous => ({ ...previous, crmUrl: origin || initial.crmUrl, origin,
         connection: origin ? "connecting" : "disconnected" }));
       // Profile detection can be slow on LinkedIn. It must not hold up the CRM connection.
+      const detection = ++detectionGeneration.current;
       const detecting = detectProfile().then(profile => {
-        if (cancelled || version !== generation.current) return "";
-        profileTab.current = profile.tabId;
+        if (cancelled || version !== generation.current || detection !== detectionGeneration.current) return "";
+        activeProfile.current = profile.url;
         setState(previous => ({ ...previous, profile: profile.url }));
         return profile.url;
       }).catch(() => "");
@@ -63,7 +71,7 @@ export function useLinkedinHelper() {
       const loaded = await loadConnection(origin);
       if (cancelled || version !== generation.current) return;
       setState(previous => ({ ...previous, bootstrap: loaded.data, accountId: loaded.selectedAccountId,
-        connection: "connected", note: loaded.note }));
+        connection: "connected", note: loaded.note, locked: loaded.locked || false, attempts: loaded.attempts || [] }));
       void detecting.then(async detected => {
         if (detected) return;
         const profile = await rememberedProfile(origin, loaded.data.user.id);
@@ -86,13 +94,58 @@ export function useLinkedinHelper() {
     }
   }, [state.connection, state.origin, state.profile, userId]);
 
+  useEffect(() => {
+    if (state.connection !== 'connected') return;
+    let cancelled = false;
+    const sync = async () => {
+      const version = ++detectionGeneration.current;
+      const url = await detectProfile().then(profile => profile.url).catch(() => '');
+      if (cancelled || !mounted.current || version !== detectionGeneration.current || url === activeProfile.current) return;
+      activeProfile.current = url;
+      invalidate();
+      setState(previous => ({ ...previous, profile: url }));
+    };
+    const changed = () => { void sync(); };
+    const updated = (_tabId: number, change: { url?: string; status?: string }) => {
+      if (change.url || change.status === 'complete') changed();
+    };
+    browser.tabs.onActivated.addListener(changed);
+    browser.tabs.onUpdated.addListener(updated);
+    const timer = window.setInterval(changed, 1000);
+    // Also catches an active-tab change while the popup was connecting.
+    changed();
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      browser.tabs.onActivated.removeListener(changed);
+      browser.tabs.onUpdated.removeListener(updated);
+    };
+  }, [state.connection, invalidate]);
+
+  useEffect(() => {
+    if (state.connection !== 'connected' || !state.accountId || !state.profile || !userId) return;
+    try { normalizeProfileUrl(state.profile); } catch { return; }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      const task = checkProfile(state.accountId, state.profile, userId);
+      const version = generation.current;
+      void task.catch(error => {
+        if (cancelled || !mounted.current || version !== generation.current) return;
+        setState(previous => ({ ...previous, checked: null,
+          connection: connectionAfterError(previous.connection, error),
+          note: error instanceof Error ? error.message : 'Could not check the current profile.', noteKind: 'error' }));
+      });
+    }, 75);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [state.connection, state.accountId, state.profile, userId, checkProfile]);
+
   async function perform(task: () => Promise<void>) {
     if (running.current) return;
     running.current = true;
     setState(previous => ({ ...previous, pending: true, note: "", noteKind: "info" }));
     try { await task(); } catch (error) {
       generation.current++;
-      if (mounted.current) setState(previous => ({ ...previous, checked: null, confirmResend: false,
+      if (mounted.current) setState(previous => ({ ...previous, checked: null,
         connection: connectionAfterError(previous.connection, error),
         note: error instanceof Error ? error.message : "Something went wrong. Retry.", noteKind: "error" }));
     } finally {
@@ -107,7 +160,9 @@ export function useLinkedinHelper() {
     const loaded = await loadConnection(origin, true);
     if (!mounted.current) return;
     setState(previous => ({ ...previous, bootstrap: loaded.data, accountId: loaded.selectedAccountId,
-      connection: "connected", note: loaded.note, origin }));
+      connection: "connected", note: loaded.note, origin, locked: loaded.locked || false, attempts: loaded.attempts || [] }));
+    const profile = activeProfile.current || state.profile;
+    if (profile && loaded.selectedAccountId) await checkProfile(loaded.selectedAccountId, profile, loaded.data.user.id, true);
   }
 
   function connect() {
@@ -125,49 +180,34 @@ export function useLinkedinHelper() {
 
   return { state,
     setCrmUrl(crmUrl: string) { invalidate(); setState(previous => ({ ...previous, crmUrl, connection: "disconnected" })); },
-    setProfile(profile: string) { profileTab.current = null; invalidate(); setState(previous => ({ ...previous, profile })); },
-    setConfirmResend(confirmResend: boolean) { setState(previous => ({ ...previous, confirmResend })); },
+    setProfile(profile: string) { invalidate(); setState(previous => ({ ...previous, profile })); },
     connect,
+    lockAccount() { void perform(async () => {
+      if (!state.accountId) throw new Error("Choose the account you are using on LinkedIn.");
+      await sendBridge({ type: "tracking-config", accountId: state.accountId });
+      await refreshConnection(normalizeCrmOrigin(state.origin));
+      setState(previous => ({ ...previous, note: "Account locked for this browser profile. Reload any LinkedIn tabs opened before installing this update.", noteKind: "success" }));
+    }); },
+    unlockAccount() { void perform(async () => {
+      await sendBridge({ type: "tracking-config", accountId: null });
+      setState(previous => ({ ...previous, locked: false, note: "Unlocked. Sending stays blocked until you choose and lock the account you are using." }));
+    }); },
+    clearAttempt(attemptId: string) { void perform(async () => {
+      await sendBridge({ type: "tracking-clear", attemptId });
+      await refreshConnection(normalizeCrmOrigin(state.origin));
+    }); },
     refresh() { void perform(() => refreshConnection(normalizeCrmOrigin(state.origin))); },
     check() { void perform(() => checkProfile(state.accountId, state.profile, state.bootstrap?.user.id || "", true)); },
-    history() { void perform(() => checkProfile(state.accountId, state.profile, state.bootstrap?.user.id || "", true, true)); },
     detect() { void perform(async () => {
       invalidate();
-      const detected = await detectProfile(); profileTab.current = detected.tabId;
+      const detected = await detectProfile();
       setState(previous => ({ ...previous, profile: detected.url }));
     }); },
     selectAccount(accountId: string) { void perform(async () => {
+      if (state.locked) throw new Error("Unlock before selecting another LinkedIn account.");
       invalidate(); setState(previous => ({ ...previous, accountId }));
       if (!state.origin || !state.bootstrap) return;
       await rememberAccount(state.origin, state.bootstrap.user.id, accountId);
-    }); },
-    record() { void perform(async () => {
-      const checked = state.checked;
-      if (!state.accountId) throw new Error("Choose an assigned LinkedIn account first.");
-      const targetUrl = normalizeProfileUrl(state.profile);
-      if (checked && !checked.canRecord) throw new Error("This profile is already recorded or unavailable.");
-      if (checked?.state === "resend_available" && !state.confirmResend) throw new Error("Confirm the resend first.");
-      if (profileTab.current !== null) {
-        const tab = await browser.tabs.get(profileTab.current);
-        if (normalizeProfileUrl(tab.url) !== targetUrl) throw new Error("The LinkedIn profile changed. Detect it again.");
-      }
-      setState(previous => ({ ...previous, note: "Checking duplicates and recording…", noteKind: "info" }));
-      const data = await requestCrm<ExtensionRecord>({ operation: "record", accountId: state.accountId,
-        targetUrl, ...(checked ? { revision: checked.revision } : {}), confirmResend: state.confirmResend });
-      if (data.user.id !== state.bootstrap?.user.id) throw new Error("The signed-in CRM user changed. Refresh accounts before continuing.");
-      let copyNote = "";
-      if (data.mode === "created" || data.mode === "resent") {
-        try {
-          await navigator.clipboard.writeText(data.targetUrl);
-          copyNote = " Profile URL copied.";
-        } catch {
-          copyNote = " Could not copy the profile URL. Copy it from the profile field; the request is saved.";
-        }
-      }
-      if (mounted.current) setState(previous => ({ ...withResult(previous, data), historyVisible: false,
-        note: data.mode === "existing" ? "No request added. Review the profile status." :
-          `${data.mode === "resent" ? "Resend" : "Request"} recorded · ${data.remaining ?? "?"} remaining.${copyNote}`,
-        noteKind: data.mode === "existing" ? "info" : "success" }));
     }); },
     openCrm() { void perform(async () => { await sendBridge({ type: "open-crm" }); }); },
     openProfile() { void perform(async () => {

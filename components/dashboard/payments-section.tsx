@@ -40,6 +40,7 @@ const STATUS_FILTERS: { value: "all" | PaymentStatus; label: string }[] = [
   { value: "fully_paid", label: "Fully paid" },
   { value: "partially_paid", label: "Partially paid" },
   { value: "not_paid", label: "Not paid" },
+  { value: "refunded", label: "Refunded" },
 ];
 
 /** Known company values that the dashboard should offer as filter chips. */

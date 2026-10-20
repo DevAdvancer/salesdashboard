@@ -605,16 +605,25 @@ export interface HistoryEntry extends Lead {
   closedAt: string;
 }
 
-export type PaymentStatus = 'not_paid' | 'partially_paid' | 'fully_paid' | 'non_upfront';
+export type PaymentStatus = 'not_paid' | 'partially_paid' | 'fully_paid' | 'non_upfront' | 'refunded';
 
 export interface ClientPaymentPlan {
   percent: number;
   months: number;
   upfrontAmount: number;
+  cycleId?: string;
+  closure?: {
+    closedAt: string;
+    ownerId: string;
+    assignedToId: string | null;
+    branchId: string | null;
+    leadAmount: number;
+  };
 }
 
 export interface ClientPaymentUpdate {
   id: string;
+  sourceFollowupId?: string;
   status: PaymentStatus;
   note?: string | null;
   actorId: string;
@@ -632,6 +641,8 @@ export interface ClientPaymentRecord {
   paymentPlan: ClientPaymentPlan;
   status: PaymentStatus;
   updates: ClientPaymentUpdate[];
+  previousRecords?: ClientPaymentRecord[];
+  lifecycleEvents?: import('@/lib/utils/lead-payment-cycle').LeadLifecycleEvent[];
   createdAt: string;
   updatedAt?: string | null;
   lastReminderAt?: string | null;
@@ -785,7 +796,7 @@ export const FOLLOWUPS_PAYMENT_COMPANIES: FollowupsPaymentCompany[] = [
   'Vizva INC',
 ];
 
-export type FollowupsPaymentStatus = 'paid';
+export type FollowupsPaymentStatus = 'paid' | 'refunded';
 
 export interface PreviousFollowupsPayment {
   $id: string;

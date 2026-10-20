@@ -1,4 +1,5 @@
 "use server";
+import { getPaymentCycleAttribution } from '@/lib/utils/lead-payment-cycle';
 
 import { Query } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
@@ -656,11 +657,12 @@ export async function getWeeklyReportAction(input: {
     const lead = cpLeadById.get(leadId);
     if (!lead) continue;
 
-    const ownerId = lead.ownerId as string | undefined;
-    const assignedToId = lead.assignedToId as string | undefined;
+    const cycle = getPaymentCycleAttribution(cp, lead);
+    const ownerId = cycle.ownerId;
+    const assignedToId = cycle.assignedToId;
     const attributedTo = assignedToId || ownerId;
 
-    const leadCreated = (lead.closedAt as string) || (lead.$createdAt as string) || (lead.createdAt as string);
+    const leadCreated = cycle.closedAt || (lead.$createdAt as string) || (lead.createdAt as string);
     if (leadCreated && leadCreated < range.from) {
       continue; // Payments for leads closed before range are followups, not upfront
     }

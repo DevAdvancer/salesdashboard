@@ -94,6 +94,7 @@ function HistoryContent() {
   };
 
   const formatPaymentStatusLabel = (status: PaymentStatus | "no_record") => {
+    if (status === 'refunded') return 'Refunded';
     if (status === "no_record") return "No Record";
     if (status === "fully_paid") return "Fully Paid";
     if (status === "partially_paid") return "Partially Paid";
@@ -415,6 +416,7 @@ function HistoryContent() {
               <option value="partially_paid">Partially Paid</option>
               <option value="non_upfront">Non-Upfront</option>
               <option value="fully_paid">Fully Paid</option>
+              <option value="refunded">Refunded</option>
             </select>
           </div>
           <div className="sm:col-span-2">

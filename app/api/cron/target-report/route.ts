@@ -1,5 +1,6 @@
 import { getTargetMonthBound } from "@/app/actions/target-month-bounds";
 import { NextResponse, type NextRequest } from "next/server";
+import { getPaymentCycleAttribution } from '@/lib/utils/lead-payment-cycle';
 import { Query } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
@@ -271,11 +272,12 @@ export async function GET(request: NextRequest) {
     const lead = cpLeadById.get(leadId);
     if (!lead) continue;
 
-    const ownerId = lead.ownerId as string | undefined;
-    const assignedToId = lead.assignedToId as string | undefined;
+    const cycle = getPaymentCycleAttribution(cp, lead);
+    const ownerId = cycle.ownerId;
+    const assignedToId = cycle.assignedToId;
     const attributedTo = assignedToId || ownerId;
 
-    const leadCreated = (lead.closedAt as string) || (lead.$createdAt as string) || (lead.createdAt as string);
+    const leadCreated = cycle.closedAt || (lead.$createdAt as string) || (lead.createdAt as string);
     if (leadCreated && leadCreated < leadsAndPaymentsStartIso) {
       continue;
     }
@@ -331,7 +333,7 @@ export async function GET(request: NextRequest) {
     }
 
     const followupsForThisLead = followupsDocs
-      .filter((doc) => doc.leadId === leadId)
+      .filter((doc) => doc.leadId === leadId && cycle.isCurrent)
       .reduce((sum, doc) => sum + (Number(doc.amount) || 0), 0);
 
     for (const [agentId, initialAmount] of agentTotals.entries()) {

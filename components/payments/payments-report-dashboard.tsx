@@ -51,6 +51,7 @@ function statusBadgeVariant(status: string) {
 }
 
 function statusLabel(status: string) {
+  if (status === 'refunded') return 'Refunded';
   if (status === "fully_paid") return "Fully Paid";
   if (status === "partially_paid") return "Partially Paid";
   return "Not Paid";

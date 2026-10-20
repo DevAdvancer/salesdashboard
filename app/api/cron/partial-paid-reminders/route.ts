@@ -13,6 +13,7 @@ import {
   notificationDedupKey,
 } from "@/lib/server/notification-dedup";
 import type { ClientPaymentRecord, LeadData, User } from "@/lib/types";
+import { isCurrentPaymentCycle } from '@/lib/utils/lead-payment-cycle';
 
 export const dynamic = "force-dynamic";
 
@@ -223,6 +224,9 @@ async function runPartialPaidSweep(databases: AdminDatabases) {
   for (const row of pendingRows) {
     const lead = leadsById.get(row.leadId);
     if (!lead) continue;
+    let cyclePlan = {};
+    try { cyclePlan = JSON.parse(typeof row.paymentDoc.paymentPlan === 'string' ? row.paymentDoc.paymentPlan : JSON.stringify(row.paymentDoc.paymentPlan ?? {})); } catch {}
+    if (!isCurrentPaymentCycle(cyclePlan as import('@/lib/types').ClientPaymentPlan, safeParseLeadData(lead.data))) continue;
 
     if (lead.isClosed) {
       // Closed-and-partial-paid is already covered by the existing

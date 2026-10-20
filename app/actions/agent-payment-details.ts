@@ -1,4 +1,5 @@
 "use server";
+import { getPaymentCycleAttribution } from '@/lib/utils/lead-payment-cycle';
 import { getTargetMonthBound } from "@/app/actions/target-month-bounds";
 
 import { Query } from "node-appwrite";
@@ -286,11 +287,12 @@ export async function getAgentPaymentDetailsAction(input: {
     if (!lead) continue;
 
     // Attribution: lead owner or assignee must be the target agent
-    const ownerId = lead.ownerId as string | undefined;
-    const assignedToId = lead.assignedToId as string | undefined;
+    const cycle = getPaymentCycleAttribution(cp, lead);
+    const ownerId = cycle.ownerId;
+    const assignedToId = cycle.assignedToId;
     const attributedTo = assignedToId || ownerId;
 
-    const leadCreated = (lead.closedAt as string) || (lead.$createdAt as string) || (lead.createdAt as string);
+    const leadCreated = cycle.closedAt || (lead.$createdAt as string) || (lead.createdAt as string);
     if (leadCreated && leadCreated < leadsAndPaymentsStartIso) {
       continue; // Payments for leads closed in previous months are followups, not upfront
     }
@@ -341,7 +343,7 @@ export async function getAgentPaymentDetailsAction(input: {
 
     // Deduct followups
     const followupsForThisLead = followupDocs
-      .filter((doc) => doc.leadId === leadId)
+      .filter((doc) => doc.leadId === leadId && cycle.isCurrent)
       .reduce((sum, doc) => sum + (Number(doc.amount) || 0), 0);
 
     totalForLead -= followupsForThisLead;
