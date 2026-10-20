@@ -545,7 +545,7 @@ export function Navigation({
             <div className="min-w-0 flex-1">
                 <h1
                   style={{
-                    fontFamily: "'Bebas Neue', var(--font-bebas-neue), 'Inter', sans-serif",
+                    fontFamily: "var(--font-bebas), 'Arial Narrow', Arial, sans-serif",
                     fontSize: "1.2rem",
                     fontWeight: 700,
                     letterSpacing: "0.04em",

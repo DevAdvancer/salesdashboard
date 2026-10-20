@@ -56,8 +56,8 @@
 ───────────────────────────────────────────────────────────── */
 :root {
   /* Font stacks */
-  --font-serif-stack: 'Bebas Neue', 'Anton', 'Arial Narrow', Arial, sans-serif;
-  --font-sans-stack:  var(--font-sans-stack, 'Plus Jakarta Sans'), 'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif;
+  --font-serif-stack: var(--font-bebas, 'Bebas Neue'), 'Anton', 'Arial Narrow', Arial, sans-serif;
+  --font-sans-stack:  var(--font-jakarta, 'Plus Jakarta Sans'), 'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif;
   --font-mono-stack:  'JetBrains Mono', 'Fira Code', monospace;
 
   /* Base radius */

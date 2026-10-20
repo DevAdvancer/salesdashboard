@@ -1,7 +1,7 @@
 import React, { Suspense } from "react";
 import "./globals.css";
 import type { Metadata } from "next";
-import { Bebas_Neue, Plus_Jakarta_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import { AuthProvider } from "@/lib/contexts/auth-context";
 import { AccessControlProvider } from "@/lib/contexts/access-control-context";
 import { AzureMsalProvider } from "@/components/azure-msal-provider";
@@ -12,17 +12,17 @@ import { QueryProvider } from "@/app/providers/query-provider";
 import { NotificationProvider } from "@/lib/providers/notification-provider";
 import { GlobalLoader } from "@/components/loader/GlobalLoader";
 
-const bebasNeue = Bebas_Neue({
+const bebasNeue = localFont({
+  src: "./fonts/BebasNeue-Regular.ttf",
   variable: "--font-bebas",
-  subsets: ["latin"],
   weight: "400",
   display: "swap",
 });
 
-const plusJakartaSans = Plus_Jakarta_Sans({
-  variable: "--font-sans-stack",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
+const plusJakartaSans = localFont({
+  src: "./fonts/PlusJakartaSans-Variable.ttf",
+  variable: "--font-jakarta",
+  weight: "300 700",
   display: "swap",
 });
 
@@ -63,13 +63,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
+    <html lang="en" className={`${plusJakartaSans.variable} ${bebasNeue.variable}`} suppressHydrationWarning data-scroll-behavior="smooth">
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
-      <body
-        className={`${plusJakartaSans.variable} ${bebasNeue.variable} antialiased`}
-      >
+      <body className="antialiased">
         <Suspense fallback={null}>
           <GlobalLoader />
         </Suspense>
