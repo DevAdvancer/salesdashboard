@@ -131,7 +131,7 @@ export function TargetReportDashboard({ user }: TargetReportDashboardProps) {
             <p className="text-xs text-muted-foreground">
               {isAgent
                 ? `Showing your personal target for ${payload.monthLabel}. Your target: ${currency.format(result.totals.target)}. Achieved: ${currency.format(result.totals.achieved)}.`
-                : `Showing ${payload.monthLabel}. Team total: ${currency.format(result.totals.target)}. Achieved: ${currency.format(result.totals.achieved)}.`
+                : `Showing ${payload.monthLabel}. Total target: ${currency.format(result.totals.target)}. Achieved: ${currency.format(result.totals.achieved)}.`
               }
             </p>
           );

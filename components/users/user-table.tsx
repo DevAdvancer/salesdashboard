@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getVisibleUserBranches } from "@/lib/utils/branch-visibility";
+import { getPrimaryBranchId } from '@/lib/utils/user-branches';
 
 interface UserTableProps {
   filteredUsers: User[];
@@ -178,7 +179,12 @@ export function UserTable({
                           {u.isActive === false ? "Inactive" : "Active"}
                         </span>
                       </td>
-                      <td className="py-3 px-4">{formatBranches(u.branchIds)}</td>
+                      <td className="py-3 px-4">
+                        {formatBranches(u.branchIds)}
+                        {u.branchIds.length > 1 && (
+                          <div className="text-xs text-muted-foreground">Primary: {formatBranches([getPrimaryBranchId(u) || ''].filter(Boolean))}</div>
+                        )}
+                      </td>
                       <td className="py-3 px-4">
                         {u.$createdAt
                           ? new Date(u.$createdAt).toLocaleDateString("en-US", { timeZone: "America/New_York" })

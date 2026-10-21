@@ -57,6 +57,7 @@ export const getAuthenticatedUserDoc = cache(async (): Promise<User> => {
     isActive: doc.isActive,
     teamLeadId: doc.teamLeadId || null,
     branchIds: doc.branchIds || [],
+    primaryBranchId: typeof doc.primaryBranchId === 'string' ? doc.primaryBranchId : null,
     branchId: doc.branchId || null,
     $createdAt: doc.$createdAt,
     $updatedAt: doc.$updatedAt,

@@ -1,7 +1,8 @@
 "use server";
 
 import { getFollowupsPaymentAmount } from "@/lib/utils/followups-payment-amount";
-import { getPaymentCycleAttribution } from '@/lib/utils/lead-payment-cycle';
+import { listTargetReportContributors } from '@/lib/server/target-report-contributors';
+import { targetPaymentRecipient, targetUpfrontAmounts } from '@/lib/utils/target-payment-attribution';
 import { getTargetMonthBound } from "@/app/actions/target-month-bounds";
 
 import { Query } from "node-appwrite";
@@ -151,6 +152,7 @@ export async function getAgentPaymentDetailsAction(input: {
   // Admin-like: no restriction
 
   // ── Load agent doc for the name ───────────────────────────────────────
+  const contributorIds = new Set((await listTargetReportContributors(databases)).map(user => user.$id));
   const agentDoc = await databases
     .getDocument(DATABASE_ID, COLLECTIONS.USERS, input.agentId)
     .catch(() => null);
@@ -235,6 +237,7 @@ export async function getAgentPaymentDetailsAction(input: {
       }
     }
 
+    targetAgentId = targetPaymentRecipient(doc.createdById, targetAgentId, contributorIds, creditedAgentId);
     if (!targetAgentId) continue;
     if (targetAgentId !== input.agentId) continue;
 
@@ -288,76 +291,11 @@ export async function getAgentPaymentDetailsAction(input: {
     const lead = cpLeadById.get(leadId);
     if (!lead) continue;
 
-    // Attribution: lead owner or assignee must be the target agent
-    const cycle = getPaymentCycleAttribution(cp, lead);
-    const ownerId = cycle.ownerId;
-    const assignedToId = cycle.assignedToId;
-    const attributedTo = assignedToId || ownerId;
-
-    const leadCreated = cycle.closedAt || (lead.$createdAt as string) || (lead.createdAt as string);
-    if (leadCreated && leadCreated < leadsAndPaymentsStartIso) {
-      continue; // Payments for leads closed in previous months are followups, not upfront
-    }
-
-
-    let updates: { createdAt?: string; amount?: number; status?: string; actorId?: string }[] = [];
-    try {
-      const raw = cp.updates ?? cp.updatesJson;
-      updates = JSON.parse(typeof raw === "string" ? raw : "[]");
-      if (!Array.isArray(updates)) updates = [];
-    } catch {
-      updates = [];
-    }
-
-    let totalForLead = 0;
-    for (const u of updates) {
-      if (
-        u.createdAt &&
-        u.createdAt >= leadsAndPaymentsStartIso &&
-        u.createdAt <= leadsAndPaymentsEndIso &&
-        (u.status === "partially_paid" || u.status === "fully_paid")
-      ) {
-        if (attributedTo === input.agentId) {
-          const amount = Number(u.amount) || 0;
-          if (amount > 0) totalForLead += amount;
-        }
-      }
-    }
-
-    // Fallback: if no updates carried an amount but the payment was created in window
-    if (totalForLead === 0 && updates.length === 0) {
-      const createdAt = cp.createdAt as string | undefined;
-      if (
-        createdAt &&
-        createdAt >= leadsAndPaymentsStartIso &&
-        createdAt <= leadsAndPaymentsEndIso &&
-        ((cp.status as string) === "partially_paid" || (cp.status as string) === "fully_paid")
-      ) {
-        if (attributedTo === input.agentId) {
-          let plan: { upfrontAmount?: number } = {};
-          try {
-            plan = JSON.parse(typeof (cp.paymentPlan ?? cp.paymentPlanJson) === "string" ? (cp.paymentPlan ?? cp.paymentPlanJson) as string : "{}");
-          } catch { /* ignore */ }
-          totalForLead = Number(plan.upfrontAmount) || 0;
-        }
-      }
-    }
-
-    // Deduct followups
-    const followupsForThisLead = followupDocs
-      .filter((doc) => doc.leadId === leadId && cycle.isCurrent)
-      .reduce((sum, doc) => sum + getFollowupsPaymentAmount(doc), 0);
-
-    totalForLead -= followupsForThisLead;
-    if (totalForLead < 0) totalForLead = 0;
-
+    const totalForLead = targetUpfrontAmounts({ payment: cp, lead,
+      from: leadsAndPaymentsStartIso, to: leadsAndPaymentsEndIso, contributorIds,
+      followups: followupDocs }).get(input.agentId) ?? 0;
     if (totalForLead > 0) {
-      upfrontDetails.push({
-        candidateName: parseLeadName(lead),
-        amount: totalForLead,
-        leadId,
-        category: "upfront",
-      });
+      upfrontDetails.push({ candidateName: parseLeadName(lead), amount: totalForLead, leadId, category: 'upfront' });
     }
   }
 

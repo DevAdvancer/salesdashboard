@@ -42,6 +42,7 @@ const mockDatabases = databases as jest.Mocked<typeof databases>;
 const normalized = <T extends Record<string, unknown>>(doc: T) => ({
   department: 'sales',
   isActive: true,
+  primaryBranchId: null,
   ...doc,
 });
 

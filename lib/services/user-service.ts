@@ -5,6 +5,7 @@ import { logAction } from '@/lib/services/audit-service';
 import { invalidateAuditLogReferenceCache } from '@/lib/services/audit-log-reference-service';
 import { User, UserRole, Department, CreateAgentInput, CreateTeamLeadInput } from '@/lib/types';
 import { cached, clearCache } from '@/lib/utils/resource-cache';
+import { normalizeUserBranches } from '@/lib/utils/user-branches';
 
 const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
 
@@ -39,6 +40,7 @@ function mapDocToUser(doc: any): User {
     department: ((doc.department as Department) ?? 'sales') as Department,
     teamLeadId: (doc.teamLeadId as string) || null,
     branchIds: Array.isArray(doc.branchIds) ? doc.branchIds : [],
+    primaryBranchId: typeof doc.primaryBranchId === 'string' ? doc.primaryBranchId : null,
     isActive: doc.isActive !== false,
     branchId: (doc.branchId as string) || null,
     $createdAt: doc.$createdAt,
@@ -111,6 +113,7 @@ export async function getAllActiveUsers(limit = 5000): Promise<User[]> {
             'role',
             'teamLeadId',
             'branchIds',
+            'primaryBranchId',
             'isActive',
             'department',
           ]),
@@ -220,6 +223,7 @@ export async function getAssignableUsers(
             'role',
             'teamLeadId',
             'branchIds',
+            'primaryBranchId',
             'isActive',
             'department',
           ]),
@@ -265,6 +269,7 @@ export async function getAgentsByTeamLead(
             'role',
             'teamLeadId',
             'branchIds',
+            'primaryBranchId',
             'isActive',
             'department',
           ]),
@@ -395,6 +400,7 @@ export async function getUsersByIds(ids: string[]): Promise<Map<string, User>> {
             'role',
             'teamLeadId',
             'branchIds',
+            'primaryBranchId',
             'isActive',
             'department',
           ]),
@@ -512,6 +518,8 @@ export async function removeUserFromBranch(
     }
     if (user.branchIds && user.branchIds.length > 0) {
       const updatedBranchIds = user.branchIds.filter((id) => id !== branchId);
+      const membership = normalizeUserBranches(updatedBranchIds,
+        updatedBranchIds.includes(user.primaryBranchId || '') ? user.primaryBranchId : null);
       if (user.branchId === branchId) {
         const newPrimary = updatedBranchIds[0] || null;
         const userDoc = await databases.updateDocument(
@@ -520,7 +528,7 @@ export async function removeUserFromBranch(
           userId,
           {
             branchId: newPrimary,
-            branchIds: updatedBranchIds,
+            ...membership,
           }
         );
         return mapDocToUser(userDoc);
@@ -529,7 +537,7 @@ export async function removeUserFromBranch(
         DATABASE_ID,
         USERS_COLLECTION_ID,
         userId,
-        { branchIds: updatedBranchIds }
+        membership
       );
       return mapDocToUser(userDoc);
     }

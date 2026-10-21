@@ -1,4 +1,5 @@
 import type { Lead, MonthlyTarget, MonthlyTargetAssignment, User } from "@/lib/types";
+import { getPrimaryBranchId } from '@/lib/utils/user-branches';
 
 /**
  * Pure helpers that compute the per-agent and per-TL rows shown on the
@@ -35,6 +36,8 @@ export interface TargetReportAgentRow {
    * to this agent and whose `markedAt` falls in the month window.
    */
   notInterestedCount: number;
+  branchName?: string;
+  branches?: { id: string; name: string; primary: boolean }[];
 }
 
 export interface TargetReportTlRow {
@@ -49,6 +52,7 @@ export interface TargetReportTlRow {
   /** True when the team total was set by the admin but no per-agent
    *  assignments exist yet — the UI uses this to prompt the TL. */
   needsSplit: boolean;
+  kind?: 'team' | 'contributor';
 }
 
 export interface TargetReportTotals {
@@ -62,6 +66,15 @@ export interface TargetReportResult {
   rows: TargetReportTlRow[];
   totals: TargetReportTotals;
   unresolvedAgentIds: string[];
+}
+
+/** Report entries show only the primary branch; other memberships stay on the user. */
+export function targetReportBranchEntries(agents: TargetReportAgentRow[]) {
+  return agents.flatMap(agent => agent.branches?.length
+    ? agent.branches.filter(branch => branch.primary).map(branch => ({ agent, branchName: branch.name, primary: true, branchId: branch.id }))
+    : [{ agent, branchName: agent.branchName || '', primary: true, branchId: '' }])
+    .sort((a, b) => a.branchName.localeCompare(b.branchName) || b.agent.achieved - a.agent.achieved ||
+      a.agent.userName.localeCompare(b.agent.userName));
 }
 
 export interface LeadPaymentSnapshot {
@@ -203,7 +216,7 @@ export function buildTargetReport(input: {
     let teamAchieved = 0;
 
     for (const agentId of teamAgentIds) {
-      if (!usersByAgentId.has(agentId)) continue;
+      if (!usersByAgentId.has(agentId) || resolvedAgentIds.has(agentId)) continue;
       resolvedAgentIds.add(agentId);
       const agent = usersByAgentId.get(agentId)!;
       const stats = agentStatsByUserId[agentId] || {
@@ -217,7 +230,7 @@ export function buildTargetReport(input: {
       teamTarget += agentTarget;
       teamAchieved += achieved;
       
-      const branchId = (agent.branchIds && agent.branchIds.length > 0) ? agent.branchIds[0] : (agent.branchId || "unassigned");
+      const branchId = getPrimaryBranchId(agent) || 'unassigned';
       const branchName = input.branchMap?.get(branchId) || "";
 
       agents.push({
@@ -230,12 +243,13 @@ export function buildTargetReport(input: {
         referralExcludedCount: stats.referralExcludedCount,
         notInterestedCount: stats.notInterestedCount,
         branchName,
-      } as TargetReportAgentRow & { branchName: string });
+        branches: branchId === 'unassigned' ? [] : [{ id: branchId, name: branchName || branchId, primary: true }],
+      });
     }
 
     agents.sort((a, b) => {
-      const branchA = (a as any).branchName || "";
-      const branchB = (b as any).branchName || "";
+      const branchA = a.branchName || "";
+      const branchB = b.branchName || "";
       if (branchA !== branchB) return branchA.localeCompare(branchB);
       return b.achieved - a.achieved || a.userName.localeCompare(b.userName);
     });
@@ -255,6 +269,23 @@ export function buildTargetReport(input: {
       needsSplit,
     });
 
+  }
+
+  // Admin/Monitor contributions have their own profile row even without a TL
+  // target assignment. Each contribution increases both target and achieved.
+  for (const [userId, user] of usersByAgentId) {
+    if (resolvedAgentIds.has(userId) || (user.role !== 'admin' && user.role !== 'monitor')) continue;
+    const stats = agentStatsByUserId[userId];
+    const achieved = (stats?.achieved ?? 0) + (followupsByAgentId[userId] ?? 0);
+    if (!(achieved > 0)) continue;
+    const primary = getPrimaryBranchId(user);
+    const agent: TargetReportAgentRow = { userId, userName: user.name, target: achieved, achieved, percent: 1,
+      leadCount: stats?.leadCount ?? 0, referralExcludedCount: stats?.referralExcludedCount ?? 0,
+      notInterestedCount: stats?.notInterestedCount ?? 0, branchName: primary ? input.branchMap?.get(primary) || primary : '',
+      branches: primary ? [{ id: primary, name: input.branchMap?.get(primary) || primary, primary: true }] : [] };
+    rows.push({ teamLeadId: userId, teamLeadName: `${user.name} (${user.role === 'admin' ? 'Admin' : 'Monitor'})`,
+      target: achieved, achieved, percent: 1, agents: [agent], needsSplit: false, kind: 'contributor' });
+    resolvedAgentIds.add(userId);
   }
 
   rows.sort((a, b) => b.achieved - a.achieved || a.teamLeadName.localeCompare(b.teamLeadName));

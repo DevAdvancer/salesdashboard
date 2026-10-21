@@ -107,6 +107,7 @@ describe('AuthContext - Signup Flow (disabled)', () => {
       isActive: true,
       teamLeadId: null,
       branchIds: [],
+      primaryBranchId: null,
       branchId: null,
       notificationsEnabled: true,
       notificationEmails: '',

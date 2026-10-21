@@ -4,6 +4,7 @@ import * as React from "react"
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date"
+import { Popover as PopoverPrimitive } from 'radix-ui'
 
 type DateRange = {
   from?: string
@@ -366,44 +367,15 @@ export function DateRangePicker({
   align?: 'smart' | 'left' | 'right'
   disabledDates?: string[]
 }) {
-  const { open, setOpen, ref } = usePopover()
+  const [open, setOpen] = React.useState(false)
   const [visibleMonth, setVisibleMonth] = React.useState(() => getMonthStart(value.from ?? value.to))
-  const [popperPosition, setPopperPosition] = React.useState<'right' | 'left'>('right')
-  const [verticalPosition, setVerticalPosition] = React.useState<'bottom' | 'top'>('bottom')
   const disabledDateSet = React.useMemo(() => new Set(disabledDates), [disabledDates])
 
   React.useEffect(() => {
     if (open) {
       setVisibleMonth(getMonthStart(value.from ?? value.to))
-
-      let finalPopperPosition: 'left' | 'right' = align === 'smart' ? 'right' : align
-
-      if (typeof document !== 'undefined' && ref.current) {
-        const buttonRect = ref.current.getBoundingClientRect()
-        
-        // Smart: check if the calendar would go off-screen
-        if (align === 'smart') {
-          const calendarWidth = 36 // Approximate width in rem
-          const spaceLeft = buttonRect.left
-          const spaceRight = window.innerWidth - buttonRect.right
-
-          // If less space on the right, position left
-          if (spaceRight < calendarWidth * 16 && spaceLeft > calendarWidth * 16) {
-            finalPopperPosition = 'left'
-          }
-        }
-        
-        const spaceBelow = window.innerHeight - buttonRect.bottom
-        if (spaceBelow < 380 && buttonRect.top > 380) {
-          setVerticalPosition('top')
-        } else {
-          setVerticalPosition('bottom')
-        }
-      }
-      
-      setPopperPosition(finalPopperPosition)
     }
-  }, [open, value.from, value.to, ref, align])
+  }, [open, value.from, value.to])
 
   const selectDate = (nextDate: string) => {
     if (disabledDateSet.has(nextDate)) return
@@ -428,27 +400,28 @@ export function DateRangePicker({
         : "Select date range"
 
   return (
-    <div ref={ref} className={cn("relative", className)}>
+    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
+    <div className={cn("relative min-w-0", className)}>
+      <PopoverPrimitive.Trigger asChild>
       <button
         id={id}
         type="button"
-        onClick={() => setOpen((current) => !current)}
         className={cn(
           "flex h-10 w-full items-center justify-between gap-3 rounded-[1.5rem]",
           "bg-[var(--input)] px-3 py-2 text-left text-sm text-foreground",
           "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ink)]",
         )}
       >
-        <span className={cn(!value.from && "text-muted-foreground")}>{label}</span>
+        <span className={cn("min-w-0 truncate", !value.from && "text-muted-foreground")}>{label}</span>
         <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />
       </button>
+      </PopoverPrimitive.Trigger>
 
       {open && (
-        <div className={cn(
-          "absolute z-50 w-[min(36rem,calc(100vw-1rem))] rounded-2xl border border-border bg-popover p-4 text-popover-foreground shadow-xl lg:w-[min(42rem,calc(100vw-2rem))]",
-          popperPosition === 'right' ? 'right-0' : 'left-0',
-          verticalPosition === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
-        )}>
+        <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Content align={align === 'left' ? 'start' : 'end'} sideOffset={8} collisionPadding={8}
+          aria-label="Choose date range"
+          className="z-50 max-h-[var(--radix-popover-content-available-height)] w-[min(36rem,calc(100vw-1rem))] overflow-y-auto rounded-2xl border border-border bg-popover p-4 text-popover-foreground shadow-xl lg:w-[min(42rem,calc(100vw-2rem))]">
           <div className="mb-3 flex items-center justify-between gap-2">
             <button
               type="button"
@@ -500,9 +473,11 @@ export function DateRangePicker({
               Done
             </button>
           </div>
-        </div>
+        </PopoverPrimitive.Content>
+        </PopoverPrimitive.Portal>
       )}
     </div>
+    </PopoverPrimitive.Root>
   )
 }
 

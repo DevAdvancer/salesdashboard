@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { DateRangePicker } from "@/components/ui/date-picker";
+import { DateRangePicker } from '@/components/ui/date-picker';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -9,25 +9,7 @@ import { getWeeklyReport } from "@/lib/services/weekly-report-service";
 import { expandIsoDateToEnd, expandIsoDateToStart } from "@/lib/utils/iso-date-range";
 import type { WeeklyReportResult } from "@/app/actions/weekly-report";
 import type { User } from "@/lib/types";
-import { getTodayEst } from "@/lib/utils/est-date";
-
-function toDateValue(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function getDefaultRange(): { from: string; to: string } {
-  const today = getTodayEst();
-  return { from: today, to: today };
-}
-
-const currency = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
+import { getCurrentWeekEst } from "@/lib/utils/est-date";
 
 type Kpi = WeeklyReportResult["teams"][number]["totals"]["kpi"];
 
@@ -73,7 +55,7 @@ function KpiBadge({ kpi }: { kpi: Kpi }) {
 }
 
 export function WeeklyReportDashboard({ user }: { user: User }) {
-  const [range, setRange] = useState<{ from?: string; to?: string }>(() => getDefaultRange());
+  const [range, setRange] = useState<{ from?: string; to?: string }>(() => getCurrentWeekEst());
   const [report, setReport] = useState<WeeklyReportResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,10 +97,12 @@ export function WeeklyReportDashboard({ user }: { user: User }) {
           <div className="max-w-md">
             <DateRangePicker value={range} onChange={setRange} />
           </div>
+          <p className="text-xs text-muted-foreground">Defaults to the current week, Monday–Sunday (Eastern).</p>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            Leads are counted by assigned agent. Calls are completed follow-ups.
+            LinkedIn leads include leads later marked Not Interested and use the lead creation date.
+            Not Interested uses the marking date and the previous agent, in Eastern time.
           </p>
         </CardContent>
       </Card>
@@ -153,9 +137,11 @@ export function WeeklyReportDashboard({ user }: { user: User }) {
             ["Calls", singleMember.totals.calls],
             ["Followups", singleMember.totals.followups],
             ["Leads", singleMember.totals.leads],
+            ["LinkedIn Leads", singleMember.totals.linkedinLeads],
             ["Closures", singleMember.totals.closures],
             ["Cold Calls", singleMember.totals.coldCalls],
             ["Not Interested", singleMember.totals.notInterested],
+            ["LinkedIn Not Interested", singleMember.totals.linkedinNotInterested],
           ].map(([label, value]) => (
             <Card key={label}>
               <CardHeader className="pb-2">
@@ -203,9 +189,11 @@ export function WeeklyReportDashboard({ user }: { user: User }) {
                     <TableHead>Calls</TableHead>
                     <TableHead>Followups</TableHead>
                     <TableHead>Leads</TableHead>
+                    <TableHead>LinkedIn Leads</TableHead>
                     <TableHead>Closures</TableHead>
                     <TableHead>Cold Calls</TableHead>
                     <TableHead>Not Interested</TableHead>
+                    <TableHead>LinkedIn Not Interested</TableHead>
                     <TableHead>KPI</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -216,9 +204,11 @@ export function WeeklyReportDashboard({ user }: { user: User }) {
                       <TableCell>{member.metrics.calls}</TableCell>
                       <TableCell>{member.metrics.followups}</TableCell>
                       <TableCell>{member.metrics.leads}</TableCell>
+                      <TableCell>{member.metrics.linkedinLeads}</TableCell>
                       <TableCell>{member.metrics.closures}</TableCell>
                       <TableCell>{member.metrics.coldCalls}</TableCell>
                       <TableCell>{member.metrics.notInterested}</TableCell>
+                      <TableCell>{member.metrics.linkedinNotInterested}</TableCell>
                       <TableCell><KpiBadge kpi={member.metrics.kpi} /></TableCell>
                     </TableRow>
                   ))}
@@ -227,9 +217,11 @@ export function WeeklyReportDashboard({ user }: { user: User }) {
                     <TableCell className="font-semibold">{team.totals.calls}</TableCell>
                     <TableCell className="font-semibold">{team.totals.followups}</TableCell>
                     <TableCell className="font-semibold">{team.totals.leads}</TableCell>
+                    <TableCell className="font-semibold">{team.totals.linkedinLeads}</TableCell>
                     <TableCell className="font-semibold">{team.totals.closures}</TableCell>
                     <TableCell className="font-semibold">{team.totals.coldCalls}</TableCell>
                     <TableCell className="font-semibold">{team.totals.notInterested}</TableCell>
+                    <TableCell className="font-semibold">{team.totals.linkedinNotInterested}</TableCell>
                     <TableCell><KpiBadge kpi={team.totals.kpi} /></TableCell>
                   </TableRow>
                 </TableBody>

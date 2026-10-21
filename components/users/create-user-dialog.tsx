@@ -261,13 +261,14 @@ export function CreateUserDialog({
                 
                 {selectedBranchIds.length > 1 && (
                   <div className="pt-2">
-                    <Label>Primary Branch</Label>
+                    <Label htmlFor="create-primary-branch">Primary Branch</Label>
                     <select
+                      id="create-primary-branch"
                       value={selectedPrimaryBranchId || ''}
                       onChange={(e) => setSelectedPrimaryBranchId(e.target.value || null)}
                       className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="">-- None --</option>
+                      <option value="">Use first selected branch</option>
                       {availableBranches.filter(b => selectedBranchIds.includes(b.$id)).map((branch) => (
                         <option key={branch.$id} value={branch.$id}>
                           {branch.name}

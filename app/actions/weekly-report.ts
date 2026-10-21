@@ -14,6 +14,8 @@ import type { ClientPaymentRecord, Department, Lead, PaymentStatus, User, UserRo
 import { getTechnicalPaymentTotalsByUserAction } from "./technical-payments";
 import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import { computeAgentStatsForDate } from "@/lib/server/stats-aggregator";
+import { loadWeeklyLeadSourceFacts, summarizeWeeklyLeadSources } from '@/lib/server/weekly-lead-source-report';
+import { getPrimaryBranchId } from '@/lib/utils/user-branches';
 
 type WeeklyReportRange = { from: string; to: string };
 
@@ -25,6 +27,8 @@ export type WeeklyReportMetrics = {
   upfront: number;
   coldCalls: number;
   notInterested: number;
+  linkedinLeads: number;
+  linkedinNotInterested: number;
   technicalUpfront: number;
   /** Per-day KPI breakdown for the selected range. */
   kpi: {
@@ -84,6 +88,7 @@ type UserDocument = {
   role: UserRole;
   teamLeadId?: string | null;
   branchIds?: string[];
+  primaryBranchId?: string | null;
   branchId?: string | null;
   department?: string;
   isActive?: boolean;
@@ -125,6 +130,7 @@ function mapUser(doc: UserDocument): User {
     role: doc.role,
     teamLeadId: doc.teamLeadId || null,
     branchIds: doc.branchIds || [],
+    primaryBranchId: doc.primaryBranchId || null,
     branchId: doc.branchId || null,
     department,
     isActive: doc.isActive ?? true,
@@ -142,6 +148,8 @@ function emptyMetrics(): WeeklyReportMetrics {
     upfront: 0,
     coldCalls: 0,
     notInterested: 0,
+    linkedinLeads: 0,
+    linkedinNotInterested: 0,
     technicalUpfront: 0,
     kpi: emptyKpi(),
   };
@@ -172,6 +180,8 @@ function addMetrics(target: WeeklyReportMetrics, delta: Partial<WeeklyReportMetr
   target.upfront += delta.upfront ?? 0;
   target.coldCalls += delta.coldCalls ?? 0;
   target.notInterested += delta.notInterested ?? 0;
+  target.linkedinLeads += delta.linkedinLeads ?? 0;
+  target.linkedinNotInterested += delta.linkedinNotInterested ?? 0;
   target.technicalUpfront += delta.technicalUpfront ?? 0;
 }
 
@@ -519,12 +529,16 @@ export async function getWeeklyReportAction(input: {
   const toIso = range.to.slice(0, 10);
   if (fromIso <= todayIso && toIso >= todayIso) {
     const todayStats = await computeAgentStatsForDate(todayIso);
+    for (let index = stats.length - 1; index >= 0; index--) {
+      if (stats[index].dateKey === todayIso) stats.splice(index, 1);
+    }
     stats.push(...todayStats);
   }
 
-  const [auditLogs, followupRecords] = await Promise.all([
+  const [auditLogs, followupRecords, leadFacts] = await Promise.all([
     listAuditLogsInRange(databases, range),
     listFollowupPaymentsInRange(databases, range),
+    loadWeeklyLeadSourceFacts({ databases, startDate: fromIso, endDate: toIso }),
   ]);
 
   const followupLeadIds = Array.from(new Set(
@@ -575,7 +589,6 @@ export async function getWeeklyReportAction(input: {
       upfront: 0,
       technicalUpfront: 0,
       coldCalls: stat.coldCallsGenerated || 0,
-      notInterested: stat.notInterestedMarked || 0,
     });
     
     const leadsGen = stat.leadsGenerated || 0;
@@ -584,6 +597,11 @@ export async function getWeeklyReportAction(input: {
       ensureLeadDays(stat.agentId).add(stat.dateKey);
     }
   });
+
+  // Read outcome history live so July-to-today reports do not depend on stale daily caches.
+  for (const [agentId, sourceMetrics] of summarizeWeeklyLeadSources(leadFacts, scopedUserIds)) {
+    addMetrics(ensureMetrics(agentId), sourceMetrics);
+  }
 
   auditLogs.forEach((log) => {
     if (!scopedUserIds.has(log.actorId)) return;
@@ -783,7 +801,7 @@ export async function getWeeklyReportAction(input: {
 
     const agentsByBranch = new Map<string, User[]>();
     teamMembers.forEach((user) => {
-      const branchId = (user.branchIds && user.branchIds.length > 0) ? user.branchIds[0] : (user.branchId || "unassigned");
+      const branchId = getPrimaryBranchId(user) || 'unassigned';
       const existing = agentsByBranch.get(branchId) || [];
       existing.push(user);
       agentsByBranch.set(branchId, existing);
@@ -810,6 +828,8 @@ export async function getWeeklyReportAction(input: {
         upfront: 0,
         coldCalls: 0,
         notInterested: 0,
+        linkedinLeads: 0,
+        linkedinNotInterested: 0,
         technicalUpfront: 0,
         kpi: combineKpi(members),
       };

@@ -7,7 +7,16 @@
  * server's host timezone or the user's browser locale.
  */
 
+import { endOfWeek, format, parseISO, startOfWeek } from 'date-fns';
+
 const EST_TIMEZONE = "America/New_York";
+
+/** Monday through Sunday of the current Eastern business week. */
+export function getCurrentWeekEst(now: Date = new Date()) {
+  const today = parseISO(getTodayEst(now));
+  return { from: format(startOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd'),
+    to: format(endOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd') };
+}
 
 /**
  * Returns today's date as a YYYY-MM-DD string in America/New_York.

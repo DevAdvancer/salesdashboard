@@ -8,6 +8,7 @@ import logger from '@/lib/logger';
 import { CreateTeamLeadInput, CreateAgentInput, Department, UserRole, isValidDepartment } from '@/lib/types';
 import { COLLECTIONS } from '@/lib/constants/appwrite';
 import { normalizeEmail } from '@/lib/utils/user-hierarchy';
+import { getUserBranchIds, normalizeUserBranches } from '@/lib/utils/user-branches';
 import { getErrorMessage } from '@/lib/utils';
 import { getUsersByIds } from '@/lib/services/user-service';
 import { sendLinkedinWithdrawalReport, withdrawLinkedinRequestsForAgent } from '@/lib/server/linkedin-auto-withdraw';
@@ -315,7 +316,8 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
         throw new Error("Permission denied: Only admins, developers, and senior TLs can create team leads");
     }
 
-    const { name, email, password, branchIds, department } = teamLeadInput;
+    const { name, email, password, branchIds, primaryBranchId, department } = teamLeadInput;
+    const branchMembership = normalizeUserBranches(branchIds, primaryBranchId);
     const { users, databases } = await createAdminClient();
     const userId = ID.unique();
 
@@ -337,7 +339,7 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
                 role: role,
                 teamLeadId: null,
                 isActive: true,
-                branchIds,
+                ...branchMembership,
                 ...(department ? { department } : {}),
             },
             [
@@ -355,7 +357,7 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
             callerDoc.name,
             userId,
             role,
-            { role, email, name, branchIds, department: department ?? 'sales' }
+            { role, email, name, ...branchMembership, department: department ?? 'sales' }
         );
 
         invalidateDepartmentScopedUserIds();
@@ -395,7 +397,8 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
         throw new Error('Permission denied: Only admins and developers can create this role');
     }
 
-    const { name, email, password, branchIds, department } = agentInput;
+    const { name, email, password, branchIds, primaryBranchId, department } = agentInput;
+    const branchMembership = normalizeUserBranches(branchIds, primaryBranchId);
     const { users, databases } = await createAdminClient();
     const userId = ID.unique();
 
@@ -431,7 +434,7 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
                 role,
                 teamLeadId,
                 isActive: true,
-                branchIds,
+                ...branchMembership,
                 ...(department ? { department } : {}),
             },
             permissions
@@ -445,7 +448,7 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
             callerDoc.name,
             userId,
             role,
-            { role, email, name, branchIds, teamLeadId, department: department ?? 'sales' }
+            { role, email, name, ...branchMembership, teamLeadId, department: department ?? 'sales' }
         );
 
         invalidateDepartmentScopedUserIds();
@@ -535,18 +538,22 @@ export async function updateUserAction(input: {
              updates.teamLeadId = teamLeadId;
         }
 
-        if (branchIds) {
+        if (branchIds !== undefined || primaryBranchId !== undefined) {
+             const finalBranchIds = branchIds ?? getUserBranchIds({ branchIds: targetUserDoc.branchIds || [], branchId: targetUserDoc.branchId || null });
+             const retainedPrimary = finalBranchIds.includes(targetUserDoc.primaryBranchId) ? targetUserDoc.primaryBranchId : null;
+             const membership = normalizeUserBranches(finalBranchIds,
+               primaryBranchId !== undefined ? primaryBranchId : retainedPrimary);
              // Validate branches if not Admin
              if (!isCallerAdmin) {
                  const callerBranches = (callerDoc.branchIds as string[]) || [];
                  // Managers/TLs can only assign branches they have access to
-                 for (const bid of branchIds) {
+                 for (const bid of membership.branchIds) {
                      if (!callerBranches.includes(bid)) {
                          throw new Error(`Branch ${bid} is not in your assigned branches`);
                      }
                  }
              }
-             updates.branchIds = branchIds;
+             Object.assign(updates, membership);
         }
 
         if (department !== undefined && department !== targetUserDoc.department) {

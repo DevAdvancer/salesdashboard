@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import type { TargetReportResult, TargetReportTlRow } from "@/lib/utils/monthly-target-report";
+import { targetReportBranchEntries } from '@/lib/utils/monthly-target-report';
 import { AgentPaymentDetailDialog } from "./agent-payment-detail-dialog";
 
 const currency = new Intl.NumberFormat("en-US", {
@@ -123,7 +124,7 @@ export function TargetReportTable({ result, isAgent, monthKey, actorId }: Target
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              {isAgent ? "Your Target" : "Team Targets"}
+              {isAgent ? "Your Target" : "Total Target"}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -162,7 +163,7 @@ export function TargetReportTable({ result, isAgent, monthKey, actorId }: Target
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Agents
+                Contributors
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -184,7 +185,7 @@ export function TargetReportTable({ result, isAgent, monthKey, actorId }: Target
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Team Lead</TableHead>
+                  <TableHead>Team / Contributor</TableHead>
                   <TableHead className="text-right">Target</TableHead>
                   <TableHead className="text-right">Achieved</TableHead>
                   <TableHead>Progress</TableHead>
@@ -219,7 +220,7 @@ export function TargetReportTable({ result, isAgent, monthKey, actorId }: Target
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              {isAgent ? "Your Performance" : "Per-agent breakdown"}
+              {isAgent ? "Your Performance" : "Per-person breakdown"}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -247,8 +248,7 @@ export function TargetReportTable({ result, isAgent, monthKey, actorId }: Target
                           {(() => {
                             let lastBranch = "";
                             const tableRows: React.ReactNode[] = [];
-                            row.agents.forEach((agent) => {
-                              const bName = (agent as any).branchName || "";
+                            targetReportBranchEntries(row.agents).forEach(({ agent, branchName: bName }) => {
                               if (bName && bName !== lastBranch) {
                                 lastBranch = bName;
                                 tableRows.push(

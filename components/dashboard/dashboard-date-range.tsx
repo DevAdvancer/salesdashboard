@@ -74,7 +74,7 @@ export function DashboardDateRange({
       <DateRangePicker
         value={value}
         onChange={onChange}
-        className="w-72"
+        className="w-full min-w-0 sm:w-72"
         disabledDates={disableHolidaySelection ? disabledDates : []}
       />
       <Button

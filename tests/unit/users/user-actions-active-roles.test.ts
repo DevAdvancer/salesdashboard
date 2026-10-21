@@ -7,6 +7,7 @@ const mockUsersDelete = jest.fn();
 const mockGetDocument = jest.fn();
 const mockCreateDocument = jest.fn();
 const mockListDocuments = jest.fn();
+const mockUpdateDocument = jest.fn();
 
 jest.mock('@/lib/server/current-user', () => ({
   assertAuthenticatedUserId: (...args: unknown[]) => mockAssertAuthenticatedUserId(...args),
@@ -61,6 +62,7 @@ describe('active user role creation actions', () => {
         getDocument: mockGetDocument,
         createDocument: mockCreateDocument,
         listDocuments: mockListDocuments,
+        updateDocument: mockUpdateDocument,
       },
     });
     mockUsersCreate.mockResolvedValue({ $id: 'new-user-id' });
@@ -80,6 +82,32 @@ describe('active user role creation actions', () => {
     );
     return userCreateCall?.[3] as Record<string, unknown> | undefined;
   }
+
+  it.each(['agent', 'team_lead'] as const)('persists both branches and the selected primary when creating %s', async role => {
+    const actions = await import('@/app/actions/user');
+    const input = { currentUserId: 'admin-1', name: 'Dual Branch', email: 'dual@example.com',
+      password: 'password123', branchIds: ['ahm', 'ncr'], primaryBranchId: 'ncr' };
+    if (role === 'agent') await actions.createAgentAction({ ...input, teamLeadId: 'tl-1' });
+    else await actions.createTeamLeadAction(input);
+    expect(getCreatedUserPayload()).toMatchObject({ branchIds: ['ncr', 'ahm'], primaryBranchId: 'ncr' });
+  });
+
+  it('persists a primary-only edit instead of returning success without a write', async () => {
+    mockGetDocument.mockResolvedValueOnce({ $id: 'admin-1', role: 'admin', name: 'Admin' })
+      .mockResolvedValueOnce({ $id: 'agent', role: 'agent', branchIds: ['ahm', 'ncr'], primaryBranchId: 'ahm' });
+    const { updateUserAction } = await import('@/app/actions/user');
+    await updateUserAction({ currentUserId: 'admin-1', userId: 'agent', primaryBranchId: 'ncr' });
+    expect(mockUpdateDocument).toHaveBeenCalledWith(expect.any(String), 'users', 'agent',
+      { branchIds: ['ncr', 'ahm'], primaryBranchId: 'ncr' }, undefined);
+  });
+
+  it('rejects a primary branch outside the saved memberships before writing', async () => {
+    mockGetDocument.mockResolvedValueOnce({ $id: 'admin-1', role: 'admin', name: 'Admin' })
+      .mockResolvedValueOnce({ $id: 'agent', role: 'agent', branchIds: ['ahm'], primaryBranchId: 'ahm' });
+    const { updateUserAction } = await import('@/app/actions/user');
+    await expect(updateUserAction({ currentUserId: 'admin-1', userId: 'agent', primaryBranchId: 'ncr' })).rejects.toThrow('selected branches');
+    expect(mockUpdateDocument).not.toHaveBeenCalled();
+  });
 
   it('creates team leads without retired manager attributes', async () => {
     const { createTeamLeadAction } = await import('@/app/actions/user');

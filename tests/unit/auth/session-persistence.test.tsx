@@ -27,6 +27,7 @@ const mockDatabases = databases as jest.Mocked<typeof databases>;
 const normalized = <T extends Record<string, unknown>>(doc: T) => ({
   department: 'sales',
   isActive: true,
+  primaryBranchId: null,
   ...doc,
 });
 
@@ -49,7 +50,8 @@ describe('Session Persistence and Restoration - Task 2.5', () => {
       email: 'test@example.com',
       role: 'team_lead',
       teamLeadId: null,
-      branchIds: [],
+      branchIds: ['ahm', 'ncr'],
+      primaryBranchId: 'ncr',
       branchId: null,
         department: 'sales',
         isActive: true,

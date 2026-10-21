@@ -1,7 +1,6 @@
 "use server";
 
 import { getFollowupsPaymentAmount } from "@/lib/utils/followups-payment-amount";
-import { getPaymentCycleAttribution } from '@/lib/utils/lead-payment-cycle';
 import { getTargetMonthBound } from "@/app/actions/target-month-bounds";
 
 import { Query } from "node-appwrite";
@@ -21,6 +20,8 @@ import { listMonthlyTargetsWithAssignmentsAction } from "@/app/actions/monthly-t
 import { getTechnicalPaymentTotalsByUserAction } from "@/app/actions/technical-payments";
 import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import { computeAgentStatsForDate } from "@/lib/server/stats-aggregator";
+import { listTargetReportContributors } from '@/lib/server/target-report-contributors';
+import { targetPaymentRecipient, targetUpfrontAmounts } from '@/lib/utils/target-payment-attribution';
 
 type LeadDoc = Record<string, unknown>;
 type UserDoc = Record<string, unknown>;
@@ -115,6 +116,7 @@ export async function getTargetReportAction(input: {
     role: userDoc.role,
     teamLeadId: userDoc.teamLeadId || null,
     branchIds: userDoc.branchIds || [],
+    primaryBranchId: userDoc.primaryBranchId || null,
     branchId: userDoc.branchId || null,
     // Default to "sales" when the user doc doesn't carry a department —
     // matches `normalizeDepartment` in lib/services/user-service.ts so
@@ -132,6 +134,8 @@ export async function getTargetReportAction(input: {
   // eligible role still cannot reach this code path — same rule the
   // Weekly Report enforces in `ensureSalesCrmAccess`.
   ensureSalesCrmAccess(actor);
+  const contributors = await listTargetReportContributors(databases);
+  const contributorIds = new Set(contributors.map(user => user.$id));
 
   // 1. Targets + assignments.
   const { targets, assignmentsByTargetId } = await listMonthlyTargetsWithAssignmentsAction({
@@ -157,6 +161,7 @@ export async function getTargetReportAction(input: {
     const assignedIds = Object.values(assignmentsByTargetId).flatMap(list => list.map(a => a.agentId));
     readableAgentIds = Array.from(new Set([
       ...all.filter((u) => u.role === "agent" || u.role === "lead_generation" || u.role === "team_lead").map((u) => u.$id),
+      ...contributors.map(user => user.$id),
       ...assignedIds
     ]));
   }
@@ -304,6 +309,7 @@ export async function getTargetReportAction(input: {
       }
     }
     
+    targetAgentId = targetPaymentRecipient(doc.createdById, targetAgentId, contributorIds, creditedAgentId);
     if (!targetAgentId || !readableSet.has(targetAgentId)) continue;
     
     followupsByAgentId[targetAgentId] = (followupsByAgentId[targetAgentId] ?? 0) + amount;
@@ -348,79 +354,11 @@ export async function getTargetReportAction(input: {
     const lead = cpLeadById.get(leadId);
     if (!lead) continue;
 
-    const cycle = getPaymentCycleAttribution(cp, lead);
-    const ownerId = cycle.ownerId;
-    const assignedToId = cycle.assignedToId;
-    const attributedTo = assignedToId || ownerId;
-
-    const leadCreated = cycle.closedAt || (lead.$createdAt as string) || (lead.createdAt as string);
-    if (leadCreated && leadCreated < leadsAndPaymentsStartIso) {
-      continue; // Payments for leads closed in previous months are followups, not upfront
-    }
-
-    let updates: { createdAt?: string; amount?: number; status?: string; actorId?: string }[] = [];
-    try {
-      const raw = cp.updates ?? cp.updatesJson;
-      updates = JSON.parse(typeof raw === "string" ? raw : "[]");
-      if (!Array.isArray(updates)) updates = [];
-    } catch {
-      updates = [];
-    }
-
-    let totalForLead = 0;
-    const agentTotals = new Map<string, number>();
-
-    for (const u of updates) {
-      if (
-        u.createdAt &&
-        u.createdAt >= leadsAndPaymentsStartIso &&
-        u.createdAt <= leadsAndPaymentsEndIso &&
-        (u.status === "partially_paid" || u.status === "fully_paid")
-      ) {
-        if (attributedTo) {
-          const amount = Number(u.amount) || 0;
-          if (amount > 0) {
-            agentTotals.set(attributedTo, (agentTotals.get(attributedTo) ?? 0) + amount);
-            totalForLead += amount;
-          }
-        }
-      }
-    }
-
-    if (totalForLead === 0 && updates.length === 0) {
-      const createdAt = cp.createdAt as string | undefined;
-      if (
-        createdAt &&
-        createdAt >= leadsAndPaymentsStartIso &&
-        createdAt <= leadsAndPaymentsEndIso &&
-        ((cp.status as string) === "partially_paid" || (cp.status as string) === "fully_paid")
-      ) {
-        if (attributedTo) {
-          let plan: { upfrontAmount?: number } = {};
-          try {
-            plan = JSON.parse(typeof (cp.paymentPlan ?? cp.paymentPlanJson) === "string" ? (cp.paymentPlan ?? cp.paymentPlanJson) as string : "{}");
-          } catch { /* ignore */ }
-          const amount = Number(plan.upfrontAmount) || 0;
-          if (amount > 0) {
-            agentTotals.set(attributedTo, (agentTotals.get(attributedTo) ?? 0) + amount);
-          }
-        }
-      }
-    }
-
-    // Deduct followups
-    const followupsForThisLead = docs
-      .filter((doc) => doc.leadId === leadId && cycle.isCurrent)
-      .reduce((sum, doc) => sum + getFollowupsPaymentAmount(doc), 0);
-
-    for (const [agentId, grossAmount] of agentTotals.entries()) {
-      let amount = grossAmount - followupsForThisLead;
-      if (amount < 0) amount = 0;
-      
-      if (amount > 0 && readableAgentIds.includes(agentId)) {
-        if (!agentStatsByUserId[agentId]) {
-          agentStatsByUserId[agentId] = { achieved: 0, leadCount: 0, referralExcludedCount: 0, notInterestedCount: 0 };
-        }
+    const agentTotals = targetUpfrontAmounts({ payment: cp, lead,
+      from: leadsAndPaymentsStartIso, to: leadsAndPaymentsEndIso, contributorIds, followups: docs });
+    for (const [agentId, amount] of agentTotals) {
+      if (amount > 0 && readableSet.has(agentId)) {
+        agentStatsByUserId[agentId] ??= { achieved: 0, leadCount: 0, referralExcludedCount: 0, notInterestedCount: 0 };
         agentStatsByUserId[agentId].achieved += amount;
       }
     }
@@ -456,7 +394,7 @@ export async function getTargetReportAction(input: {
         databases,
         databaseId: DATABASE_ID,
         collectionId: COLLECTIONS.USERS,
-        queries: [Query.equal("$id", chunk), Query.select(["$id", "name", "email", "role", "department"]), Query.limit(CHUNK)],
+        queries: [Query.equal("$id", chunk), Query.select(["$id", "name", "email", "role", "department", "teamLeadId", "branchIds", "branchId", "primaryBranchId"]), Query.limit(CHUNK)],
         pageLimit: CHUNK,
         maxPages: 50,
       });
@@ -468,6 +406,7 @@ export async function getTargetReportAction(input: {
           role: d.role as User["role"],
           teamLeadId: typeof d.teamLeadId === "string" ? d.teamLeadId : null,
           branchIds: Array.isArray(d.branchIds) ? (d.branchIds as string[]) : [],
+          primaryBranchId: typeof d.primaryBranchId === 'string' ? d.primaryBranchId : null,
           branchId: typeof d.branchId === "string" ? d.branchId : null,
           department: d.department === "sales" || d.department === "resume" ? d.department : "sales",
           $createdAt: String(d.$createdAt ?? ""),

@@ -115,6 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         department: ((userDoc.department as Department) ?? 'sales') as Department,
         teamLeadId: (userDoc.teamLeadId as string) || null,
         branchIds: Array.isArray(userDoc.branchIds) ? (userDoc.branchIds as string[]) : [],
+        primaryBranchId: typeof userDoc.primaryBranchId === 'string' ? userDoc.primaryBranchId : null,
         notificationsEnabled: userDoc.notificationsEnabled !== false,
         notificationEmails: (userDoc.notificationEmails as string) || '',
         isActive: userDoc.isActive !== false,

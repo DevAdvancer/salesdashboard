@@ -128,7 +128,7 @@ export function useUserManagement() {
             Query.equal('isActive', statusFilter === 'active'),
             Query.select([
               '$id', '$createdAt', '$updatedAt', 'name', 'email', 'role',
-              'isActive', 'teamLeadId', 'branchIds', 'department',
+              'isActive', 'teamLeadId', 'branchIds', 'primaryBranchId', 'department',
             ]),
             ...baseQueries
           ]
@@ -147,6 +147,7 @@ export function useUserManagement() {
           role: doc.role,
           teamLeadId: doc.teamLeadId || null,
           branchIds: doc.branchIds || [],
+          primaryBranchId: doc.primaryBranchId || null,
           isActive: doc.isActive !== false,
           branchId: doc.branchId || null,
           department: (doc.department === 'resume' ? 'resume' : 'sales') as Department,
@@ -212,6 +213,7 @@ export function useUserManagement() {
         role: doc.role,
         teamLeadId: doc.teamLeadId || null,
         branchIds: doc.branchIds || [],
+        primaryBranchId: doc.primaryBranchId || null,
         isActive: doc.isActive !== false,
         branchId: doc.branchId || null,
         department: (doc.department === 'resume' ? 'resume' : 'sales') as Department,
@@ -306,6 +308,7 @@ export function useUserManagement() {
     setFormEmail("");
     setFormPassword("");
     setSelectedBranchIds([]);
+    setSelectedPrimaryBranchId(null);
     setSelectedTeamLeadId(null);
     setCreateDepartment(activeDashboard);
     setFormErrors({});
@@ -339,6 +342,11 @@ export function useUserManagement() {
   }, [formName, formEmail, formPassword, createRole, selectedBranchIds, activeDashboard, createDepartment]);
 
   const toggleBranch = (branchId: string) => {
+    if (selectedBranchIds.includes(branchId) && selectedPrimaryBranchId === branchId) {
+      setSelectedPrimaryBranchId(selectedBranchIds.find(id => id !== branchId) || null);
+    } else if (!selectedPrimaryBranchId) {
+      setSelectedPrimaryBranchId(selectedBranchIds[0] || branchId);
+    }
     setSelectedBranchIds((prev) =>
       prev.includes(branchId) ? prev.filter((id) => id !== branchId) : [...prev, branchId]
     );
@@ -347,7 +355,7 @@ export function useUserManagement() {
   const handleEdit = useCallback((userToEdit: User) => {
     setEditingUser(userToEdit);
     setSelectedBranchIds(userToEdit.branchIds || []);
-      setSelectedPrimaryBranchId(userToEdit.primaryBranchId || null);
+    setSelectedPrimaryBranchId(userToEdit.primaryBranchId || userToEdit.branchIds?.[0] || null);
     setSelectedTeamLeadId(userToEdit.teamLeadId || null);
     setEditRole(userToEdit.role);
     setEditEmail(userToEdit.email || "");
@@ -406,7 +414,7 @@ export function useUserManagement() {
     } finally {
       setIsUpdating(false);
     }
-  }, [editingUser, user, editRole, editEmail, selectedTeamLeadId, selectedBranchIds, fetchUsers, editDepartment]);
+  }, [editingUser, user, editRole, editEmail, selectedTeamLeadId, selectedBranchIds, selectedPrimaryBranchId, fetchUsers, editDepartment]);
 
   const handleDeleteUser = useCallback(async (userToDelete: User) => {
     if (!user || (!isAdmin && !isDeveloper) || userToDelete.$id === user.$id) return;
@@ -578,7 +586,7 @@ export function useUserManagement() {
     }
   }, [
     user, validateForm, isAdmin, isDeveloper, canCreateAgent, createRole,
-    formName, formEmail, formPassword, selectedTeamLeadId, selectedBranchIds,
+    formName, formEmail, formPassword, selectedTeamLeadId, selectedBranchIds, selectedPrimaryBranchId,
     fetchUsers, resetForm, createDepartment, activeDashboard
   ]);
 
