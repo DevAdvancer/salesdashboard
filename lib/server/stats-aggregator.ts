@@ -59,6 +59,7 @@ export async function computeLinkedinStatsForDate(dateKey: string, accountsMap?:
   // 3. Aggregate
   const map = new Map<string, any>();
   for (const req of requests) {
+    if (req.recordSource === 'lead_backfill') continue;
     if (!req.accountId || !req.agentId) continue;
     
     const account = accountsMap.get(req.accountId);

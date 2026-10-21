@@ -71,6 +71,26 @@ function isNotFoundError(error: unknown): boolean {
 
 // Collection schema definitions - matches lib/types/index.ts
 const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: SchemaIndex[] }> = {
+  [COLLECTIONS.LINKEDIN_LEAD_REGISTRY]: {
+    attributes: [
+      { key:'kind',type:'string',required:true,size:20 },
+      { key:'profileUrl',type:'string',required:true,size:2048 },
+      { key:'leadId',type:'string',required:true,size:255 },
+    ],indexes:[],
+  },
+  [COLLECTIONS.LEAD_HISTORY]: {
+    attributes: [
+      { key:'leadId',type:'string',required:true,size:255 },
+      { key:'requestId',type:'string',required:true,size:255 },
+      { key:'profileUrl',type:'string',required:true,size:2048 },
+      { key:'eventType',type:'string',required:true,size:100 },
+      { key:'profileKey',type:'string',required:true,size:40 },
+      { key:'occurredAt',type:'string',required:true,size:64 },
+      { key:'actorId',type:'string',required:true,size:255 },
+      { key:'actorName',type:'string',required:true,size:255 },
+      { key:'payload',type:'string',required:true,size:60000 },
+    ],indexes:[{key:'lead_history_idx',type:'key',attributes:['leadId']},{key:'profile_history_idx',type:'key',attributes:['profileKey']}],
+  },
   [COLLECTIONS.BETA_FEATURE_ACCESS]: {
     attributes: [
       { key: 'feature', type: 'string', required: true, size: 50 },
@@ -643,7 +663,9 @@ async function syncCollection(collectionId: string, schema: typeof collectionSch
     await databases.createCollection(
       DATABASE_ID,
       collectionId,
-      humanizeCollectionName(collectionId)
+      humanizeCollectionName(collectionId),
+      [],
+      [COLLECTIONS.LEAD_HISTORY,COLLECTIONS.LINKEDIN_LEAD_REGISTRY].includes(collectionId) ? true : undefined,
     );
     console.log(`  ✅ Collection created`);
   }

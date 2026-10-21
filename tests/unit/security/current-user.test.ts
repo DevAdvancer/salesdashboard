@@ -1,12 +1,13 @@
 import { assertAuthenticatedUserId } from "@/lib/server/current-user";
 import { createSessionClient } from "@/lib/server/appwrite";
+import { getRequestMaintenanceStatus, isMaintenanceManager } from '@/lib/server/maintenance';
 
 jest.mock("@/lib/server/appwrite", () => ({
   createSessionClient: jest.fn(),
   createAdminClient: jest.fn(),
 }));
 jest.mock("@/lib/server/maintenance", () => ({
-  getMaintenanceStatus: jest.fn().mockResolvedValue({ active: false }),
+  getRequestMaintenanceStatus: jest.fn().mockResolvedValue({ active: false }),
   isMaintenanceManager: jest.fn().mockReturnValue(false),
 }));
 
@@ -15,6 +16,8 @@ const mockCreateSessionClient = createSessionClient as jest.MockedFunction<typeo
 describe("server current-user helpers", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (getRequestMaintenanceStatus as jest.Mock).mockResolvedValue({active:false});
+    (isMaintenanceManager as jest.Mock).mockReturnValue(false);
   });
 
   it("allows the authenticated account id", async () => {
@@ -40,5 +43,16 @@ describe("server current-user helpers", () => {
   it("rejects missing caller ids", async () => {
     await expect(assertAuthenticatedUserId("")).rejects.toThrow("Unauthorized");
     expect(mockCreateSessionClient).not.toHaveBeenCalled();
+  });
+  it('blocks authenticated live-site users during maintenance',async()=>{
+    (getRequestMaintenanceStatus as jest.Mock).mockResolvedValue({active:true});
+    mockCreateSessionClient.mockResolvedValue({account:{get:jest.fn().mockResolvedValue({$id:'user-123'})}} as any);
+    await expect(assertAuthenticatedUserId('user-123')).rejects.toThrow('maintenance');
+  });
+  it('keeps the authorized maintenance manager able to access the live site',async()=>{
+    (getRequestMaintenanceStatus as jest.Mock).mockResolvedValue({active:true});
+    (isMaintenanceManager as jest.Mock).mockReturnValue(true);
+    mockCreateSessionClient.mockResolvedValue({account:{get:jest.fn().mockResolvedValue({$id:'manager'})}} as any);
+    await expect(assertAuthenticatedUserId('manager')).resolves.toMatchObject({$id:'manager'});
   });
 });

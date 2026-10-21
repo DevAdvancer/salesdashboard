@@ -1,6 +1,8 @@
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
 import { MAINTENANCE_MANAGER_EMAIL, MAINTENANCE_MANAGER_USER_ID } from "@/lib/constants/maintenance";
+import { headers } from 'next/headers';
+import { isLocalMaintenanceRequest } from '@/lib/utils/maintenance-scope';
 
 export const MAINTENANCE_SETTINGS_ID = "global";
 
@@ -40,4 +42,14 @@ export async function getMaintenanceStatus(
     }
     throw error;
   }
+}
+
+/** Effective access status for this site; admin settings keep reading the raw live configuration. */
+export async function getRequestMaintenanceStatus(requestHeaders?: Pick<Headers, 'get'>): Promise<MaintenanceStatus> {
+  const incoming = requestHeaders ?? await headers();
+  if (isLocalMaintenanceRequest(incoming, {
+    nodeEnv:process.env.NODE_ENV,
+    hosted:process.env.VERCEL === '1' || Boolean(process.env.VERCEL_ENV),
+  })) return {active:false,enabled:false,endsAt:null};
+  return getMaintenanceStatus();
 }

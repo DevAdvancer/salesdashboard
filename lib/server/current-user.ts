@@ -3,7 +3,7 @@ import { createAdminClient, createSessionClient } from "@/lib/server/appwrite";
 import { bumpRequestCount } from "@/lib/server/appwrite-request-meter";
 import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
 import type { User } from "@/lib/types";
-import { getMaintenanceStatus, isMaintenanceManager } from "@/lib/server/maintenance";
+import { getRequestMaintenanceStatus, isMaintenanceManager } from "@/lib/server/maintenance";
 
 import { cache } from "react";
 
@@ -14,7 +14,7 @@ export const getAuthenticatedAccount = cache(async () => {
   // makes.
   bumpRequestCount();
   const authenticated = await account.get();
-  const maintenance = await getMaintenanceStatus();
+  const maintenance = await getRequestMaintenanceStatus();
   if (maintenance.active && !isMaintenanceManager(authenticated)) {
     throw new Error("CRM maintenance is in progress. Try again after the scheduled end time.");
   }

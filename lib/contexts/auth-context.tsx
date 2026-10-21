@@ -146,7 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const maintenance = await maintenanceResponse.json() as { active?: boolean };
             if (maintenance.active && (session.$id !== MAINTENANCE_MANAGER_USER_ID ||
               session.email?.trim().toLowerCase() !== MAINTENANCE_MANAGER_EMAIL)) {
-              await account.deleteSession('current').catch(() => {});
+              // Clear only this site's CRM cookie, not the cross-site Appwrite session.
               await clearServerSession();
               if (!cancelled) setUser(null);
               return;

@@ -6,6 +6,7 @@ import {
   createReadThroughDatabases,
 } from "@/lib/utils/appwrite-read-cache";
 import { bumpRequestCount } from "@/lib/server/appwrite-request-meter";
+import { withLeadHistory } from '@/lib/server/lead-history';
 
 const adminDatabaseCacheStores = createAppwriteReadCacheStores();
 const sessionDatabaseCacheStores = createAppwriteReadCacheStores();
@@ -105,7 +106,11 @@ export async function createAdminClient() {
       return new Account(client);
     },
     get databases() {
-      return createReadThroughDatabases(new Databases(client), {
+      return createReadThroughDatabases(withLeadHistory(new Databases(client), async () => {
+        const { getAuthenticatedAccount } = await import('@/lib/server/current-user');
+        const actor = await getAuthenticatedAccount().catch(() => null);
+        return { id: actor?.$id || 'system', name: actor?.name || 'System' };
+      }), {
         namespace: "admin",
         stores: adminDatabaseCacheStores,
       });

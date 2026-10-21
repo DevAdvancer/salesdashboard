@@ -18,6 +18,8 @@ import { normalizeProfileUrl } from "@/lib/utils/linkedin-extension-url";
 import { isWithdrawnLinkedinRequest } from "@/lib/utils/linkedin-request-state";
 import { listLinkedinReportRequests } from "@/lib/server/linkedin-report-requests";
 import { runLinkedinWithdrawalSweep, sendLinkedinWithdrawalReport } from "@/lib/server/linkedin-auto-withdraw";
+import { assertLinkedinProfileAvailable, findProtectedLinkedinLead, requestBlocksLinkedinProfile } from '@/lib/server/linkedin-lead-protection';
+import { leadProfileUrl } from '@/lib/utils/linkedin-lead-protection';
 
 function linkedinRequestSearch(value: string) {
     const text = value.trim();
@@ -44,18 +46,20 @@ export async function checkLinkedinDuplicateAction(input: {
 
     const { databases } = await createAdminClient();
     const account = await assertAccessibleLinkedinAccount(databases, input.currentUserId, input.accountId);
+    const existingLead = await findProtectedLinkedinLead(databases, targetUrl);
     const docs = await listLinkedinRequestsForProfile(databases, targetUrl, normalizeCompany(account.company));
     let active: LinkedinRequest | null = null;
     for (const doc of docs) {
-    if (isBlockingLinkedinRequest(doc)) {
+    if (await requestBlocksLinkedinProfile(databases, doc)) {
       if (!active || doc.status === "accepted") active = doc;
       if (doc.status === "accepted") break;
     }
     }
 
     return {
-    isDuplicate: Boolean(active),
-    canResend: !active && docs.some(isWithdrawnLinkedinRequest),
+    isDuplicate: Boolean(existingLead || active),
+    canResend: !existingLead && !active && docs.length > 0,
+    leadExists: Boolean(existingLead),
     activeRequestId: active?.$id ?? null,
     activeStatus: active?.status ?? null,
     activeAgentId: active?.agentId ?? null,
@@ -97,6 +101,7 @@ export async function createLinkedinRequestAction(input: {
     }
 
     const company = normalizeCompany(account.company);
+    await assertLinkedinProfileAvailable(databases, targetUrl);
     const connectionLimitRaw = (account as unknown as { connectionLimit?: unknown })
             .connectionLimit;
     const connectionLimit = typeof connectionLimitRaw === "number" && Number.isFinite(connectionLimitRaw)
@@ -118,7 +123,7 @@ export async function createLinkedinRequestAction(input: {
     const existingByCompany = await listLinkedinRequestsForProfile(databases, targetUrl, company);
     let activeByCompany: LinkedinRequest | null = null;
     for (const doc of existingByCompany) {
-    if (isBlockingLinkedinRequest(doc)) {
+    if (await requestBlocksLinkedinProfile(databases, doc)) {
       if (!activeByCompany || doc.status === "accepted") activeByCompany = doc;
       if (doc.status === "accepted") break;
     }
@@ -177,6 +182,7 @@ export async function createLinkedinRequestAction(input: {
           ...(coldCall ? { coldCall: true, coldCallPhone } : {}),
           status: "sent" satisfies LinkedinRequestStatus,
           acceptedAt: null,
+          recordSource: null,
           withdrawnAt: null,
           isActive: true,
         },
@@ -298,34 +304,18 @@ export async function linkLeadToLinkedinRequestAction(input: {
     throw new Error("Unauthorized");
     }
 
-    const updated = await databases.updateDocument(
-            DATABASE_ID,
-            COLLECTIONS.LINKEDIN_REQUESTS,
-            input.requestId,
-            { leadId: input.leadId },
-          );
-    try {
+    if (user.role === 'monitor' || user.role === 'operations' || (user.department || 'sales') !== 'sales') throw new Error('Unauthorized');
+    databases.clearReadCacheForCollection(COLLECTIONS.LEADS);
     const lead = (await databases.getDocument(
       DATABASE_ID,
       COLLECTIONS.LEADS,
       input.leadId,
     )) as unknown as Lead;
-    const currentData = (() => {
-      try {
-        return JSON.parse(lead.data ?? "{}");
-      } catch {
-        return {};
-      }
-    })();
-    if (
-      !currentData.linkedinRequestId ||
-      String(currentData.linkedinRequestId).trim() !== input.requestId
-    ) {
-      await databases.updateDocument(DATABASE_ID, COLLECTIONS.LEADS, input.leadId, {
-        data: JSON.stringify({ ...currentData, linkedinRequestId: input.requestId }),
-      });
-    }
-    } catch {}
+    const profileUrl = leadProfileUrl(lead.data);
+    if (!profileUrl || profileUrl !== leadProfileUrl({ linkedinProfileUrl: request.targetUrl })) throw new Error('The request and lead must have the same LinkedIn profile.');
+    if (![lead.ownerId,lead.assignedToId].includes(user.$id) && !['admin','developer'].includes(user.role)) throw new Error('This lead belongs to another agent.');
+    if (request.leadId && request.leadId !== lead.$id) throw new Error('This request is already linked to a different lead.');
+    const updated = await databases.updateDocument(DATABASE_ID,COLLECTIONS.LINKEDIN_REQUESTS,input.requestId,{ leadId:lead.$id });
 
     await logAuditAction(databases, {
     action: "LINKEDIN_REQUEST_LINK_LEAD",
@@ -340,6 +330,19 @@ export async function linkLeadToLinkedinRequestAction(input: {
     },
     });
     return updated as unknown as LinkedinRequest;
+}
+
+export async function checkLinkedinLeadCreationAction(input: { currentUserId: string; requestId: string }) {
+    await assertAuthenticatedUserId(input.currentUserId);
+    const user = await getAuthenticatedUserDoc();
+    if ((user.department || 'sales') !== 'sales' || user.isActive === false || !['admin','developer','team_lead','agent','lead_generation'].includes(user.role)) throw new Error('Unauthorized');
+    const { databases } = await createAdminClient();
+    databases.clearReadCacheForCollection(COLLECTIONS.LINKEDIN_REQUESTS);
+    const request = await databases.getDocument(DATABASE_ID,COLLECTIONS.LINKEDIN_REQUESTS,input.requestId);
+    if (request.agentId !== user.$id && !['admin','developer'].includes(user.role)) throw new Error('Unauthorized');
+    await assertLinkedinProfileAvailable(databases,request.targetUrl);
+    if (isWithdrawnLinkedinRequest(request as unknown as LinkedinRequest) || request.status !== 'accepted') throw new Error('Only an accepted request can create a lead.');
+    return { canCreate:true };
 }
 
 export async function findBackedOutLeadForLinkedinTargetUrlAction(input: {
@@ -616,8 +619,10 @@ export async function markLinkedinRequestAcceptedAction(input: {
     throw new Error("This request is withdrawn and cannot be accepted.");
     }
 
+    if (!existing.leadId) await assertLinkedinProfileAvailable(databases,existing.targetUrl);
+
     if (existing.status === "accepted") {
-    if (!existing.acceptedAt || existing.isActive === false) {
+    if ((!existing.acceptedAt && existing.recordSource !== 'lead_backfill') || existing.isActive === false) {
       const updated = await databases.updateDocument(
         DATABASE_ID,
         COLLECTIONS.LINKEDIN_REQUESTS,

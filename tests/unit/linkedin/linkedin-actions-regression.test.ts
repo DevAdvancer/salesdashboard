@@ -8,6 +8,10 @@ const mockGetDocument = jest.fn();
 const mockCreateDocument = jest.fn();
 const mockUpdateDocument = jest.fn();
 const mockGetAuthenticatedUserDoc = jest.fn();
+jest.mock('@/lib/server/linkedin-lead-protection',()=>({
+  findProtectedLinkedinLead:jest.fn(async()=>null),assertLinkedinProfileAvailable:jest.fn(async()=>undefined),
+  requestBlocksLinkedinProfile:jest.fn(async (_db,r)=>r.status!=='withdrawn'&&!(r.isActive===false&&r.withdrawnAt)),
+}));
 
 jest.mock('@/lib/server/current-user', () => ({
   assertAuthenticatedUserId: (...args: unknown[]) => mockAssertAuthenticatedUserId(...args),
@@ -470,6 +474,29 @@ describe('LinkedIn Server Actions Regression', () => {
           .rejects.toThrow('Only admins can run auto-withdraw');
       }));
       expect(mockCreateAdminClient).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('linkLeadToLinkedinRequestAction',()=>{
+    it('links only the request and never edits the lead record',async()=>{
+      mockGetAuthenticatedUserDoc.mockResolvedValue({$id:'agent-1',role:'agent',department:'sales'});
+      mockGetDocument.mockImplementation(async(_db,collection)=>collection==='linkedin_requests'
+        ? {$id:'request',agentId:'agent-1',targetUrl:'https://linkedin.com/in/person',leadId:null}
+        : {$id:'lead',ownerId:'agent-1',assignedToId:'agent-1',data:'{"linkedinProfileUrl":"https://www.linkedin.com/in/person/"}'});
+      mockUpdateDocument.mockResolvedValue({$id:'request',leadId:'lead'});
+      const{linkLeadToLinkedinRequestAction}=await import('@/app/actions/linkedin/requests');
+      await linkLeadToLinkedinRequestAction({currentUserId:'agent-1',requestId:'request',leadId:'lead'});
+      expect(mockUpdateDocument).toHaveBeenCalledTimes(1);
+      expect(mockUpdateDocument).toHaveBeenCalledWith('database','linkedin_requests','request',{leadId:'lead'});
+    });
+    it('rejects another agent linking a protected lead before any write',async()=>{
+      mockGetAuthenticatedUserDoc.mockResolvedValue({$id:'agent-1',role:'agent',department:'sales'});
+      mockGetDocument.mockImplementation(async(_db,collection)=>collection==='linkedin_requests'
+        ? {$id:'request',agentId:'agent-1',targetUrl:'https://linkedin.com/in/person',leadId:null}
+        : {$id:'lead',ownerId:'other',assignedToId:'other',data:'{"linkedinProfileUrl":"https://linkedin.com/in/person"}'});
+      const{linkLeadToLinkedinRequestAction}=await import('@/app/actions/linkedin/requests');
+      await expect(linkLeadToLinkedinRequestAction({currentUserId:'agent-1',requestId:'request',leadId:'lead'})).rejects.toThrow('another agent');
+      expect(mockUpdateDocument).not.toHaveBeenCalled();
     });
   });
 });

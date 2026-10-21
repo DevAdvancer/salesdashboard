@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ProtectedRoute } from "@/components/protected-route";
 import { LinkedinExtensionSection } from "@/components/linkedin-extension-guide";
 import { LinkedinDailyExport } from "@/components/linkedin-daily-export";
+import { LinkedinLeadHistory } from '@/components/linkedin-lead-history';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listMyLinkedinAccountsWithUsageAction } from "@/app/actions/linkedin/accounts";
 import {
   checkLinkedinDuplicateAction,
+  checkLinkedinLeadCreationAction,
   createLinkedinRequestAction,
   getBackoutStatusForLeadIdsAction,
   getLinkedinConnectionHistoryAction,
@@ -263,8 +265,8 @@ function LinkedinRequestsContent() {
       setHistoryTargetUrl(normalizedTargetUrl);
       setHistoryOpen(true);
       toast({
-        title: result.isDuplicate ? "Active request found" : "History loaded",
-        description: result.isDuplicate
+        title: result.leadExists ? 'Existing lead protected' : result.isDuplicate ? "Active request found" : "History loaded",
+        description: result.leadExists ? 'This LinkedIn profile already has a lead. It can be reused only after Not Interested or Backed Out.' : result.isDuplicate
           ? "This company has an active request for this profile. Withdraw it before sending another."
           : result.canResend
             ? "The previous request was withdrawn. You can send a new invitation."
@@ -373,7 +375,10 @@ function LinkedinRequestsContent() {
     }
   };
 
-  const openCreateLead = (request: LinkedinRequest) => {
+  const openCreateLead = async (request: LinkedinRequest) => {
+    if (!user) return;
+    try { await checkLinkedinLeadCreationAction({ currentUserId:user.$id,requestId:request.$id }); }
+    catch (error) { toast({ title:'Existing lead protected',description:getErrorMessage(error),variant:'destructive' }); return; }
     const params = new URLSearchParams();
     params.set("linkedinRequestId", request.$id);
     params.set("linkedinTargetUrl", request.targetUrl);
@@ -756,11 +761,16 @@ function LinkedinRequestsContent() {
                       <TableCell>
                         {formatLinkedinRequestSentDate(r.dateSent)}
                       </TableCell>
-                      <TableCell>{statusLabel}</TableCell>
+                      <TableCell>{r.recordSource === 'lead_backfill' ? `Existing lead${leadStatusLabel ? ` · ${leadStatusLabel}` : ''}` : statusLabel}</TableCell>
                       <TableCell>
-                        {!withdrawn && r.status === "accepted" ? (
+                        {r.leadId && !leadOutcome?.isTerminal ? (
                           <div className="flex flex-wrap gap-2">
-                            {r.leadId ? (
+                            <Button variant="outline" onClick={() => router.push(`/leads/${encodeURIComponent(r.leadId!)}`)}>Open Lead</Button>
+                            <LinkedinLeadHistory leadId={r.leadId}/>
+                          </div>
+                        ) : !withdrawn && r.status === "accepted" ? (
+                          <div className="flex flex-wrap gap-2">
+                            {r.leadId && !leadOutcome?.isTerminal ? (
                               <Button
                                 variant="outline"
                                 onClick={() =>

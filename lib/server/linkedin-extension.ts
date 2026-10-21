@@ -14,6 +14,7 @@ import { isWithdrawnLinkedinRequest } from "@/lib/utils/linkedin-request-state";
 import { canUseLinkedinExtension, LinkedinExtensionError, projectExtensionHistory } from "./linkedin-extension-policy";
 import type { LinkedinAccount, LinkedinRequest } from "@/lib/types";
 import type { ExtensionBootstrap, ExtensionCheck, ExtensionRecord, ExtensionState } from "@/lib/types/linkedin-extension";
+import { findProtectedLinkedinLead, requestBlocksLinkedinProfile } from '@/lib/server/linkedin-lead-protection';
 
 type Databases = Awaited<ReturnType<typeof createAdminClient>>["databases"];
 
@@ -70,19 +71,19 @@ async function inspect(input: { accountId: string; targetUrl: string }) {
     if ((error as { code?: number }).code === 400) return queryRecords(false);
     throw error;
   });
-  const [companyRecords, quota] = await Promise.all([
-    companyPromise, usage(databases, account, today),
+  const [companyRecords, quota, existingLead] = await Promise.all([
+    companyPromise, usage(databases, account, today), findProtectedLinkedinLead(databases,targetUrl),
   ]);
   const records = companyRecords.filter(record => sameProfile(record.targetUrl, targetUrl) &&
     sameLinkedinCompany(record.company, account.company));
-  const blocking = records.map(record => ({ record, blocks: isBlockingLinkedinRequest(record) }));
+  const blocking = await Promise.all(records.map(async record => ({ record, blocks: await requestBlocksLinkedinProfile(databases,record) })));
   const active = (blocking.find(item => item.blocks && item.record.status === "accepted") ||
     blocking.find(item => item.blocks))?.record;
   const latest = records[0];
-  const state: ExtensionState = active ? "active_request" :
+  const state: ExtensionState = existingLead || active ? "active_request" :
     quota.limit === null ? "missing_limit" : quota.remaining === 0 ? "limit_reached" :
     latest ? "resend_available" : "new";
-  return { actor, databases, today, account, targetUrl, records, latest, state, quota };
+  return { actor, databases, today, account, targetUrl, records, latest, state, quota, existingLead };
 }
 
 type Inspection = Awaited<ReturnType<typeof inspect>>;
@@ -94,7 +95,8 @@ function result(value: Inspection, includeHistory = false): ExtensionCheck {
       dateSent: latest.dateSent } : null,
     // Opaque revision proves the user checked the exact account/profile/history before saving.
     revision: createHash("sha256").update(JSON.stringify([actor.$id, account.$id, targetUrl, today,
-      records.map(r => [r.$id, r.$updatedAt, r.status, r.dateSent, r.agentId])])).digest("hex"),
+      records.map(r => [r.$id, r.$updatedAt, r.status, r.dateSent, r.agentId]),
+      value.existingLead && [value.existingLead.$id,value.existingLead.$updatedAt,value.existingLead.status]])).digest("hex"),
     history: includeHistory ? records.map(record => projectExtensionHistory(record, actor.$id)) : [] };
 }
 

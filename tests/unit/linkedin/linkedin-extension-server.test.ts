@@ -16,6 +16,7 @@ jest.mock("@/lib/server/appwrite", () => ({ createAdminClient: jest.fn() }));
 jest.mock("@/lib/server/current-user", () => ({ getAuthenticatedUserDoc: jest.fn() }));
 jest.mock("@/lib/server/beta-feature-access", () => ({ hasLinkedinHelperAccess: jest.fn() }));
 jest.mock("@/lib/server/appwrite-pagination", () => ({ listAllDocuments: jest.fn() }));
+jest.mock('@/lib/server/linkedin-lead-protection',()=>({findProtectedLinkedinLead:jest.fn(),requestBlocksLinkedinProfile:jest.fn()}));
 jest.mock("@/app/actions/linkedin/accounts", () => ({ listMyLinkedinAccountsAction: jest.fn() }));
 jest.mock("@/app/actions/linkedin/requests", () => ({ createLinkedinRequestAction: jest.fn() }));
 jest.mock("@/app/actions/linkedin/shared", () => ({
@@ -33,6 +34,7 @@ import { createLinkedinRequestAction } from "@/app/actions/linkedin/requests";
 import { assertAccessibleLinkedinAccount, isBlockingLinkedinRequest } from "@/app/actions/linkedin/shared";
 import { bootstrapLinkedinExtension, checkLinkedinExtension, recordLinkedinExtension } from "@/lib/server/linkedin-extension";
 import { COLLECTIONS } from "@/lib/constants/appwrite";
+import { findProtectedLinkedinLead,requestBlocksLinkedinProfile } from '@/lib/server/linkedin-lead-protection';
 
 const account = { $id: "account-1", assignedUserId: "agent-1", company: "Silverspace", idName: "Account A", accountType: "main", isActive: true, connectionLimit: 3 };
 const databases = { clearReadCacheForCollection: jest.fn(), createDocument: jest.fn(),
@@ -45,6 +47,8 @@ beforeEach(() => {
   jest.resetAllMocks();
   jest.useFakeTimers().setSystemTime(new Date("2026-10-06T02:00:00Z")); // Oct 5 in Eastern time.
   records = []; used = [];
+  (findProtectedLinkedinLead as jest.Mock).mockResolvedValue(null);
+  (requestBlocksLinkedinProfile as jest.Mock).mockImplementation(async (_db,r)=>r.status!=='withdrawn'&&!(r.isActive===false&&r.withdrawnAt));
   (createAdminClient as jest.Mock).mockResolvedValue({ databases });
   (getAuthenticatedUserDoc as jest.Mock).mockResolvedValue({ $id: "agent-1", name: "Agent", role: "agent", department: "sales", isActive: true });
   (hasLinkedinHelperAccess as jest.Mock).mockResolvedValue(true);
@@ -96,6 +100,13 @@ it("allows the same profile through another company's LinkedIn account", async (
   const otherAccount = { ...account, $id: "account-2", company: "Vizva INC" };
   (assertAccessibleLinkedinAccount as jest.Mock).mockResolvedValue(otherAccount);
   expect((await checkLinkedinExtension({ ...input, accountId: otherAccount.$id })).state).toBe("new");
+});
+it('blocks an existing lead across companies even after its request was withdrawn',async()=>{
+  (findProtectedLinkedinLead as jest.Mock).mockResolvedValue({$id:'existing-lead',status:'Interested',$updatedAt:'now'});
+  records=[{$id:'old',targetUrl:input.targetUrl,company:'Another company',status:'withdrawn'}];
+  expect(await checkLinkedinExtension(input)).toMatchObject({state:'active_request',canRecord:false});
+  await expect(recordLinkedinExtension({...input,confirmResend:false,revision:'stale'})).rejects.toMatchObject({status:409});
+  expect(databases.createDocument).not.toHaveBeenCalled();
 });
 it("rechecks allowance at save time", async () => {
   const checked = await checkLinkedinExtension(input);

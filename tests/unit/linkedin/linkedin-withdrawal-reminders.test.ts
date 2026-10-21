@@ -24,6 +24,11 @@ function request(overrides: Partial<LinkedinRequest>): LinkedinRequest {
 
 describe('linkedin withdrawal reminders', () => {
   const now = new Date('2026-05-16T12:00:00.000Z');
+  it('preserves an old sent request once it is linked to an existing lead',()=>{
+    const linked=request({status:'sent',leadId:'existing-lead',dateSent:'2026-01-01T00:00:00.000Z'});
+    expect(shouldAutoWithdrawLinkedinRequest({request:linked,now})).toBe(false);
+    expect(shouldSendLinkedinWithdrawalReminder({request:linked,now,remindersSentToday:0})).toBe(false);
+  });
 
   it('sends reminder for active sent request after 15 days when no recent reminder exists', () => {
     expect(

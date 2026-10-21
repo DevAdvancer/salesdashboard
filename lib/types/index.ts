@@ -464,6 +464,7 @@ export interface LinkedinRequest {
   targetUrl: string;
   coldCall?: boolean;
   coldCallPhone?: string | null;
+  recordSource?: 'lead_backfill' | null;
   dateSent: string;
   status: LinkedinRequestStatus;
   acceptedAt: string | null;

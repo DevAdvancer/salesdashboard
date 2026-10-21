@@ -44,8 +44,7 @@ export function MaintenanceSettings() {
       const result = await setMaintenanceModeAction({ enabled, endsAtEastern });
       setStatus(result);
       toast({ title: enabled ? 'Maintenance mode is on' : 'Maintenance mode is off',
-        description: enabled ? `${result.signedOut} users signed out.${result.failedUserIds.length ? ` ${result.failedUserIds.length} session revocations failed; the server access guard remains active.` : ''}` : undefined,
-        variant: result.failedUserIds.length ? 'destructive' : undefined });
+        description: enabled ? 'The live site is paused until the scheduled end. Localhost development remains available.' : undefined });
     } catch (error) {
       toast({ title: 'Unable to update maintenance mode',
         description: error instanceof Error ? error.message : undefined, variant: 'destructive' });
@@ -56,7 +55,7 @@ export function MaintenanceSettings() {
     <Card>
       <CardHeader>
         <CardTitle>Maintenance mode</CardTitle>
-        <CardDescription>When enabled, other users are signed out and see a maintenance page until the Eastern time you set. Your admin account keeps access.</CardDescription>
+        <CardDescription>When enabled, live-site users see a maintenance page until the Eastern time you set. Localhost development and your admin account keep access.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm font-medium">Status: {status ? status.active ? 'On' : 'Off' : 'Loading…'}</p>

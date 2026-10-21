@@ -46,6 +46,7 @@ export async function listLinkedinReportRequests(input: {
     collectionId: COLLECTIONS.LINKEDIN_REQUESTS, queries,
   });
   return requests.filter(request => {
+    if (request.recordSource === 'lead_backfill') return false;
     if (!request.$createdAt) return false;
     const created = getCurrentEasternIsoDate(new Date(request.$createdAt));
     return created >= start && created <= end;

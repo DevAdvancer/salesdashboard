@@ -12,6 +12,8 @@
     "test:coverage": "jest --coverage",
     "setup:appwrite": "tsx scripts/sync-appwrite-schema.ts",
     "setup:appwrite:dry": "tsx scripts/sync-appwrite-schema.ts --dry-run",
+    "link:linkedin-leads:dry": "tsx scripts/link-linkedin-leads.ts",
+    "link:linkedin-leads:apply": "tsx scripts/link-linkedin-leads.ts --apply",
     "setup:beta-access:dry": "tsx scripts/setup-beta-feature-access.ts",
     "setup:beta-access:apply": "tsx scripts/setup-beta-feature-access.ts --apply",
     "setup:appwrite:targets": "tsx scripts/setup-monthly-targets.ts",

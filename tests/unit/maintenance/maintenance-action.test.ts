@@ -16,7 +16,7 @@ jest.mock('@/lib/server/maintenance', () => ({
   getMaintenanceStatus: () => mockGetStatus(),
 }));
 
-test('turning maintenance on revokes every other CRM session and preserves the manager', async () => {
+test('turning live-site maintenance on preserves all shared Appwrite sessions', async () => {
   const deleteSessions = jest.fn().mockResolvedValue(undefined);
   const updateDocument = jest.fn().mockResolvedValue({});
   mockGetUser.mockResolvedValue({ $id: '698a5e64002675ad41f6',
@@ -24,18 +24,15 @@ test('turning maintenance on revokes every other CRM session and preserves the m
   mockCreateAdminClient.mockResolvedValue({ databases: {
     updateDocument, clearReadCacheForCollection: jest.fn(),
   }, users: { deleteSessions } });
-  mockGetStatus.mockResolvedValueOnce({ active: false, enabled: false, endsAt: null })
-    .mockResolvedValueOnce({ active: true, enabled: true, endsAt: '2099-10-14T19:00:00.000Z' });
+  mockGetStatus.mockResolvedValue({ active: true, enabled: true, endsAt: '2099-10-14T19:00:00.000Z' });
   mockListAll.mockResolvedValue([{ $id: '698a5e64002675ad41f6' }, { $id: 'agent-1' }, { $id: 'agent-2' }]);
 
   const { setMaintenanceModeAction } = await import('@/app/actions/maintenance');
   const result = await setMaintenanceModeAction({ enabled: true, endsAtEastern: '2099-10-14T15:00' });
   expect(updateDocument).toHaveBeenCalledTimes(1);
-  expect(deleteSessions).toHaveBeenCalledTimes(2);
-  expect(deleteSessions).toHaveBeenCalledWith('agent-1');
-  expect(deleteSessions).toHaveBeenCalledWith('agent-2');
-  expect(deleteSessions).not.toHaveBeenCalledWith('698a5e64002675ad41f6');
-  expect(result.signedOut).toBe(2);
+  expect(deleteSessions).not.toHaveBeenCalled();
+  expect(mockListAll).not.toHaveBeenCalled();
+  expect(result).toMatchObject({active:true,signedOut:0,failedUserIds:[]});
 });
 
 test('another admin cannot turn maintenance on', async () => {

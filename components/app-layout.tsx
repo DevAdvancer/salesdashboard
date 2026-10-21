@@ -17,7 +17,7 @@ const ADMIN_ATTENDANCE_PING_STORAGE_KEY = 'crm:last-admin-attendance-ping-at';
 import { useUIStore } from '@/lib/hooks/useUIStore';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, activeDashboard, logout } = useAuth();
+  const { user, loading, activeDashboard } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
@@ -39,7 +39,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         const manager = user?.$id === MAINTENANCE_MANAGER_USER_ID &&
           user.email.toLowerCase() === MAINTENANCE_MANAGER_EMAIL && user.role === 'admin';
         if (status.active && !manager) {
-          if (user) await logout();
+          // Keep the shared Appwrite session intact for other origins such as localhost.
           if (!cancelled && pathname !== '/maintenance') router.replace('/maintenance');
         } else if (!status.active && pathname === '/maintenance') {
           router.replace(user ? '/dashboard' : '/login');
@@ -53,7 +53,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     void checkMaintenance();
     const interval = window.setInterval(checkMaintenance, 10_000);
     return () => { cancelled = true; window.clearInterval(interval); };
-  }, [logout, pathname, router, user]);
+  }, [pathname, router, user]);
 
   useEffect(() => {
     // Post-login landing page depends on the user's active dashboard. Resume-

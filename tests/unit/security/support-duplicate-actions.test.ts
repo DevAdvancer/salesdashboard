@@ -17,7 +17,7 @@ jest.mock("@/lib/server/appwrite", () => ({
   createAdminClient: jest.fn(),
 }));
 jest.mock("@/lib/server/maintenance", () => ({
-  getMaintenanceStatus: jest.fn().mockResolvedValue({ active: false }),
+  getRequestMaintenanceStatus: jest.fn().mockResolvedValue({ active: false }),
   isMaintenanceManager: jest.fn().mockReturnValue(false),
 }));
 

@@ -26,6 +26,8 @@ function getAgeDays(anchorIso: string | null, now: Date) {
 export function getLinkedinReminderPolicy(request: LinkedinRequest) {
   if ((request.isActive ?? true) === false) return null;
   if (request.withdrawnAt) return null;
+  // Existing leads keep their request link; lead status governs reuse of the profile.
+  if (request.leadId) return null;
 
   if (request.status === 'sent') {
     return {

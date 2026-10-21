@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { getMaintenanceStatus } from "@/lib/server/maintenance";
+import { getRequestMaintenanceStatus } from "@/lib/server/maintenance";
 
-export async function GET() {
-  const status = await getMaintenanceStatus();
+export async function GET(request: Request) {
+  const status = await getRequestMaintenanceStatus(request.headers);
   return NextResponse.json(status, { headers: { "Cache-Control": "no-store" } });
 }
