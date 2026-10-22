@@ -6,6 +6,13 @@ import { listAllDocuments } from '@/lib/server/appwrite-pagination';
 import { leadProfileUrl, isLeadReleased } from '@/lib/utils/linkedin-lead-protection';
 import type { LinkedinRequest } from '@/lib/types';
 import { isWithdrawnLinkedinRequest } from '@/lib/utils/linkedin-request-state';
+import { createBriefReadCache } from '@/lib/utils/brief-read-cache';
+
+// Only UI previews share scans. Every mutation still performs a fresh lookup
+// under the distributed profile lock, including when a preview reported no match.
+const previewScans = createBriefReadCache<Models.Document[]>(60_000, 2);
+export function invalidateLinkedinLeadPreviews() { previewScans.clear(); }
+type LookupOptions = { preview?: boolean };
 
 type Database = Pick<Databases, 'getDocument' | 'listDocuments' | 'createDocument' | 'updateDocument' | 'deleteDocument'> & {
   clearReadCacheForCollection?: (collectionId: string) => void;
@@ -15,31 +22,38 @@ export const profileDocumentId = (url: string, kind: 'profile' | 'lock' = 'profi
 export const isNotFound = (error: unknown) => (error as { code?: number })?.code === 404;
 export class LinkedinLeadProtectionError extends Error {}
 
-export async function findLeadsForLinkedinProfile(databases: Database, targetUrl: string): Promise<Models.Document[]> {
+export async function findLeadsForLinkedinProfile(databases: Database, targetUrl: string, options: LookupOptions = {}): Promise<Models.Document[]> {
   const url = leadProfileUrl({ linkedinProfileUrl: targetUrl });
   if (!url) throw new Error('Enter a valid public LinkedIn profile URL.');
-  databases.clearReadCacheForCollection?.(COLLECTIONS.LEADS);
   databases.clearReadCacheForCollection?.(COLLECTIONS.LINKEDIN_LEAD_REGISTRY);
   try {
     const entry = await databases.getDocument(DATABASE_ID, COLLECTIONS.LINKEDIN_LEAD_REGISTRY, profileDocumentId(url));
     if (entry?.leadId) {
       try {
+        databases.clearReadCacheForCollection?.(COLLECTIONS.LEADS);
         const lead = await databases.getDocument(DATABASE_ID, COLLECTIONS.LEADS, entry.leadId);
         if (leadProfileUrl(lead.data) === url) return [lead];
       } catch (error) { if (!isNotFound(error)) throw error; }
     }
   } catch (error) { if (!isNotFound(error)) throw error; }
   // No age, branch, owner, company, or 1,000-record cutoff. Unknown profiles fail closed on scan errors.
-  const leads = await listAllDocuments<Models.Document>({ databases, databaseId: DATABASE_ID,
+  const scan = () => {
+    // Do not inherit the SDK wrapper's two-hour cache when the preview expires.
+    databases.clearReadCacheForCollection?.(COLLECTIONS.LEADS);
+    return listAllDocuments<Models.Document>({ databases, databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.LEADS, queries: [Query.orderAsc('$id'),
       Query.select(['$id', 'data', 'status', 'ownerId', 'assignedToId', '$updatedAt'])],
     pageLimit: 5000, maxPages: 1000, maxDocuments: 100000, requireComplete: true });
+  };
+  const key = createHash('sha256').update(JSON.stringify([process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT,
+    process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID, process.env.APPWRITE_API_KEY, DATABASE_ID, COLLECTIONS.LEADS])).digest('hex');
+  const leads = await (options.preview ? previewScans.read(key, scan) : scan());
   if (leads.length >= 100000) throw new Error('The lead profile scan is incomplete. Ask an admin to review it.');
   return leads.filter(lead => leadProfileUrl(lead.data) === url);
 }
 
-export async function findProtectedLinkedinLead(databases: Database, targetUrl: string, excludeLeadId?: string) {
-  return (await findLeadsForLinkedinProfile(databases, targetUrl))
+export async function findProtectedLinkedinLead(databases: Database, targetUrl: string, excludeLeadId?: string, options: LookupOptions = {}) {
+  return (await findLeadsForLinkedinProfile(databases, targetUrl, options))
     .find(lead => lead.$id !== excludeLeadId && !isLeadReleased(lead.status)) ?? null;
 }
 

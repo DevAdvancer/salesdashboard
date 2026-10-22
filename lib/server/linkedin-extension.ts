@@ -72,7 +72,7 @@ async function inspect(input: { accountId: string; targetUrl: string }, recordin
     throw error;
   });
   const [companyRecords, quota, checkedLead] = await Promise.all([
-    companyPromise, usage(databases, account, today), recording ? null : findProtectedLinkedinLead(databases,targetUrl),
+    companyPromise, usage(databases, account, today), recording ? null : findProtectedLinkedinLead(databases,targetUrl, undefined, { preview: true }),
   ]);
   const records = companyRecords.filter(record => sameProfile(record.targetUrl, targetUrl) &&
     sameLinkedinCompany(record.company, account.company));

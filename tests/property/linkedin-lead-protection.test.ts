@@ -1,12 +1,57 @@
 import fc from 'fast-check';
 import { isLeadReleased, leadOwnershipMayChange, leadProfileUrl } from '@/lib/utils/linkedin-lead-protection';
-import { findProtectedLinkedinLead, withLinkedinProfileLock } from '@/lib/server/linkedin-lead-protection';
-import { COLLECTIONS } from '@/lib/constants/appwrite';
+import { findProtectedLinkedinLead, invalidateLinkedinLeadPreviews, withLinkedinProfileLock } from '@/lib/server/linkedin-lead-protection';
+import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import type { Databases } from 'node-appwrite';
-jest.mock('node-appwrite',()=>({Query:{orderAsc:(key:string)=>`asc:${key}`,select:(keys:string[])=>`select:${keys}`,limit:(n:number)=>`limit:${n}`,cursorAfter:(id:string)=>`cursor:${id}`}}));
+import { withLeadHistory } from '@/lib/server/lead-history';
+jest.mock('node-appwrite',()=>({ID:{unique:()=>`event-${Math.random()}`},Query:{orderAsc:(key:string)=>`asc:${key}`,select:(keys:string[])=>`select:${keys}`,limit:(n:number)=>`limit:${n}`,cursorAfter:(id:string)=>`cursor:${id}`}}));
 
 const statuses = ['Interested','Connection Accepted','Signed/Closure','Won','Generated','Not Interested','Backed Out','notinterested','backout'];
 describe('LinkedIn lead protection invariants',() => {
+  beforeEach(() => invalidateLinkedinLeadPreviews());
+  it('checks same-agent resends under the lock even when an earlier preview found no lead', async () => {
+    await fc.assert(fc.asyncProperty(fc.constantFrom('Interested', 'Signed/Closure', 'Generated'), fc.uuid(), async (status, agentId) => {
+      invalidateLinkedinLeadPreviews();
+      let locked = false;
+      const before = { $id: 'request', targetUrl: 'https://linkedin.com/in/person', status: 'withdrawn', agentId, accountId: 'account', dateSent: '2026-10-21' };
+      const db = {
+        getDocument: jest.fn(async (_database, collection) => { if (collection === COLLECTIONS.LINKEDIN_REQUESTS) return before; throw { code: 404 }; }),
+        listDocuments: jest.fn().mockResolvedValue({ total: 0, documents: [] }),
+        createDocument: jest.fn(async (_database, collection, id, data) => {
+          if (collection === COLLECTIONS.LINKEDIN_LEAD_REGISTRY) locked = true;
+          return { $id: id, ...data };
+        }),
+        updateDocument: jest.fn(), deleteDocument: jest.fn(async () => { locked = false; }),
+      } as unknown as Databases;
+      await findProtectedLinkedinLead(db, before.targetUrl, undefined, { preview: true });
+      (db.listDocuments as jest.Mock).mockImplementation(async () => {
+        expect(locked).toBe(true);
+        return { total: 1, documents: [{ $id: 'lead', status, data: JSON.stringify({ field_16: before.targetUrl }) }] };
+      });
+      await expect(withLeadHistory(db, async () => ({ id: agentId, name: 'Agent' }))
+        .updateDocument(DATABASE_ID, COLLECTIONS.LINKEDIN_REQUESTS, 'request', { status: 'sent', dateSent: '2026-10-22', agentId }))
+        .rejects.toThrow('protected lead');
+      expect(db.updateDocument).not.toHaveBeenCalled();
+      expect(locked).toBe(false);
+    }), { numRuns: 10 });
+  });
+  it('shares one preview scan across profiles but every authoritative check reads fresh state', async () => {
+    await fc.assert(fc.asyncProperty(fc.integer({ min: 2, max: 30 }), fc.constantFrom(...statuses), async (count, status) => {
+      invalidateLinkedinLeadPreviews();
+      const db = { getDocument: jest.fn().mockRejectedValue({ code: 404 }), clearReadCacheForCollection: jest.fn(),
+        listDocuments: jest.fn().mockResolvedValue({ total: 0, documents: [] }) } as unknown as Databases;
+      await Promise.all(Array.from({ length: count }, (_, i) =>
+        findProtectedLinkedinLead(db, `https://linkedin.com/in/person-${i}`, undefined, { preview: true })));
+      expect(db.listDocuments).toHaveBeenCalledTimes(1);
+      const lead = { $id: 'new', data: JSON.stringify({ field_16: 'https://linkedin.com/in/person-0' }), status };
+      (db.listDocuments as jest.Mock).mockResolvedValue({ total: 1, documents: [lead] });
+      expect(Boolean(await findProtectedLinkedinLead(db, 'https://linkedin.com/in/person-0'))).toBe(!isLeadReleased(status));
+      expect(db.listDocuments).toHaveBeenCalledTimes(2);
+      invalidateLinkedinLeadPreviews();
+      expect(Boolean(await findProtectedLinkedinLead(db, 'https://linkedin.com/in/person-0', undefined, { preview: true }))).toBe(!isLeadReleased(status));
+      expect(db.listDocuments).toHaveBeenCalledTimes(3);
+    }), { numRuns: 15 });
+  });
   it('blocks ownership takeover for every protected status regardless of actor or company',() => {
     fc.assert(fc.property(fc.constantFrom(...statuses),fc.uuid(),fc.uuid(),fc.string(),(status,owner,nextOwner,company) => {
       fc.pre(owner!==nextOwner);

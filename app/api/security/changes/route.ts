@@ -5,16 +5,30 @@ import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { securityDatabase } from '@/lib/server/crm-access';
 import { verifiedBrowserActor } from '@/lib/server/crm-browser-data';
 import type { User } from '@/lib/types';
+import { createBriefReadCache } from '@/lib/utils/brief-read-cache';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 const secretCollections = new Set([COLLECTIONS.SECURITY_CHALLENGES, COLLECTIONS.CRM_ACCESS_REQUESTS, COLLECTIONS.LEAD_HISTORY,
   COLLECTIONS.LINKEDIN_LEAD_REGISTRY, COLLECTIONS.MAINTENANCE_SETTINGS, COLLECTIONS.REPORT_EMAIL_SETTINGS, COLLECTIONS.BETA_FEATURE_ACCESS]);
+// Share only empty-payload change markers, after fresh authorization and scope
+// resolution. Chat/notification bodies and access decisions are never cached here.
+const markers = createBriefReadCache<Awaited<ReturnType<typeof readChange>>>(30_000, 512);
+const carriesMessageBody = (collectionId: string) =>
+  [COLLECTIONS.NOTIFICATIONS, COLLECTIONS.CHAT_MESSAGES, COLLECTIONS.RESUME_CHAT_MESSAGES].includes(collectionId);
+
+async function readChange(collectionId: string, queries: string[], bodyVisible: boolean) {
+  const result = await securityDatabase().listDocuments(DATABASE_ID, collectionId, queries);
+  const row = result.documents[0];
+  return { version: createHash('sha256').update(`${result.total}:${row?.$id || ''}:${row?.$updatedAt || ''}`).digest('hex'),
+    payload: bodyVisible && row ? row : {},
+    createdAt: row?.$createdAt || '', updatedAt: row?.$updatedAt || '' };
+}
 
 async function changeFor(actor: User, collectionId: string) {
   const queries = [Query.orderDesc('$updatedAt'), Query.limit(1)];
-  const bodyVisible = [COLLECTIONS.NOTIFICATIONS, COLLECTIONS.CHAT_MESSAGES, COLLECTIONS.RESUME_CHAT_MESSAGES].includes(collectionId);
+  const bodyVisible = carriesMessageBody(collectionId);
   if (!bodyVisible) queries.push(Query.select(['$id', '$createdAt', '$updatedAt']));
   if (collectionId === COLLECTIONS.NOTIFICATIONS) queries.push(Query.equal('recipientId', actor.$id));
   if (collectionId === COLLECTIONS.CHAT_MESSAGES || collectionId === COLLECTIONS.RESUME_CHAT_MESSAGES) {
@@ -30,11 +44,10 @@ async function changeFor(actor: User, collectionId: string) {
       queries.push(Query.or([Query.equal('ownerId', ids), Query.equal('assignedToId', ids)]));
     }
   }
-  const result = await securityDatabase().listDocuments(DATABASE_ID, collectionId, queries);
-  const row = result.documents[0];
-  return { version: createHash('sha256').update(`${result.total}:${row?.$id || ''}:${row?.$updatedAt || ''}`).digest('hex'),
-    payload: bodyVisible && row ? row : {},
-    createdAt: row?.$createdAt || '', updatedAt: row?.$updatedAt || '' };
+  if (bodyVisible) return readChange(collectionId, queries, true);
+  const key = createHash('sha256').update(JSON.stringify([process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT,
+    process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID, process.env.APPWRITE_API_KEY, DATABASE_ID, collectionId, queries])).digest('hex');
+  return markers.read(key, () => readChange(collectionId, queries, false));
 }
 
 export async function GET(request: NextRequest) {
@@ -57,6 +70,7 @@ export async function GET(request: NextRequest) {
       start(controller) {
         let stopped = false; let running = false;
         const previous = new Map<string, string>();
+        const checkedAt = new Map<string, number>();
         const cleanup = () => { stopped = true; clearInterval(timer); clearTimeout(deadline); request.signal.removeEventListener('abort', end); };
         const end = () => { if (stopped) return; cleanup(); controller.close(); };
         cancelStream = cleanup;
@@ -66,6 +80,9 @@ export async function GET(request: NextRequest) {
           try {
             const actor = await verifiedBrowserActor();
             for (const { channel, collectionId } of parsed) {
+              const now = Date.now();
+              if (!carriesMessageBody(collectionId) && now - (checkedAt.get(channel) ?? -Infinity) < 30_000) continue;
+              checkedAt.set(channel, now);
               const change = await changeFor(actor, collectionId);
               if (!change || stopped) continue;
               const old = previous.get(channel); previous.set(channel, change.version);

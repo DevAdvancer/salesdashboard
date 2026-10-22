@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { Databases, ID, type Models } from 'node-appwrite';
 import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { leadOwnershipMayChange, leadProfileUrl } from '@/lib/utils/linkedin-lead-protection';
-import { findProtectedLinkedinLead, LinkedinLeadProtectionError, profileDocumentId, saveLeadProfileRegistry, withLinkedinProfileLock } from '@/lib/server/linkedin-lead-protection';
+import { findProtectedLinkedinLead, invalidateLinkedinLeadPreviews, LinkedinLeadProtectionError, profileDocumentId, saveLeadProfileRegistry, withLinkedinProfileLock } from '@/lib/server/linkedin-lead-protection';
 import { parseLeadHistory, type LeadHistorySnapshotEvent } from '@/lib/utils/lead-history-snapshot';
 
 type Row = Record<string, unknown>;
@@ -92,8 +92,10 @@ export function withLeadHistory(databases: Databases, actor: () => Promise<Histo
           }
           if (!isLead && profileUrl && !deleting) {
             const reassignment = creating || ['agentId','accountId','targetUrl'].some(key => patch && key in patch && patch[key] !== before?.[key]);
+            const resending = patch?.status === 'sent' && (before?.status !== 'sent' ||
+              before?.isActive === false || ('dateSent' in patch && patch.dateSent !== before?.dateSent));
             const removesLink = patch && 'leadId' in patch && patch.leadId !== before?.leadId && !patch.leadId;
-            if ((reassignment || removesLink) && await findProtectedLinkedinLead(target,profileUrl)) {
+            if ((reassignment || resending || removesLink) && await findProtectedLinkedinLead(target,profileUrl)) {
               await appendLeadHistory(target,{...event,eventType:'REQUEST_CHANGE_BLOCKED',payload:{changes,reason:'Existing protected lead'}});
               throw new LinkedinLeadProtectionError('This LinkedIn profile has a protected lead. Request reassignment cannot release or replace it.');
             }
@@ -124,6 +126,7 @@ export function withLeadHistory(databases: Databases, actor: () => Promise<Histo
             await appendLeadHistory(target,{ ...event,eventType:`${operation}_FAILED`,payload:{ intentId, code:(error as { code?:number }).code || null } });
             throw error;
           }
+          if (isLead) invalidateLinkedinLeadPreviews();
           if (isLead && !deleting) await saveLeadProfileRegistry(target,saved);
           await appendLeadHistory(target,{ ...event,eventType:operation,payload:{ intentId, changes, documentUpdatedAt:saved?.$updatedAt || null } });
           return saved;

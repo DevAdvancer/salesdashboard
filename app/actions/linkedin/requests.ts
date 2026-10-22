@@ -46,7 +46,7 @@ export async function checkLinkedinDuplicateAction(input: {
 
     const { databases } = await createAdminClient();
     const account = await assertAccessibleLinkedinAccount(databases, input.currentUserId, input.accountId);
-    const existingLead = await findProtectedLinkedinLead(databases, targetUrl);
+    const existingLead = await findProtectedLinkedinLead(databases, targetUrl, undefined, { preview: true });
     const docs = await listLinkedinRequestsForProfile(databases, targetUrl, normalizeCompany(account.company));
     let active: LinkedinRequest | null = null;
     for (const doc of docs) {
@@ -101,7 +101,8 @@ export async function createLinkedinRequestAction(input: {
     }
 
     const company = normalizeCompany(account.company);
-    await assertLinkedinProfileAvailable(databases, targetUrl);
+    // The shared mutation wrapper checks under the profile lock. A second
+    // unlocked whole-collection scan here adds reads without closing the race.
     const connectionLimitRaw = (account as unknown as { connectionLimit?: unknown })
             .connectionLimit;
     const connectionLimit = typeof connectionLimitRaw === "number" && Number.isFinite(connectionLimitRaw)
