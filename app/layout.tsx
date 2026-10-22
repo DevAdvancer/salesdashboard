@@ -11,6 +11,7 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { QueryProvider } from "@/app/providers/query-provider";
 import { NotificationProvider } from "@/lib/providers/notification-provider";
 import { GlobalLoader } from "@/components/loader/GlobalLoader";
+import { CrmSecurityGate } from '@/components/crm-security-gate';
 
 const bebasNeue = localFont({
   src: "./fonts/BebasNeue-Regular.ttf",
@@ -74,6 +75,7 @@ export default function RootLayout({
         <AzureMsalProvider>
           <ErrorBoundary>
             <AuthProvider>
+              <CrmSecurityGate>
               <QueryProvider>
                 <AccessControlProvider>
                   <NotificationProvider>
@@ -82,6 +84,7 @@ export default function RootLayout({
                   </NotificationProvider>
                 </AccessControlProvider>
               </QueryProvider>
+              </CrmSecurityGate>
             </AuthProvider>
           </ErrorBoundary>
         </AzureMsalProvider>

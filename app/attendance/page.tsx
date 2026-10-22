@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { ProtectedRoute } from "@/components/protected-route";
+import { AttendanceAccessApprovals } from '@/components/attendance-access-approvals';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -392,6 +393,7 @@ function AttendanceContent() {
 
   return (
     <div className="container mx-auto pb-24">
+      <div className="mb-6"><AttendanceAccessApprovals /></div>
       <div className="flex flex-col gap-2 mb-6">
         <h1 className="text-2xl md:text-3xl font-bold">Attendance</h1>
         <div className="flex flex-col sm:flex-row sm:items-end gap-4 justify-between w-full">

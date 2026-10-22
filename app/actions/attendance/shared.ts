@@ -158,13 +158,10 @@ export async function upsertAttendanceDoc(databases: Awaited<ReturnType<typeof c
             : input.existing;
     const permissions = [
             Permission.read(Role.user(input.userId)),
-            Permission.update(Role.user(input.userId)),
             Permission.read(Role.label("admin")),
-            Permission.update(Role.label("admin")),
           ];
     if (input.teamLeadId) {
     permissions.push(Permission.read(Role.user(input.teamLeadId)));
-    permissions.push(Permission.update(Role.user(input.teamLeadId)));
     }
 
     if (existing) {

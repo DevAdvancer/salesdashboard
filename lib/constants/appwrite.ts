@@ -11,6 +11,9 @@ export const COLLECTIONS = {
   LEAD_NOTES: process.env.NEXT_PUBLIC_APPWRITE_LEAD_NOTES_COLLECTION_ID || 'lead_notes',
   NOTIFICATIONS: process.env.NEXT_PUBLIC_APPWRITE_NOTIFICATIONS_COLLECTION_ID || 'notifications',
   ATTENDANCE: process.env.NEXT_PUBLIC_APPWRITE_ATTENDANCE_COLLECTION_ID || 'attendance',
+  // Server-only OTP challenges, atomic attempt claims, and daily cover approvals.
+  SECURITY_CHALLENGES: process.env.APPWRITE_SECURITY_CHALLENGES_COLLECTION_ID || 'security_challenges',
+  CRM_ACCESS_REQUESTS: process.env.APPWRITE_CRM_ACCESS_REQUESTS_COLLECTION_ID || 'crm_access_requests',
   CHAT_MESSAGES: process.env.NEXT_PUBLIC_APPWRITE_CHAT_MESSAGES_COLLECTION_ID || 'chat_messages',
   // Dedicated store for the Resume team's chat, kept separate from the Sales
   // `chat_messages` table. Same document shape (channel/body/author/createdAt)

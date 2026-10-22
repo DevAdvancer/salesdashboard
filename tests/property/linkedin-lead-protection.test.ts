@@ -29,6 +29,18 @@ describe('LinkedIn lead protection invariants',() => {
     const db={getDocument:jest.fn().mockRejectedValue({code:404}),listDocuments:jest.fn().mockRejectedValue(new Error('offline'))} as unknown as Databases;
     await expect(findProtectedLinkedinLead(db,'https://linkedin.com/in/person')).rejects.toThrow('offline');
   });
+  it('finds legacy profiles anywhere in a large batch, including beyond the old 1,000-row boundary', async () => {
+    await fc.assert(fc.asyncProperty(fc.integer({ min: 1001, max: 1900 }),
+      fc.constantFrom('linkedinProfileUrl', 'linkedinProfile', 'field_16'), fc.constantFrom(...statuses), async (position, key, status) => {
+        const leads = Array.from({ length: position }, (_, i) => ({ $id: `other-${i}`, data: '{}', status: 'Interested' }));
+        leads.push({ $id: 'target', data: JSON.stringify({ [key]: 'https://linkedin.com/in/PERSON/?trk=test' }), status });
+        const db = { getDocument: jest.fn().mockRejectedValue({ code: 404 }),
+          listDocuments: jest.fn().mockResolvedValue({ total: leads.length, documents: leads }) } as unknown as Databases;
+        expect(Boolean(await findProtectedLinkedinLead(db, 'https://www.linkedin.com/in/person'))).toBe(!isLeadReleased(status));
+        expect(db.listDocuments).toHaveBeenCalledTimes(1);
+        expect((db.listDocuments as jest.Mock).mock.calls[0][2]).toContain('limit:5000');
+      }), { numRuns: 20 });
+  });
   it('serializes concurrent profile writes with a database reservation',async() => {
     const locks=new Set<string>();let release!:()=>void;
     const hold=new Promise<void>(resolve=>{release=resolve;});

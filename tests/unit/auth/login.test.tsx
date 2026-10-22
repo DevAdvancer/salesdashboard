@@ -80,7 +80,7 @@ describe('LoginPage - Task 2.5: Login Flow with Session Management', () => {
       });
     });
 
-    it('should redirect to dashboard on successful login', async () => {
+    it('leaves navigation to the security gate after password login', async () => {
       mockLogin.mockResolvedValue(undefined);
 
       render(<LoginPage />);
@@ -94,8 +94,9 @@ describe('LoginPage - Task 2.5: Login Flow with Session Management', () => {
       fireEvent.click(submitButton);
 
       await waitFor(() => {
-        expect(mockPush).toHaveBeenCalledWith('/dashboard');
+        expect(mockLogin).toHaveBeenCalledWith('test@example.com', 'password123');
       });
+      expect(mockPush).not.toHaveBeenCalled();
     });
   });
 

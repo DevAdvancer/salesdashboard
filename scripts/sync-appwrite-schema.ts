@@ -71,6 +71,20 @@ function isNotFoundError(error: unknown): boolean {
 
 // Collection schema definitions - matches lib/types/index.ts
 const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: SchemaIndex[] }> = {
+  [COLLECTIONS.SECURITY_CHALLENGES]: {
+    attributes: [{ key: 'data', type: 'string', required: true, size: 4000 },
+      { key: 'expiresAt', type: 'datetime', required: true }],
+    indexes: [{ key: 'expiry_idx', type: 'key', attributes: ['expiresAt'] }],
+  },
+  [COLLECTIONS.CRM_ACCESS_REQUESTS]: {
+    attributes: [
+      { key: 'userId', type: 'string', required: true, size: 255 },
+      { key: 'delegateId', type: 'string', required: true, size: 255 },
+      { key: 'dateKey', type: 'string', required: true, size: 10 },
+      { key: 'state', type: 'enum', required: true, values: ['pending', 'approved', 'denied'] },
+      { key: 'data', type: 'string', required: true, size: 4000 },
+    ], indexes: [{ key: 'user_date_idx', type: 'key', attributes: ['userId', 'dateKey'] }],
+  },
   [COLLECTIONS.LINKEDIN_LEAD_REGISTRY]: {
     attributes: [
       { key:'kind',type:'string',required:true,size:20 },
@@ -136,6 +150,7 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
   [COLLECTIONS.LEADS]: {
     attributes: [
       { key: 'data', type: 'string', required: true },
+      { key: 'history', type: 'string', required: false, size: 60000, default: '[]' },
       { key: 'status', type: 'string', required: true, size: 50 },
       { key: 'ownerId', type: 'string', required: true, size: 255 },
       { key: 'assignedToId', type: 'string', required: false, size: 255 },
@@ -666,7 +681,7 @@ async function syncCollection(collectionId: string, schema: typeof collectionSch
       collectionId,
       humanizeCollectionName(collectionId),
       [],
-      [COLLECTIONS.LEAD_HISTORY,COLLECTIONS.LINKEDIN_LEAD_REGISTRY].includes(collectionId) ? true : undefined,
+      [COLLECTIONS.LEAD_HISTORY,COLLECTIONS.LINKEDIN_LEAD_REGISTRY,COLLECTIONS.SECURITY_CHALLENGES,COLLECTIONS.CRM_ACCESS_REQUESTS].includes(collectionId) ? true : undefined,
     );
     console.log(`  ✅ Collection created`);
   }

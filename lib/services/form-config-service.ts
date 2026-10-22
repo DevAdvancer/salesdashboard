@@ -1,5 +1,5 @@
 import { Permission, Role } from 'appwrite';
-import { databases } from '@/lib/appwrite';
+import { referenceDatabases as databases } from '@/lib/services/reference-databases';
 import { FormField, FormConfig } from '@/lib/types';
 import { logAction } from './audit-service';
 

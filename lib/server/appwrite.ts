@@ -1,4 +1,5 @@
-import { Client, Account, Databases, Storage, Users } from "node-appwrite";
+import { Account, Databases, Storage, Users } from "node-appwrite";
+import { ServerAppwriteClient as Client } from '@/lib/server/appwrite-client';
 import { cookies } from "next/headers";
 import { createHash } from "node:crypto";
 import {
@@ -6,7 +7,8 @@ import {
   createReadThroughDatabases,
 } from "@/lib/utils/appwrite-read-cache";
 import { bumpRequestCount } from "@/lib/server/appwrite-request-meter";
-import { withLeadHistory } from '@/lib/server/lead-history';
+import { withLeadHistory, type HistoryActor } from '@/lib/server/lead-history';
+import { withServerOwnedPermissions } from '@/lib/server/server-owned-permissions';
 
 const adminDatabaseCacheStores = createAppwriteReadCacheStores();
 const sessionDatabaseCacheStores = createAppwriteReadCacheStores();
@@ -95,7 +97,7 @@ export async function createSessionClient() {
   throw new Error("No session");
 }
 
-export async function createAdminClient() {
+export async function createAdminClient(options?: { systemActor?: HistoryActor }) {
   const client = new Client()
     .setEndpoint(process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!)
     .setProject(process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!)
@@ -106,11 +108,20 @@ export async function createAdminClient() {
       return new Account(client);
     },
     get databases() {
-      return createReadThroughDatabases(withLeadHistory(new Databases(client), async () => {
+      return createReadThroughDatabases(withServerOwnedPermissions(withLeadHistory(new Databases(client), async () => {
+        // Explicit internal jobs provide an actor only after validating their own secret.
+        if (options?.systemActor) return options.systemActor;
         const { getAuthenticatedAccount } = await import('@/lib/server/current-user');
-        const actor = await getAuthenticatedAccount().catch(() => null);
-        return { id: actor?.$id || 'system', name: actor?.name || 'System' };
-      }), {
+        const actor = await getAuthenticatedAccount().catch(error => {
+          if (process.env.CRM_ACCESS_ENFORCEMENT === 'true') throw error;
+          return null;
+        });
+        if (actor) {
+          const { effectiveCrmAuditActor } = await import('@/lib/server/crm-access');
+          return effectiveCrmAuditActor({ id: actor.$id, name: actor.name });
+        }
+        return { id: 'system', name: 'System' };
+      })), {
         namespace: "admin",
         stores: adminDatabaseCacheStores,
       });

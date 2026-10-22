@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
     evaluated += 1;
 
     const status = (paymentDoc.status as PaymentStatus) ?? "not_paid";
-    if (status === "fully_paid" || status === 'refunded') continue;
+    if (status === "fully_paid" || status === "refunded" || status === "non_upfront") continue;
 
     const lastActivityAtRaw = paymentDoc.updatedAt ?? paymentDoc.createdAt;
     const lastActivityAt = typeof lastActivityAtRaw === "string" ? lastActivityAtRaw : paymentDoc.createdAt;

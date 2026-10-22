@@ -13,6 +13,7 @@ type Database = Pick<Databases, 'getDocument' | 'listDocuments' | 'createDocumen
 export const profileDocumentId = (url: string, kind: 'profile' | 'lock' = 'profile') =>
   `${kind === 'profile' ? 'p' : 'l'}_${createHash('sha256').update(url).digest('hex').slice(0, 32)}`;
 export const isNotFound = (error: unknown) => (error as { code?: number })?.code === 404;
+export class LinkedinLeadProtectionError extends Error {}
 
 export async function findLeadsForLinkedinProfile(databases: Database, targetUrl: string): Promise<Models.Document[]> {
   const url = leadProfileUrl({ linkedinProfileUrl: targetUrl });
@@ -31,7 +32,8 @@ export async function findLeadsForLinkedinProfile(databases: Database, targetUrl
   // No age, branch, owner, company, or 1,000-record cutoff. Unknown profiles fail closed on scan errors.
   const leads = await listAllDocuments<Models.Document>({ databases, databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.LEADS, queries: [Query.orderAsc('$id'),
-      Query.select(['$id', 'data', 'status', 'ownerId', 'assignedToId', '$updatedAt'])], maxPages: 1000 });
+      Query.select(['$id', 'data', 'status', 'ownerId', 'assignedToId', '$updatedAt'])],
+    pageLimit: 5000, maxPages: 1000, maxDocuments: 100000, requireComplete: true });
   if (leads.length >= 100000) throw new Error('The lead profile scan is incomplete. Ask an admin to review it.');
   return leads.filter(lead => leadProfileUrl(lead.data) === url);
 }
@@ -43,7 +45,7 @@ export async function findProtectedLinkedinLead(databases: Database, targetUrl: 
 
 export async function assertLinkedinProfileAvailable(databases: Database, targetUrl: string) {
   if (await findProtectedLinkedinLead(databases, targetUrl)) {
-    throw new Error('A lead already exists for this LinkedIn profile. It can only be reused after the lead is marked Not Interested or Backed Out.');
+    throw new LinkedinLeadProtectionError('A lead already exists for this LinkedIn profile. It can only be reused after the lead is marked Not Interested or Backed Out.');
   }
 }
 

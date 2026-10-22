@@ -1,6 +1,7 @@
 import { logger } from '@/lib/utils/logger';
 import { Query } from 'appwrite';
-import { databases, DATABASE_ID, COLLECTIONS, invalidateCollectionReads } from '@/lib/appwrite';
+import { DATABASE_ID, COLLECTIONS, invalidateCollectionReads } from '@/lib/appwrite';
+import { referenceDatabases as databases } from '@/lib/services/reference-databases';
 import { invalidateAuditLogReferenceCache } from '@/lib/services/audit-log-reference-service';
 import { Branch, CreateBranchInput, UpdateBranchInput } from '@/lib/types';
 import { cached, clearCache } from '@/lib/utils/resource-cache';
@@ -205,6 +206,7 @@ export async function listBranches(): Promise<Branch[]> {
           // System fields ($id, $createdAt, $updatedAt) are returned
           // automatically and don't need to be in the select list.
           Query.select(['name', 'isActive']),
+          Query.limit(1000),
           Query.orderDesc('$createdAt'),
         ]
       );

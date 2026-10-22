@@ -1,7 +1,7 @@
 'use client';
 
 import { Navigation } from './navigation';
-import { WhatsNewModal } from './whats-new-modal';
+import { SecurityNotice } from './security-notice';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
@@ -78,9 +78,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     if (!loading && !user && !isPublicRoute && lastRedirectPath.current !== '/login') {
       lastRedirectPath.current = '/login';
       router.replace('/login');
-    } else if (!loading && user && pathname === '/login' && lastRedirectPath.current !== homePath) {
-      lastRedirectPath.current = homePath;
-      router.replace(homePath);
     }
   }, [user, loading, isPublicRoute, pathname, router, activeDashboard]);
 
@@ -138,6 +135,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       >
         <LoaderOverlay />
         {children}
+        <SecurityNotice />
       </main>
     </div>
   );

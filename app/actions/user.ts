@@ -463,6 +463,7 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
 
 export async function updateUserAction(input: {
     userId: string;
+    name?: string;
     role?: UserRole;
     teamLeadId?: string | null;
     branchIds?: string[];
@@ -471,7 +472,7 @@ export async function updateUserAction(input: {
     department?: Department;
     currentUserId: string;
 }) {
-    const { userId, role, teamLeadId, branchIds, primaryBranchId, email, department, currentUserId } = input;
+    const { userId, name, role, teamLeadId, branchIds, primaryBranchId, email, department, currentUserId } = input;
 
     await assertAuthenticatedUserId(currentUserId);
 
@@ -502,6 +503,13 @@ export async function updateUserAction(input: {
     try {
         const updates: any = {};
         let newAuthEmail: string | null = null;
+        if (name !== undefined) {
+            if (!isCallerAdmin) throw new Error('Only admins or developers can update names.');
+            const trimmedName = name.trim();
+            if (!trimmedName || trimmedName.length > 255) throw new Error('Enter a valid name.');
+            updates.name = trimmedName;
+            await users.updateName(userId, trimmedName);
+        }
 
         if (email && email !== targetUserDoc.email) {
             if (!isCallerAdmin) {

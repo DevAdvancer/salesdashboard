@@ -7,8 +7,12 @@ export async function listAllDocuments<T>(input: {
   queries: string[];
   pageLimit?: number;
   maxPages?: number;
+  requireComplete?: boolean;
+  maxDocuments?: number;
 }): Promise<T[]> {
-  const pageLimit = Math.min(Math.max(input.pageLimit ?? 100, 1), 100);
+  // Keep the small default for UI lists. Large server scans may explicitly use
+  // Appwrite's supported 5,000-row limit instead of paying for 50 round trips.
+  let pageLimit = Math.min(Math.max(input.pageLimit ?? 100, 1), 5000);
   const maxPages = Math.max(input.maxPages ?? 1000, 1);
 
   const documents: T[] = [];
@@ -21,24 +25,35 @@ export async function listAllDocuments<T>(input: {
     }
 
     const response = await input.databases.listDocuments(
-      input.databaseId,
-      input.collectionId,
-      pageQueries,
-    );
+      input.databaseId, input.collectionId, pageQueries,
+    ).catch((error: { code?: number }) => {
+      // Older installations can reject larger pages. Retry with their safe
+      // limit rather than treating an unsupported query as an empty scan.
+      if (pageLimit <= 100 || error?.code !== 400) throw error;
+      pageLimit = 100;
+      return input.databases.listDocuments(input.databaseId, input.collectionId,
+        [...input.queries, Query.limit(pageLimit), ...(cursorAfter ? [Query.cursorAfter(cursorAfter)] : [])]);
+    });
 
     const pageDocuments = (response?.documents ?? []) as T[];
     documents.push(...pageDocuments);
+    if (input.maxDocuments && documents.length >= input.maxDocuments) {
+      throw new Error('The document scan exceeded its safety limit. Ask an admin to review it.');
+    }
 
-    if (pageDocuments.length < pageLimit) {
+    const moreReported = typeof response?.total === 'number' && documents.length < response.total;
+    if (pageDocuments.length < pageLimit && !moreReported) {
       return documents;
     }
 
     const last = pageDocuments[pageDocuments.length - 1] as any;
     cursorAfter = typeof last?.$id === "string" ? last.$id : null;
-    if (!cursorAfter) {
+    if (!cursorAfter || pageDocuments.length === 0) {
+      if (input.requireComplete) throw new Error('The document scan is incomplete. Retry before continuing.');
       return documents;
     }
   }
 
+  if (input.requireComplete) throw new Error('The document scan exceeded its safety limit. Ask an admin to review it.');
   return documents;
 }

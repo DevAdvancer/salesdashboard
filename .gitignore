@@ -41,6 +41,7 @@ yarn-error.log*
 next-env.d.ts
 
 output/
+outputs/
 
 # Security audit reports: contain unremediated findings, keep out of the repo
 CRM-Security-and-Request-Volume-Audit*.pdf

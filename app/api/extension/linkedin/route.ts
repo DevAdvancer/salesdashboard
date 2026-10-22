@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { assertExtensionRequest, LinkedinExtensionError } from "@/lib/server/linkedin-extension-policy";
 import { bootstrapLinkedinExtension, checkLinkedinExtension, recordLinkedinExtension } from "@/lib/server/linkedin-extension";
+import { withCrmRequestContext } from '@/lib/server/crm-request-context';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,10 +26,13 @@ function failure(error: unknown) {
 }
 
 export async function GET(request: NextRequest) {
+  return withCrmRequestContext(() => bootstrap(request));
+}
+async function bootstrap(request: NextRequest) {
   try {
     assertExtensionRequest(request);
     if (request.headers.get("x-crm-extension-channel") === "beta") {
-      throw new LinkedinExtensionError(403, "The beta has been retired. Install LinkedIn Helper v1.7 from LinkedIn Requests.");
+      throw new LinkedinExtensionError(403, "The beta has been retired. Install LinkedIn Helper v2.0 from LinkedIn Requests.");
     }
     return json(await bootstrapLinkedinExtension());
   }
@@ -36,10 +40,13 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  return withCrmRequestContext(() => execute(request));
+}
+async function execute(request: NextRequest) {
   try {
     assertExtensionRequest(request);
     if (request.headers.get("x-crm-extension-channel") === "beta") {
-      throw new LinkedinExtensionError(403, "The beta has been retired. Install LinkedIn Helper v1.7 from LinkedIn Requests.");
+      throw new LinkedinExtensionError(403, "The beta has been retired. Install LinkedIn Helper v2.0 from LinkedIn Requests.");
     }
     if (!request.headers.get("content-type")?.startsWith("application/json")) {
       throw new LinkedinExtensionError(415, "Send a JSON request.");

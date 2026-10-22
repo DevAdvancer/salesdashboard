@@ -1,6 +1,6 @@
 {
   "name": "newpulsecrm",
-  "version": "0.1.0",
+  "version": "6.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev -p 5000",
@@ -12,6 +12,10 @@
     "test:coverage": "jest --coverage",
     "setup:appwrite": "tsx scripts/sync-appwrite-schema.ts",
     "setup:appwrite:dry": "tsx scripts/sync-appwrite-schema.ts --dry-run",
+    "setup:crm-access:dry": "tsx scripts/setup-crm-access.ts",
+    "setup:crm-access:apply": "tsx scripts/setup-crm-access.ts --apply",
+    "setup:crm-access:lock:dry": "tsx scripts/lock-crm-client-access.ts",
+    "setup:crm-access:lock": "tsx scripts/lock-crm-client-access.ts --apply",
     "link:linkedin-leads:dry": "tsx scripts/link-linkedin-leads.ts",
     "link:linkedin-leads:apply": "tsx scripts/link-linkedin-leads.ts --apply",
     "setup:beta-access:dry": "tsx scripts/setup-beta-feature-access.ts",

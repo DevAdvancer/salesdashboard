@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { Databases, ID, type Models } from 'node-appwrite';
 import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { leadOwnershipMayChange, leadProfileUrl } from '@/lib/utils/linkedin-lead-protection';
-import { findProtectedLinkedinLead, profileDocumentId, saveLeadProfileRegistry, withLinkedinProfileLock } from '@/lib/server/linkedin-lead-protection';
+import { findProtectedLinkedinLead, LinkedinLeadProtectionError, profileDocumentId, saveLeadProfileRegistry, withLinkedinProfileLock } from '@/lib/server/linkedin-lead-protection';
+import { parseLeadHistory, type LeadHistorySnapshotEvent } from '@/lib/utils/lead-history-snapshot';
 
 type Row = Record<string, unknown>;
 export type HistoryActor = { id: string; name: string };
@@ -25,7 +26,7 @@ export function leadHistoryChanges(before: Row | null, after: Row | null) {
     if (!row) return {};
     let data: Row = {};
     try { data = typeof row.data === 'string' ? JSON.parse(row.data) : {}; } catch { /* Raw value is retained below. */ }
-    return { ...Object.fromEntries(Object.entries(row).filter(([k]) => !k.startsWith('$') && k !== 'data')), ...Object.fromEntries(Object.entries(data).map(([k,v]) => [`data.${k}`,v])) };
+    return { ...Object.fromEntries(Object.entries(row).filter(([k]) => !k.startsWith('$') && k !== 'data' && k !== 'history')), ...Object.fromEntries(Object.entries(data).map(([k,v]) => [`data.${k}`,v])) };
   };
   const left = unpack(before); const right = unpack(after);
   return Object.fromEntries([...new Set([...Object.keys(left),...Object.keys(right)])]
@@ -94,7 +95,7 @@ export function withLeadHistory(databases: Databases, actor: () => Promise<Histo
             const removesLink = patch && 'leadId' in patch && patch.leadId !== before?.leadId && !patch.leadId;
             if ((reassignment || removesLink) && await findProtectedLinkedinLead(target,profileUrl)) {
               await appendLeadHistory(target,{...event,eventType:'REQUEST_CHANGE_BLOCKED',payload:{changes,reason:'Existing protected lead'}});
-              throw new Error('This LinkedIn profile has a protected lead. Request reassignment cannot release or replace it.');
+              throw new LinkedinLeadProtectionError('This LinkedIn profile has a protected lead. Request reassignment cannot release or replace it.');
             }
             if (patch?.leadId) {
               const linkedLead = await target.getDocument(DATABASE_ID,COLLECTIONS.LEADS,String(patch.leadId));
@@ -104,6 +105,19 @@ export function withLeadHistory(databases: Databases, actor: () => Promise<Histo
           }
           // Persist intent BEFORE the mutation, so a logging outage never permits an untracked write.
           await appendLeadHistory(target,{ ...event, id:intentId, eventType:`${operation}_ATTEMPT`, payload:{ changes } });
+          if (isLead && !deleting && process.env.CRM_LEAD_HISTORY_SNAPSHOT === 'true') {
+            const snapshot: LeadHistorySnapshotEvent = { id: intentId, actorId: eventActor.id, actorName: eventActor.name,
+              occurredAt: new Date().toISOString(), eventType: operation, changes };
+            const history = [...parseLeadHistory(before?.history), snapshot].slice(-100);
+            // Keep the inline column bounded; the append-only event store retains the full archive.
+            while (history.length > 1 && Buffer.byteLength(JSON.stringify(history), 'utf8') > 59000) history.shift();
+            if (Buffer.byteLength(JSON.stringify(history), 'utf8') > 59000) snapshot.changes = { archive: { from: null, to: 'Open full Lead History for this event.' } };
+            args[3] = { ...patch, history: JSON.stringify(history) };
+            const permissions = (args[4] ?? before?.$permissions ?? []) as string[];
+            args[4] = permissions.filter(permission => permission.startsWith('read('));
+          } else if (isLead && patch && 'history' in patch) {
+            const clean = { ...patch }; delete clean.history; args[3] = clean;
+          }
           let saved;
           try { saved = await method.apply(target,args); }
           catch (error) {

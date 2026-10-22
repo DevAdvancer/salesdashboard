@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -21,8 +20,7 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
-  const router = useRouter();
-  const { login, user, loading, activeDashboard } = useAuth();
+  const { login, user, loading } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -40,47 +38,18 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema),
   });
 
-  let homePath = '/dashboard';
-  if (user?.role === 'compliance') {
-    homePath = '/compliance-dashboard';
-  } else if (activeDashboard === 'resume') {
-    homePath = '/resume-dashboard';
-  }
-
-  // Redirect to the active dashboard if already authenticated
-  useEffect(() => {
-    if (!loading && user) {
-      router.replace(homePath);
-    }
-  }, [user, loading, router, homePath]);
-
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true); setError(null);
     try {
-      const loggedInUser = await login(data.email, data.password);
-      // Route by the freshly-resolved user's department. `user`/`activeDashboard`
-      // from context are still stale in this closure right after login, so we
-      // derive the target from the returned doc.
-      let target = '/dashboard';
-      if (loggedInUser?.role === 'compliance') {
-        target = '/compliance-dashboard';
-      } else if (
-        loggedInUser?.department === 'resume' &&
-        loggedInUser?.role !== 'admin' &&
-        loggedInUser?.role !== 'developer' &&
-        loggedInUser?.role !== 'monitor' &&
-        loggedInUser?.role !== 'operations'
-      ) {
-        target = '/resume-dashboard';
-      }
-      router.push(target);
+      // CrmSecurityGate owns navigation after OTP and attendance verification.
+      await login(data.email, data.password);
     } catch (err: unknown) {
       setError(handleApiError(err, { title: 'Login Failed', showToast: true, retry: () => onSubmit(data) }));
     } finally { setIsLoading(false); }
   };
 
   // Don't render the login form while checking session or redirecting
-  if (loading || user) return null;
+  if (loading || user) return <main className="min-h-screen flex items-center justify-center" role="status">Checking your sign-in…</main>;
 
   return (
     <div style={{

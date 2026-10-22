@@ -16,7 +16,8 @@ jest.mock("@/lib/server/appwrite", () => ({ createAdminClient: jest.fn() }));
 jest.mock("@/lib/server/current-user", () => ({ getAuthenticatedUserDoc: jest.fn() }));
 jest.mock("@/lib/server/beta-feature-access", () => ({ hasLinkedinHelperAccess: jest.fn() }));
 jest.mock("@/lib/server/appwrite-pagination", () => ({ listAllDocuments: jest.fn() }));
-jest.mock('@/lib/server/linkedin-lead-protection',()=>({findProtectedLinkedinLead:jest.fn(),requestBlocksLinkedinProfile:jest.fn()}));
+jest.mock('@/lib/server/linkedin-lead-protection',()=>({ ...jest.requireActual('@/lib/server/linkedin-lead-protection'),
+  findProtectedLinkedinLead:jest.fn(),requestBlocksLinkedinProfile:jest.fn()}));
 jest.mock("@/app/actions/linkedin/accounts", () => ({ listMyLinkedinAccountsAction: jest.fn() }));
 jest.mock("@/app/actions/linkedin/requests", () => ({ createLinkedinRequestAction: jest.fn() }));
 jest.mock("@/app/actions/linkedin/shared", () => ({
@@ -34,7 +35,7 @@ import { createLinkedinRequestAction } from "@/app/actions/linkedin/requests";
 import { assertAccessibleLinkedinAccount, isBlockingLinkedinRequest } from "@/app/actions/linkedin/shared";
 import { bootstrapLinkedinExtension, checkLinkedinExtension, recordLinkedinExtension } from "@/lib/server/linkedin-extension";
 import { COLLECTIONS } from "@/lib/constants/appwrite";
-import { findProtectedLinkedinLead,requestBlocksLinkedinProfile } from '@/lib/server/linkedin-lead-protection';
+import { findProtectedLinkedinLead, LinkedinLeadProtectionError, requestBlocksLinkedinProfile } from '@/lib/server/linkedin-lead-protection';
 
 const account = { $id: "account-1", assignedUserId: "agent-1", company: "Silverspace", idName: "Account A", accountType: "main", isActive: true, connectionLimit: 3 };
 const databases = { clearReadCacheForCollection: jest.fn(), createDocument: jest.fn(),
@@ -126,6 +127,16 @@ it("a database duplicate conflict never falls through into a resend", async () =
   const checked = await checkLinkedinExtension(input);
   databases.createDocument.mockRejectedValue({ code: 409 });
   await expect(recordLinkedinExtension({ ...input, revision: checked.revision, confirmResend: false })).rejects.toMatchObject({ status: 409 });
+  expect(createLinkedinRequestAction).not.toHaveBeenCalled();
+});
+it('defers a new save to the locked lead check and reports a racing protected lead without retrying', async () => {
+  const checked = await checkLinkedinExtension(input);
+  (findProtectedLinkedinLead as jest.Mock).mockClear();
+  databases.createDocument.mockRejectedValue(new LinkedinLeadProtectionError('Protected lead'));
+  await expect(recordLinkedinExtension({ ...input, revision: checked.revision, confirmResend: false }))
+    .rejects.toMatchObject({ status: 409 });
+  expect(findProtectedLinkedinLead).not.toHaveBeenCalled();
+  expect(databases.createDocument).toHaveBeenCalledTimes(1);
   expect(createLinkedinRequestAction).not.toHaveBeenCalled();
 });
 it("explicit resend reuses the legacy URL and existing action without adding a record", async () => {

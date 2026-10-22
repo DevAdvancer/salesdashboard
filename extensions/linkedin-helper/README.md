@@ -21,7 +21,7 @@ bun run zip
 6. Open a public LinkedIn profile, click the extension, open **Connection settings** using the header icon, choose `crm.silverspaceinc.tech` or `localhost:5000`, and click **Connect**. The production URL is the default for a fresh installation; your last connected environment is remembered. Approve access to your CRM hostname if prompted.
 7. Choose the LinkedIn account you are actually using. Optionally **Check before inviting**; use **Open profile on LinkedIn** to go to the selected profile. After manually sending the invitation on LinkedIn, click **Record request sent**. Once CRM confirms the save, the profile URL is copied to your clipboard. Use **View history** for full CRM history.
 
-The ready-to-extract ZIP is generated at `.output/crm-hub-linkedin-helper-1.7.0-chrome.zip` and copied to `public/downloads/` for the CRM installation guide. Extract it into a folder and load that folder as unpacked. The ZIP contains only the compiled extension, not source, dependencies, or credentials. It is not a signed Web Store package.
+The ready-to-extract ZIP is generated at `.output/crm-hub-linkedin-helper-2.0.0-chrome.zip` and copied to `public/downloads/` for the CRM installation guide. Extract it into a folder and load that folder as unpacked. The ZIP contains only the compiled extension, not source, dependencies, or credentials. It is not a signed Web Store package.
 
 The updated CRM must provide `/api/extension/linkedin`. Use the local CRM (`bun run dev` from the repository root, http://localhost:5000) until the additive endpoint is deployed through your normal release process. Installing the extension does not install this endpoint on an already deployed CRM. Nothing here commits, pushes, deploys, or migrates Appwrite data.
 

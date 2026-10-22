@@ -7,14 +7,14 @@ import { getLinkedinAccountUsage } from "@/lib/server/linkedin-account-usage";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { listMyLinkedinAccountsAction } from "@/app/actions/linkedin/accounts";
 import { createLinkedinRequestAction } from "@/app/actions/linkedin/requests";
-import { logAuditAction, assertAccessibleLinkedinAccount, isBlockingLinkedinRequest, sameLinkedinCompany } from "@/app/actions/linkedin/shared";
+import { logAuditAction, assertAccessibleLinkedinAccount, sameLinkedinCompany } from "@/app/actions/linkedin/shared";
 import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import { normalizeProfileUrl, sameProfile } from "@/lib/utils/linkedin-extension-url";
 import { isWithdrawnLinkedinRequest } from "@/lib/utils/linkedin-request-state";
 import { canUseLinkedinExtension, LinkedinExtensionError, projectExtensionHistory } from "./linkedin-extension-policy";
 import type { LinkedinAccount, LinkedinRequest } from "@/lib/types";
 import type { ExtensionBootstrap, ExtensionCheck, ExtensionRecord, ExtensionState } from "@/lib/types/linkedin-extension";
-import { findProtectedLinkedinLead, requestBlocksLinkedinProfile } from '@/lib/server/linkedin-lead-protection';
+import { findProtectedLinkedinLead, LinkedinLeadProtectionError, requestBlocksLinkedinProfile } from '@/lib/server/linkedin-lead-protection';
 
 type Databases = Awaited<ReturnType<typeof createAdminClient>>["databases"];
 
@@ -52,7 +52,7 @@ export async function bootstrapLinkedinExtension(): Promise<ExtensionBootstrap> 
       ...await usage(databases, account, today) }))) };
 }
 
-async function inspect(input: { accountId: string; targetUrl: string }) {
+async function inspect(input: { accountId: string; targetUrl: string }, recording = false) {
   const { actor, databases, today } = await context();
   let targetUrl: string;
   try { targetUrl = normalizeProfileUrl(input.targetUrl); }
@@ -71,11 +71,16 @@ async function inspect(input: { accountId: string; targetUrl: string }) {
     if ((error as { code?: number }).code === 400) return queryRecords(false);
     throw error;
   });
-  const [companyRecords, quota, existingLead] = await Promise.all([
-    companyPromise, usage(databases, account, today), findProtectedLinkedinLead(databases,targetUrl),
+  const [companyRecords, quota, checkedLead] = await Promise.all([
+    companyPromise, usage(databases, account, today), recording ? null : findProtectedLinkedinLead(databases,targetUrl),
   ]);
   const records = companyRecords.filter(record => sameProfile(record.targetUrl, targetUrl) &&
     sameLinkedinCompany(record.company, account.company));
+  // A new create is checked again by withLeadHistory while holding the distributed
+  // profile lock. That is the authoritative check; doing the full scan before
+  // acquiring that lock only repeats the work and cannot prevent a racing lead.
+  // Existing/resend responses still inspect the lead to report accurate state.
+  const existingLead = recording && records.length ? await findProtectedLinkedinLead(databases, targetUrl) : checkedLead;
   const blocking = await Promise.all(records.map(async record => ({ record, blocks: await requestBlocksLinkedinProfile(databases,record) })));
   const active = (blocking.find(item => item.blocks && item.record.status === "accepted") ||
     blocking.find(item => item.blocks))?.record;
@@ -107,7 +112,7 @@ export async function checkLinkedinExtension(input: { accountId: string; targetU
 export async function recordLinkedinExtension(input: {
   accountId: string; targetUrl: string; revision?: string; confirmResend: boolean;
 }): Promise<ExtensionRecord> {
-  const current = await inspect(input);
+  const current = await inspect(input, true);
   const checked = result(current);
   if (input.revision && checked.revision !== input.revision) throw new LinkedinExtensionError(409, "The profile history or business date changed. Check again before recording.");
   if (!input.revision && (!checked.canRecord || current.latest)) return { ...checked, mode: "existing" };
@@ -137,6 +142,8 @@ export async function recordLinkedinExtension(input: {
         metadata: { accountId: current.account.$id, company: current.account.company.trim(),
           targetUrl: current.targetUrl, dateSent: `${current.today}T00:00:00.000Z`, source: "extension" } });
     } catch (error) {
+      if (error instanceof LinkedinLeadProtectionError) throw new LinkedinExtensionError(409,
+        'A lead already exists for this profile. Check its current status before recording.');
       if ((error as { code?: number }).code === 409) throw new LinkedinExtensionError(409, "This profile was recorded while you were checking. Check again; no second request was added.");
       throw error;
     }

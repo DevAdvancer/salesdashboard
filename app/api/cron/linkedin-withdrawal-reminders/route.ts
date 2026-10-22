@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
 async function runAutomaticWithdrawal() {
   const now = new Date();
-  const { databases } = await createAdminClient();
+  const { databases } = await createAdminClient({ systemActor: { id: 'system', name: 'Scheduled LinkedIn withdrawal' } });
   const withdrawal = await runLinkedinWithdrawalSweep(databases, now);
   const report = await sendLinkedinWithdrawalReport(databases, withdrawal.withdrawn, now, {
     sendEmpty: true,

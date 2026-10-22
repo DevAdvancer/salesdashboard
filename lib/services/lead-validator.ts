@@ -19,6 +19,9 @@ export async function validateLeadUniqueness(
   data: LeadData,
   excludeLeadId?: string
 ): Promise<LeadValidationResult> {
+  if (process.env.NEXT_PUBLIC_CRM_SERVER_DATA === 'true') {
+    return (await import('@/app/actions/lead/validation')).validateLeadUniquenessAction(data, excludeLeadId);
+  }
   try {
     const email = data.email as string | undefined;
     const phone = data.phone as string | undefined;

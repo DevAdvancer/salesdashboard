@@ -6,20 +6,31 @@ import type { User } from "@/lib/types";
 import { getRequestMaintenanceStatus, isMaintenanceManager } from "@/lib/server/maintenance";
 
 import { cache } from "react";
+import { hasCrmRequestContext, memoizeCrmRequest } from '@/lib/server/crm-request-context';
+const accountRequestKey = Symbol('crm-account');
+const userRequestKey = Symbol('crm-user');
 
-export const getAuthenticatedAccount = cache(async () => {
-  const { account } = await createSessionClient();
-  // `/v1/account` never passes through the read cache, so without this the
-  // meter would miss the one request every authenticated server entry point
-  // makes.
-  bumpRequestCount();
-  const authenticated = await account.get();
+export const getAuthenticatedAccount = cache(() => memoizeCrmRequest(accountRequestKey, async () => {
+  let authenticated;
+  if (process.env.CRM_ACCESS_ENFORCEMENT === 'true') {
+    const { assertCrmAccess } = await import('@/lib/server/crm-access');
+    const identity = await assertCrmAccess();
+    if (!identity) throw new Error('Unauthorized');
+    authenticated = identity.account;
+    // Keep authorization reads fresh without performing a second native account lookup.
+    (await createAdminClient()).databases.clearReadCacheForCollection?.(COLLECTIONS.USERS);
+  } else {
+    const { account } = await createSessionClient();
+    // `/v1/account` bypasses the database read cache.
+    bumpRequestCount();
+    authenticated = await account.get();
+  }
   const maintenance = await getRequestMaintenanceStatus();
   if (maintenance.active && !isMaintenanceManager(authenticated)) {
     throw new Error("CRM maintenance is in progress. Try again after the scheduled end time.");
   }
   return authenticated;
-});
+}));
 
 export async function assertAuthenticatedUserId(userId: string | null | undefined) {
   if (!userId) {
@@ -34,11 +45,19 @@ export async function assertAuthenticatedUserId(userId: string | null | undefine
   return account;
 }
 
-export const getAuthenticatedUserDoc = cache(async (): Promise<User> => {
+export const getAuthenticatedUserDoc = cache(() => memoizeCrmRequest(userRequestKey, async (): Promise<User> => {
   const account = await getAuthenticatedAccount();
-  const { databases } = await createAdminClient();
   const doc = await (async () => {
+    if (hasCrmRequestContext() && process.env.CRM_ACCESS_ENFORCEMENT === 'true') {
+      // The scoped native-session check already fetched this live user. Reuse
+      // that exact profile, including current department and activation state.
+      const { resolveSecurityIdentity } = await import('@/lib/server/crm-access');
+      const identity = await resolveSecurityIdentity();
+      if (identity.account.$id !== account.$id) throw new Error('Unauthorized');
+      return identity.user;
+    }
     try {
+      const { databases } = await createAdminClient();
       return await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, account.$id);
     } catch (error) {
       throw new Error(getAppwriteErrorMessage(error));
@@ -62,4 +81,4 @@ export const getAuthenticatedUserDoc = cache(async (): Promise<User> => {
     $createdAt: doc.$createdAt,
     $updatedAt: doc.$updatedAt,
   } as User;
-});
+}));

@@ -21,7 +21,7 @@
  *    relevant arguments, instead of JSON.stringify-ing the entire args array.
  *    listDocuments and getDocument accept variable-length tail arguments
  *    (queries, selection, etc.) — only the relevant ones participate in the
- *    key, and they're hashed with a tiny non-cryptographic hash.
+ *    key, including the database and the exact serialized query arguments.
  *  - The in-flight Map collapses concurrent identical calls into one
  *    network round-trip — already a CPU saver, kept as-is.
  *  - `inFlight` is also pruned when we clear the cache, so a request that
@@ -60,18 +60,6 @@ export function createAppwriteReadCacheStores(): AppwriteReadCacheStores {
   };
 }
 
-// Tiny non-cryptographic string hash (FNV-1a-ish). Used only to make
-// query-array keys compact and stable; collisions are vanishingly rare
-// and a collision is at worst a stale-cache hit, never a wrong-data hit.
-function shortHash(input: string): string {
-  let h = 2166136261 >>> 0;
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return (h >>> 0).toString(36);
-}
-
 // Stable serializer for the parts of the args array that participate in the
 // key. Arrays become `[a,b,c]`, plain objects sort their keys, and the rest
 // uses JSON.stringify. This avoids stringifying the full args (which often
@@ -92,13 +80,15 @@ function stableSerialize(value: unknown): string {
 function buildReadKey(
   namespace: string,
   method: string,
+  databaseId: string,
   collectionId: string,
   tail: unknown[],
 ): string {
   // tail is everything after collectionId in the args array. For
   // listDocuments that's queries. For getDocument that's [docId, queries].
-  const tailKey = tail.length === 0 ? "" : shortHash(stableSerialize(tail));
-  return `${namespace}:${method}:${collectionId}:${tailKey}`;
+  // Retain the exact query identity: short hashes can collide across scopes.
+  const tailKey = tail.length === 0 ? "" : stableSerialize(tail);
+  return `${namespace}:${databaseId}:${method}:${collectionId}:${tailKey}`;
 }
 
 function extractCollectionId(method: string, args: unknown[]): string | null {
@@ -176,7 +166,7 @@ export function createReadThroughDatabases<T extends object>(
           // Tail is everything after collectionId. For getDocument that's
           // [docId, queries?]. For listDocuments that's [queries?].
           const tail = args.slice(2);
-          const key = buildReadKey(namespace, prop, collectionId, tail);
+          const key = buildReadKey(namespace, prop, String(args[0]), collectionId, tail);
           const now = Date.now();
           const cached = cache.get(key);
 
@@ -206,7 +196,7 @@ export function createReadThroughDatabases<T extends object>(
           const start = Date.now();
           const request = Promise.resolve(method.apply(target, args))
             .then((value) => {
-              cache.set(key, { expiresAt: Date.now() + ttlMs, value });
+              if (inFlight.get(key) === request) cache.set(key, { expiresAt: Date.now() + ttlMs, value });
               logger.debug({
                 type: 'database_read',
                 method: prop,
@@ -229,7 +219,7 @@ export function createReadThroughDatabases<T extends object>(
               throw error;
             })
             .finally(() => {
-              inFlight.delete(key);
+              if (inFlight.get(key) === request) inFlight.delete(key);
             });
 
           inFlight.set(key, request);
@@ -267,19 +257,12 @@ export function createReadThroughDatabases<T extends object>(
           // a create still needs to drop lists/gets of the same collection
           // so the new doc shows up; an update needs to drop the
           // affected doc + its containing lists.
-          if (collectionId) {
-            promise.finally(() => {
-              clearReadCacheForCollection(collectionId);
-            });
-          } else {
-            // Couldn't identify the collection — fall back to a full wipe
-            // so we never serve a known-stale read.
-            promise.finally(() => {
-              clearReadCache();
-            });
-          }
-
-          return promise;
+          // Return this chain so a rejected write cannot leave an unhandled
+          // rejection from a detached finally callback.
+          return promise.finally(() => {
+            if (collectionId) clearReadCacheForCollection(collectionId);
+            else clearReadCache();
+          });
         };
       }
 

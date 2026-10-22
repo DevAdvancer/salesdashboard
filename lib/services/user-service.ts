@@ -1,11 +1,17 @@
 import { logger } from '@/lib/utils/logger';
 import { ID, Permission, Role, Query } from 'appwrite';
-import { account, databases, DATABASE_ID, invalidateCollectionReads } from '@/lib/appwrite';
+import { account, DATABASE_ID, invalidateCollectionReads } from '@/lib/appwrite';
+import { referenceDatabases as databases } from '@/lib/services/reference-databases';
 import { logAction } from '@/lib/services/audit-service';
 import { invalidateAuditLogReferenceCache } from '@/lib/services/audit-log-reference-service';
 import { User, UserRole, Department, CreateAgentInput, CreateTeamLeadInput } from '@/lib/types';
 import { cached, clearCache } from '@/lib/utils/resource-cache';
 import { normalizeUserBranches } from '@/lib/utils/user-branches';
+async function updateUserAction(input: Parameters<typeof import('@/app/actions/user').updateUserAction>[0]) {
+  const result = await (await import('@/app/actions/user')).updateUserAction(input);
+  invalidateUsersCache();
+  return result;
+}
 
 const USERS_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID!;
 
@@ -468,13 +474,9 @@ export async function updateUser(
   data: Partial<Pick<User, 'name' | 'email'>>
 ): Promise<User> {
   try {
-    const userDoc = await databases.updateDocument(
-      DATABASE_ID,
-      USERS_COLLECTION_ID,
-      userId,
-      data
-    );
-    return mapDocToUser(userDoc);
+    await updateUserAction({ userId, ...data, currentUserId: (await account.get()).$id });
+    invalidateCollectionReads(USERS_COLLECTION_ID);
+    return getUserById(userId);
   } catch (error: unknown) {
     logger.error('Error updating user:', error);
     throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to update user');
@@ -489,15 +491,9 @@ export async function updateUserTeamLead(
   teamLeadId: string | null
 ): Promise<User> {
   try {
-    const userDoc = await databases.updateDocument(
-      DATABASE_ID,
-      USERS_COLLECTION_ID,
-      agentId,
-      {
-        teamLeadId: teamLeadId,
-      }
-    );
-    return mapDocToUser(userDoc);
+    await updateUserAction({ userId: agentId, teamLeadId, currentUserId: (await account.get()).$id });
+    invalidateCollectionReads(USERS_COLLECTION_ID);
+    return getUserById(agentId);
   } catch (error: unknown) {
     logger.error('Error updating user team lead:', error);
     throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to update user team lead');
@@ -520,35 +516,14 @@ export async function removeUserFromBranch(
       const updatedBranchIds = user.branchIds.filter((id) => id !== branchId);
       const membership = normalizeUserBranches(updatedBranchIds,
         updatedBranchIds.includes(user.primaryBranchId || '') ? user.primaryBranchId : null);
-      if (user.branchId === branchId) {
-        const newPrimary = updatedBranchIds[0] || null;
-        const userDoc = await databases.updateDocument(
-          DATABASE_ID,
-          USERS_COLLECTION_ID,
-          userId,
-          {
-            branchId: newPrimary,
-            ...membership,
-          }
-        );
-        return mapDocToUser(userDoc);
-      }
-      const userDoc = await databases.updateDocument(
-        DATABASE_ID,
-        USERS_COLLECTION_ID,
-        userId,
-        membership
-      );
-      return mapDocToUser(userDoc);
+      await updateUserAction({ userId, ...membership, currentUserId: (await account.get()).$id });
+      invalidateCollectionReads(USERS_COLLECTION_ID);
+      return getUserById(userId);
     }
     if (user.branchId === branchId) {
-      const userDoc = await databases.updateDocument(
-        DATABASE_ID,
-        USERS_COLLECTION_ID,
-        userId,
-        { branchId: null }
-      );
-      return mapDocToUser(userDoc);
+      await updateUserAction({ userId, branchIds: [], primaryBranchId: null, currentUserId: (await account.get()).$id });
+      invalidateCollectionReads(USERS_COLLECTION_ID);
+      return getUserById(userId);
     }
     return user;
   } catch (error: unknown) {
@@ -565,15 +540,9 @@ export async function updateUserRole(
   role: UserRole
 ): Promise<User> {
   try {
-    const userDoc = await databases.updateDocument(
-      DATABASE_ID,
-      USERS_COLLECTION_ID,
-      userId,
-      {
-        role: role,
-      }
-    );
-    return mapDocToUser(userDoc);
+    await updateUserAction({ userId, role, currentUserId: (await account.get()).$id });
+    invalidateCollectionReads(USERS_COLLECTION_ID);
+    return getUserById(userId);
   } catch (error: unknown) {
     logger.error('Error updating user role:', error);
     throw new Error((error instanceof Error ? error.message : String(error)) || 'Failed to update user role');

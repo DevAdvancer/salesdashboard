@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  env: {
+    NEXT_PUBLIC_CRM_SERVER_DATA: 'true',
+    CRM_ACCESS_ENFORCEMENT: process.env.CRM_ACCESS_ENFORCEMENT || 'true',
+    CRM_LEAD_HISTORY_SNAPSHOT: process.env.CRM_LEAD_HISTORY_SNAPSHOT || 'true',
+  },
   async headers() {
     return [
       {

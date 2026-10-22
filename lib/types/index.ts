@@ -72,6 +72,7 @@ export interface CreateAgentInput {
 export interface Lead {
   $id: string;
   data: string; // JSON serialized lead data
+  history?: string; // Server-owned recent audit events; full archive is in lead_history.
   status: string;
   ownerId: string;
   assignedToId: string | null;
@@ -586,6 +587,8 @@ export interface AuthContext {
    * legacy a_session_* cookie loop and may 500 with "No session".
    */
   serverSessionReady: boolean;
+  /** Fresh server bootstrap; never restored from browser storage. */
+  initialAccess?: { userId: string; status: import('@/lib/server/crm-access').CrmAccessStatus } | null;
   login: (email: string, password: string) => Promise<User | null>;
   logout: () => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;

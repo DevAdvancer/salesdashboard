@@ -1,6 +1,8 @@
 'use client';
 
 import { getLeadLifecycleEvents } from '@/lib/utils/lead-payment-cycle';
+import { leadHistoryLabel, parseLeadHistory } from '@/lib/utils/lead-history-snapshot';
+import { LinkedinLeadHistory } from '@/components/linkedin-lead-history';
 import { Activity } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -68,6 +70,7 @@ function buildFollowUpDescription(metadata: unknown) {
 
 export function LeadActivityTimeline({ lead }: LeadActivityTimelineProps) {
   const [followUpLogs, setFollowUpLogs] = useState<AuditLog[]>([]);
+  const recordedEvents = useMemo(() => parseLeadHistory(lead.history).slice().reverse(), [lead.history]);
 
   useEffect(() => {
     let cancelled = false;
@@ -129,12 +132,24 @@ export function LeadActivityTimeline({ lead }: LeadActivityTimelineProps) {
           <Activity className="h-4 w-4" />
           Activity Timeline
         </CardTitle>
+        <LinkedinLeadHistory leadId={lead.$id} />
       </CardHeader>
       <CardContent>
-        {events.length === 0 && followUpLogs.length === 0 && lifecycleEvents.length === 0 ? (
+        {events.length === 0 && followUpLogs.length === 0 && lifecycleEvents.length === 0 && recordedEvents.length === 0 ? (
           <p className="text-sm text-muted-foreground">No timeline activity yet.</p>
         ) : (
           <div className="space-y-4">
+            {recordedEvents.map(event => (
+              <div key={event.id} className="border-l-2 border-primary pl-4 text-sm">
+                <p className="font-medium">{leadHistoryLabel(event)}</p>
+                <p className="text-xs text-muted-foreground">{formatDate(event.occurredAt)} · {event.actorName} · {event.actorId}</p>
+                {Object.entries(event.changes).map(([field, change]) => (
+                  <p key={field} className="break-words text-xs text-muted-foreground">
+                    {field.replace(/^data\./, '')}: {JSON.stringify(change.from)} → {JSON.stringify(change.to)}
+                  </p>
+                ))}
+              </div>
+            ))}
             {lifecycleEvents.map(event => (
               <div key={event.id} className="border-l-2 border-primary pl-4 text-sm">
                 <p className="font-medium">{event.type === 'reopened' ? 'Lead reopened' : event.type === 'updated' ? 'Lead details updated' : 'Lead closed'}</p>

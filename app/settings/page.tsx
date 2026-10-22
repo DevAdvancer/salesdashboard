@@ -18,6 +18,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { account, databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { listBranches } from '@/lib/services/branch-service';
+import { SecurityNoticeText } from '@/components/security-notice';
 import { MAINTENANCE_MANAGER_EMAIL, MAINTENANCE_MANAGER_USER_ID } from '@/lib/constants/maintenance';
 import type { UserRole } from '@/lib/types';
 import { DEFAULT_DISPLAY_TIME_ZONE, DISPLAY_TIME_ZONES, getDisplayTimeZone, saveDisplayTimeZone } from '@/lib/utils/display-time-zone';
@@ -31,7 +32,7 @@ function formatRoleLabel(role: UserRole) {
 
 // Bump this string every time you ship a new release. It is shown on the
 // Settings page so users can confirm which build they are running.
-const APP_VERSION = '5.0';
+const APP_VERSION = '6.0';
 
 export default function SettingsPage() {
   return (
@@ -124,21 +125,21 @@ function SettingsContent() {
   // Resolve branch IDs to branch names
   useEffect(() => {
     async function resolveBranches() {
-      if (!user?.branchIds?.length) return;
+      const ids = user?.branchIds?.length ? user.branchIds : user?.branchId ? [user.branchId] : [];
+      if (!ids.length) { setBranchNames([]); return; }
       try {
         const allBranches = await listBranches();
         const branchMap = new Map(allBranches.map((b) => [b.$id, b.name]));
-        const names = user.branchIds
-          .map((id) => branchMap.get(id) || id)
+        const names = ids
+          .map((id) => branchMap.get(id) || 'Branch unavailable')
           .filter(Boolean);
         setBranchNames(names);
       } catch {
-        // fallback: show IDs
-        setBranchNames(user.branchIds);
+        setBranchNames(['Branch names could not be loaded. Please refresh.']);
       }
     }
     resolveBranches();
-  }, [user]);
+  }, [user?.branchIds, user?.branchId]);
 
   // Resolve team lead ID to name
   useEffect(() => {
@@ -212,6 +213,7 @@ function SettingsContent() {
 
   return (
     <div className="container mx-auto space-y-6">
+      <Card><CardHeader><CardTitle>Security Notice</CardTitle></CardHeader><CardContent><SecurityNoticeText /></CardContent></Card>
       <div>
         <h1 className="text-2xl font-bold md:text-3xl">Settings</h1>
         <p className="text-muted-foreground">Profile, security, and account details for your CRM user.</p>

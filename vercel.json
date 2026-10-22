@@ -1,5 +1,15 @@
 {
+  "regions": ["sin1"],
+  "functions": {
+    "app/api/extension/linkedin/route.ts": {
+      "regions": ["sin1"]
+    }
+  },
   "crons": [
+    {
+      "path": "/api/cron/security-cleanup",
+      "schedule": "0 6 * * *"
+    },
     {
       "path": "/api/cron/linkedin-withdrawal-reminders",
       "schedule": "0 14 * * 1"

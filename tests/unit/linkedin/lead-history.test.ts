@@ -30,3 +30,49 @@ it('does not perform an untracked mutation when the history store is unavailable
   await expect(withLeadHistory(raw,async()=>({id:'agent',name:'Agent'})).updateDocument(DATABASE_ID,COLLECTIONS.LINKEDIN_REQUESTS,'request',{status:'withdrawn'})).rejects.toThrow('history offline');
   expect(raw.updateDocument).not.toHaveBeenCalled();
 });
+it('checks a new request under its profile lock and blocks a lead that appeared since preview', async () => {
+  let locked = false;
+  const raw = {
+    getDocument: jest.fn().mockRejectedValue({ code: 404 }),
+    listDocuments: jest.fn(async () => {
+      expect(locked).toBe(true);
+      return { total: 1, documents: [{ $id: 'racing-lead', data: '{"field_16":"https://linkedin.com/in/person"}', status: 'Interested' }] };
+    }),
+    createDocument: jest.fn(async (_db, collection, id, data) => {
+      if (collection === COLLECTIONS.LINKEDIN_LEAD_REGISTRY) locked = true;
+      return { $id: id, ...data };
+    }),
+    deleteDocument: jest.fn(async () => { locked = false; }),
+  } as unknown as Databases;
+  await expect(withLeadHistory(raw, async () => ({ id: 'agent', name: 'Agent' }))
+    .createDocument(DATABASE_ID, COLLECTIONS.LINKEDIN_REQUESTS, 'request', { targetUrl: 'https://linkedin.com/in/person' }))
+    .rejects.toThrow('protected lead');
+  expect((raw.createDocument as jest.Mock).mock.calls.some(([, collection]) => collection === COLLECTIONS.LINKEDIN_REQUESTS)).toBe(false);
+  expect((raw.createDocument as jest.Mock).mock.calls.some(([, collection, , data]) => collection === COLLECTIONS.LEAD_HISTORY && data.eventType === 'REQUEST_CHANGE_BLOCKED')).toBe(true);
+  expect(locked).toBe(false);
+});
+
+it('writes server-owned actor and status history atomically with the lead and ignores forged history', async () => {
+  const originalFlag = process.env.CRM_LEAD_HISTORY_SNAPSHOT;
+  process.env.CRM_LEAD_HISTORY_SNAPSHOT = 'true';
+  try {
+    const previous = { id: 'old-event', actorId: 'old-agent', actorName: 'Old Agent', occurredAt: '2026-10-01T12:00:00Z', eventType: 'LEAD_CREATE', changes: {} };
+    const before = { $id: 'lead', $updatedAt: 'before', $permissions: ['read("user:agent")', 'update("user:agent")'],
+      status: 'Interested', ownerId: 'agent', data: '{"firstName":"Client"}', history: JSON.stringify([previous]) };
+    const raw = { getDocument: jest.fn().mockResolvedValue(before),
+      createDocument: jest.fn(async (_db, _collection, id, data) => ({ $id: id, ...data })),
+      updateDocument: jest.fn(async (_db, _collection, _id, patch) => ({ ...before, ...patch, $updatedAt: 'after' })),
+    } as unknown as Databases;
+    const saved = await withLeadHistory(raw, async () => ({ id: 'real-agent', name: 'Real Agent' }))
+      .updateDocument(DATABASE_ID, COLLECTIONS.LEADS, 'lead', { status: 'Backed Out', history: '[{"actorId":"forged"}]' });
+    const history = JSON.parse(saved.history);
+    expect(history[0]).toEqual(previous);
+    expect(history[1]).toMatchObject({ actorId: 'real-agent', actorName: 'Real Agent', changes: { status: { from: 'Interested', to: 'Backed Out' } } });
+    expect(history[1].changes).not.toHaveProperty('history');
+    expect(raw.updateDocument).toHaveBeenCalledWith(DATABASE_ID, COLLECTIONS.LEADS, 'lead',
+      expect.objectContaining({ status: 'Backed Out', history: expect.any(String) }), ['read("user:agent")']);
+  } finally {
+    if (originalFlag === undefined) delete process.env.CRM_LEAD_HISTORY_SNAPSHOT;
+    else process.env.CRM_LEAD_HISTORY_SNAPSHOT = originalFlag;
+  }
+});

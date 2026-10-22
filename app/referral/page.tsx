@@ -3,7 +3,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ArrowRight, CheckCircle2, Link2, Moon, Send, Sun } from 'lucide-react';
-import { createPublicLeadRequestAction } from '@/app/actions/lead-requests';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -75,7 +74,9 @@ export default function ReferralPage() {
     setIsSubmitting(true);
 
     try {
-      const result = await createPublicLeadRequestAction(form);
+      const response = await fetch('/api/referrals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Failed to submit referral.');
       setSubmittedRequestId(result.requestId);
       setForm(initialState);
     } catch (err) {

@@ -11,6 +11,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const SERVER_SESSION_SYNC_COOLDOWN_MS = 5 * 60 * 1000;
 const SERVER_SESSION_SYNC_STORAGE_KEY = 'crm.lastServerSessionSyncAt';
 const ACTIVE_DASHBOARD_STORAGE_KEY = 'crm.activeDashboard';
+type SessionBootstrap = { user: Record<string, unknown> & { $id: string }; status: NonNullable<AuthContextType['initialAccess']>['status'] };
 
 /**
  * Leadership roles (admin/developer/monitor/operations) can preview either
@@ -31,6 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Pages that fire server actions from useEffect should wait on this
   // flag to avoid a 500 race on the crm_appwrite_jwt cookie.
   const [serverSessionReady, setServerSessionReady] = useState(false);
+  const [initialAccess, setInitialAccess] = useState<AuthContextType['initialAccess']>(null);
   // Sales-team members and resume-team members are pinned; only leadership
   // roles may flip this. We store it in state for re-render, but read the
   // initial value from localStorage so the choice survives a refresh.
@@ -40,7 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return stored === 'resume' ? 'resume' : 'sales';
   });
   const lastServerSessionSyncAt = useRef(0);
-  const serverSessionSyncPromise = useRef<Promise<void> | null>(null);
+  const serverSessionSyncPromise = useRef<Promise<SessionBootstrap | null> | null>(null);
 
   const readStoredServerSessionSyncAt = useCallback(() => {
     if (typeof window === 'undefined') {
@@ -58,35 +60,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.sessionStorage.setItem(SERVER_SESSION_SYNC_STORAGE_KEY, String(value));
   }, []);
 
-  const syncServerSession = useCallback(async ({ force = false }: { force?: boolean } = {}) => {
+  const syncServerSession = useCallback(async ({ force = false, bootstrap = false }: { force?: boolean; bootstrap?: boolean } = {}) => {
     const now = Date.now();
     const lastSyncedAt = Math.max(lastServerSessionSyncAt.current, readStoredServerSessionSyncAt());
     if (!force && now - lastSyncedAt < SERVER_SESSION_SYNC_COOLDOWN_MS) {
-      return serverSessionSyncPromise.current ?? Promise.resolve();
+      return serverSessionSyncPromise.current ?? Promise.resolve(null);
     }
 
     if (serverSessionSyncPromise.current) {
       return serverSessionSyncPromise.current;
     }
 
-    const jwt = await account.createJWT();
-    serverSessionSyncPromise.current = fetch('/api/auth/appwrite-session', {
+    serverSessionSyncPromise.current = (async () => {
+      const jwt = await account.createJWT();
+      const response = await fetch('/api/auth/appwrite-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jwt: jwt.jwt }),
-      })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error('Failed to sync server session');
-        }
-
-        const syncedAt = Date.now();
-        lastServerSessionSyncAt.current = syncedAt;
-        writeStoredServerSessionSyncAt(syncedAt);
-      })
-      .finally(() => {
-        serverSessionSyncPromise.current = null;
+        body: JSON.stringify({ jwt: jwt.jwt, ...(bootstrap ? { bootstrap: true } : {}) }),
       });
+      if (!response.ok) throw new Error('Failed to sync server session');
+      const syncedAt = Date.now();
+      lastServerSessionSyncAt.current = syncedAt;
+      writeStoredServerSessionSyncAt(syncedAt);
+      if (!bootstrap) return null;
+      const data = await response.json();
+      return data.user?.$id && data.status?.state ? data as SessionBootstrap : null;
+    })().finally(() => { serverSessionSyncPromise.current = null; });
 
     return serverSessionSyncPromise.current;
   }, [readStoredServerSessionSyncAt, writeStoredServerSessionSyncAt]);
@@ -95,17 +94,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     lastServerSessionSyncAt.current = 0;
     writeStoredServerSessionSyncAt(0);
     setServerSessionReady(false);
+    setInitialAccess(null);
     await fetch('/api/auth/appwrite-session', { method: 'DELETE' }).catch(() => {});
   }, [writeStoredServerSessionSyncAt]);
 
   // Fetch user document from database
-  const fetchUserDocument = useCallback(async (userId: string): Promise<User | null> => {
+  const fetchUserDocument = useCallback(async (userId: string, initialDocument?: Record<string, unknown>): Promise<User | null> => {
     try {
-      const userDoc = await databases.getDocument(
+      const userDoc = (initialDocument || await databases.getDocument(
         DATABASE_ID,
         COLLECTIONS.USERS,
         userId
-      );
+      )) as Record<string, unknown> & { $id: string; $createdAt: string; $updatedAt: string };
 
       const userData = {
         $id: userDoc.$id,
@@ -131,6 +131,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const bootstrapSession = useCallback(async () => {
+    const response = await fetch('/api/security/access?view=bootstrap', { cache: 'no-store' });
+    if (response.status === 401 || response.status === 404) return null;
+    if (!response.ok) throw new Error('Could not restore the CRM session. Please retry.');
+    const data = await response.json();
+    return data.user?.$id && data.status?.state ? data as SessionBootstrap : null;
+  }, []);
+
   // Check for existing session on mount
   useEffect(() => {
     let cancelled = false;
@@ -140,6 +148,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // attempt before downstream pages fire server actions.
       setServerSessionReady(false);
       try {
+        // A valid HttpOnly session can restore profile and access in one request.
+        // JWT rotation is background work, rather than a prerequisite on every refresh.
+        const restored = await bootstrapSession();
+        if (restored) {
+          const restoredUser = await fetchUserDocument(restored.user.$id, restored.user);
+          if (cancelled) return;
+          setUser(restoredUser);
+          setInitialAccess({ userId: restored.user.$id, status: restored.status });
+          setServerSessionReady(true);
+          void syncServerSession().catch(() => {});
+          return;
+        }
         const session = await account.get();
         if (session) {
           const maintenanceResponse = await fetch('/api/maintenance/status', { cache: 'no-store' });
@@ -153,15 +173,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               return;
             }
           }
-          // Parallelize: server session sync + user doc fetch both depend on
-          // the local cookie already set by account.get(); no sequential order required.
-          // We still need the sync promise to settle before un-gating the
-          // context, so we await it here and only resolve the user-doc
-          // branch via Promise.all with a no-op shim.
-          const userDoc = await Promise.all([
-            syncServerSession({ force: true }).catch(() => {}),
-            fetchUserDocument(session.$id),
-          ]).then(([, doc]) => doc);
+          // The own-profile gateway needs the server JWT before its bootstrap read.
+          const refreshed = await syncServerSession({ force: true, bootstrap: true });
+          const userDoc = await fetchUserDocument(session.$id, refreshed?.user);
+          if (refreshed && !cancelled) setInitialAccess({ userId: refreshed.user.$id, status: refreshed.status });
           if (cancelled) return;
 
           if (userDoc?.isActive === false) {
@@ -221,7 +236,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [clearServerSession, fetchUserDocument, syncServerSession]);
+  }, [bootstrapSession, clearServerSession, fetchUserDocument, syncServerSession]);
 
   useEffect(() => {
     if (!user) return;
@@ -257,17 +272,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       // Re-gate for the new session.
       setServerSessionReady(false);
+      setInitialAccess(null);
 
       // Create email session
-      await account.createEmailPasswordSession(email, password);
+      await serverSessionSyncPromise.current?.catch(() => {});
+      const created = await account.createEmailPasswordSession(email, password);
       createdSession = true;
 
-      // Get account details
-      const accountDetails = await account.get();
-      await syncServerSession({ force: true });
-
-      // Fetch user document
-      const userDoc = await fetchUserDocument(accountDetails.$id);
+      const restored = await syncServerSession({ force: true, bootstrap: true });
+      const accountId = restored?.user.$id || created?.userId || (await account.get()).$id;
+      const userDoc = await fetchUserDocument(accountId, restored?.user);
 
       if (!userDoc) {
         throw new Error('User document not found');
@@ -280,6 +294,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setUser(userDoc);
+      if (restored) setInitialAccess({ userId: userDoc.$id, status: restored.status });
       // Un-gate: the JWT cookie is now set; downstream pages may fire.
       setServerSessionReady(true);
       // Return the resolved doc so callers can route by department immediately
@@ -372,6 +387,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setActiveDashboard,
       loading,
       serverSessionReady,
+      initialAccess,
       login,
       logout,
       signup,
@@ -394,6 +410,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setActiveDashboard,
       loading,
       serverSessionReady,
+      initialAccess,
       login,
       logout,
       signup,

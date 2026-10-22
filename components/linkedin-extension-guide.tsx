@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useAuth } from '@/lib/contexts/auth-context';
 import { canUseLinkedinExtension } from '@/lib/server/linkedin-extension-policy';
 
-const VERSION = '1.7.0';
+const VERSION = '2.0.0';
 const ATTRIBUTE = 'data-crm-hub-linkedin-helper-version';
 const DOWNLOAD = `/downloads/crm-hub-linkedin-helper-${VERSION}-chrome.zip`;
 
