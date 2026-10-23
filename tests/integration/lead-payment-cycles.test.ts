@@ -112,6 +112,23 @@ describe('closure payment cycles', () => {
     expect(JSON.parse(payments()[0].updates)).toHaveLength(1);
   });
 
+  it('reads linked follow-up history across all dates without changing payment totals or cycles', async () => {
+    const record = await upsertClientPaymentRecordAction(input);
+    const original = JSON.stringify(mockDocs.get(record.$id));
+    mockDocs.set('followup-old', { $id: 'followup-old', leadId: 'lead', amount: 0, status: 'paid',
+      paymentRemark: 'Waiting for interview before payment', createdById: 'admin', createdByName: 'Admin',
+      createdAt: '2025-01-01T14:00:00Z', date: '2025-01-01' });
+    mockDocs.set('followup-other', { $id: 'followup-other', leadId: 'other-lead', amount: 100,
+      status: 'paid', paymentRemark: 'Private other client note' });
+    const history = await getClientPaymentRecordAction('admin', 'lead');
+    expect(history?.followupUpdates).toEqual([expect.objectContaining({
+      id: 'followup-old', amount: 0, note: 'Waiting for interview before payment', actorName: 'Admin',
+    })]);
+    expect(history?.updates).toEqual(record.updates);
+    expect(history?.status).toBe('fully_paid');
+    expect(JSON.stringify(mockDocs.get(record.$id))).toBe(original);
+  });
+
   it('records only the signed adjustment when a followup payment is edited or refunded', async () => {
     await upsertClientPaymentRecordAction(input);
     const update = { actorId: 'admin', leadId: 'lead', status: 'fully_paid' as const, amount: 200, sourceFollowupId: 'followup-1' };

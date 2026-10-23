@@ -27,7 +27,7 @@ export async function listMyTeamAttendanceAction(input: {
     const now = new Date();
     const dateKey = input.dateKey ? assertDateKey(input.dateKey) : getEtDateKey(now);
     const { databases } = await createAdminClient();
-    const teamLeadDoc = (await databases.getDocument(
+    const teamLeadDoc = effectiveTeamLeadId === user.$id ? user : (await databases.getDocument(
             DATABASE_ID,
             COLLECTIONS.USERS,
             effectiveTeamLeadId,
@@ -48,12 +48,12 @@ export async function listMyTeamAttendanceAction(input: {
     const agentIds = agents.map((a) => a.$id);
     agentIds.push(effectiveTeamLeadId);
 
-    const attendanceResponse = await databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
+    const [attendanceResponse, accountsByUserId] = await Promise.all([databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
             Query.equal("dateKey", dateKey),
             Query.equal("userId", agentIds),
             Query.select(["userId", "present", "presentAt", "absentNotifiedAt", "presentWithDelegateFlag", "delegateUserId"]),
             Query.limit(2000),
-          ]);
+          ]), getActiveLinkedinAccountsForUsers(databases, agents.map(agent => agent.$id))]);
     const attendanceDocs = attendanceResponse.documents as unknown as AttendanceRecord[];
     const attendanceByUserId = new Map<string, AttendanceRecord>();
     attendanceDocs.forEach((doc) => attendanceByUserId.set(doc.userId, doc));
@@ -66,10 +66,6 @@ export async function listMyTeamAttendanceAction(input: {
               COLLECTIONS.USERS,
               teamLeadDelegateUserId,
             )) as unknown as User) : null;
-    const accountsByUserId = await getActiveLinkedinAccountsForUsers(
-            databases,
-            agents.map((a) => a.$id),
-          );
     const rows = await Promise.all(
             agents.map(async (agent) => {
               const attendance = attendanceByUserId.get(agent.$id) ?? null;

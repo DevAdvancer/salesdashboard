@@ -90,7 +90,8 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key:'kind',type:'string',required:true,size:20 },
       { key:'profileUrl',type:'string',required:true,size:2048 },
       { key:'leadId',type:'string',required:true,size:255 },
-    ],indexes:[],
+      { key:'linkedinProfileKey',type:'string',required:false,size:34 },
+    ],indexes:[{ key:'linkedin_profile_key_idx',type:'key',attributes:['linkedinProfileKey'] }],
   },
   [COLLECTIONS.LEAD_HISTORY]: {
     attributes: [

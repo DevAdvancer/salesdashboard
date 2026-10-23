@@ -587,6 +587,10 @@ export interface AuthContext {
    * legacy a_session_* cookie loop and may 500 with "No session".
    */
   serverSessionReady: boolean;
+  /** Rotate an expired CRM JWT using the existing native Appwrite session. */
+  recoverServerSession: () => Promise<void>;
+  sessionRestoreError?: string;
+  retrySessionRestore?: () => void;
   /** Fresh server bootstrap; never restored from browser storage. */
   initialAccess?: { userId: string; status: import('@/lib/server/crm-access').CrmAccessStatus } | null;
   login: (email: string, password: string) => Promise<User | null>;
@@ -646,12 +650,25 @@ export interface ClientPaymentRecord {
   status: PaymentStatus;
   updates: ClientPaymentUpdate[];
   previousRecords?: ClientPaymentRecord[];
+  /** Display-only follow-ups read from their source; never included in payment totals. */
+  followupUpdates?: ClientPaymentFollowupUpdate[];
   lifecycleEvents?: import('@/lib/utils/lead-payment-cycle').LeadLifecycleEvent[];
   createdAt: string;
   updatedAt?: string | null;
   lastReminderAt?: string | null;
   updatedById?: string | null;
   updatedByName?: string | null;
+}
+
+export interface ClientPaymentFollowupUpdate {
+  id: string;
+  amount: number;
+  status: 'paid' | 'refunded';
+  note: string | null;
+  actorId: string;
+  actorName: string;
+  createdAt: string;
+  paymentDate: string;
 }
 
 export type LeadNoteVisibility = 'team' | 'leadership' | 'private';

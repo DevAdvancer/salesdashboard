@@ -1,6 +1,17 @@
 import { createReadThroughDatabases } from "@/lib/utils/appwrite-read-cache";
 
 describe("Appwrite read cache", () => {
+  it('allows a live protection read without evicting cached lead lists for everyone', async () => {
+    const source = { listDocuments: jest.fn().mockResolvedValue({ documents: [{ $id: 'lead' }] }),
+      getDocument: jest.fn().mockResolvedValue({ $id: 'lead', status: 'Interested' }) };
+    const db = createReadThroughDatabases(source);
+    await db.listDocuments('db', 'leads', ['list']);
+    await db.uncachedReads.getDocument('db', 'leads', 'lead');
+    await db.uncachedReads.getDocument('db', 'leads', 'lead');
+    await db.listDocuments('db', 'leads', ['list']);
+    expect(source.getDocument).toHaveBeenCalledTimes(2);
+    expect(source.listDocuments).toHaveBeenCalledTimes(1);
+  });
   it('does not let an old read repopulate or remove a replacement read after invalidation', async () => {
     let releaseOld!: (value: string) => void; let releaseNew!: (value: string) => void;
     const old = new Promise<string>(resolve => { releaseOld = resolve; });

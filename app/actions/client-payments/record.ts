@@ -14,6 +14,7 @@ import { logger } from '@/lib/utils/logger';
 import { mergeLockedClientContactDetails } from '@/lib/utils/lead-contact-lock';
 import type { LeadData } from '@/lib/types';
 import { getLeadLifecycleEvents, getPaymentCycleId, snapshotPaymentPlan } from '@/lib/utils/lead-payment-cycle';
+import { mapFollowupHistoryUpdate } from '@/lib/utils/client-payment-history';
 
 
 export async function getClientPaymentRecordAction(actorId: string, leadId: string): Promise<ClientPaymentRecord | null> {
@@ -24,15 +25,26 @@ export async function getClientPaymentRecordAction(actorId: string, leadId: stri
     }
 
     const { databases } = await createAdminClient();
+    // Individual history reads must see writes made on other server instances.
+    const historyReads = databases.uncachedReads ?? databases;
     const records = await listAllDocuments<any>({
-      databases, databaseId: DATABASE_ID, collectionId: COLLECTIONS.CLIENT_PAYMENTS,
+      databases: historyReads, databaseId: DATABASE_ID, collectionId: COLLECTIONS.CLIENT_PAYMENTS,
       queries: [Query.equal('leadId', leadId), Query.orderDesc('createdAt')],
+      requireComplete: true,
     });
     if (!records.length) return null;
-    const lead = await databases.getDocument(DATABASE_ID, COLLECTIONS.LEADS, leadId);
+    const [lead, followups] = await Promise.all([
+      historyReads.getDocument(DATABASE_ID, COLLECTIONS.LEADS, leadId),
+      listAllDocuments<Record<string, unknown>>({
+        databases: historyReads, databaseId: DATABASE_ID, collectionId: COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS,
+        queries: [Query.equal('leadId', leadId), Query.orderDesc('createdAt')],
+        requireComplete: true,
+      }),
+    ]);
     return {
       ...mapRecord(records[0]),
       previousRecords: records.slice(1).map(mapRecord),
+      followupUpdates: followups.map(mapFollowupHistoryUpdate),
       lifecycleEvents: getLeadLifecycleEvents(JSON.parse(lead?.data || '{}')),
     };
 }

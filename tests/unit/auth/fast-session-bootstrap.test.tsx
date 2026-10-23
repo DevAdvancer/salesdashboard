@@ -42,3 +42,90 @@ it('receives the new profile/access with JWT sync after login instead of another
   expect(account.get).not.toHaveBeenCalled(); expect(databases.getDocument).not.toHaveBeenCalled();
   expect((fetch as jest.Mock).mock.calls.some(([url]) => String(url).includes('view=bootstrap'))).toBe(false);
 });
+
+it('recovers a stalled bootstrap body through the native session without clearing OTP proof', async () => {
+  jest.useFakeTimers();
+  try {
+    global.fetch = jest.fn(async (url, options) => {
+      if (String(url).includes('view=bootstrap')) return { ok: true, json: () => new Promise(() => {}) } as Response;
+      if (options?.method === 'POST') return { ok: true, json: async () => bootstrap } as Response;
+      return { ok: true, json: async () => ({ active: false }) } as Response;
+    });
+    (account.get as jest.Mock).mockResolvedValue({ $id: user.$id, email: user.email });
+    (account.createJWT as jest.Mock).mockResolvedValue({ jwt: 'native-jwt' });
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await act(async () => { await jest.advanceTimersByTimeAsync(8_001); });
+    expect(result.current.loading).toBe(false);
+    expect(result.current.user?.$id).toBe(user.$id);
+    expect(result.current.initialAccess?.status.state).toBe('allowed');
+    expect((fetch as jest.Mock).mock.calls.some(([, options]) => options?.method === 'DELETE')).toBe(false);
+  } finally { jest.useRealTimers(); }
+});
+
+it('ends a stalled native restore and retries in place without erasing a potentially valid session', async () => {
+  jest.useFakeTimers();
+  try {
+    global.fetch = jest.fn().mockResolvedValue({ status: 401, ok: false });
+    let resolveOld!: (value: unknown) => void;
+    (account.get as jest.Mock).mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await act(async () => { await jest.advanceTimersByTimeAsync(8_001); });
+    expect(result.current.loading).toBe(false);
+    expect(result.current.sessionRestoreError).toContain('Retry');
+    expect(result.current.serverSessionReady).toBe(false);
+    expect((fetch as jest.Mock).mock.calls.some(([, options]) => options?.method === 'DELETE')).toBe(false);
+    (fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => bootstrap });
+    await act(async () => { result.current.retrySessionRestore?.(); });
+    expect(result.current.user?.$id).toBe(user.$id);
+    expect(result.current.sessionRestoreError).toBe('');
+    await act(async () => { resolveOld({ $id: 'old-user', email: 'old@example.com' }); });
+    expect(result.current.user?.$id).toBe(user.$id);
+    expect(result.current.serverSessionReady).toBe(true);
+  } finally { jest.useRealTimers(); }
+});
+
+it('restores a valid session when browser storage is unavailable', async () => {
+  const storage = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('Storage unavailable'); });
+  const write = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Storage unavailable'); });
+  try {
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => bootstrap });
+    (account.createJWT as jest.Mock).mockResolvedValue({ jwt: 'native-jwt' });
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.user?.$id).toBe(user.$id);
+    expect(result.current.sessionRestoreError).toBe('');
+  } finally { storage.mockRestore(); write.mockRestore(); }
+});
+
+it('bounds the entire restore and prevents a late SDK result from syncing an obsolete session', async () => {
+  jest.useFakeTimers();
+  try {
+    global.fetch = jest.fn(async (url) => {
+      if (String(url).includes('view=bootstrap')) {
+        await new Promise(resolve => setTimeout(resolve, 7_000));
+        return { status: 401, ok: false } as Response;
+      }
+      return { ok: true, json: async () => {
+        await new Promise(resolve => setTimeout(resolve, 3_000));
+        return { active: false };
+      } } as Response;
+    });
+    (account.get as jest.Mock).mockImplementationOnce(async () => {
+      await new Promise(resolve => setTimeout(resolve, 6_000));
+      return { $id: user.$id, email: user.email };
+    });
+    let resolveJwt!: (value: unknown) => void;
+    (account.createJWT as jest.Mock).mockImplementationOnce(() => new Promise(resolve => { resolveJwt = resolve; }));
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await act(async () => { await jest.advanceTimersByTimeAsync(20_001); });
+    expect(result.current.loading).toBe(false);
+    expect(result.current.sessionRestoreError).toContain('took too long');
+    expect(result.current.serverSessionReady).toBe(false);
+    (fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => bootstrap });
+    await act(async () => { result.current.retrySessionRestore?.(); });
+    expect(result.current.user?.$id).toBe(user.$id);
+    await act(async () => { resolveJwt({ jwt: 'obsolete-jwt' }); });
+    expect((fetch as jest.Mock).mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false);
+    expect(result.current.serverSessionReady).toBe(true);
+  } finally { jest.useRealTimers(); }
+});

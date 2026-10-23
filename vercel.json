@@ -7,6 +7,10 @@
   },
   "crons": [
     {
+      "path": "/api/cron/refresh-lead-profile-index",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/security-cleanup",
       "schedule": "0 6 * * *"
     },

@@ -242,7 +242,9 @@ function HistoryDetailContent() {
         paymentPlan: { percent, months, upfrontAmount },
         initialStatus: upfrontAmount > 0 ? "partially_paid" : "not_paid",
       });
-      setPaymentRecord(created);
+      // Include earlier linked follow-ups when a payment record is initialized later.
+      const history = await getClientPaymentRecord(user.$id, leadId).catch(() => null);
+      setPaymentRecord(history ?? created);
       toast({ title: "Success", description: "Payment record created." });
     } catch (err: unknown) {
       logger.error("Error creating payment record:", err);
@@ -497,6 +499,7 @@ function HistoryDetailContent() {
       setPaymentRecord((previous) => ({
         ...updated,
         previousRecords: previous?.previousRecords,
+        followupUpdates: previous?.followupUpdates,
         lifecycleEvents: previous?.lifecycleEvents,
       }));
       setClientIntakeValues(updated.personalDetails ?? {});

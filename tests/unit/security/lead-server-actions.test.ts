@@ -963,6 +963,106 @@ describe('lead server action authorization', () => {
     expect(mockUpdateDocument).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['email', 'new@example.com'],
+    ['phone', '5553334444'],
+    ['linkedinProfileUrl', 'https://linkedin.com/in/new'],
+  ])('still blocks duplicate %s during initial creation', async (field, value) => {
+    mockGetDocument.mockResolvedValueOnce({ $id: 'agent-1', role: 'agent', department: 'sales' });
+    mockListDocuments.mockResolvedValue({ documents: [{
+      $id: 'lead-2', status: 'Interested', data: JSON.stringify({ [field]: value }),
+    }] });
+
+    const { createLeadAction } = await import('@/app/actions/lead/mutations');
+    await expect(createLeadAction('agent-1', {
+      data: { firstName: 'New', [field]: value }, status: 'Interested',
+    }, 'agent-1')).rejects.toMatchObject({ code: 'DUPLICATE_FIELD', field });
+    expect(mockCreateDocument).not.toHaveBeenCalled();
+    expect(mockUpdateDocument).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('skips duplicate scans for unchanged contacts (full form: %s)', async (fullForm) => {
+    const contacts = {
+      email: 'current@example.com',
+      phone: '5551112222',
+      linkedinProfileUrl: 'https://linkedin.com/in/current',
+    };
+    mockGetDocument
+      .mockResolvedValueOnce({ $id: 'teamLead-1', role: 'team_lead', branchIds: ['branch-1'] })
+      .mockResolvedValueOnce({
+        $id: 'lead-1',
+        data: JSON.stringify({ firstName: 'Current', ...contacts }),
+        ownerId: 'teamLead-1',
+        assignedToId: 'agent-1',
+        branchId: 'branch-1',
+        isClosed: false,
+        status: 'Interested',
+      });
+    // An accidental scan would fail the save, even for a harmless notes edit.
+    mockListDocuments.mockRejectedValue(new Error('Duplicate scan must not run'));
+
+    const { updateLeadAction } = await import('@/app/actions/lead/mutations');
+    await expect(updateLeadAction('lead-1', {
+      ...(fullForm ? contacts : {}), notes: 'Called client',
+    }, 'teamLead-1', 'TeamLead')).resolves.toBeTruthy();
+
+    expect(mockAssertAuthenticatedUserId).toHaveBeenCalledWith('teamLead-1');
+    expect(mockListDocuments).not.toHaveBeenCalled();
+    expect(mockUpdateDocument).toHaveBeenCalledWith('database', 'leads', 'lead-1', {
+      data: expect.any(String), status: 'Interested', branchId: 'branch-1',
+    });
+    const saved = JSON.parse(mockUpdateDocument.mock.calls[0][3].data);
+    expect(saved).toEqual(expect.objectContaining({ ...contacts, notes: 'Called client' }));
+    expect(mockCreateDocument).toHaveBeenCalledWith('database', expect.any(String), expect.any(String),
+      expect.objectContaining({ action: 'LEAD_UPDATE', actorId: 'teamLead-1', targetId: 'lead-1' }));
+  });
+
+  it.each([
+    ['email', 'new@example.com'],
+    ['phone', '5553334444'],
+    ['linkedinProfileUrl', 'https://linkedin.com/in/new'],
+    ['field_16', 'https://linkedin.com/in/new'],
+  ])('still blocks a duplicate when filling an empty %s', async (field, value) => {
+    mockGetDocument
+      .mockResolvedValueOnce({ $id: 'teamLead-1', role: 'team_lead', branchIds: ['branch-1'] })
+      .mockResolvedValueOnce({
+        $id: 'lead-1', data: JSON.stringify({ firstName: 'Current' }),
+        ownerId: 'teamLead-1', assignedToId: 'agent-1', branchId: 'branch-1',
+        isClosed: false, status: 'Interested',
+      });
+    const canonical = field === 'field_16' ? 'linkedinProfileUrl' : field;
+    mockListDocuments.mockResolvedValue({ documents: [{
+      $id: 'lead-2', status: 'Interested', data: JSON.stringify({ [canonical]: value }),
+    }] });
+
+    const { updateLeadAction } = await import('@/app/actions/lead/mutations');
+    await expect(updateLeadAction('lead-1', { [field]: value }, 'teamLead-1'))
+      .rejects.toMatchObject({ code: 'DUPLICATE_FIELD', field: canonical });
+    expect(mockListDocuments).toHaveBeenCalled();
+    expect(mockUpdateDocument).not.toHaveBeenCalled();
+  });
+
+  it('checks only the newly filled field even when historical data duplicates an unchanged contact', async () => {
+    mockGetDocument
+      .mockResolvedValueOnce({ $id: 'teamLead-1', role: 'team_lead', branchIds: ['branch-1'] })
+      .mockResolvedValueOnce({
+        $id: 'lead-1', data: JSON.stringify({ firstName: 'Current', email: 'legacy@example.com' }),
+        ownerId: 'teamLead-1', assignedToId: 'agent-1', branchId: 'branch-1',
+        isClosed: false, status: 'Interested',
+      });
+    mockListDocuments.mockResolvedValue({ documents: [{
+      $id: 'lead-2', status: 'Interested',
+      data: JSON.stringify({ email: 'legacy@example.com', phone: '5559998888' }),
+    }] });
+
+    const { updateLeadAction } = await import('@/app/actions/lead/mutations');
+    await expect(updateLeadAction('lead-1', { phone: '5551112222' }, 'teamLead-1'))
+      .resolves.toBeTruthy();
+    expect(mockListDocuments).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(mockUpdateDocument.mock.calls[0][3].data))
+      .toEqual(expect.objectContaining({ email: 'legacy@example.com', phone: '5551112222' }));
+  });
+
   it('blocks duplicate lead edits and notifies admins and team leads only', async () => {
     mockGetDocument
       .mockResolvedValueOnce({

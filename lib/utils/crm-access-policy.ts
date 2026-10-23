@@ -1,4 +1,12 @@
 import type { User } from '@/lib/types';
+import { easternWallTimeToIso, getCurrentEasternIsoDate } from '@/lib/utils/eastern-date';
+
+export function attendanceGateStartsAt(now = new Date()) {
+  return easternWallTimeToIso(`${getCurrentEasternIsoDate(now)}T10:00`);
+}
+export function attendanceGateApplies(now = new Date()) {
+  return now.getTime() >= Date.parse(attendanceGateStartsAt(now));
+}
 
 export const ATTENDANCE_EXEMPT_ROLES = ['admin', 'developer', 'monitor', 'operations'] as const;
 export function attendanceExempt(role: string) {

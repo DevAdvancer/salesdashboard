@@ -22,7 +22,7 @@ async function context() {
   const { databases } = await createAdminClient();
   // Extension eligibility and mutations must use current assignments/usage, not a two-hour cache.
   for (const collection of [COLLECTIONS.USERS, COLLECTIONS.LINKEDIN_ACCOUNTS,
-    COLLECTIONS.ATTENDANCE, COLLECTIONS.LINKEDIN_REQUESTS, COLLECTIONS.LEADS]) {
+    COLLECTIONS.ATTENDANCE, COLLECTIONS.LINKEDIN_REQUESTS]) {
     databases.clearReadCacheForCollection(collection);
   }
   const actor = await getAuthenticatedUserDoc().catch(() => {

@@ -51,6 +51,15 @@ it("allows direct recording while history remains an explicit operation", async 
   expect(checkLinkedinExtension).toHaveBeenCalledWith(expect.objectContaining({ operation: "history" }), true);
 });
 
+it('returns a bounded retry response when the read circuit opens', async () => {
+  const { ProfileReadBudgetError } = await import('@/lib/server/lead-profile-index');
+  (checkLinkedinExtension as jest.Mock).mockRejectedValueOnce(new ProfileReadBudgetError());
+  const response = await POST(new NextRequest(url, { method: 'POST', headers,
+    body: JSON.stringify({ operation: 'check', accountId: 'a', targetUrl: 'https://linkedin.com/in/person' }) }));
+  expect(response.status).toBe(429);
+  expect(response.headers.get('retry-after')).toBe('60');
+});
+
 it("retires beta clients without changing stable manual recording", async () => {
   const betaHeaders = { ...headers, "x-crm-extension-channel": "beta" };
   expect((await GET(new NextRequest(url, { headers: betaHeaders }))).status).toBe(403);

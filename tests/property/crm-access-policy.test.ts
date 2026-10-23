@@ -1,5 +1,17 @@
 import fc from 'fast-check';
-import { attendanceExempt, bypassCrmGate, canApproveCrmAccess } from '@/lib/utils/crm-access-policy';
+import { attendanceExempt, attendanceGateApplies, attendanceGateStartsAt, bypassCrmGate, canApproveCrmAccess } from '@/lib/utils/crm-access-policy';
+import { easternWallTimeToIso } from '@/lib/utils/eastern-date';
+
+it('starts attendance enforcement at exactly 10 AM New York across summer and winter', () => {
+  fc.assert(fc.property(fc.constantFrom('2026-01-15', '2026-03-08', '2026-07-15', '2026-11-01', '2026-12-15'),
+    fc.integer({ min: 0, max: 1439 }), (day, minute) => {
+      const value = `${day}T${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
+      let now: Date;
+      try { now = new Date(easternWallTimeToIso(value)); } catch { return; } // Spring-forward gap has no instant.
+      expect(attendanceGateApplies(now)).toBe(minute >= 600);
+      expect(attendanceGateStartsAt(now)).toBe(easternWallTimeToIso(`${day}T10:00`));
+    }));
+});
 import type { User } from '@/lib/types';
 
 const user = (id: string, role: User['role'], department: User['department'] = 'sales') => ({ $id: id, role, department, teamLeadId: null, isActive: true });

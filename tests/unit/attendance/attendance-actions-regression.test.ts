@@ -44,6 +44,7 @@ describe('attendance server actions', () => {
   beforeEach(() => {
     jest.resetModules();
     jest.clearAllMocks();
+    mockGetDocument.mockReset();
     process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID = 'database';
     
     mockAssertAuthenticatedUserId.mockResolvedValue(undefined);
@@ -83,7 +84,7 @@ describe('attendance server actions', () => {
         role: 'agent',
       });
       const { markMyselfPresentAction } = await import('@/app/actions/attendance/mark');
-      await expect(markMyselfPresentAction({ currentUserId: 'agent-1' })).rejects.toThrow('You can only mark present between 9-10 ET');
+      await expect(markMyselfPresentAction({ currentUserId: 'agent-1' })).rejects.toThrow('before 10 AM Eastern');
     });
 
     it('allows marking present between 9-10 ET', async () => {

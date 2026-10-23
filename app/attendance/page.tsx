@@ -1,6 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getCurrentEasternIsoDate } from '@/lib/utils/eastern-date';
+import { attendanceGateApplies } from '@/lib/utils/crm-access-policy';
+import { loadAttendanceTeamAction } from '@/app/actions/attendance/bootstrap';
 import { useAuth } from "@/lib/contexts/auth-context";
 import { ProtectedRoute } from "@/components/protected-route";
 import { AttendanceAccessApprovals } from '@/components/attendance-access-approvals';
@@ -39,7 +42,29 @@ function AttendanceContent() {
   const [remarkText, setRemarkText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [dateKey, setDateKey] = useState<string>("");
-  const [selectedDateKey, setSelectedDateKey] = useState<string>("");
+  const [selectedDateKey, setSelectedDateKey] = useState<string>(() => getCurrentEasternIsoDate());
+  const userId = user?.$id;
+  const userRole = user?.role;
+  const notifiedDate = useRef('');
+  const notificationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const overviewGeneration = useRef(0);
+  const teamGeneration = useRef(0);
+  useEffect(() => () => {
+    if (notificationTimer.current) { clearTimeout(notificationTimer.current); notificationTimer.current = null; notifiedDate.current = ''; }
+  }, [userId, selectedDateKey]);
+  const scheduleNotifications = useCallback(() => {
+    if (!userId || !attendanceGateApplies() || selectedDateKey !== getCurrentEasternIsoDate()) return;
+    const key = `${userId}:${selectedDateKey}`;
+    if (notifiedDate.current === key) return;
+    notifiedDate.current = key;
+    notificationTimer.current = setTimeout(() => {
+      notificationTimer.current = null;
+      const run = userRole === 'team_lead' ? checkAndNotifyMyTeamAbsencesAction({ currentUserId: userId })
+        : userRole === 'admin' || userRole === 'operations'
+          ? checkAndNotifyAdminAttendanceEscalationsAction({ currentUserId: userId, departmentScope: 'sales' }) : Promise.resolve();
+      void run.catch(() => { if (notifiedDate.current === key) notifiedDate.current = ''; });
+    }, 1500);
+  }, [userId, userRole, selectedDateKey]);
   const [selectedTeamLeadId, setSelectedTeamLeadId] = useState<string>("");
   const [teamLeadRows, setTeamLeadRows] = useState<TeamLeadAttendanceRow[]>([]);
   const [teamLeadDelegateOptions, setTeamLeadDelegateOptions] = useState<
@@ -95,6 +120,7 @@ function AttendanceContent() {
 
   const loadOverview = useCallback(async () => {
     if (!user) return;
+    const request = ++overviewGeneration.current;
     if (isAdminLikeAttendance) {
       setOverviewLoading(true);
     } else {
@@ -103,19 +129,8 @@ function AttendanceContent() {
     setError(null);
     try {
       if (user.role === "team_lead") {
-        void checkAndNotifyMyTeamAbsencesAction({ currentUserId: user.$id }).catch(
-          () => {},
-        );
-        const [result, summary] = await Promise.all([
-          listMyTeamAttendanceAction({
-            currentUserId: user.$id,
-            dateKey: selectedDateKey || undefined,
-          }),
-          getAttendanceFlagSummaryAction({
-            currentUserId: user.$id,
-            referenceDateKey: selectedDateKey || undefined,
-          }),
-        ]);
+        const { attendance: result, summary } = await loadAttendanceTeamAction({ currentUserId: user.$id, dateKey: selectedDateKey });
+        if (request !== overviewGeneration.current) return;
         setDateKey(result.dateKey);
         setSelectedDateKey((prev) => prev || result.dateKey);
         setTeamAttendance(result);
@@ -132,17 +147,12 @@ function AttendanceContent() {
           return next;
         });
       } else if (isAdminLikeAttendance) {
-        if (user.role === "admin" || user.role === "operations") {
-          void checkAndNotifyAdminAttendanceEscalationsAction({
-            currentUserId: user.$id,
-            departmentScope: "sales",
-          }).catch(() => {});
-        }
         const overview = await listTeamLeadsAttendanceForAdminAction({
           currentUserId: user.$id,
           dateKey: selectedDateKey || undefined,
           departmentScope: "sales",
         });
+        if (request !== overviewGeneration.current) return;
         setDateKey(overview.dateKey);
         setSelectedDateKey((prev) => prev || overview.dateKey);
         setTeamLeadRows(overview.rows);
@@ -169,19 +179,24 @@ function AttendanceContent() {
         setTeamLeadRows([]);
         setFlagSummary(null);
       }
+      scheduleNotifications();
     } catch (e: unknown) {
+      if (request !== overviewGeneration.current) return;
       setError(e instanceof Error ? e.message : "Failed to load attendance");
     } finally {
+      if (request === overviewGeneration.current) {
       if (isAdminLikeAttendance) {
         setOverviewLoading(false);
       } else {
         setTeamLoading(false);
       }
+      }
     }
-  }, [isAdminLikeAttendance, selectedDateKey, user]);
+  }, [isAdminLikeAttendance, selectedDateKey, userId, userRole, scheduleNotifications]);
 
   useEffect(() => {
-    loadOverview();
+    void loadOverview();
+    return () => { overviewGeneration.current++; };
   }, [loadOverview]);
 
   const loadTeamAttendanceOnly = useCallback(async () => {
@@ -203,20 +218,12 @@ function AttendanceContent() {
     }
 
     setTeamLoading(true);
+    const request = ++teamGeneration.current;
     setError(null);
     try {
-      const [result, summary] = await Promise.all([
-        listMyTeamAttendanceAction({
-          currentUserId: user.$id,
-          teamLeadId: selectedTeamLeadId,
-          dateKey: selectedDateKey || undefined,
-        }),
-        getAttendanceFlagSummaryAction({
-          currentUserId: user.$id,
-          teamLeadId: selectedTeamLeadId,
-          referenceDateKey: selectedDateKey || undefined,
-        }),
-      ]);
+      const { attendance: result, summary } = await loadAttendanceTeamAction({ currentUserId: user.$id,
+        teamLeadId: selectedTeamLeadId, dateKey: selectedDateKey });
+      if (request !== teamGeneration.current) return;
       setTeamAttendance(result);
       setFlagSummary(summary);
       setPendingDelegateByAbsentUserId((prev) => {
@@ -231,13 +238,14 @@ function AttendanceContent() {
         return next;
       });
     } catch (e: unknown) {
+      if (request !== teamGeneration.current) return;
       setError(
         e instanceof Error ? e.message : "Failed to load team attendance",
       );
     } finally {
-      setTeamLoading(false);
+      if (request === teamGeneration.current) setTeamLoading(false);
     }
-  }, [isAdminLikeAttendance, loadOverview, selectedDateKey, selectedTeamLeadId, user]);
+  }, [isAdminLikeAttendance, loadOverview, selectedDateKey, selectedTeamLeadId, userId, userRole]);
 
   const getModifiedActions = useCallback((target: "team_leads" | "team_attendance" | "all" = "all") => {
     const actions: {
@@ -311,7 +319,8 @@ function AttendanceContent() {
     if (!isAdminLikeAttendance) return;
     if (!selectedTeamLeadId) return;
     void loadTeamAttendanceOnly();
-  }, [isAdminLikeAttendance, loadTeamAttendanceOnly, selectedTeamLeadId, user]);
+    return () => { teamGeneration.current++; };
+  }, [isAdminLikeAttendance, loadTeamAttendanceOnly, selectedTeamLeadId, userId]);
 
   const [remarkDialog, setRemarkDialog] = useState<null | {
     bulkActions: ReturnType<typeof getModifiedActions>;

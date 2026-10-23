@@ -13,6 +13,8 @@
     "setup:appwrite": "tsx scripts/sync-appwrite-schema.ts",
     "setup:appwrite:dry": "tsx scripts/sync-appwrite-schema.ts --dry-run",
     "setup:crm-access:dry": "tsx scripts/setup-crm-access.ts",
+    "setup:lead-profile-index:dry": "tsx scripts/setup-lead-profile-index.ts",
+    "setup:lead-profile-index:apply": "tsx scripts/setup-lead-profile-index.ts --apply",
     "setup:crm-access:apply": "tsx scripts/setup-crm-access.ts --apply",
     "setup:crm-access:lock:dry": "tsx scripts/lock-crm-client-access.ts",
     "setup:crm-access:lock": "tsx scripts/lock-crm-client-access.ts --apply",

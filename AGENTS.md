@@ -123,7 +123,7 @@ See [docs/crm-access-rollout.md](docs/crm-access-rollout.md) for the full operat
 2. **Appwrite Native Email OTP**: Every CRM login (including `admin`, `developer`, `monitor`, `operations`) requires an Email OTP sent and verified via Appwrite's native Email OTP APIs ([lib/server/crm-security-store.ts](lib/server/crm-security-store.ts)) using project SMTP (never the Google transporter). Before sending, the server verifies the native auth account is active and its email matches the CRM `users` record. Verification creates a temporary Appwrite session that the server immediately deletes before issuing an HttpOnly signed proof cookie (`crm_email_verified`) bound to `(userId, sessionId)` for up to 12 hours (or native session expiry). Challenges expire in 10 minutes, allow 5 attempts, and enforce atomic consumption and rate limits in `security_challenges`.
 3. **Daily Attendance & Assigned Cover**:
    - `admin`, `developer`, `monitor`, and `operations` (`ATTENDANCE_EXEMPT_ROLES`) are exempt from daily attendance.
-   - All other roles require today's Eastern-date attendance (`present === true`).Duplicate attendance rows fail closed.
+   - All other roles can enter after OTP and self-mark attendance before **10 AM America/New_York**. From 10 AM, they require today's Eastern-date attendance (`present === true`) or approved cover. Duplicate attendance rows fail closed. The server enforces the cutoff; browser `recheckAt` is only a UI scheduling hint.
    - If absent/unmarked **without** an assigned cover (`delegateUserId`), the gate shows instructions to contact their TL/manager and **never** renders a name input.
    - If absent **with** an assigned active same-department cover, the user must enter the assigned cover's matching normalized full name, triggering a second Appwrite OTP to the cover's registered email. Verifying that OTP creates a `pending` row in `crm_access_requests` bound to `(userId, delegateId, dateKey, sessionId, assignedAt)`.
    - A separate authorized TL/manager, `admin`, `developer`, or `operations` user approves or revokes the request in **Attendance → CRM access approvals** ([components/attendance-access-approvals.tsx](components/attendance-access-approvals.tsx)). `monitor` cannot approve, and neither the absent user nor the covering delegate can approve their own request. Approval does **not** mark the absent user present, and has no mark-present control/API.
@@ -273,6 +273,7 @@ Handlers live under [app/api/cron/](app/api/cron/) and authenticate via `CRON_SE
 | Route | Purpose | Scheduled in `vercel.json` |
 |---|---|---|
 | `security-cleanup` | Delete expired OTP challenges/claims and incomplete resume upload parts | Yes, `0 6 * * *` |
+| `refresh-lead-profile-index` | Incrementally refresh private profile lookup metadata and checkpoint without writing lead documents | Yes, `*/5 * * * *` |
 | `linkedin-withdrawal-reminders` | Auto-withdraw stale LinkedIn requests (`systemActor`) and send report | Yes, `0 14 * * 1` |
 | `friday-withdrawal-warning` | Warn agents on Friday about upcoming Monday LinkedIn withdrawals | Yes, `0 21 * * 5` |
 | `payment-reminders` | Follow up on pending client payments (excludes `fully_paid`, `refunded`, `non_upfront`) | Yes, `0 5 * * 1-5` |

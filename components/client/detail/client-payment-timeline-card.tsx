@@ -1,31 +1,19 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { ClientPaymentRecord, PaymentStatus } from "@/lib/types";
+import type { ClientPaymentRecord } from "@/lib/types";
+import { buildClientPaymentHistory } from '@/lib/utils/client-payment-history';
 
 interface ClientPaymentTimelineCardProps {
   paymentRecord: ClientPaymentRecord;
 }
 
 export function ClientPaymentTimelineCard({ paymentRecord }: ClientPaymentTimelineCardProps) {
-  const formatPaymentStatusLabel = (status: PaymentStatus) => {
-    if (status === "fully_paid") return "Fully Paid";
-    if (status === "partially_paid") return "Partially Paid";
-    if (status === "non_upfront") return "Non-Upfront";
-    if (status === "refunded") return "Refunded";
-    return "Not Paid";
-  };
   const records = [paymentRecord, ...(paymentRecord.previousRecords ?? [])];
-  const entries = records
-    .flatMap((record) => record.updates.map((update) => ({
-      ...update,
-      title: `Status changed to ${formatPaymentStatusLabel(update.status)}`,
-      cycle: record.createdAt,
-    })))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const formatDate = (date: string) => new Intl.DateTimeFormat('en-US', {
+  const entries = buildClientPaymentHistory(paymentRecord);
+  const formatDate = (date: string) => Number.isFinite(Date.parse(date)) ? new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York', dateStyle: 'medium', timeStyle: 'short',
-  }).format(new Date(date));
+  }).format(new Date(date)) : 'Date unavailable';
 
   return (
     <Card>
@@ -56,8 +44,16 @@ export function ClientPaymentTimelineCard({ paymentRecord }: ClientPaymentTimeli
                 )}
                 {update.amount !== undefined && update.amount !== null && (
                   <p className="text-sm text-emerald-600 font-medium">
-                    Payment Amount: ${update.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                    {update.kind === 'followup' ? 'Follow-up Amount' : 'Payment Amount'}: ${update.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                   </p>
+                )}
+                {update.reportedAmount !== undefined && (
+                  <p className="text-sm text-muted-foreground">
+                    Reported follow-up amount: ${update.reportedAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </p>
+                )}
+                {update.paymentDate && (
+                  <p className="text-xs text-muted-foreground">Follow-up date: {update.paymentDate}</p>
                 )}
                 {update.note && (
                   <p className="text-sm text-muted-foreground mt-1">

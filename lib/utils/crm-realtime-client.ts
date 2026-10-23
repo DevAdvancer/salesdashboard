@@ -45,6 +45,7 @@ export function subscribeCrmChanges(channels: string | string[], callback: (even
   subscriptions.set(id, { channels: Array.isArray(channels) ? channels : [channels], callback });
   if (!watchingVisibility && typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', reconnect);
+    window.addEventListener('crm-session-restored', reconnect);
     watchingVisibility = true;
   }
   scheduleReconnect();
@@ -54,6 +55,7 @@ export function subscribeCrmChanges(channels: string | string[], callback: (even
       source?.close(); source = null; activeChannels = '';
       versions.clear();
       if (watchingVisibility) document.removeEventListener('visibilitychange', reconnect);
+      if (watchingVisibility) window.removeEventListener('crm-session-restored', reconnect);
       watchingVisibility = false;
     } else scheduleReconnect();
   };

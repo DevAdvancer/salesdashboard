@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/contexts/auth-context";
+import { attendanceExempt } from '@/lib/utils/crm-access-policy';
 import { useToast } from "@/components/ui/use-toast";
 import { getMyAttendanceToggleStateAction, markMyselfPresentAction } from "@/app/actions/attendance/mark";
 import { cacheClientRead, clearClientReadCache } from "@/lib/utils/client-read-cache";
@@ -20,7 +21,7 @@ export function AttendanceSelfToggle() {
   const [loading, setLoading] = useState(false);
   const lastForcedRefreshAt = useRef(0);
 
-  const visible = user?.role === "agent" || user?.role === "team_lead" || user?.role === "lead_generation";
+  const visible = Boolean(user && !attendanceExempt(user.role));
 
   const refresh = useCallback(async ({ forceRefresh = false }: { forceRefresh?: boolean } = {}) => {
     if (!user || !visible) return;
@@ -71,7 +72,6 @@ export function AttendanceSelfToggle() {
 
   const view = useMemo(() => {
     const present = state?.present === true;
-    const windowStatus = state?.windowStatus ?? "closed";
     const canMarkPresent = state?.canMarkPresent === true;
 
     if (present) {
@@ -92,7 +92,7 @@ export function AttendanceSelfToggle() {
       };
     }
 
-    const label = windowStatus === "before" ? "Absent (opens 9 ET)" : "Absent";
+    const label = "Absent";
 
     return {
       label,

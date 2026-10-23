@@ -29,6 +29,16 @@ export function isLeadContactLocked(data: LeadData, field: LockedLeadContactFiel
   return Boolean(getLeadContactValue(data, field));
 }
 
+/** Compare persisted and merged data; callers must still enforce saved contact locks. */
+export function getLeadContactValuesToValidate(saved: LeadData, next: LeadData): LeadData | null {
+  const changed: LeadData = {};
+  for (const field of ["email", "phone", "linkedinProfileUrl"] as const) {
+    const value = getLeadContactValue(next, field);
+    if (value && value !== getLeadContactValue(saved, field)) changed[field] = value;
+  }
+  return Object.keys(changed).length ? changed : null;
+}
+
 export function getChangedLockedLeadContactField(
   saved: LeadData,
   next: LeadData,

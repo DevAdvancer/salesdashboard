@@ -84,6 +84,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user || isPublicRoute) return;
     if (user.role !== 'admin' && user.role !== 'operations') return;
+    if (pathname === '/attendance') return; // The page schedules this after its visible data loads.
 
     const now = Date.now();
     const storedLastPingAt = Number(
@@ -92,10 +93,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     const lastPingAt = Math.max(lastAttendancePingAt.current, storedLastPingAt);
     if (now - lastPingAt < ADMIN_ATTENDANCE_PING_COOLDOWN_MS) return;
 
-    lastAttendancePingAt.current = now;
-    window.sessionStorage.setItem(ADMIN_ATTENDANCE_PING_STORAGE_KEY, String(now));
-
-    checkAndNotifyAdminAttendanceEscalationsAction({ currentUserId: user.$id }).catch(() => {});
+    const timer = window.setTimeout(() => {
+      lastAttendancePingAt.current = Date.now();
+      window.sessionStorage.setItem(ADMIN_ATTENDANCE_PING_STORAGE_KEY, String(lastAttendancePingAt.current));
+      void checkAndNotifyAdminAttendanceEscalationsAction({ currentUserId: user.$id }).catch(() => {});
+    }, 2000);
+    return () => window.clearTimeout(timer);
   }, [isPublicRoute, pathname, user]);
 
 

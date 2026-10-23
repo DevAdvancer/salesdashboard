@@ -28,7 +28,7 @@ function setRequest(state: string) {
     data: JSON.stringify({ sessionId: 'session', assignedAt, requestedAt: assignedAt, delegateName: 'cover', decidedById: 'manager' }) });
 }
 beforeEach(() => {
-  jest.clearAllMocks(); jest.useFakeTimers().setSystemTime(new Date('2026-10-22T13:00:00Z'));
+  jest.clearAllMocks(); jest.useFakeTimers().setSystemTime(new Date('2026-10-22T14:00:00Z'));
   previousKey = process.env.APPWRITE_API_KEY; previousFlag = process.env.CRM_ACCESS_ENFORCEMENT;
   process.env.APPWRITE_API_KEY = 'unit-test-key'; process.env.CRM_ACCESS_ENFORCEMENT = 'true';
   records = new Map([['absent', person('absent')], ['cover', person('cover')], ['manager', person('manager', 'team_lead')]]);
@@ -65,6 +65,17 @@ it.each(['admin', 'developer', 'monitor', 'operations'])('allows verified attend
 it('hides name verification when absent with no assigned cover and rejects direct name submission', async () => {
   expect(await evaluateCrmAccess(identity)).toMatchObject({ state: 'attendance_required', canVerifyDelegate: false });
   await expect(startDelegateOtp(identity, 'Anyone')).rejects.toThrow('No one is assigned');
+});
+it.each(['agent', 'team_lead', 'senior_tl', 'lead_generation', 'compliance'])('allows verified %s before 10 AM and enforces attendance at the cutoff', async role => {
+  identity.user.role = role as User['role'];
+  jest.setSystemTime(new Date('2026-10-22T13:59:59Z'));
+  expect(await evaluateCrmAccess(identity)).toMatchObject({ state: 'allowed', recheckAt: '2026-10-22T14:00:00.000Z' });
+  expect(mockDb.listDocuments).not.toHaveBeenCalled();
+  identity.proof = undefined;
+  expect(await evaluateCrmAccess(identity)).toMatchObject({ state: 'otp_required' });
+  identity.proof = signProof({ userId: 'absent', sessionId: 'session', expiresAt: Date.now() + 3_600_000 });
+  jest.setSystemTime(new Date('2026-10-22T14:00:00Z'));
+  expect(await evaluateCrmAccess(identity)).toMatchObject({ state: 'attendance_required' });
 });
 it('allows present users and rejects attendance belonging to another day', async () => {
   setAttendance('absent', true);
@@ -106,5 +117,6 @@ it('expires the day-specific approval at Eastern midnight', async () => {
   identity.proof = signProof({ userId: 'absent', sessionId: 'session', expiresAt: Date.now() + 3_600_000 });
   expect(await evaluateCrmAccess(identity)).toMatchObject({ state: 'allowed', dateKey: '2026-10-22' });
   jest.setSystemTime(new Date('2026-10-23T04:01:00Z'));
-  expect(await evaluateCrmAccess(identity)).toMatchObject({ state: 'attendance_required', dateKey: '2026-10-23' });
+  expect(await evaluateCrmAccess(identity)).toMatchObject({ state: 'allowed', dateKey: '2026-10-23', recheckAt: '2026-10-23T14:00:00.000Z' });
+  expect((await evaluateCrmAccess(identity)).actingAs).toBeUndefined();
 });

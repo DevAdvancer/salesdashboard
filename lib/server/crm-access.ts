@@ -5,7 +5,7 @@ import { cookies } from 'next/headers';
 import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import type { AttendanceRecord, User } from '@/lib/types';
 import { getTodayEst } from '@/lib/utils/est-date';
-import { attendanceExempt, canApproveCrmAccess, normalizeVerificationName } from '@/lib/utils/crm-access-policy';
+import { attendanceExempt, attendanceGateApplies, attendanceGateStartsAt, canApproveCrmAccess, normalizeVerificationName } from '@/lib/utils/crm-access-policy';
 import { consumeEmailOtp, CRM_PROOF_COOKIE, issueEmailOtp, validProof } from '@/lib/server/crm-security-store';
 import { listAllDocuments } from '@/lib/server/appwrite-pagination';
 import { createHash } from 'node:crypto';
@@ -29,7 +29,7 @@ type RequestData = { sessionId: string; assignedAt: string | null; requestedAt: 
   decisions?: Array<{ approved: boolean; at: string; actorId: string; actorName: string }> };
 export type CrmAccessStatus = {
   state: 'disabled' | 'otp_required' | 'attendance_required' | 'approval_pending' | 'approval_denied' | 'allowed';
-  dateKey: string; canVerifyDelegate?: boolean; requestId?: string; actingAs?: string;
+  dateKey: string; canVerifyDelegate?: boolean; requestId?: string; actingAs?: string; recheckAt?: string;
 };
 export class CrmAccessError extends Error {
   constructor(public status: number, message: string, public code = 'CRM_ACCESS_REQUIRED') { super(message); }
@@ -116,6 +116,7 @@ async function readCrmAccessStatus(identity: SecurityIdentity): Promise<CrmAcces
   const dateKey = getTodayEst();
   if (!hasEmailProof(identity)) return { state: 'otp_required', dateKey };
   if (attendanceExempt(identity.user.role)) return { state: 'allowed', dateKey };
+  if (!attendanceGateApplies()) return { state: 'allowed', dateKey, recheckAt: attendanceGateStartsAt() };
   const db = securityDatabase();
   const attendance = await attendanceFor(identity.user.$id, db, dateKey);
   if (attendance?.present === true) return { state: 'allowed', dateKey };

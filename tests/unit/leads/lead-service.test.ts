@@ -13,6 +13,7 @@ import {
 import { databases } from '@/lib/appwrite';
 import { Lead, CreateLeadInput, LeadData } from '@/lib/types';
 import { Permission, Role } from 'appwrite';
+import { validateLeadUniqueness } from '@/lib/services/lead-validator';
 
 // Mock the Appwrite modules
 jest.mock('@/lib/appwrite', () => ({
@@ -242,6 +243,7 @@ describe('Lead Service', () => {
 
       const result = await updateLead(leadId, updatedData);
 
+      expect(validateLeadUniqueness).toHaveBeenCalledWith({ phone: '+9876543210' }, leadId);
       expect(databases.updateDocument).toHaveBeenCalledWith(
         'test-database',
         'test-leads-collection',
@@ -275,6 +277,7 @@ describe('Lead Service', () => {
 
       await updateLead(leadId, partialUpdate);
 
+      expect(validateLeadUniqueness).not.toHaveBeenCalled();
       const callArgs = (databases.updateDocument as jest.Mock).mock.calls[0];
       const updatedDataJson = callArgs[3].data;
       const updatedData = JSON.parse(updatedDataJson);

@@ -1,6 +1,7 @@
 "use server";
 import { ID, Permission, Query, Role } from "node-appwrite";
 import { revalidatePath } from "next/cache";
+import { attendanceExempt, attendanceGateApplies } from '@/lib/utils/crm-access-policy';
 import { createAdminClient } from "@/lib/server/appwrite";
 import { assertAuthenticatedUserId, getAuthenticatedUserDoc } from "@/lib/server/current-user";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
@@ -15,14 +16,13 @@ export async function markAttendancePresenceAction(input: {
     }) {
     await assertAuthenticatedUserId(input.currentUserId);
     const user = await getAuthenticatedUserDoc();
-    if (user.role !== "agent" && user.role !== "team_lead" && user.role !== "lead_generation") {
+    if (attendanceExempt(user.role)) {
     return { dateKey: getEtDateKey(new Date()), marked: false };
     }
 
     const now = new Date();
     const dateKey = getEtDateKey(now);
-    const hour = getEtHour(now);
-    const shouldAutoMarkPresent = hour >= 9 && hour < 10;
+    const shouldAutoMarkPresent = !attendanceGateApplies(now);
     let marked = false;
     const appwriteEndpointRaw = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT ?? "";
     const appwriteEndpoint = appwriteEndpointRaw.endsWith("/")
@@ -88,7 +88,7 @@ export async function getMyAttendanceToggleStateAction(input: {
     }) {
     await assertAuthenticatedUserId(input.currentUserId);
     const user = await getAuthenticatedUserDoc();
-    if (user.role !== "agent" && user.role !== "team_lead" && user.role !== "lead_generation") {
+    if (attendanceExempt(user.role)) {
     return {
       dateKey: getEtDateKey(new Date()),
       present: false,
@@ -99,8 +99,7 @@ export async function getMyAttendanceToggleStateAction(input: {
 
     const now = new Date();
     const dateKey = getEtDateKey(now);
-    const hour = getEtHour(now);
-    const windowStatus = hour < 9 ? "before" : hour < 10 ? "open" : "closed";
+    const windowStatus = attendanceGateApplies(now) ? "closed" as const : "open" as const;
     const { databases } = await createAdminClient();
     const existing = await getAttendanceDoc(databases, { dateKey, userId: user.$id });
     const present = existing?.present === true;
@@ -115,15 +114,14 @@ export async function getMyAttendanceToggleStateAction(input: {
 export async function markMyselfPresentAction(input: { currentUserId: string }) {
     await assertAuthenticatedUserId(input.currentUserId);
     const user = await getAuthenticatedUserDoc();
-    if (user.role !== "agent" && user.role !== "team_lead" && user.role !== "lead_generation") {
+    if (attendanceExempt(user.role)) {
     throw new Error("Unauthorized");
     }
 
     const now = new Date();
     const dateKey = getEtDateKey(now);
-    const hour = getEtHour(now);
-    if (hour < 9 || hour >= 10) {
-    throw new Error("You can only mark present between 9-10 ET");
+    if (attendanceGateApplies(now)) {
+    throw new Error("You can only mark yourself present before 10 AM Eastern time");
     }
 
     const { databases } = await createAdminClient();

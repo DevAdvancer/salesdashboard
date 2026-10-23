@@ -16,7 +16,9 @@ export function getClientPaymentRecord(
   leadId: string
 ): Promise<ClientPaymentRecord | null> {
   return cacheClientRead("clientPayments:get", [actorId, leadId], () =>
-    getClientPaymentRecordAction(actorId, leadId)
+    getClientPaymentRecordAction(actorId, leadId),
+    // Share concurrent loads, but reopening history must not reuse stale payment notes.
+    { ttlMs: 0 },
   );
 }
 

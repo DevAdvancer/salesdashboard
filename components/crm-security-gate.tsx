@@ -4,25 +4,31 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { VerifiedLoginRedirect } from '@/components/verified-login-redirect';
 import { crmHomePath } from '@/lib/utils/crm-home-path';
+import { replaceDocument } from '@/lib/utils/document-navigation';
 import { ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { CrmAccessStatus } from '@/lib/server/crm-access';
+import { withClientTimeout } from '@/lib/utils/client-timeout';
 
 async function postAccess(body: Record<string, unknown>) {
-  const response = await fetch('/api/security/access', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Access verification failed.');
-  return data;
+  return withClientTimeout(async signal => {
+    const response = await fetch('/api/security/access', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Access verification failed.');
+    return data;
+  }, 30_000, 'Access verification took too long. Please retry.');
 }
 
 export function CrmSecurityGate({ children }: { children: React.ReactNode }) {
-  const { user, loading, serverSessionReady, initialAccess, activeDashboard, logout } = useAuth();
+  const { user, loading, serverSessionReady, initialAccess, activeDashboard, logout, recoverServerSession,
+    sessionRestoreError, retrySessionRestore } = useAuth();
   const pathname = usePathname();
-  const [result, setResult] = useState<{ userId: string; status: CrmAccessStatus } | null>(null);
+  const [result, setResult] = useState<{ userId: string; status: CrmAccessStatus | null } | null>(null);
   const [error, setError] = useState('');
+  const [sessionExpired, setSessionExpired] = useState(false);
   const [busy, setBusy] = useState(false);
   const [challenge, setChallenge] = useState<{ challengeId: string; purpose: 'login' | 'delegate' } | null>(null);
   const [code, setCode] = useState('');
@@ -31,41 +37,95 @@ export function CrmSecurityGate({ children }: { children: React.ReactNode }) {
   const [clock, setClock] = useState(Date.now());
   const autoSentFor = useRef<string | null>(null);
   const generation = useRef(0);
-  const status = result?.userId === user?.$id ? result?.status : null;
+  const pendingRefresh = useRef<Promise<void> | null>(null);
+  const lastCheckedAt = useRef(0);
+  const bootstrap = useRef(initialAccess);
+  useEffect(() => { bootstrap.current = initialAccess; }, [initialAccess]);
+  const userId = user?.$id;
+  // A fresh server bootstrap is usable in this render; waiting for an effect
+  // previously flashed the security panel on every hard refresh.
+  const status = !serverSessionReady || !userId ? null : result?.userId === userId ? result.status
+    : initialAccess?.userId === userId ? initialAccess?.status : null;
   const publicPage = pathname === '/referral' || pathname === '/maintenance';
 
   const refresh = useCallback(async () => {
-    if (!user || !serverSessionReady || publicPage) return;
+    if (loading || sessionRestoreError || !userId || !serverSessionReady || publicPage) return;
+    if (pendingRefresh.current) return pendingRefresh.current;
     const requestGeneration = generation.current;
+    const request = (async () => {
     try {
-      const response = await fetch('/api/security/access', { cache: 'no-store' });
-      const data = await response.json();
+      // A single temporary network failure should not dismantle the dashboard.
+      // Recheck once, without showing an intermediate checking screen.
+      const read = () => withClientTimeout(async signal => {
+        const response = await fetch('/api/security/access', { cache: 'no-store', signal });
+        return { response, data: await response.json() };
+      }, 10_000, 'Access verification took too long. Please retry.');
+      let checked = await read().catch(() => null);
+      if (requestGeneration !== generation.current) return;
+      if (!checked || checked.response.status >= 500) checked = await read();
+      if (requestGeneration !== generation.current) return;
+      let response = checked?.response;
+      if (response?.status === 401 && recoverServerSession) {
+        await withClientTimeout(() => recoverServerSession(), 12_000, 'Session restoration took too long. Please retry.');
+        checked = await read();
+        response = checked.response;
+      }
+      if (!response || !checked) throw new Error('Could not check CRM access.');
+      const data = checked.data;
+      if (requestGeneration !== generation.current) return;
+      setSessionExpired(response.status === 401);
       if (!response.ok) throw new Error(data.error || 'Could not check CRM access.');
       if (requestGeneration !== generation.current) return;
-      setResult({ userId: user.$id, status: data });
+      setResult({ userId, status: data });
+      lastCheckedAt.current = Date.now();
       setError('');
     } catch (err) {
       if (requestGeneration !== generation.current) return;
-      setResult(null);
+      if ((err as { code?: number })?.code === 401) setSessionExpired(true);
+      // Keep a failed check explicit; an older bootstrap must never re-allow access.
+      setResult({ userId, status: null });
       setError(err instanceof Error ? err.message : 'Could not check CRM access.');
     }
-  }, [user, serverSessionReady, publicPage]);
+    })();
+    pendingRefresh.current = request;
+    try { await request; } finally { if (pendingRefresh.current === request) pendingRefresh.current = null; }
+  }, [userId, loading, sessionRestoreError, serverSessionReady, publicPage, recoverServerSession]);
+
+  useEffect(() => {
+    autoSentFor.current = null;
+    setSessionExpired(false);
+    setChallenge(null); setCode(''); setName('');
+  }, [userId]);
 
   useEffect(() => {
     const effectGeneration = ++generation.current;
-    autoSentFor.current = null;
-    setChallenge(null); setCode(''); setName(''); setResult(null);
-    if (initialAccess?.userId === user?.$id) setResult(initialAccess || null);
+    // Profile object refreshes and bootstrap updates must not clear an already
+    // verified status or unmount every CRM data provider.
+    if (!userId || !serverSessionReady) setResult(null);
+    else if (bootstrap.current?.userId === userId) {
+      const initial = bootstrap.current;
+      setResult(current => current?.userId === userId ? current : initial);
+      lastCheckedAt.current = Date.now();
+    }
     else void refresh();
-    const focused = () => void refresh();
+    const focused = () => { if (Date.now() - lastCheckedAt.current >= 30_000) void refresh(); };
+    const forced = () => void refresh();
     window.addEventListener('focus', focused);
-    window.addEventListener('crm-access-recheck', focused);
+    window.addEventListener('crm-access-recheck', forced);
     const interval = window.setInterval(() => {
       setClock(Date.now());
       if (document.visibilityState === 'visible') void refresh();
-    }, 30_000);
-    return () => { generation.current = effectGeneration + 1; window.removeEventListener('focus', focused); window.removeEventListener('crm-access-recheck', focused); window.clearInterval(interval); };
-  }, [refresh, initialAccess, user?.$id]);
+    }, 60_000);
+    return () => { generation.current = effectGeneration + 1; pendingRefresh.current = null; window.removeEventListener('focus', focused); window.removeEventListener('crm-access-recheck', forced); window.clearInterval(interval); };
+  }, [refresh, userId, serverSessionReady]);
+
+  useEffect(() => {
+    if (!status?.recheckAt) return;
+    const delay = Date.parse(status.recheckAt) - Date.now();
+    if (!Number.isFinite(delay)) return;
+    const timer = window.setTimeout(() => void refresh(), Math.max(0, delay));
+    return () => window.clearTimeout(timer);
+  }, [status?.recheckAt, refresh]);
 
   const sendLoginCode = useCallback(async () => {
     setBusy(true); setError('');
@@ -83,7 +143,27 @@ export function CrmSecurityGate({ children }: { children: React.ReactNode }) {
   }, [status?.state, user, sendLoginCode]);
 
   if (publicPage) return <>{children}</>;
-  if (loading) return <main className="min-h-screen flex items-center justify-center" role="status">Checking your session…</main>;
+  if (loading || (!sessionRestoreError && user && (!serverSessionReady || (!status && !error)))) return (
+    <main className="min-h-screen bg-background p-6" role="status" aria-label="Loading CRM HUB" aria-busy="true">
+      <div className="mx-auto max-w-6xl space-y-6 pt-8">
+        <p className="text-sm text-muted-foreground">Loading CRM HUB…</p>
+        <div aria-hidden="true" className="space-y-6">
+          <div className="h-10 w-48 rounded bg-muted" />
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">{[0, 1, 2, 3].map(key => <div key={key} className="h-24 rounded-xl bg-muted" />)}</div>
+          <div className="h-64 rounded-xl bg-muted" />
+        </div>
+      </div>
+    </main>
+  );
+  if (sessionRestoreError) return (
+    <main className="min-h-screen flex items-center justify-center p-6">
+      <section className="max-w-md space-y-4 rounded-2xl border bg-card p-7">
+        <h1 className="text-xl font-semibold">Could not load your session</h1>
+        <p role="alert" className="text-sm text-muted-foreground">{sessionRestoreError}</p>
+        <Button onClick={retrySessionRestore}>Retry loading</Button>
+      </section>
+    </main>
+  );
   if (!user) return <>{children}</>;
   if (status?.state === 'allowed' || status?.state === 'disabled') {
     if (pathname === '/login') return <VerifiedLoginRedirect target={crmHomePath(user, activeDashboard)} onSignOut={logout} />;
@@ -117,7 +197,7 @@ export function CrmSecurityGate({ children }: { children: React.ReactNode }) {
       <ShieldCheck className="h-8 w-8 text-primary" aria-hidden />
       <div className="space-y-2">
         <p className="text-xs uppercase tracking-widest text-muted-foreground">CRM HUB · Secure access</p>
-        <h1 id="crm-access-title" className="text-2xl font-semibold">{!status ? 'Checking your access' : otpRequired ? 'Verify your email' : 'Attendance approval required'}</h1>
+        <h1 id="crm-access-title" className="text-2xl font-semibold">{!status ? sessionExpired ? 'Please sign in again' : error ? 'Could not confirm access' : 'Checking your access' : otpRequired ? 'Verify your email' : 'Attendance approval required'}</h1>
         <p className="text-sm text-muted-foreground">{user.email}</p>
       </div>
       {otpRequired && <p className="text-sm">Enter the six-digit code sent to your sign-in email. The code expires in 10 minutes.</p>}
@@ -143,6 +223,7 @@ export function CrmSecurityGate({ children }: { children: React.ReactNode }) {
       </Button>}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <div className="flex gap-3 border-t pt-4">
+        {sessionExpired && <Button onClick={() => void logout().then(() => replaceDocument('/login'))}>Sign in again</Button>}
         <Button variant="outline" disabled={busy} onClick={() => void refresh()}>Check access again</Button>
         <Button variant="ghost" onClick={() => void logout()}>Sign out</Button>
       </div>

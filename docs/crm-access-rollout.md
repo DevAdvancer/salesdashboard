@@ -8,6 +8,26 @@ At the 22 October pre-release checkpoint, application checks were local and the 
 
 ## Login and daily access
 
+Attendance page reads use a single read-only team/summary action with a shared
+request authorization snapshot. Initial selection starts at today's Eastern date
+so hydration does not trigger a second fetch. Background absence scans start
+after visible data has loaded. Flag summaries query only flagged rows once for
+the combined week/month range. Generation checks discard old selection responses.
+The attendance mutation actions remain outside that shared read context.
+
+October 23 update: all attendance-required roles can access CRM after email OTP
+before 10 AM New York time and mark themselves present. At 10 AM the server
+requires today's attendance or approved cover. A bootstrap cutoff timestamp
+prompts the browser to recheck at the boundary; browser time never authorizes
+server access. Exempt roles remain Admin, Developer, Monitor and Operations.
+
+After an idle tab's 15-minute server JWT expires, the security gate now forces a
+shared JWT rotation from the existing native Appwrite session and retries before
+blocking. Successful background rechecks do not unmount CRM providers. An actual
+native-session expiry shows an explicit sign-in action; repeated outages still
+fail closed after one silent retry. Checks are deduplicated, run every minute
+while visible, and suppress repeated focus checks within 30 seconds.
+
 Every CRM login, including Admin, Developer, Monitor and Operations, requires a code sent and validated by Appwrite's native Email OTP APIs using the configured project SMTP. The Google transporter is not imported by this flow. Other existing notification emails are unchanged. Before sending, the server verifies that the native authentication account is active and its email matches the CRM record, so the token endpoint cannot silently register or target another account.
 
 Native OTP verification creates a temporary Appwrite session. The server deletes that session before issuing an HttpOnly signed proof bound to the original CRM login session, for at most twelve hours or the native session expiry. The native token secret is never returned or stored by the CRM. Challenges expire within ten minutes, permit five attempts, and have durable resend/hourly limits and an atomic consumption claim. A provider/cleanup failure never unlocks access. This is password plus email verification enforced by the CRM gateway, rather than automatic enrollment in Appwrite's native MFA feature.
@@ -32,7 +52,24 @@ Native public/password-session requests can otherwise bypass the CRM gateway. Th
 
 ## Lead history and payment reminders
 
-`leads.history` is a server-owned JSON string containing up to one hundred recent events, bounded below the 60,000-byte column size. Events are appended in the lead mutation with actor ID/name, time, action and redacted before/after values. Caller-supplied history is discarded. The existing append-only `lead_history` collection retains the full archive. The lead view labels Backed Out, Not Interested, reopened, reassignment and other changes. Historical actors are not invented. Payment History continues to display payment updates separately from lifecycle events.
+`leads.history` is a server-owned JSON string containing up to one hundred recent events, bounded below the 60,000-byte column size. Events are appended in the lead mutation with actor ID/name, time, action and redacted before/after values. Caller-supplied history is discarded. The existing append-only `lead_history` collection retains the full archive. The lead view labels Backed Out, Not Interested, reopened, reassignment and other changes. Historical actors are not invented. Payment History displays payment updates and linked payment follow-ups separately from lifecycle events.
+
+### Refresh and slow connections
+
+The gate consumes fresh server bootstrap status on its first render. Pending
+restoration uses a light placeholder; it does not show an attendance/security
+panel until the server actually requires verification. Background access checks
+retain the verified dashboard while running, and repeated bootstrap object
+replacement does not cancel an in-flight check. A failed check cannot fall back
+to an older allowed bootstrap.
+
+Browser restoration has a 20-second overall deadline, with bounded bootstrap,
+native-session and JWT requests (including response body reads). A transient
+bootstrap error falls back to native session recovery. Network failures show an
+in-place retry without deleting the OTP proof; only confirmed native expiry
+clears it. Timeouts never grant access. Retries cancel obsolete restore work so
+late SDK results cannot restore an old user. No browser-stored access decision
+is trusted, and server-side enforcement remains fresh on every request.
 
 The payment-reminder cron excludes `non_upfront`, alongside fully paid and refunded payments.
 

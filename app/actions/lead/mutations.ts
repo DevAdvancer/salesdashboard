@@ -11,7 +11,7 @@ import { logAction } from "@/lib/services/audit-service";
 import { assertAuthenticatedUserId, getAuthenticatedAccount } from "@/lib/server/current-user";
 import { notifyDuplicateLeadUpdateAttemptAction } from "@/app/actions/lead-duplicates";
 import { normalizeLinkedinProfileUrl } from "@/lib/utils/linkedin";
-import { getChangedLockedLeadContactField } from "@/lib/utils/lead-contact-lock";
+import { getChangedLockedLeadContactField, getLeadContactValuesToValidate } from "@/lib/utils/lead-contact-lock";
 import { sameProfile } from "@/lib/utils/linkedin-extension-url";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import { recordLgHandoffAction } from "@/app/actions/lg-handoffs";
@@ -484,7 +484,11 @@ export async function updateLeadAction(leadId: string, data: Partial<LeadData>, 
             }
         }
 
-        const validation = await validateLeadUniqueness(updatedData, leadId);
+        // Existing contacts are immutable. Only newly supplied contacts need a duplicate search.
+        const contactChanges = getLeadContactValuesToValidate(currentData, updatedData);
+        const validation: Awaited<ReturnType<typeof validateLeadUniqueness>> = contactChanges
+            ? await validateLeadUniqueness(contactChanges, leadId)
+            : { isValid: true };
         if (!validation.isValid && validation.duplicateField && validation.existingLeadId) {
             try {
                 await notifyDuplicateLeadUpdateAttemptAction({

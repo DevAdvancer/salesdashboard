@@ -3,6 +3,7 @@ import { z } from "zod";
 import { assertExtensionRequest, LinkedinExtensionError } from "@/lib/server/linkedin-extension-policy";
 import { bootstrapLinkedinExtension, checkLinkedinExtension, recordLinkedinExtension } from "@/lib/server/linkedin-extension";
 import { withCrmRequestContext } from '@/lib/server/crm-request-context';
+import { ProfileReadBudgetError } from '@/lib/server/lead-profile-index';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +21,8 @@ function json(body: unknown, status = 200) {
 }
 
 function failure(error: unknown) {
+  if (error instanceof ProfileReadBudgetError) return NextResponse.json({ error: error.message },
+    { status: 429, headers: { 'Cache-Control': 'no-store', 'Retry-After': '60' } });
   if (error instanceof LinkedinExtensionError) return json({ error: error.message }, error.status);
   // Never expose Appwrite scopes, document contents, or raw SDK diagnostics to the browser.
   return json({ error: "CRM could not complete the request. Retry, or contact your administrator." }, 500);

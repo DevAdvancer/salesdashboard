@@ -38,6 +38,15 @@ describe('CRM change subscription read budget', () => {
     expect(sources).toHaveLength(2);
   });
 
+  it('resumes a blocked stream after silent JWT recovery without remounting subscribers', async () => {
+    cleanups.push(subscribe('leads', jest.fn()));
+    await Promise.resolve();
+    sources[0].listeners.get('blocked')!({});
+    expect(sources[0].close).toHaveBeenCalledTimes(1);
+    window.dispatchEvent(new Event('crm-session-restored'));
+    expect(sources).toHaveLength(2);
+  });
+
   it('retains version comparison so changes made while hidden trigger refresh on return', async () => {
     const changed = jest.fn();
     cleanups.push(subscribe('leads', changed));

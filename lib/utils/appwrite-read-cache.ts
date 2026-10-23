@@ -110,7 +110,7 @@ function extractCollectionId(method: string, args: unknown[]): string | null {
 export function createReadThroughDatabases<T extends object>(
   source: T,
   options: number | AppwriteReadCacheOptions = DEFAULT_TTL_MS,
-): T & { clearReadCache: () => void; clearReadCacheForCollection: (id: string) => void } {
+): T & { uncachedReads: Pick<T, Extract<keyof T, 'getDocument' | 'listDocuments'>>; clearReadCache: () => void; clearReadCacheForCollection: (id: string) => void } {
   const resolvedOptions =
     typeof options === "number" ? { ttlMs: options } : options;
   const ttlMs = resolvedOptions.ttlMs ?? DEFAULT_TTL_MS;
@@ -140,6 +140,10 @@ export function createReadThroughDatabases<T extends object>(
 
   return new Proxy(source, {
     get(target, prop, receiver) {
+      if (prop === 'uncachedReads') return Object.fromEntries([...READ_METHODS].map(name => [name, (...args: unknown[]) => {
+        bumpRequestCount();
+        return (Reflect.get(target, name) as Callable).apply(target, args);
+      }]));
       if (prop === "clearReadCache") {
         return clearReadCache;
       }
@@ -268,5 +272,5 @@ export function createReadThroughDatabases<T extends object>(
 
       return method.bind(target);
     },
-  }) as T & { clearReadCache: () => void; clearReadCacheForCollection: (id: string) => void };
+  }) as T & { uncachedReads: Pick<T, Extract<keyof T, 'getDocument' | 'listDocuments'>>; clearReadCache: () => void; clearReadCacheForCollection: (id: string) => void };
 }

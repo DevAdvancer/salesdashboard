@@ -3,6 +3,7 @@ import { ID, Permission, Query, Role } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
 import { assertAuthenticatedUserId, getAuthenticatedUserDoc } from "@/lib/server/current-user";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
+import { listAllDocuments } from '@/lib/server/appwrite-pagination';
 import type { AttendanceRecord, Department, LinkedinAccount, User } from "@/lib/types";
 import { createNotificationRecord, createNotificationsForRecipients } from "@/lib/server/notifications";
 import { getEtDateKey, isAttendanceAdminLikeReadRole, isAttendanceAdminWriteRole, normalizeDepartment, matchesDepartmentScope, getEtHour, assertDateKey, dateKeyToUtcDate, utcDateToDateKey, addDaysUtc, buildInclusiveDateKeys, getIsoWeekStartDateKey, getMonthStartDateKey, getMonthEndDateKey, logAuditAction, getAttendanceDoc, upsertAttendanceDoc, getActiveLinkedinAccountsForUser, getActiveLinkedinAccountsForUsers, formatLinkedinAccountsForNotification } from "./shared";
@@ -34,20 +35,15 @@ export async function getAttendanceFlagSummaryAction(input: {
     const weekKeys = buildInclusiveDateKeys(weekStart, weekEnd);
     const monthKeys = buildInclusiveDateKeys(monthStart, monthEnd);
     const { databases } = await createAdminClient();
-    const listForKeys = async (keys: string[]) => {
-            if (keys.length === 0) return [] as AttendanceRecord[];
-            const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.ATTENDANCE, [
-              Query.equal("teamLeadId", effectiveTeamLeadId),
-              Query.equal("dateKey", keys),
-              Query.select(["userId", "present", "presentWithDelegateFlag"]),
-              Query.limit(2000),
-            ]);
-            return response.documents as unknown as AttendanceRecord[];
-          };
-    const [weekDocs, monthDocs] = await Promise.all([
-            listForKeys(weekKeys),
-            listForKeys(monthKeys),
-          ]);
+    // Fetch only flagged rows once, rather than downloading the whole team's
+    // attendance separately for overlapping week and month ranges.
+    const flagged = await listAllDocuments<AttendanceRecord>({ databases, databaseId: DATABASE_ID,
+      collectionId: COLLECTIONS.ATTENDANCE, queries: [Query.equal('teamLeadId', effectiveTeamLeadId),
+        Query.equal('dateKey', [...new Set([...weekKeys, ...monthKeys])]), Query.equal('present', true),
+        Query.equal('presentWithDelegateFlag', true), Query.select(['userId', 'dateKey', 'present', 'presentWithDelegateFlag'])],
+      pageLimit: 100, requireComplete: true });
+    const weekDocs = flagged.filter(row => row.dateKey >= weekStart && row.dateKey <= weekEnd);
+    const monthDocs = flagged.filter(row => row.dateKey >= monthStart && row.dateKey <= monthEnd);
     const isFlagged = (doc: AttendanceRecord) =>
             doc.userId !== effectiveTeamLeadId &&
             doc.present === true &&

@@ -35,6 +35,7 @@ describe("client payment action authorization", () => {
     jest.clearAllMocks();
     mockGetDocument.mockReset();
     mockListDocuments.mockReset();
+    mockListDocuments.mockResolvedValue({ documents: [] });
     mockCreateDocument.mockReset();
     mockUpdateDocument.mockReset();
     mockCreateAdminClient.mockReset();
@@ -99,6 +100,34 @@ describe("client payment action authorization", () => {
       leadId: "lead-1",
       status: "partially_paid",
     });
+  });
+
+  it('uses fresh, lead-scoped source reads for history instead of settled collection caches', async () => {
+    process.env.NEXT_PUBLIC_APPWRITE_PREVIOUS_FOLLOWUPS_PAYMENTS_COLLECTION_ID = 'followups';
+    mockGetDocument.mockResolvedValueOnce({ $id: 'admin', name: 'Admin', role: 'admin' })
+      .mockResolvedValueOnce({ $id: 'lead-1', ownerId: 'admin' });
+    const freshList = jest.fn(async (_db, collection) => ({ documents: collection === 'payments' ? [{
+      $id: 'payment', leadId: 'lead-1', updates: '[]', createdAt: '2026-06-01T00:00:00Z',
+    }] : [{ $id: 'followup', leadId: 'lead-1', amount: 0, paymentRemark: 'Awaiting payment',
+      createdByName: 'Agent', createdAt: '2026-10-21T14:00:00Z', date: '2026-10-21' }] }));
+    mockCreateAdminClient.mockResolvedValue({ databases: {
+      getDocument: mockGetDocument, listDocuments: mockListDocuments,
+      uncachedReads: { listDocuments: freshList, getDocument: jest.fn().mockResolvedValue({ data: '{}' }) },
+    } });
+    const { getClientPaymentRecordAction } = await import('@/app/actions/client-payments/record');
+    const history = await getClientPaymentRecordAction('admin', 'lead-1');
+    expect(history?.followupUpdates).toEqual([expect.objectContaining({ id: 'followup', amount: 0, note: 'Awaiting payment' })]);
+    expect(mockListDocuments).not.toHaveBeenCalled();
+    expect(freshList).toHaveBeenCalledWith('database', 'followups', expect.arrayContaining(['equal:leadId:"lead-1"']));
+    expect(freshList).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not read payment or follow-up history for a lead the agent cannot access', async () => {
+    mockGetDocument.mockResolvedValueOnce({ $id: 'agent', role: 'agent' })
+      .mockResolvedValueOnce({ $id: 'lead-1', ownerId: 'other', assignedToId: 'other', $permissions: [] });
+    const { getClientPaymentRecordAction } = await import('@/app/actions/client-payments/record');
+    await expect(getClientPaymentRecordAction('agent', 'lead-1')).rejects.toThrow('Not authorized');
+    expect(mockListDocuments).not.toHaveBeenCalled();
   });
 
   // This test previously asserted that monitors are rejected. That expectation

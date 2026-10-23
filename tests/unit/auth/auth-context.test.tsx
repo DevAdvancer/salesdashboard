@@ -42,6 +42,18 @@ describe('AuthContext', () => {
     <AuthProvider>{children}</AuthProvider>
   );
 
+  it('forces expired-JWT recovery through the cooldown while sharing concurrent rotations', async () => {
+    mockAccount.get.mockRejectedValue(Object.assign(new Error('No session'), { code: 401 }));
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const before = mockAccount.createJWT.mock.calls.length;
+    await act(async () => { await Promise.all([result.current.recoverServerSession(), result.current.recoverServerSession()]); });
+    expect(mockAccount.createJWT).toHaveBeenCalledTimes(before + 1);
+    await act(async () => { await result.current.recoverServerSession(); });
+    expect(mockAccount.createJWT).toHaveBeenCalledTimes(before + 2);
+    expect(result.current.serverSessionReady).toBe(true);
+  });
+
   describe('useAuth hook', () => {
     it('should throw error when used outside AuthProvider', () => {
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();

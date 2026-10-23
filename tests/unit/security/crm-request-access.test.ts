@@ -15,13 +15,14 @@ import { getAuthenticatedUserDoc } from '@/lib/server/current-user';
 import { withCrmRequestContext } from '@/lib/server/crm-request-context';
 const originalFlag = process.env.CRM_ACCESS_ENFORCEMENT;
 beforeEach(() => {
+  jest.useFakeTimers().setSystemTime(new Date('2026-10-23T15:00:00Z'));
   process.env.CRM_ACCESS_ENFORCEMENT = 'true'; jest.clearAllMocks();
   mockAccount.get.mockResolvedValue({ $id: 'person', email: 'person@example.com' });
   mockAccount.getSession.mockResolvedValue({ $id: 'session' });
   mockDb.getDocument.mockResolvedValue({ $id: 'person', name: 'Person', department: 'resume', role: 'agent', isActive: true });
   mockDb.listDocuments.mockResolvedValue({ documents: [{ userId: 'person', present: true }] });
 });
-afterEach(() => { if (originalFlag === undefined) delete process.env.CRM_ACCESS_ENFORCEMENT; else process.env.CRM_ACCESS_ENFORCEMENT = originalFlag; });
+afterEach(() => { jest.useRealTimers(); if (originalFlag === undefined) delete process.env.CRM_ACCESS_ENFORCEMENT; else process.env.CRM_ACCESS_ENFORCEMENT = originalFlag; });
 
 it('uses one live profile and attendance lookup for an entire save, preserving department', async () => {
   await withCrmRequestContext(async () => {

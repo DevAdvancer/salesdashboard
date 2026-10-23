@@ -7,6 +7,7 @@ import { leadProfileUrl, isLeadReleased } from '@/lib/utils/linkedin-lead-protec
 import type { LinkedinRequest } from '@/lib/types';
 import { isWithdrawnLinkedinRequest } from '@/lib/utils/linkedin-request-state';
 import { createBriefReadCache } from '@/lib/utils/brief-read-cache';
+import { indexedProfileCandidates, ProfileReadBudgetError } from '@/lib/server/lead-profile-index';
 
 // Only UI previews share scans. Every mutation still performs a fresh lookup
 // under the distributed profile lock, including when a preview reported no match.
@@ -15,6 +16,7 @@ export function invalidateLinkedinLeadPreviews() { previewScans.clear(); }
 type LookupOptions = { preview?: boolean };
 
 type Database = Pick<Databases, 'getDocument' | 'listDocuments' | 'createDocument' | 'updateDocument' | 'deleteDocument'> & {
+  uncachedReads?: Pick<Databases, 'getDocument' | 'listDocuments'>;
   clearReadCacheForCollection?: (collectionId: string) => void;
 };
 export const profileDocumentId = (url: string, kind: 'profile' | 'lock' = 'profile') =>
@@ -25,13 +27,21 @@ export class LinkedinLeadProtectionError extends Error {}
 export async function findLeadsForLinkedinProfile(databases: Database, targetUrl: string, options: LookupOptions = {}): Promise<Models.Document[]> {
   const url = leadProfileUrl({ linkedinProfileUrl: targetUrl });
   if (!url) throw new Error('Enter a valid public LinkedIn profile URL.');
-  databases.clearReadCacheForCollection?.(COLLECTIONS.LINKEDIN_LEAD_REGISTRY);
+  const reads = databases.uncachedReads || databases;
+  if (!databases.uncachedReads) {
+    databases.clearReadCacheForCollection?.(COLLECTIONS.LINKEDIN_LEAD_REGISTRY);
+    databases.clearReadCacheForCollection?.(COLLECTIONS.LEADS);
+  }
+  const indexed = await indexedProfileCandidates(reads, url);
+  if (indexed) return indexed.filter(lead => leadProfileUrl(lead.data) === url);
+  if (Reflect.get(process.env, 'NODE_ENV') === 'production' && process.env.CRM_ALLOW_FULL_PROFILE_SCAN !== 'true')
+    throw new ProfileReadBudgetError();
   try {
-    const entry = await databases.getDocument(DATABASE_ID, COLLECTIONS.LINKEDIN_LEAD_REGISTRY, profileDocumentId(url));
+    const entry = await reads.getDocument(DATABASE_ID, COLLECTIONS.LINKEDIN_LEAD_REGISTRY, profileDocumentId(url));
     if (entry?.leadId) {
       try {
-        databases.clearReadCacheForCollection?.(COLLECTIONS.LEADS);
-        const lead = await databases.getDocument(DATABASE_ID, COLLECTIONS.LEADS, entry.leadId);
+        if (!databases.uncachedReads) databases.clearReadCacheForCollection?.(COLLECTIONS.LEADS);
+        const lead = await reads.getDocument(DATABASE_ID, COLLECTIONS.LEADS, entry.leadId);
         if (leadProfileUrl(lead.data) === url) return [lead];
       } catch (error) { if (!isNotFound(error)) throw error; }
     }
@@ -39,8 +49,8 @@ export async function findLeadsForLinkedinProfile(databases: Database, targetUrl
   // No age, branch, owner, company, or 1,000-record cutoff. Unknown profiles fail closed on scan errors.
   const scan = () => {
     // Do not inherit the SDK wrapper's two-hour cache when the preview expires.
-    databases.clearReadCacheForCollection?.(COLLECTIONS.LEADS);
-    return listAllDocuments<Models.Document>({ databases, databaseId: DATABASE_ID,
+    if (!databases.uncachedReads) databases.clearReadCacheForCollection?.(COLLECTIONS.LEADS);
+    return listAllDocuments<Models.Document>({ databases: reads, databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.LEADS, queries: [Query.orderAsc('$id'),
       Query.select(['$id', 'data', 'status', 'ownerId', 'assignedToId', '$updatedAt'])],
     pageLimit: 5000, maxPages: 1000, maxDocuments: 100000, requireComplete: true });
@@ -66,8 +76,8 @@ export async function assertLinkedinProfileAvailable(databases: Database, target
 export async function requestBlocksLinkedinProfile(databases: Database, request: LinkedinRequest) {
   if (isWithdrawnLinkedinRequest(request)) return false;
   if (request.leadId) {
-    databases.clearReadCacheForCollection?.(COLLECTIONS.LEADS);
-    const lead = await databases.getDocument(DATABASE_ID, COLLECTIONS.LEADS, request.leadId);
+    if (!databases.uncachedReads) databases.clearReadCacheForCollection?.(COLLECTIONS.LEADS);
+    const lead = await (databases.uncachedReads || databases).getDocument(DATABASE_ID, COLLECTIONS.LEADS, request.leadId);
     if (isLeadReleased(lead.status)) return false;
   }
   return true;

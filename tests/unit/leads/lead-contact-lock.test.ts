@@ -1,10 +1,35 @@
 import {
   getChangedLockedLeadContactField,
+  getLeadContactValuesToValidate,
   isLeadContactLocked,
   mergeLockedClientContactDetails,
 } from "@/lib/utils/lead-contact-lock";
 
 describe("lead contact fields", () => {
+  it('skips unchanged contact values for partial or full-form ordinary edits', () => {
+    const saved = { email: 'person@example.com', phone: '5551112222', field_16: 'https://linkedin.com/in/person' };
+    expect(getLeadContactValuesToValidate(saved, { ...saved, notes: 'Called' })).toBeNull();
+    expect(getLeadContactValuesToValidate(saved, {
+      ...saved, email: ' person@example.com ', linkedinRequestId: 'new-request',
+    })).toBeNull();
+  });
+
+  it.each(['linkedinProfileUrl', 'linkedinProfile', 'field_16', 'linkedinUrl'])(
+    'checks a newly supplied %s under the canonical field', (field) => {
+      const saved = { email: 'person@example.com', phone: '5551112222' };
+      expect(getLeadContactValuesToValidate(saved, {
+        ...saved, [field]: ' https://linkedin.com/in/person ',
+      })).toEqual({ linkedinProfileUrl: 'https://linkedin.com/in/person' });
+    },
+  );
+
+  it('checks every newly filled contact and does not treat request IDs as profiles', () => {
+    expect(getLeadContactValuesToValidate({}, {
+      email: 'person@example.com', phone: '5551112222', linkedinRequestId: 'request-1',
+    })).toEqual({ email: 'person@example.com', phone: '5551112222' });
+    expect(getLeadContactValuesToValidate({}, { phone: '   ', linkedinRequestId: 'request-1' })).toBeNull();
+  });
+
   it("allows a missing value to be entered, then locks it after saving", () => {
     const saved = { email: "", phone: "   " };
     const next = { ...saved, email: "person@example.com", phone: "5551112222" };

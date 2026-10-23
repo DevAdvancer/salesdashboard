@@ -8,6 +8,7 @@ import { getErrorMessage } from '@/lib/utils';
 import { isSalesTeamLeadAssignee } from '@/lib/utils/lead-assignment';
 import { isAllowedLeadStatusTransition, normalizeLeadStatus } from '@/lib/utils/lead-status-workflow';
 import { recordLeadLifecycleEvent, recordReopenedLeadChanges, getReopenedLeadMetadataPatch } from '@/lib/utils/lead-payment-cycle';
+import { getLeadContactValuesToValidate } from '@/lib/utils/lead-contact-lock';
 
 import { getLead } from './queries';
 import { getHierarchyPermissions } from './visibility';
@@ -170,7 +171,10 @@ export async function updateLead(
       }
     }
 
-    const validation = await validateLeadUniqueness(updatedData, leadId);
+    const contactChanges = getLeadContactValuesToValidate(currentData, updatedData);
+    const validation: Awaited<ReturnType<typeof validateLeadUniqueness>> = contactChanges
+      ? await validateLeadUniqueness(contactChanges, leadId)
+      : { isValid: true };
     if (!validation.isValid) {
       throw new Error(
         `Duplicate ${validation.duplicateField} found in lead ${validation.existingLeadId}` +
