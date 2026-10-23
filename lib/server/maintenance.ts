@@ -44,6 +44,45 @@ export async function getMaintenanceStatus(
   }
 }
 
+/**
+ * The per-request guard runs on every server action, the CRM access check and
+ * the layout's status check. Re-reading the single settings document each time
+ * cost tens of thousands of reads a month while maintenance was almost always
+ * off. Keep the last result for a short window instead. `active` is still
+ * recomputed against the current time, so a scheduled end takes effect on time.
+ * Saving the settings clears this cache; other warm server instances pick up
+ * the change within MAINTENANCE_STATUS_TTL_MS.
+ */
+export const MAINTENANCE_STATUS_TTL_MS = 30_000;
+let cachedMaintenance: { expiresAt: number; enabled: boolean; endsAt: string | null } | null = null;
+let pendingMaintenance: Promise<MaintenanceStatus> | null = null;
+
+export function clearMaintenanceStatusCache() {
+  cachedMaintenance = null;
+  pendingMaintenance = null;
+}
+
+async function getCachedMaintenanceStatus(): Promise<MaintenanceStatus> {
+  const now = Date.now();
+  if (cachedMaintenance && cachedMaintenance.expiresAt > now) {
+    const { enabled, endsAt } = cachedMaintenance;
+    return { enabled, endsAt, active: enabled && Boolean(endsAt) && Date.parse(endsAt!) > now };
+  }
+  if (!pendingMaintenance) {
+    const pending = getMaintenanceStatus().then((status) => {
+      // Ignore a result that raced with clearMaintenanceStatusCache().
+      if (pendingMaintenance === pending) {
+        cachedMaintenance = { expiresAt: Date.now() + MAINTENANCE_STATUS_TTL_MS, enabled: status.enabled, endsAt: status.endsAt };
+      }
+      return status;
+    }).finally(() => {
+      if (pendingMaintenance === pending) pendingMaintenance = null;
+    });
+    pendingMaintenance = pending;
+  }
+  return pendingMaintenance;
+}
+
 /** Effective access status for this site; admin settings keep reading the raw live configuration. */
 export async function getRequestMaintenanceStatus(requestHeaders?: Pick<Headers, 'get'>): Promise<MaintenanceStatus> {
   const incoming = requestHeaders ?? await headers();
@@ -51,5 +90,5 @@ export async function getRequestMaintenanceStatus(requestHeaders?: Pick<Headers,
     nodeEnv:process.env.NODE_ENV,
     hosted:process.env.VERCEL === '1' || Boolean(process.env.VERCEL_ENV),
   })) return {active:false,enabled:false,endsAt:null};
-  return getMaintenanceStatus();
+  return getCachedMaintenanceStatus();
 }

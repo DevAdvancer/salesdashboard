@@ -19,7 +19,8 @@ export default function MaintenancePage() {
       } catch { /* Keep the scheduled message visible during transient errors. */ }
     };
     void refresh();
-    const interval = window.setInterval(refresh, 10_000);
+    // Only shown while maintenance is active; 30s is enough to notice it ending.
+    const interval = window.setInterval(refresh, 30_000);
     return () => { alive = false; window.clearInterval(interval); };
   }, []);
 

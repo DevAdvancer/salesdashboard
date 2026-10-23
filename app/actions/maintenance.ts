@@ -3,7 +3,7 @@
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
 import { getAuthenticatedUserDoc } from "@/lib/server/current-user";
-import { getMaintenanceStatus, isMaintenanceManager, MAINTENANCE_SETTINGS_ID } from "@/lib/server/maintenance";
+import { clearMaintenanceStatusCache, getMaintenanceStatus, isMaintenanceManager, MAINTENANCE_SETTINGS_ID } from "@/lib/server/maintenance";
 import { easternWallTimeToIso } from "@/lib/utils/eastern-date";
 
 async function assertManager() {
@@ -35,6 +35,7 @@ export async function setMaintenanceModeAction(input: { enabled: boolean; endsAt
       MAINTENANCE_SETTINGS_ID, { config });
   }
   databases.clearReadCacheForCollection?.(COLLECTIONS.MAINTENANCE_SETTINGS);
+  clearMaintenanceStatusCache();
   // Appwrite sessions span sites. Revoking them globally also disconnects localhost.
   // The live UI and server access guard enforce maintenance per request instead.
   return { ...(await getMaintenanceStatus(databases)), signedOut:0, failedUserIds:[] as string[] };

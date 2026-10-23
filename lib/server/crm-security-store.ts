@@ -39,6 +39,38 @@ export function validProof(token: string | undefined, userId: string, sessionId:
   } catch { return false; }
 }
 
+/**
+ * Short-lived, server-only "already verified" pass.
+ *
+ * proxy.ts runs the full CRM access check (live user record + attendance) and
+ * then forwards this signed pass to the route handler / server action of the
+ * SAME request as an internal request header. The handler still validates the
+ * native Appwrite session itself, and only reuses the proxy's user record and
+ * access decision when the pass is genuine, unexpired and bound to that exact
+ * account + session. It never reaches the browser, so it adds no settled
+ * cache: every new request is checked fresh by the proxy.
+ */
+export const ACCESS_PASS_TTL_MS = 30_000;
+export type AccessPass<TStatus = unknown, TUser = unknown> = {
+  kind: 'crm-access-pass'; accountId: string; sessionId: string; dateKey: string;
+  status: TStatus; user?: TUser; expiresAt: number;
+};
+export function signAccessPass<TStatus, TUser>(pass: Omit<AccessPass<TStatus, TUser>, 'kind' | 'expiresAt'>, now = Date.now()) {
+  const body = Buffer.from(JSON.stringify({ ...pass, kind: 'crm-access-pass', expiresAt: now + ACCESS_PASS_TTL_MS })).toString('base64url');
+  return `${body}.${signature(`access-pass:${body}`)}`;
+}
+export function readAccessPass<TStatus, TUser>(token: string | null | undefined, accountId: string, sessionId: string, now = Date.now()) {
+  if (!token || token.length > 12_000) return null;
+  try {
+    const [body, sig, extra] = token.split('.');
+    if (extra || !body || !sig || !equal(signature(`access-pass:${body}`), sig)) return null;
+    const pass = JSON.parse(Buffer.from(body, 'base64url').toString()) as AccessPass<TStatus, TUser>;
+    if (pass.kind !== 'crm-access-pass' || pass.accountId !== accountId || pass.sessionId !== sessionId) return null;
+    if (!Number.isFinite(pass.expiresAt) || pass.expiresAt <= now || pass.expiresAt > now + ACCESS_PASS_TTL_MS) return null;
+    return pass;
+  } catch { return null; }
+}
+
 function recordId(value: string) { return createHash('sha256').update(value).digest('hex').slice(0, 36); }
 
 /** Document creation is an atomic claim across processes and Vercel instances. */

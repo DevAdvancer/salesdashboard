@@ -52,7 +52,12 @@ async function changeFor(actor: User, collectionId: string) {
 
 export async function GET(request: NextRequest) {
   try {
-    await verifiedBrowserActor();
+    // Access is verified once per connection (proxy + this check). The stream closes
+    // after ~55s and the browser reconnects, so a revoked user stops receiving change
+    // markers within about a minute, while every page load, data read and action is
+    // still checked on its own request. Re-verifying on every 10s tick cost two
+    // database reads per tick per open tab.
+    const actor = await verifiedBrowserActor();
     const raw = request.nextUrl.searchParams.get('channels') || '[]';
     if (raw.length > 3000) throw new Error('Invalid subscription');
     const channels: unknown = JSON.parse(raw);
@@ -78,7 +83,6 @@ export async function GET(request: NextRequest) {
         const tick = async () => {
           if (running || stopped) return; running = true;
           try {
-            const actor = await verifiedBrowserActor();
             for (const { channel, collectionId } of parsed) {
               const now = Date.now();
               if (!carriesMessageBody(collectionId) && now - (checkedAt.get(channel) ?? -Infinity) < 30_000) continue;

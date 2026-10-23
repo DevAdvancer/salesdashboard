@@ -38,7 +38,17 @@ describe('authorized change marker read budget', () => {
     expect(mockList).toHaveBeenCalledTimes(1);
     await jest.advanceTimersByTimeAsync(10_000);
     expect(mockList).toHaveBeenCalledTimes(2);
-    expect(mockActor.mock.calls.length).toBeGreaterThanOrEqual(10);
+    // Access is verified once when each stream connects, not on every 10s tick.
+    expect(mockActor).toHaveBeenCalledTimes(2);
+  });
+
+  it('verifies access again on the next connection and blocks a revoked user', async () => {
+    await open();
+    expect(mockActor).toHaveBeenCalledTimes(1);
+    mockActor.mockRejectedValueOnce(new Error('revoked'));
+    const channel = `databases.${DATABASE_ID}.collections.${COLLECTIONS.LEADS}.documents`;
+    const response = await GET(new NextRequest(`http://localhost/api/security/changes?${new URLSearchParams({ channels: JSON.stringify([channel]) })}`));
+    expect(response.status).toBe(403);
   });
 
   it('does not share markers across different lead visibility scopes', async () => {

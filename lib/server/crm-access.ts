@@ -1,12 +1,12 @@
 import { Account, Databases, ID, Query } from 'node-appwrite';
 import { ServerAppwriteClient as Client } from '@/lib/server/appwrite-client';
 import type { Models } from 'node-appwrite';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import type { AttendanceRecord, User } from '@/lib/types';
 import { getTodayEst } from '@/lib/utils/est-date';
 import { attendanceExempt, attendanceGateApplies, attendanceGateStartsAt, canApproveCrmAccess, normalizeVerificationName } from '@/lib/utils/crm-access-policy';
-import { consumeEmailOtp, CRM_PROOF_COOKIE, issueEmailOtp, validProof } from '@/lib/server/crm-security-store';
+import { consumeEmailOtp, CRM_PROOF_COOKIE, issueEmailOtp, readAccessPass, signAccessPass, validProof } from '@/lib/server/crm-security-store';
 import { listAllDocuments } from '@/lib/server/appwrite-pagination';
 import { createHash } from 'node:crypto';
 import { cache } from 'react';
@@ -19,7 +19,13 @@ const inFlightReads = createInFlightGroup();
 
 export function crmAccessEnabled() { return process.env.CRM_ACCESS_ENFORCEMENT === 'true'; }
 type CookieReader = { get: (name: string) => { value: string } | undefined };
-export type SecurityIdentity = { account: Models.User<Models.Preferences>; session: Models.Session; user: User; proof?: string };
+export type SecurityIdentity = { account: Models.User<Models.Preferences>; session: Models.Session; user: User; proof?: string;
+  /** Access decision the proxy made for this same request (see CRM_ACCESS_PASS_HEADER). */
+  preverified?: CrmAccessStatus };
+/** Internal request header proxy.ts forwards to the handler of the same request. */
+export const CRM_ACCESS_PASS_HEADER = 'x-crm-access-pass';
+/** User records larger than this are re-read by the handler instead of forwarded. */
+const ACCESS_PASS_MAX_USER_CHARS = 3_000;
 export type AccessRequest = {
   $id: string; userId: string; delegateId: string; dateKey: string; state: 'pending' | 'approved' | 'denied';
   data: string;
@@ -52,7 +58,7 @@ export function securityDatabase() {
     };
   } });
 }
-async function readSecurityIdentity(jar: CookieReader): Promise<SecurityIdentity> {
+async function readSecurityIdentity(jar: CookieReader, passToken?: string | null): Promise<SecurityIdentity> {
   const jwt = jar.get('crm_appwrite_jwt')?.value;
   const project = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!;
   const credentials = jwt ? [{ jwt }] : [`a_session_${project}`, `a_session_${project}_legacy`, project]
@@ -65,22 +71,33 @@ async function readSecurityIdentity(jar: CookieReader): Promise<SecurityIdentity
     let account; let session;
     try { bumpRequestCount(); bumpRequestCount(); [account, session] = await Promise.all([accountApi.get(), accountApi.getSession('current')]); }
     catch { continue; }
-    const user = await securityDatabase().getDocument(DATABASE_ID, COLLECTIONS.USERS, account.$id) as unknown as User;
+    // The native session above is always validated live. Only the user record and
+    // access decision the proxy just read for this same request are reused, and
+    // only when the signed pass is bound to this exact account and session.
+    const pass = readAccessPass<CrmAccessStatus, User>(passToken, account.$id, session.$id);
+    const user = pass?.user && pass.user.$id === account.$id ? pass.user
+      : await securityDatabase().getDocument(DATABASE_ID, COLLECTIONS.USERS, account.$id) as unknown as User;
     if (user.isActive === false) throw new CrmAccessError(403, 'This CRM account is inactive.', 'ACCOUNT_INACTIVE');
-    return { account, session, user, proof: jar.get(CRM_PROOF_COOKIE)?.value };
+    const preverified = pass && pass.dateKey === getTodayEst() && pass.status && (pass.status as CrmAccessStatus).state === 'allowed'
+      ? pass.status : undefined;
+    return { account, session, user, proof: jar.get(CRM_PROOF_COOKIE)?.value, ...(preverified ? { preverified } : {}) };
   }
   throw new CrmAccessError(401, 'Please sign in again.', 'UNAUTHENTICATED');
 }
-const requestIdentity = cache(async () => resolveSecurityIdentity(await cookies()));
+async function requestAccessPass() {
+  try { return (await headers()).get(CRM_ACCESS_PASS_HEADER); } catch { return null; }
+}
+const requestIdentity = cache(async () => resolveSecurityIdentity(await cookies(), await requestAccessPass()));
 const identityRequestKey = Symbol('crm-identity');
-export async function resolveSecurityIdentity(reader?: CookieReader): Promise<SecurityIdentity> {
+export async function resolveSecurityIdentity(reader?: CookieReader, passToken?: string | null): Promise<SecurityIdentity> {
   if (!reader) return memoizeCrmRequest(identityRequestKey, requestIdentity);
   const project = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!;
   const values = ['crm_appwrite_jwt', `a_session_${project}`, `a_session_${project}_legacy`, project, CRM_PROOF_COOKIE].map(name => reader.get(name)?.value || '');
+  values.push(passToken || '');
   const key = createHash('sha256').update(JSON.stringify([process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT, project, ...values])).digest('hex');
   // Parallel dashboard requests share only an outstanding lookup. Every later request
   // revalidates native session, user activation and proof; no authorization TTL is added.
-  return inFlightIdentity(key, () => readSecurityIdentity(reader));
+  return inFlightIdentity(key, () => readSecurityIdentity(reader, passToken));
 }
 export function hasEmailProof(identity: SecurityIdentity) {
   return validProof(identity.proof, identity.account.$id, identity.session.$id);
@@ -115,6 +132,9 @@ export async function evaluateCrmAccess(identity: SecurityIdentity): Promise<Crm
 async function readCrmAccessStatus(identity: SecurityIdentity): Promise<CrmAccessStatus> {
   const dateKey = getTodayEst();
   if (!hasEmailProof(identity)) return { state: 'otp_required', dateKey };
+  // The proxy evaluated this exact request moments ago (same account, session and
+  // Eastern date). Reuse that decision, including any approved-cover attribution.
+  if (identity.preverified?.state === 'allowed' && identity.preverified.dateKey === dateKey) return identity.preverified;
   if (attendanceExempt(identity.user.role)) return { state: 'allowed', dateKey };
   if (!attendanceGateApplies()) return { state: 'allowed', dateKey, recheckAt: attendanceGateStartsAt() };
   const db = securityDatabase();
@@ -138,6 +158,21 @@ async function readCrmAccessStatus(identity: SecurityIdentity): Promise<CrmAcces
     return { state: row.state === 'denied' ? 'approval_denied' : 'approval_pending', dateKey, requestId: row.$id, canVerifyDelegate: false };
   }
   return { state: 'attendance_required', dateKey, canVerifyDelegate: true };
+}
+/**
+ * proxy.ts entry point: run the full access check, then return a signed pass for
+ * the handler of this same request so it does not repeat the user/attendance reads.
+ */
+export async function assertCrmAccessForProxy(reader: CookieReader): Promise<string | null> {
+  const identity = await resolveSecurityIdentity(reader);
+  const status = await evaluateCrmAccess(identity);
+  if (status.state !== 'allowed') throw new CrmAccessError(403,
+    status.state === 'otp_required' ? 'Verify your email to access CRM.' : 'Ask your TL or manager to mark you present or approve assigned cover.', status.state);
+  try {
+    const user = JSON.stringify(identity.user).length <= ACCESS_PASS_MAX_USER_CHARS ? identity.user : undefined;
+    return signAccessPass<CrmAccessStatus, User>({ accountId: identity.account.$id, sessionId: identity.session.$id,
+      dateKey: status.dateKey, status, user });
+  } catch { return null; }
 }
 export async function assertCrmAccess(reader?: CookieReader, existingIdentity?: SecurityIdentity) {
   if (!crmAccessEnabled()) return;

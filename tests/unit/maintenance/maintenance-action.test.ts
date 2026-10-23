@@ -14,6 +14,7 @@ jest.mock('@/lib/server/maintenance', () => ({
   isMaintenanceManager: (actor: { $id: string; email: string; role: string }) =>
     actor.$id === '698a5e64002675ad41f6' && actor.email === 'abhirupvizva@gmail.com' && actor.role === 'admin',
   getMaintenanceStatus: () => mockGetStatus(),
+  clearMaintenanceStatusCache: jest.fn(),
 }));
 
 test('turning live-site maintenance on preserves all shared Appwrite sessions', async () => {

@@ -50,9 +50,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         checking = false;
       }
     };
+    // Maintenance is rare, so there is no background poll: check on page load,
+    // on every navigation (pathname is a dependency) and when the tab regains
+    // focus. The server still blocks every action while maintenance is active.
     void checkMaintenance();
-    const interval = window.setInterval(checkMaintenance, 10_000);
-    return () => { cancelled = true; window.clearInterval(interval); };
+    const onFocus = () => { void checkMaintenance(); };
+    window.addEventListener('focus', onFocus);
+    return () => { cancelled = true; window.removeEventListener('focus', onFocus); };
   }, [pathname, router, user]);
 
   useEffect(() => {

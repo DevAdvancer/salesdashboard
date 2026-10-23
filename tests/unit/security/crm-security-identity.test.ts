@@ -31,3 +31,28 @@ it('does not reuse a prior success after the native session has been revoked', a
   mockAccount.get.mockRejectedValueOnce(new Error('Session revoked'));
   await expect(resolveSecurityIdentity(jar('revoked'))).rejects.toThrow('sign in again');
 });
+describe('signed pass forwarded by the proxy for the same request', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { signAccessPass } = require('@/lib/server/crm-security-store');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const today = () => require('@/lib/utils/est-date').getTodayEst();
+  const pass = (accountId = 'person', sessionId = 'session') => signAccessPass({ accountId, sessionId, dateKey: today(),
+    status: { state: 'allowed', dateKey: today() }, user: { $id: accountId, isActive: true, role: 'agent' } });
+  it('still validates the native session but skips re-reading the user record', async () => {
+    const identity = await resolveSecurityIdentity(jar('with-pass'), pass());
+    expect(mockAccount.get).toHaveBeenCalledTimes(1); expect(mockAccount.getSession).toHaveBeenCalledTimes(1);
+    expect(mockDb.getDocument).not.toHaveBeenCalled();
+    expect(identity.preverified).toMatchObject({ state: 'allowed' });
+  });
+  it('ignores a pass issued for another session or account, or a forged one', async () => {
+    for (const [token, key] of [[pass('person', 'stolen'), 'a'], [pass('admin', 'session'), 'b'], ['forged.value', 'c']]) {
+      const identity = await resolveSecurityIdentity(jar(`other-${key}`), token);
+      expect(identity.preverified).toBeUndefined();
+    }
+    expect(mockDb.getDocument).toHaveBeenCalledTimes(3);
+  });
+  it('never reuses a pass once the native session is revoked', async () => {
+    mockAccount.get.mockRejectedValueOnce(new Error('Session revoked'));
+    await expect(resolveSecurityIdentity(jar('revoked-pass'), pass())).rejects.toThrow('sign in again');
+  });
+});

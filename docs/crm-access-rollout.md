@@ -118,3 +118,22 @@ Lead protection scans explicitly request 5,000-row cursor pages, with a 100-row 
 `bunx tsx scripts/benchmark-linkedin-extension.ts --email=<authorized-developer-email>` previews the probe. Adding `--apply` uses isolated synthetic agent, attendance, account and request fixtures against localhost, then deletes those fixtures, their history/locks and native auth user/session. `--origin=http://localhost:5001` selects a locally started production build. The final warm production-build run against live Appwrite measured one complete 1,945-lead scan at 422 ms versus 5,312 ms across 20 old batches, and complete saves at 2,844 / 2,755 / 3,638 ms (3,079 ms average). These are local API timings, not deployed browser timings or real LinkedIn sends. The approximately two-second target still requires verification after deployment in the configured region.
 
 Validation after these changes: 144 Jest suites / 1,049 tests passed; production build and application typecheck passed. Full ESLint still reports the same nine pre-existing errors in untouched files. The updated application remains uncommitted and undeployed.
+
+## Read budget for access checks
+
+Each access check reads the live user record and today's attendance (2 database
+reads). To avoid repeating that work without caching decisions across requests:
+
+- **One check per request.** `proxy.ts` runs the full check, then forwards a signed,
+  30-second, server-only `x-crm-access-pass` header to the handler of the same request.
+  The handler still validates the native Appwrite session and reuses the proxy's user
+  record and `allowed` decision only if the pass is genuine and bound to that account,
+  session and Eastern date. Any browser-supplied copy is stripped by the proxy and would
+  fail signature verification anyway. Status endpoints (`/api/security/access`,
+  `/api/auth/appwrite-session`) bypass the proxy and always evaluate fresh.
+- **Live change stream.** Access is verified when each stream connects (about once a
+  minute), not on every 10-second tick. A revoked user's open stream ends within about a
+  minute; every page, data read and action is still checked on its own request.
+- **Gate re-checks.** The browser gate re-checks every minute while waiting for OTP,
+  attendance or cover approval, and every 5 minutes once allowed. Focus, `recheckAt` and
+  the stream's `crm-access-recheck` signal still refresh immediately.

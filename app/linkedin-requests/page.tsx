@@ -126,8 +126,12 @@ function LinkedinRequestsContent() {
     queryFn: () => listMyLinkedinAccountsWithUsageAction({ currentUserId: user!.$id }),
     enabled: !!user && serverSessionReady,
     staleTime: 0,
+    // Returning to the tab and this page's own actions refresh usage immediately
+    // (focus refetch + invalidateQueries). The timer only catches sends made from
+    // elsewhere while this tab stays focused, so 2 minutes is plenty and cuts
+    // the access-check, account and usage reads it triggers by 4x.
     refetchOnWindowFocus: true,
-    refetchInterval: 30 * 1000,
+    refetchInterval: 2 * 60 * 1000,
   });
   const accounts: LinkedinAccount[] = accountUsageQuery.data?.accounts ?? [];
   const sentByAccountId = accountUsageQuery.data?.sentByAccountId;

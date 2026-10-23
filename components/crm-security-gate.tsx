@@ -22,6 +22,9 @@ async function postAccess(body: Record<string, unknown>) {
   }, 30_000, 'Access verification took too long. Please retry.');
 }
 
+/** Background re-check cadence once access is allowed (see the interval below). */
+const ALLOWED_RECHECK_MS = 5 * 60 * 1000;
+
 export function CrmSecurityGate({ children }: { children: React.ReactNode }) {
   const { user, loading, serverSessionReady, initialAccess, activeDashboard, logout, recoverServerSession,
     sessionRestoreError, retrySessionRestore } = useAuth();
@@ -47,6 +50,10 @@ export function CrmSecurityGate({ children }: { children: React.ReactNode }) {
   const status = !serverSessionReady || !userId ? null : result?.userId === userId ? result.status
     : initialAccess?.userId === userId ? initialAccess?.status : null;
   const publicPage = pathname === '/referral' || pathname === '/maintenance';
+  // Read by the interval below without re-creating it on every status change.
+  const allowedRef = useRef(false);
+  const allowed = status?.state === 'allowed' || status?.state === 'disabled';
+  useEffect(() => { allowedRef.current = allowed; }, [allowed]);
 
   const refresh = useCallback(async () => {
     if (loading || sessionRestoreError || !userId || !serverSessionReady || publicPage) return;
@@ -112,9 +119,15 @@ export function CrmSecurityGate({ children }: { children: React.ReactNode }) {
     const forced = () => void refresh();
     window.addEventListener('focus', focused);
     window.addEventListener('crm-access-recheck', forced);
+    // The clock still ticks every minute. While someone is waiting (OTP, attendance,
+    // cover approval) the status is re-checked every minute so approval lets them in
+    // promptly. Once access is allowed the background re-check runs every 5 minutes:
+    // the server enforces access on every request, the live change stream dispatches
+    // crm-access-recheck as soon as access is lost, and focus, recheckAt and explicit
+    // rechecks still refresh immediately.
     const interval = window.setInterval(() => {
       setClock(Date.now());
-      if (document.visibilityState === 'visible') void refresh();
+      if (document.visibilityState === 'visible' && (!allowedRef.current || Date.now() - lastCheckedAt.current >= ALLOWED_RECHECK_MS)) void refresh();
     }, 60_000);
     return () => { generation.current = effectGeneration + 1; pendingRefresh.current = null; window.removeEventListener('focus', focused); window.removeEventListener('crm-access-recheck', forced); window.clearInterval(interval); };
   }, [refresh, userId, serverSessionReady]);
