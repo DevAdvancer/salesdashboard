@@ -19,6 +19,7 @@ import type {
   UserRole,
 } from "@/lib/types";
 import { listLeadsAction } from "@/app/actions/lead/queries";
+import { filterResolvedPaymentReminders } from '@/lib/server/payment-reminder-notifications';
 
 async function getActor(userId: string): Promise<User> {
   await assertAuthenticatedUserId(userId);
@@ -309,7 +310,14 @@ export async function listNotificationsAction(actorId: string): Promise<Notifica
     COLLECTIONS.NOTIFICATIONS,
     [Query.equal("recipientId", actor.$id), Query.orderDesc("createdAt"), Query.limit(100)]
   );
-  return response.documents as unknown as NotificationRecord[];
+  const notifications = response.documents as unknown as NotificationRecord[];
+  try {
+    return await filterResolvedPaymentReminders(databases, notifications);
+  } catch (error) {
+    // A temporary payment-source outage must not hide unrelated notifications.
+    console.error('Failed to refresh payment reminder activity:', error);
+    return notifications;
+  }
 }
 
 export async function markNotificationReadAction(

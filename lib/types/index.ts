@@ -166,6 +166,9 @@ export interface UpdateBranchInput {
 // Lead validation types
 export interface LeadValidationResult {
   isValid: boolean;
+  /** Preview only. The create action revalidates before reusing the existing row. */
+  canReuse?: boolean;
+  existingLeadStatus?: string;
   duplicateField?: 'email' | 'phone' | 'linkedinProfileUrl';
   existingLeadId?: string;
   existingBranchId?: string;

@@ -182,6 +182,7 @@ export async function createLinkedinRequestAction(input: {
           targetUrl,
           ...(coldCall ? { coldCall: true, coldCallPhone } : {}),
           status: "sent" satisfies LinkedinRequestStatus,
+          leadId: null,
           acceptedAt: null,
           recordSource: null,
           withdrawnAt: null,

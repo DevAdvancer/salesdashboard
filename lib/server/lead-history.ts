@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Databases, ID, type Models } from 'node-appwrite';
 import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
-import { leadOwnershipMayChange, leadProfileUrl } from '@/lib/utils/linkedin-lead-protection';
+import { isLeadReleased, leadOwnershipMayChange, leadProfileUrl } from '@/lib/utils/linkedin-lead-protection';
 import { findProtectedLinkedinLead, invalidateLinkedinLeadPreviews, LinkedinLeadProtectionError, profileDocumentId, saveLeadProfileRegistry, withLinkedinProfileLock } from '@/lib/server/linkedin-lead-protection';
 import { parseLeadHistory, type LeadHistorySnapshotEvent } from '@/lib/utils/lead-history-snapshot';
 
@@ -89,6 +89,15 @@ export function withLeadHistory(databases: Databases, actor: () => Promise<Histo
           if (isLead && creating && profileUrl && await findProtectedLinkedinLead(target,profileUrl)) {
             await appendLeadHistory(target,{ ...event, eventType: 'DUPLICATE_LEAD_BLOCKED', payload: { attemptedLeadId:id, reason:'Existing protected LinkedIn lead', changes } });
             throw new Error('A lead already exists for this LinkedIn profile. It can only be reused after Not Interested or Backed Out.');
+          }
+          const reusingProfile = isLead && before && proposed &&
+            (leadProfileUrl(before.data) !== profileUrl ||
+              (isLeadReleased(before.status) && !isLeadReleased(proposed.status)));
+          if (reusingProfile && profileUrl &&
+              await findProtectedLinkedinLead(target, profileUrl, id)) {
+            await appendLeadHistory(target, { ...event, eventType: 'DUPLICATE_LEAD_BLOCKED',
+              payload: { changes, reason: 'Another lead protects this LinkedIn profile' } });
+            throw new LinkedinLeadProtectionError('Another lead already owns this LinkedIn profile. Refresh before saving.');
           }
           if (!isLead && profileUrl && !deleting) {
             const reassignment = creating || ['agentId','accountId','targetUrl'].some(key => patch && key in patch && patch[key] !== before?.[key]);

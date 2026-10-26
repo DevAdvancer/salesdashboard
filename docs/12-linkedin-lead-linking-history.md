@@ -25,7 +25,15 @@ The shared admin client also wraps lead/request writes with `withLeadHistory`. L
 
 The request-link action authorizes the actor and checks the URL before changing only the request's `leadId`; it never rewrites lead data or the lead's saved request reference. Existing linked requests show **Open Lead** and **Lead History**, including withdrawn and historical import rows. Old sent requests with a lead link do not expire merely because no acceptance timestamp is known.
 
-## Append-only history
+## Reusing a released lead
+
+Marking a lead Not Interested or Backed Out withdraws its linked requests while retaining their lead links and acceptance dates. Create Lead reuses the existing released lead ID, replaces its current business fields with the new submission, applies the new owner/assignee/branch, clears old follow-up details, and starts a new payment cycle. Earlier payment records and append-only history remain intact. Active duplicate matches take priority over released matches, and the profile is rechecked under its write lock.
+
+Form previews use the same server policy and allow eligible reuse. LinkedIn matching includes older records and legacy URL fields. Reuse also withdraws old outreach referenced by the lead's saved request ID. Same-company resends still reuse the request row because of the company/profile/active unique index; resending clears its old lead link, and restoring the lead leaves that newly accepted request active. Earlier ownership, request statuses, and lead data remain in `lead_history`.
+
+Lead History is available from the Activity Timeline for open and closed leads. TLs/Senior TLs retain their existing lead visibility scope; admin, developer, monitor, and operations retain their leadership visibility. Closure status does not grant or remove history access.
+
+## Append-only event storage
 
 `lead_history` stores separate lead/request write attempts, successful changes, failures and blocked takeovers. Baselines distinguish existing snapshots from a complete historical log; past events and missing acceptance times cannot be reconstructed. Sensitive credential/SSN values are redacted; long values have bounded previews and hashes. Collection and document permissions do not permit browser writes, updates or deletes. The application only appends history events.
 

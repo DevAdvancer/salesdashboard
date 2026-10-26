@@ -269,7 +269,7 @@ export function LeadGenerationNewLeadContent() {
         : baseLeadData;
 
       const validation = await validateLeadUniqueness(leadData);
-      if (!validation.isValid) {
+      if (!validation.isValid && !validation.canReuse) {
         const fieldLabel =
           validation.duplicateField === "email"
             ? "email address"

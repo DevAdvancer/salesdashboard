@@ -35,6 +35,8 @@ import { createNotificationsForRecipients } from "@/lib/server/notifications";
 import { getLeadDisplayName } from "@/lib/actions/lead/utils";
 import { isSalesTeamLeadAssignee } from '@/lib/utils/lead-assignment';
 import { recordLeadLifecycleEvent, recordReopenedLeadChanges } from '@/lib/utils/lead-payment-cycle';
+import { withdrawLeadRequests } from '@/lib/server/lead-request-release';
+import { isWithdrawnLinkedinRequest } from '@/lib/utils/linkedin-request-state';
 
 export async function restoreNotInterestedDuplicateLead(input: {
         databases: Awaited<ReturnType<typeof createAdminClient>>['databases'];
@@ -45,7 +47,7 @@ export async function restoreNotInterestedDuplicateLead(input: {
         actorName?: string;
     }): Promise<Lead> {
     const { databases, duplicateLeadId, nextOwnerId, createInput, actorId, actorName } = input;
-    const existingLead = await databases.getDocument(
+    const existingLead = await (databases.uncachedReads || databases).getDocument(
                 DATABASE_ID,
                 LEADS_COLLECTION_ID,
                 duplicateLeadId,
@@ -59,15 +61,8 @@ export async function restoreNotInterestedDuplicateLead(input: {
 
     const currentData = parseLeadDataSafely(existingLead.data);
     const mergedData: LeadData = {
-                ...currentData,
                 ...createInput.data,
             };
-    const lockedField = getChangedLockedLeadContactField(currentData, mergedData);
-    if (lockedField) {
-        throw new LeadActionError('INVALID_INPUT', `${lockedField} cannot be changed after it is saved.`, {
-            field: lockedField,
-        });
-    }
     if (!createInput.data.linkedinRequestId) {
         delete (mergedData as Record<string, unknown>).linkedinRequestId;
     }
@@ -92,6 +87,13 @@ export async function restoreNotInterestedDuplicateLead(input: {
     }
 
     const nowIso = new Date().toISOString();
+    const lifecycle = recordLeadLifecycleEvent(existingLead, 'reopened', actorId,
+        actorName || actorId, createInput.status || 'New', nowIso, ID.unique());
+    mergedData.lifecycleHistory = lifecycle.lifecycleHistory;
+    mergedData.paymentCycleId = lifecycle.paymentCycleId;
+    // Also retires legacy requests left as sent by the old Not Interested flow.
+    await withdrawLeadRequests(databases, existingLead, nowIso,
+        typeof createInput.data.linkedinRequestId === 'string' ? createInput.data.linkedinRequestId : undefined);
     const reopenedLead = await databases.updateDocument(
                 DATABASE_ID,
                 LEADS_COLLECTION_ID,
@@ -104,6 +106,10 @@ export async function restoreNotInterestedDuplicateLead(input: {
                     branchId: createInput.branchId ?? existingLead.branchId ?? null,
                     isClosed: false,
                     closedAt: null,
+                    nextFollowUpAt: null,
+                    followUpStatus: null,
+                    lastContactedAt: null,
+                    nextAction: null,
                 },
                 [...new Set(permissions)],
             );
@@ -185,11 +191,17 @@ export async function createLeadAction(ownerId: string, input: CreateLeadInput, 
         }
 
         if (typeof input.data.linkedinRequestId === 'string' && input.data.linkedinRequestId.trim()) {
-            const request = await databases.getDocument(
+            const request = await (databases.uncachedReads || databases).getDocument(
                 DATABASE_ID,
                 COLLECTIONS.LINKEDIN_REQUESTS,
                 input.data.linkedinRequestId.trim(),
-            ) as unknown as { targetUrl: string };
+            ) as unknown as import('@/lib/types').LinkedinRequest;
+            if (request.agentId !== finalOwnerId && !['admin', 'developer'].includes(actorDoc.role)) {
+                throw new LeadActionError('PERMISSION_DENIED', 'This LinkedIn request belongs to another agent.');
+            }
+            if (request.status !== 'accepted' || isWithdrawnLinkedinRequest(request) || request.leadId) {
+                throw new LeadActionError('INVALID_INPUT', 'Use an accepted, unlinked LinkedIn request to create a lead.');
+            }
             const submittedUrl = typeof input.data.linkedinProfileUrl === 'string'
                 ? input.data.linkedinProfileUrl
                 : '';
@@ -218,7 +230,7 @@ export async function createLeadAction(ownerId: string, input: CreateLeadInput, 
                 const normalizedStatus = normalizeLeadStatus(actualDuplicateStatus);
                 const shouldRestoreNotInterested = normalizedStatus === 'notinterested' || normalizedStatus === 'backedout';
 
-                if (shouldRestoreNotInterested) {
+                if (shouldRestoreNotInterested && validation.canReuse) {
                     return restoreNotInterestedDuplicateLead({
                         databases,
                         duplicateLeadId: validation.existingLeadId,

@@ -9,7 +9,7 @@ jest.mock('next/server', () => ({
   NextResponse: { json: (body: unknown) => ({ json: async () => body }) },
 }));
 jest.mock('node-appwrite', () => ({
-  Query: { equal: jest.fn(), lessThanEqual: jest.fn(), limit: jest.fn() },
+  Query: { equal: jest.fn(), lessThanEqual: jest.fn(), limit: jest.fn(), orderAsc: jest.fn(), select: jest.fn() },
 }));
 jest.mock('@/lib/server/appwrite', () => ({ createAdminClient: jest.fn() }));
 jest.mock('@/lib/server/notifications', () => ({ createNotificationsForRecipients: jest.fn() }));
@@ -59,7 +59,7 @@ describe('payment reminder eligibility', () => {
     databases.listDocuments.mockImplementation(async (_database, collection) => ({
       documents: collection === COLLECTIONS.CLIENT_PAYMENTS
         ? [{ ...payment, status }]
-        : [{ $id: 'admin-1' }],
+        : collection === COLLECTIONS.USERS ? [{ $id: 'admin-1' }] : [],
     }));
   }
 
@@ -96,4 +96,38 @@ describe('payment reminder eligibility', () => {
       );
     },
   );
+
+  it('does not notify when a $0 follow-up is more recent than the payment row', async () => {
+    databases.listDocuments.mockImplementation(async (_database, collection) => ({
+      documents: collection === COLLECTIONS.CLIENT_PAYMENTS ? [{ ...payment, status: 'partially_paid' }]
+        : collection === COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS ? [{
+          $id: 'followup', leadId: 'lead-1', amount: 0, paymentRemark: 'Awaiting interview',
+          createdAt: '2026-10-21T14:01:45.587+00:00',
+        }] : [],
+    }));
+    expect(await (await GET(request)).json()).toMatchObject({ remindersSent: 0 });
+    expect(createNotificationsForRecipients).not.toHaveBeenCalled();
+    expect(databases.updateDocument).not.toHaveBeenCalled();
+  });
+
+  it('resumes reminders when the latest follow-up itself becomes overdue', async () => {
+    databases.listDocuments.mockImplementation(async (_database, collection) => ({
+      documents: collection === COLLECTIONS.CLIENT_PAYMENTS ? [{ ...payment, status: 'partially_paid' }]
+        : collection === COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS ? [{
+          $id: 'followup', leadId: 'lead-1', amount: 0, createdAt: '2026-09-01T14:00:00Z',
+        }] : [],
+    }));
+    expect(await (await GET(request)).json()).toMatchObject({ remindersSent: 1 });
+  });
+
+  it('does not let a legacy premature reminder suppress the next genuinely overdue window', async () => {
+    databases.listDocuments.mockImplementation(async (_database, collection) => ({
+      documents: collection === COLLECTIONS.CLIENT_PAYMENTS ? [{ ...payment, status: 'partially_paid',
+        lastReminderAt: '2026-09-02T14:00:00Z' }]
+        : collection === COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS ? [{
+          $id: 'followup', leadId: 'lead-1', amount: 0, createdAt: '2026-09-01T14:00:00Z',
+        }] : [],
+    }));
+    expect(await (await GET(request)).json()).toMatchObject({ remindersSent: 1 });
+  });
 });

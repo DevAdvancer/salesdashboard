@@ -14,6 +14,7 @@ import {
 } from "@/lib/server/notification-dedup";
 import type { ClientPaymentRecord, LeadData, User } from "@/lib/types";
 import { isCurrentPaymentCycle } from '@/lib/utils/lead-payment-cycle';
+import { loadPaymentReminderActivity } from '@/lib/server/payment-reminder-activity';
 
 export const dynamic = "force-dynamic";
 
@@ -166,6 +167,7 @@ export async function GET(request: NextRequest) {
 }
 
 async function runPartialPaidSweep(databases: AdminDatabases) {
+  const reads = databases.uncachedReads ?? databases;
   const days = Number(
     process.env.PARTIAL_PAID_STALE_DAYS ?? "2",
   );
@@ -177,7 +179,7 @@ async function runPartialPaidSweep(databases: AdminDatabases) {
 
   const adminAndOpsIds = await getAdminAndOpsRecipientIds(databases);
 
-  const response = await databases.listDocuments(
+  const response = await reads.listDocuments(
     DATABASE_ID,
     COLLECTIONS.CLIENT_PAYMENTS,
     [
@@ -186,6 +188,7 @@ async function runPartialPaidSweep(databases: AdminDatabases) {
       Query.limit(5000),
     ],
   );
+  const activityByPayment = await loadPaymentReminderActivity(databases, response.documents, now);
 
   let evaluated = 0;
   let skippedClosed = 0;
@@ -198,12 +201,9 @@ async function runPartialPaidSweep(databases: AdminDatabases) {
   for (const paymentDoc of response.documents as unknown as ClientPaymentRecord[]) {
     evaluated += 1;
 
-    const lastUpdateAt =
-      typeof paymentDoc.updatedAt === "string"
-        ? paymentDoc.updatedAt
-        : paymentDoc.createdAt;
+    const lastUpdateAt = activityByPayment.get(paymentDoc.$id);
     if (!lastUpdateAt) continue;
-    if (lastUpdateAt > thresholdIso) continue;
+    if (Date.parse(lastUpdateAt) > Date.parse(thresholdIso)) continue;
 
     const leadId = paymentDoc.leadId;
     if (!leadId) continue;
@@ -212,7 +212,7 @@ async function runPartialPaidSweep(databases: AdminDatabases) {
   }
 
   const leadsById = await loadDocumentsByIds<LeadReminderDoc>(
-    databases,
+    reads as AdminDatabases,
     COLLECTIONS.LEADS,
     pendingRows.map((row) => row.leadId),
     ["$id", "isClosed", "assignedToId", "ownerId", "data"],

@@ -390,7 +390,7 @@ describe('LinkedIn Server Actions Regression', () => {
       mockListDocuments
         .mockResolvedValueOnce({ documents: [{ $id: 'withdrawn-request',
           targetUrl: 'linkedin.com/in/person', company: 'Silverspace INC',
-          status: 'withdrawn', isActive: false, agentId: 'agent-1' }] })
+          status: 'withdrawn', isActive: false, agentId: 'agent-1', leadId: 'released-lead' }] })
         .mockResolvedValueOnce({ documents: [] });
       mockUpdateDocument.mockResolvedValue({ $id: 'withdrawn-request', status: 'sent' });
       const { createLinkedinRequestAction } = await import('@/app/actions/linkedin/requests');
@@ -399,7 +399,7 @@ describe('LinkedIn Server Actions Regression', () => {
         dateSent: '2026-10-13', targetUrl: 'https://www.linkedin.com/in/person/' });
       expect(result.mode).toBe('resent');
       expect(mockUpdateDocument).toHaveBeenCalledWith('database', 'linkedin_requests', 'withdrawn-request',
-        expect.objectContaining({ agentId: 'agent-2', status: 'sent', isActive: true,
+        expect.objectContaining({ agentId: 'agent-2', status: 'sent', isActive: true, leadId: null,
           targetUrl: 'https://www.linkedin.com/in/person' }), expect.any(Array));
     });
 

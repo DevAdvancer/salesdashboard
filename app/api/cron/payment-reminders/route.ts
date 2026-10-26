@@ -8,6 +8,8 @@ import { getTodayEst } from "@/lib/utils/est-date";
 import { isWorkingDateKey } from "@/lib/utils/holiday-calendar";
 import type { LeadData, PaymentStatus } from "@/lib/types";
 import { isCurrentPaymentCycle } from '@/lib/utils/lead-payment-cycle';
+import { loadPaymentReminderActivity } from '@/lib/server/payment-reminder-activity';
+import { activityTimestamp } from '@/lib/utils/payment-reminder-activity';
 
 function getAuthorizationToken(request: NextRequest) {
   const header = request.headers.get("authorization");
@@ -45,6 +47,7 @@ export async function GET(request: NextRequest) {
   }
 
   const { databases } = await createAdminClient();
+  const reads = databases.uncachedReads ?? databases;
   const todayKey = getTodayEst();
   const holidays = await listHolidayDateKeys({ databases, from: todayKey, to: todayKey });
   if (!isWorkingDateKey(todayKey, holidays)) {
@@ -62,10 +65,13 @@ export async function GET(request: NextRequest) {
   ]);
   const adminIds = admins.documents.map((doc: any) => doc.$id as string);
 
-  const paymentDocs = await databases.listDocuments(DATABASE_ID, COLLECTIONS.CLIENT_PAYMENTS, [
+  const paymentDocs = await reads.listDocuments(DATABASE_ID, COLLECTIONS.CLIENT_PAYMENTS, [
     Query.lessThanEqual("createdAt", thresholdIso),
     Query.limit(5000),
   ]);
+  const candidates = paymentDocs.documents.filter(doc =>
+    !['fully_paid', 'refunded', 'non_upfront'].includes(doc.status as string));
+  const activityByPayment = await loadPaymentReminderActivity(databases, candidates, now);
 
   let evaluated = 0;
   let remindersSent = 0;
@@ -76,20 +82,20 @@ export async function GET(request: NextRequest) {
     const status = (paymentDoc.status as PaymentStatus) ?? "not_paid";
     if (status === "fully_paid" || status === "refunded" || status === "non_upfront") continue;
 
-    const lastActivityAtRaw = paymentDoc.updatedAt ?? paymentDoc.createdAt;
-    const lastActivityAt = typeof lastActivityAtRaw === "string" ? lastActivityAtRaw : paymentDoc.createdAt;
-    if (typeof lastActivityAt !== "string") continue;
-    if (lastActivityAt > thresholdIso) continue;
+    const lastActivityAt = activityByPayment.get(paymentDoc.$id);
+    if (!lastActivityAt || Date.parse(lastActivityAt) > Date.parse(thresholdIso)) continue;
 
     const lastReminderAt = typeof paymentDoc.lastReminderAt === "string" ? paymentDoc.lastReminderAt : null;
-    if (lastReminderAt && lastReminderAt >= lastActivityAt) continue;
+    // A legacy false alert sent before this activity became stale must not
+    // suppress the first genuinely overdue reminder for the new window.
+    if (lastReminderAt && (activityTimestamp(lastReminderAt) ?? 0) >= Date.parse(lastActivityAt) + staleMs) continue;
 
     const leadId = paymentDoc.leadId as string | undefined;
     if (!leadId) continue;
 
     let lead: any = null;
     try {
-      lead = await databases.getDocument(DATABASE_ID, COLLECTIONS.LEADS, leadId);
+      lead = await reads.getDocument(DATABASE_ID, COLLECTIONS.LEADS, leadId);
     } catch {
       continue;
     }

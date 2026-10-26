@@ -1,6 +1,8 @@
 export {};
+import fc from 'fast-check';
 
 const mockAssertAuthenticatedUserId = jest.fn();
+const mockGetAuthenticatedUserDoc = jest.fn();
 const mockCreateAdminClient = jest.fn();
 const mockListDocuments = jest.fn();
 const mockGetDocument = jest.fn();
@@ -11,6 +13,7 @@ const mockGetDepartmentScopedUserIds = jest.fn();
 
 jest.mock('@/lib/server/current-user', () => ({
   assertAuthenticatedUserId: (...args: unknown[]) => mockAssertAuthenticatedUserId(...args),
+  getAuthenticatedUserDoc: () => mockGetAuthenticatedUserDoc(),
 }));
 
 jest.mock('@/lib/server/appwrite', () => ({
@@ -20,6 +23,10 @@ jest.mock('@/lib/server/appwrite', () => ({
 jest.mock('@/lib/server/department-user-cache', () => ({
   getDepartmentScopedUserIds: (...args: unknown[]) =>
     mockGetDepartmentScopedUserIds(...args),
+}));
+
+jest.mock('@/lib/server/linkedin-lead-protection', () => ({
+  findLeadsForLinkedinProfile: jest.fn().mockResolvedValue([]),
 }));
 
 jest.mock('@/lib/server/notifications', () => ({
@@ -83,6 +90,7 @@ describe('lead server action authorization', () => {
     mockAssertAuthenticatedUserId.mockResolvedValue({ $id: 'viewer-1' });
     mockCreateAdminClient.mockResolvedValue({
       databases: {
+        clearReadCacheForCollection: jest.fn(),
         listDocuments: mockListDocuments,
         getDocument: mockGetDocument,
         updateDocument: mockUpdateDocument,
@@ -124,6 +132,35 @@ describe('lead server action authorization', () => {
 
   afterEach(() => {
     consoleErrorSpy.mockRestore();
+  });
+
+  it('allows scoped TL and leadership history on both open and closed leads', async () => {
+    const { getLinkedinLeadHistoryAction } = await import('@/app/actions/linkedin/lead-history');
+    await fc.assert(fc.asyncProperty(
+      fc.constantFrom('team_lead', 'senior_tl', 'admin', 'developer', 'monitor', 'operations'),
+      fc.boolean(), fc.constantFrom('Interested', 'Not Interested', 'Backed Out'),
+      async (role, isClosed, status) => {
+        const viewer = { $id: 'viewer-1', role, department: 'sales', isActive: true };
+        mockGetAuthenticatedUserDoc.mockResolvedValue(viewer);
+        mockGetDocument.mockImplementation((_db, collection) => Promise.resolve(collection === 'users' ? viewer : {
+          $id: 'lead-1', ownerId: 'old-agent', assignedToId: 'viewer-1', data: '{}', isClosed, status,
+        }));
+        mockListDocuments.mockResolvedValue({ documents: [] });
+        await expect(getLinkedinLeadHistoryAction({ leadId: 'lead-1' })).resolves.toEqual({ rows: [], next: null });
+      }));
+  });
+
+  it('keeps unrelated TLs outside lead history regardless of closure status', async () => {
+    const { getLinkedinLeadHistoryAction } = await import('@/app/actions/linkedin/lead-history');
+    await fc.assert(fc.asyncProperty(fc.boolean(), async isClosed => {
+      const viewer = { $id: 'viewer-1', role: 'team_lead', department: 'sales', isActive: true };
+      mockGetAuthenticatedUserDoc.mockResolvedValue(viewer);
+      mockGetDocument.mockImplementation((_db, collection) => Promise.resolve(collection === 'users' ? viewer : {
+        $id: 'lead-1', ownerId: 'other-agent', assignedToId: 'other-tl', data: '{}', isClosed,
+      }));
+      mockListDocuments.mockResolvedValue({ documents: [] });
+      await expect(getLinkedinLeadHistoryAction({ leadId: 'lead-1' })).rejects.toThrow('Permission denied');
+    }));
   });
 
   it('uses the persisted user role instead of the browser supplied role when listing leads', async () => {
@@ -1354,6 +1391,42 @@ describe('lead server action authorization', () => {
     );
   });
 
+  it('reuses the same profile with new contact data, retires old outreach, and starts a new payment cycle', async () => {
+    const profile = 'https://linkedin.com/in/reused-person';
+    const oldLead = { $id: 'lead-old', $updatedAt: 'before', status: 'Not Interested',
+      ownerId: 'old-owner', assignedToId: null, isClosed: true, closedAt: 'before',
+      data: JSON.stringify({ firstName: 'Previous', email: 'old@example.com', phone: '5551112222',
+        linkedinProfileUrl: profile, linkedinRequestId: 'old-request', creatorId: 'original',
+        company: 'Old Company', closedById: 'old-owner', paymentCycleId: 'previous-cycle' }) };
+    mockGetDocument.mockImplementation((_db, collection, id) => Promise.resolve(
+      collection === 'users' ? { $id: id, name: id, role: 'agent', department: 'sales' }
+        : id === 'lead-old' ? oldLead
+        : { $id: id, targetUrl: profile, agentId: id === 'new-request' ? 'agent-2' : 'old-owner',
+          status: 'accepted', leadId: null }));
+    const { findLeadsForLinkedinProfile } = await import('@/lib/server/linkedin-lead-protection');
+    (findLeadsForLinkedinProfile as jest.Mock).mockResolvedValueOnce([oldLead]);
+    mockListDocuments.mockResolvedValue({ documents: [] });
+    mockUpdateDocument.mockImplementation(async (_db, collection, id, patch) =>
+      collection === 'leads' ? { ...oldLead, ...patch } : { $id: id, ...patch });
+    const { createLeadAction } = await import('@/app/actions/lead/mutations');
+    const saved = await createLeadAction('agent-2', { status: 'Generated', branchId: 'branch-new',
+      data: { firstName: 'Fresh', email: 'fresh@example.com', phone: '5559998888',
+        linkedinProfileUrl: profile, linkedinRequestId: 'new-request' } }, 'agent-2', 'Agent Two');
+    expect(saved).toMatchObject({ $id: 'lead-old', ownerId: 'agent-2', isClosed: false,
+      closedAt: null, nextFollowUpAt: null, nextAction: null, status: 'Generated' });
+    const data = JSON.parse(saved.data);
+    expect(data).toMatchObject({ email: 'fresh@example.com', phone: '5559998888',
+      linkedinRequestId: 'new-request', creatorId: 'original',
+      lifecycleHistory: [expect.objectContaining({ type: 'reopened', actorId: 'agent-2' })] });
+    expect(data).not.toHaveProperty('closedById');
+    expect(data).not.toHaveProperty('company');
+    expect(data.paymentCycleId).not.toBe('previous-cycle');
+    expect(mockUpdateDocument).toHaveBeenCalledWith('database', 'linkedin_requests', 'old-request',
+      { status: 'withdrawn', isActive: false, withdrawnAt: expect.any(String) });
+    expect(mockUpdateDocument.mock.calls.some(([, collection, id]) => collection === 'linkedin_requests' && id === 'new-request')).toBe(false);
+    expect(mockCreateDocument.mock.calls.some(([, collection]) => collection === 'leads')).toBe(false);
+  });
+
   it('rejects blank required lead fields before updating', async () => {
     mockGetDocument
       .mockResolvedValueOnce({
@@ -1540,9 +1613,9 @@ describe('lead server action authorization', () => {
       })
       .mockResolvedValueOnce({
         $id: 'linkedin-request-1',
-        status: 'sent',
-        isActive: true,
-        leadId: null,
+        status: 'withdrawn',
+        isActive: false,
+        leadId: 'lead-1',
       });
 
     const { notInterestedLeadAction } = await import('@/lib/actions/lead/status');
@@ -1572,11 +1645,9 @@ describe('lead server action authorization', () => {
       'linkedin_requests',
       'linkedin-request-1',
       expect.objectContaining({
-        status: 'sent',
-        isActive: true,
-        leadId: null,
-        acceptedAt: null,
-        withdrawnAt: null,
+        status: 'withdrawn',
+        isActive: false,
+        withdrawnAt: expect.any(String),
       }),
     );
   });

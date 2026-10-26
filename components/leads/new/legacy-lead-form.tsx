@@ -249,7 +249,7 @@ export function LegacyNewLeadContent() {
 
       // Validate lead uniqueness before creating
       const validation = await validateLeadUniqueness(data);
-      if (!validation.isValid) {
+      if (!validation.isValid && !validation.canReuse) {
         const fieldLabel =
           validation.duplicateField === "email"
             ? "email address"

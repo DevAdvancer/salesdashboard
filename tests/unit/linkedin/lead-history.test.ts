@@ -76,3 +76,39 @@ it('writes server-owned actor and status history atomically with the lead and ig
     else process.env.CRM_LEAD_HISTORY_SNAPSHOT = originalFlag;
   }
 });
+
+it('preserves the archive and inline history when a released lead changes hands and data', async () => {
+  const originalFlag = process.env.CRM_LEAD_HISTORY_SNAPSHOT;
+  process.env.CRM_LEAD_HISTORY_SNAPSHOT = 'true';
+  try {
+    const previous = { id: 'previous', actorId: 'old-agent', actorName: 'Old Agent', occurredAt: 'before',
+      eventType: 'LEAD_UPDATE', changes: { status: { from: 'Interested', to: 'Not Interested' } } };
+    const url = 'https://linkedin.com/in/person';
+    const before = { $id: 'lead', $updatedAt: 'before', status: 'Not Interested', ownerId: 'old-agent',
+      data: JSON.stringify({ linkedinProfileUrl: url, email: 'old@example.com' }), history: JSON.stringify([previous]) };
+    const archive: any[] = [];
+    const raw = { getDocument: jest.fn(async (_db, collection, id) => {
+      if (collection === COLLECTIONS.LEADS) return before;
+      if (id.startsWith('p_')) return { leadId: 'lead' };
+      throw { code: 404 };
+    }), listDocuments: jest.fn().mockResolvedValue({ documents: [] }),
+      createDocument: jest.fn(async (_db, collection, id, data) => {
+        if (collection === COLLECTIONS.LEAD_HISTORY) archive.push(data);
+        return { $id: id, ...data };
+      }), deleteDocument: jest.fn(),
+      updateDocument: jest.fn(async (_db, _collection, _id, patch) => ({ ...before, ...patch, $updatedAt: 'after' })),
+    } as unknown as Databases;
+    const saved = await withLeadHistory(raw, async () => ({ id: 'new-agent', name: 'New Agent' }))
+      .updateDocument(DATABASE_ID, COLLECTIONS.LEADS, 'lead', { status: 'Generated', ownerId: 'new-agent',
+        data: JSON.stringify({ linkedinProfileUrl: url, email: 'new@example.com' }) });
+    expect(JSON.parse(saved.history)[0]).toEqual(previous);
+    expect(archive.map(row => row.eventType)).toEqual(['LEAD_UPDATE_ATTEMPT', 'LEAD_UPDATE']);
+    expect(JSON.parse(archive[1].payload).changes).toMatchObject({
+      ownerId: { from: 'old-agent', to: 'new-agent' },
+      'data.email': { from: 'old@example.com', to: 'new@example.com' },
+    });
+  } finally {
+    if (originalFlag === undefined) delete process.env.CRM_LEAD_HISTORY_SNAPSHOT;
+    else process.env.CRM_LEAD_HISTORY_SNAPSHOT = originalFlag;
+  }
+});

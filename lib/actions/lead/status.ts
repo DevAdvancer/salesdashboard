@@ -4,11 +4,12 @@ import { createAdminClient } from '@/lib/server/appwrite';
 import { createNotificationsForRecipients } from '@/lib/server/notifications';
 import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { Permission, Role, ID, Query } from 'node-appwrite';
-import { Lead, LinkedinRequest, User } from '@/lib/types';
+import { Lead, User } from '@/lib/types';
 import { assertAuthenticatedUserId } from '@/lib/server/current-user';
 import { assertLeadAccessAllowed, getHierarchyPermissionsServer } from './visibility';
-import { getUnassignedOwnerId, getLeadLinkedinRequestId, resolveBranchIdForEvent, getLeadDisplayName } from './utils';
+import { getUnassignedOwnerId, resolveBranchIdForEvent, getLeadDisplayName } from './utils';
 import { logger } from '@/lib/utils/logger';
+import { withdrawLeadRequests } from '@/lib/server/lead-request-release';
 import { recordLeadLifecycleEvent } from '@/lib/utils/lead-payment-cycle';
 
 type AdminDatabases = Awaited<ReturnType<typeof createAdminClient>>['databases'];
@@ -21,89 +22,28 @@ async function syncLinkedinRequestAfterLeadClosure(
     databases: AdminDatabases,
     occurredAt: string,
 ) {
-    const requestId = getLeadLinkedinRequestId(lead);
-    if (!requestId) return;
-
     try {
-        const request = await databases.getDocument(
-            DATABASE_ID,
-            COLLECTIONS.LINKEDIN_REQUESTS,
-            requestId,
-        ) as unknown as LinkedinRequest;
-
-        if (outcome === 'Not Interested') {
-            await databases.updateDocument(
-                DATABASE_ID,
-                COLLECTIONS.LINKEDIN_REQUESTS,
-                requestId,
-                {
-                    status: 'sent',
-                    isActive: true,
-                    leadId: null,
-                    acceptedAt: null,
-                    withdrawnAt: null,
-                },
-            );
-
+        const withdrawn = await withdrawLeadRequests(databases, lead, occurredAt);
+        for (const request of withdrawn) {
             await databases.createDocument(DATABASE_ID, "", ID.unique(), {
-                action: 'LINKEDIN_REQUEST_REOPEN',
-                actorId,
-                actorName,
-                targetId: requestId,
-                targetType: 'linkedin_request',
-                metadata: JSON.stringify({
-                    leadId: lead.$id,
-                    targetUrl: request.targetUrl,
-                    company: request.company,
-                    reason: `Lead marked as ${outcome}`,
-                    reopenedAt: occurredAt,
-                    source: 'lead_status_sync',
-                }),
-                createdAt: occurredAt,
+                action: 'LINKEDIN_REQUEST_WITHDRAW', actorId, actorName,
+                targetId: request.$id, targetType: 'linkedin_request', createdAt: occurredAt,
+                metadata: JSON.stringify({ leadId: lead.$id, targetUrl: request.targetUrl,
+                    company: request.company, reason: `Lead marked as ${outcome}`,
+                    withdrawnAt: occurredAt, source: 'lead_status_sync' }),
             });
-
-            try {
-                await databases.createDocument(DATABASE_ID, COLLECTIONS.CHAT_MESSAGES, ID.unique(), {
-                    channel: 'general',
-                    body: `Linkedin URL available again: ${request.targetUrl} (${request.company}) lead was marked as Not Interested by ${actorName}. Another agent can try this URL.`,
-                    createdById: actorId,
-                    createdByName: actorName,
-                    createdAt: occurredAt,
-                });
-            } catch {}
-
-            return;
+            if (outcome === 'Not Interested') {
+                try {
+                    await databases.createDocument(DATABASE_ID, COLLECTIONS.CHAT_MESSAGES, ID.unique(), {
+                        channel: 'general',
+                        body: `Linkedin URL available again: ${request.targetUrl} (${request.company}) lead was marked as Not Interested by ${actorName}. Another agent can try this URL.`,
+                        createdById: actorId, createdByName: actorName, createdAt: occurredAt,
+                    });
+                } catch {}
+            }
         }
-
-        await databases.updateDocument(
-            DATABASE_ID,
-            COLLECTIONS.LINKEDIN_REQUESTS,
-            requestId,
-            {
-                status: 'withdrawn',
-                isActive: false,
-                withdrawnAt: occurredAt,
-            },
-        );
-
-        await databases.createDocument(DATABASE_ID, "", ID.unique(), {
-            action: 'LINKEDIN_REQUEST_WITHDRAW',
-            actorId,
-            actorName,
-            targetId: requestId,
-            targetType: 'linkedin_request',
-            metadata: JSON.stringify({
-                leadId: lead.$id,
-                targetUrl: request.targetUrl,
-                company: request.company,
-                reason: `Lead marked as ${outcome}`,
-                withdrawnAt: occurredAt,
-                source: 'lead_status_sync',
-            }),
-            createdAt: occurredAt,
-        });
     } catch (error) {
-        logger.error(`Failed to sync Linkedin request for lead ${lead.$id}:`, error);
+        logger.error(`Failed to withdraw Linkedin requests for lead ${lead.$id}:`, error);
     }
 }
 
