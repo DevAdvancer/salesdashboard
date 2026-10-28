@@ -1,7 +1,7 @@
 "use server";
 import { ID, Permission, Query, Role } from "node-appwrite";
 import { revalidatePath } from "next/cache";
-import { attendanceExempt, attendanceGateApplies } from '@/lib/utils/crm-access-policy';
+import { attendanceExempt, attendanceSelfMarkOpen } from '@/lib/utils/crm-access-policy';
 import { createAdminClient } from "@/lib/server/appwrite";
 import { assertAuthenticatedUserId, getAuthenticatedUserDoc } from "@/lib/server/current-user";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
@@ -22,7 +22,7 @@ export async function markAttendancePresenceAction(input: {
 
     const now = new Date();
     const dateKey = getEtDateKey(now);
-    const shouldAutoMarkPresent = !attendanceGateApplies(now);
+    const shouldAutoMarkPresent = attendanceSelfMarkOpen(now);
     let marked = false;
     const appwriteEndpointRaw = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT ?? "";
     const appwriteEndpoint = appwriteEndpointRaw.endsWith("/")
@@ -99,7 +99,7 @@ export async function getMyAttendanceToggleStateAction(input: {
 
     const now = new Date();
     const dateKey = getEtDateKey(now);
-    const windowStatus = attendanceGateApplies(now) ? "closed" as const : "open" as const;
+    const windowStatus = attendanceSelfMarkOpen(now) ? "open" as const : "closed" as const;
     const { databases } = await createAdminClient();
     const existing = await getAttendanceDoc(databases, { dateKey, userId: user.$id });
     const present = existing?.present === true;
@@ -120,8 +120,8 @@ export async function markMyselfPresentAction(input: { currentUserId: string }) 
 
     const now = new Date();
     const dateKey = getEtDateKey(now);
-    if (attendanceGateApplies(now)) {
-    throw new Error("You can only mark yourself present before 10 AM Eastern time");
+    if (!attendanceSelfMarkOpen(now)) {
+    throw new Error("You can only mark yourself present before 10 AM Eastern time, Monday-Friday");
     }
 
     const { databases } = await createAdminClient();

@@ -22,9 +22,6 @@ async function postAccess(body: Record<string, unknown>) {
   }, 30_000, 'Access verification took too long. Please retry.');
 }
 
-/** Background re-check cadence once access is allowed (see the interval below). */
-const ALLOWED_RECHECK_MS = 5 * 60 * 1000;
-
 export function CrmSecurityGate({ children }: { children: React.ReactNode }) {
   const { user, loading, serverSessionReady, initialAccess, activeDashboard, logout, recoverServerSession,
     sessionRestoreError, retrySessionRestore } = useAuth();
@@ -115,19 +112,16 @@ export function CrmSecurityGate({ children }: { children: React.ReactNode }) {
       lastCheckedAt.current = Date.now();
     }
     else void refresh();
-    const focused = () => { if (Date.now() - lastCheckedAt.current >= 30_000) void refresh(); };
+    const focused = () => { if (!allowedRef.current && Date.now() - lastCheckedAt.current >= 30_000) void refresh(); };
     const forced = () => void refresh();
     window.addEventListener('focus', focused);
     window.addEventListener('crm-access-recheck', forced);
-    // The clock still ticks every minute. While someone is waiting (OTP, attendance,
-    // cover approval) the status is re-checked every minute so approval lets them in
-    // promptly. Once access is allowed the background re-check runs every 5 minutes:
-    // the server enforces access on every request, the live change stream dispatches
-    // crm-access-recheck as soon as access is lost, and focus, recheckAt and explicit
-    // rechecks still refresh immediately.
+    // This local clock makes no requests for an allowed user. Their only scheduled
+    // attendance review is recheckAt (10 AM weekdays); real requests still authorize
+    // fresh. Waiting users poll for cover approval, and blocked reads force recheck.
     const interval = window.setInterval(() => {
       setClock(Date.now());
-      if (document.visibilityState === 'visible' && (!allowedRef.current || Date.now() - lastCheckedAt.current >= ALLOWED_RECHECK_MS)) void refresh();
+      if (document.visibilityState === 'visible' && !allowedRef.current) void refresh();
     }, 60_000);
     return () => { generation.current = effectGeneration + 1; pendingRefresh.current = null; window.removeEventListener('focus', focused); window.removeEventListener('crm-access-recheck', forced); window.clearInterval(interval); };
   }, [refresh, userId, serverSessionReady]);

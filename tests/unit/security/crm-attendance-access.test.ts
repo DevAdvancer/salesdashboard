@@ -83,6 +83,14 @@ it('allows present users and rejects attendance belonging to another day', async
   records.get('attendance:absent').dateKey = '2026-10-21';
   expect(await evaluateCrmAccess(identity)).toMatchObject({ state: 'attendance_required', canVerifyDelegate: false });
 });
+it.each(['2026-10-31T16:00:00Z', '2026-11-01T17:00:00Z'])('skips weekend attendance reads but still requires OTP at %s', async now => {
+  jest.setSystemTime(new Date(now));
+  identity.proof = signProof({ userId: 'absent', sessionId: 'session', expiresAt: Date.now() + 3_600_000 });
+  expect(await evaluateCrmAccess(identity)).toMatchObject({ state: 'allowed', recheckAt: '2026-11-02T15:00:00.000Z' });
+  expect(mockDb.listDocuments).not.toHaveBeenCalled();
+  identity.proof = undefined;
+  expect(await evaluateCrmAccess(identity)).toMatchObject({ state: 'otp_required' });
+});
 it('requires verified assigned cover and a separate manager approval', async () => {
   setAttendance('absent', false, 'cover'); setAttendance('cover', true);
   expect(await evaluateCrmAccess(identity)).toMatchObject({ state: 'attendance_required', canVerifyDelegate: true });

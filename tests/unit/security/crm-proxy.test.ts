@@ -44,11 +44,18 @@ it('forwards a fresh signed pass to the handler of an approved request', async (
   expect(forwardedHeaders().get('x-crm-access-pass')).toBe('signed-pass');
 });
 it('strips a browser-supplied pass on public and bypassed paths', async () => {
-  for (const path of ['/login', '/api/security/access', '/api/cron/security-cleanup']) {
+  for (const path of ['/login', '/api/security/access', '/api/security/changes', '/api/cron/security-cleanup']) {
     await proxy(request(path, 'GET', false, { 'x-crm-access-pass': 'forged' }));
     expect(forwardedHeaders().get('x-crm-access-pass')).toBeNull();
   }
   (crmAccessEnabled as jest.Mock).mockReturnValue(false);
   await proxy(request('/api/leads/list', 'GET', false, { 'x-crm-access-pass': 'forged' }));
   expect(forwardedHeaders().get('x-crm-access-pass')).toBeNull();
+});
+it('lets only the changes GET authorize in its handler while other methods still pass the proxy gate', async () => {
+  expect(await proxy(request('/api/security/changes', 'GET'))).toEqual({ allowed: true });
+  expect(assertCrmAccess).not.toHaveBeenCalled();
+  (assertCrmAccess as jest.Mock).mockRejectedValue(new CrmAccessError(403, 'Verify your email', 'otp_required'));
+  expect(await proxy(request('/api/security/changes', 'POST'))).toMatchObject({ options: { status: 403 } });
+  expect(await proxy(request('/api/security/changes', 'POST', true))).toMatchObject({ options: { status: 403 } });
 });

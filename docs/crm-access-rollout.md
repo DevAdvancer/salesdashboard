@@ -15,9 +15,10 @@ after visible data has loaded. Flag summaries query only flagged rows once for
 the combined week/month range. Generation checks discard old selection responses.
 The attendance mutation actions remain outside that shared read context.
 
-October 23 update: all attendance-required roles can access CRM after email OTP
-before 10 AM New York time and mark themselves present. At 10 AM the server
-requires today's attendance or approved cover. A bootstrap cutoff timestamp
+October 28 update: all attendance-required roles can access CRM after email OTP
+before 10 AM New York time on Monday-Friday and mark themselves present. From 10 AM
+on weekdays the server requires today's attendance or approved cover. Weekends
+do not require attendance; login OTP is still required every day. A bootstrap cutoff timestamp
 prompts the browser to recheck at the boundary; browser time never authorizes
 server access. Exempt roles remain Admin, Developer, Monitor and Operations.
 
@@ -25,14 +26,16 @@ After an idle tab's 15-minute server JWT expires, the security gate now forces a
 shared JWT rotation from the existing native Appwrite session and retries before
 blocking. Successful background rechecks do not unmount CRM providers. An actual
 native-session expiry shows an explicit sign-in action; repeated outages still
-fail closed after one silent retry. Checks are deduplicated, run every minute
-while visible, and suppress repeated focus checks within 30 seconds.
+fail closed after one silent retry. Checks are deduplicated. Waiting users recheck
+once a minute while visible; allowed users have no five-minute or focus access
+poll. Their next scheduled review is 10 AM on the next weekday. Explicit rechecks
+and access failures still refresh immediately.
 
 Every CRM login, including Admin, Developer, Monitor and Operations, requires a code sent and validated by Appwrite's native Email OTP APIs using the configured project SMTP. The Google transporter is not imported by this flow. Other existing notification emails are unchanged. Before sending, the server verifies that the native authentication account is active and its email matches the CRM record, so the token endpoint cannot silently register or target another account.
 
 Native OTP verification creates a temporary Appwrite session. The server deletes that session before issuing an HttpOnly signed proof bound to the original CRM login session, for at most twelve hours or the native session expiry. The native token secret is never returned or stored by the CRM. Challenges expire within ten minutes, permit five attempts, and have durable resend/hourly limits and an atomic consumption claim. A provider/cleanup failure never unlocks access. This is password plus email verification enforced by the CRM gateway, rather than automatic enrollment in Appwrite's native MFA feature.
 
-Admin, Developer, Monitor and Operations are exempt from attendance. All other roles require today's Eastern-date attendance. An absent/unmarked account without assigned cover only shows instructions to ask its TL or manager to mark attendance or assign cover; it never shows a name input.
+Admin, Developer, Monitor and Operations are exempt from attendance. All other roles require today's Eastern-date attendance from 10 AM on weekdays. An absent/unmarked account without assigned cover only shows instructions to ask its TL or manager to mark attendance or assign cover; it never shows a name input.
 
 With assigned cover, the person's name must match the assignment, and a second Appwrite OTP goes to their registered email. Verification submits a pending request. A separate authorized TL/manager, Admin, Developer or Operations user approves in Attendance -> CRM access approvals. Monitor cannot approve; neither the absent account nor its effective cover actor can approve their own request. The CRM access approvals panel only approves or revokes assigned-cover access. It has no mark-present control or mark-present API operation; existing attendance and delegate-assignment controls remain in their original workflow.
 
@@ -40,11 +43,11 @@ Cover approval is bound to the absent account's session, current assignment time
 
 ## Data access and uploads
 
-Pages, API routes, server actions, mail routes, browser CRUD and change subscriptions pass through server access checks. The browser gate mounts before access and notification providers, checks on focus and every thirty seconds, and does not mount CRM data providers while blocked. Outlook authentication remains independent; this controls CRM use of mail routes, not Microsoft's separate mailbox sessions.
+Pages, API routes, server actions, mail routes, browser CRUD and change subscriptions pass through server access checks. The browser gate mounts before access and notification providers, reviews attendance at 10 AM on weekdays, rechecks waiting users once a minute while visible, and does not mount CRM data providers while blocked. Outlook authentication remains independent; this controls CRM use of mail routes, not Microsoft's separate mailbox sessions.
 
 The public referral form keeps its dedicated, validated intake-only POST endpoint; it does not exempt general server actions or allow CRM reads. Shared lookup services invoked by server actions use authenticated in-process reads rather than HTTP calls to localhost. Scheduled LinkedIn withdrawals supply an explicit system audit actor after cron-secret validation. The browser Account SDK still authenticates directly with Appwrite. Database and resume requests go through `/api/appwrite/...`; only an authenticated user's own safe profile can be read before OTP for the login screen. Lists, other profiles, changes and files require CRM access. Generic browser lead reads are restricted to leadership; normal users use the existing scoped lead actions. The gateway preserves department boundaries and excludes private user preferences from other users' profiles. Mutations use existing authorized server actions; branch management is Admin/Developer only.
 
-Native browser realtime is replaced with gated change events. Notification bodies are recipient-scoped and chat bodies department-scoped. Other collections emit refresh metadata. Connections recheck access every ten seconds and reconnect within one minute. The polling interval can coalesce multiple changes; list data remains authoritative.
+Native browser realtime is replaced with gated change events. Notification bodies are recipient-scoped and chat bodies department-scoped. Other collections emit refresh metadata. A single browser request batches all subscribed collections once a minute while visible and returns immediately after its reads. There is no server-side interval or sleeping stream. Every snapshot authorizes fresh before reading any marker cache. Chat/notification updates may take about one minute plus request latency; cached list-change markers can take up to about two minutes; the polling interval can coalesce multiple changes and list data remains authoritative. Hidden tabs stop and catch up when visible. Failed requests back off to at most four minutes and reset after success. Legacy EventSource tabs receive a finite SSE snapshot with a 60-second retry hint, so they also release function memory between reads. No chat or notification bodies or access decisions are cached.
 
 Resume reads/deletes also check per-file ownership/read permissions and role restrictions. Browser uploads use parts no larger than 2 MiB. Appwrite rejects these as native Content-Range chunks, so each part is temporarily stored server-only and the server assembles the final file using Appwrite's supported SDK upload. Server-selected permissions replace caller permissions. Incomplete parts expire after one hour and the daily cleanup cron removes them. Maximum assembled file size is 20 MiB.
 
@@ -131,9 +134,22 @@ reads). To avoid repeating that work without caching decisions across requests:
   session and Eastern date. Any browser-supplied copy is stripped by the proxy and would
   fail signature verification anyway. Status endpoints (`/api/security/access`,
   `/api/auth/appwrite-session`) bypass the proxy and always evaluate fresh.
-- **Live change stream.** Access is verified when each stream connects (about once a
-  minute), not on every 10-second tick. A revoked user's open stream ends within about a
-  minute; every page, data read and action is still checked on its own request.
+  The exact GET `/api/security/changes` also authorizes in its own handler before
+  any marker read, avoiding two native session validations per snapshot. This
+  exception does not cover other methods, subpaths or server action requests;
+  the proxy still strips browser-supplied access passes on this path.
+- **Finite change snapshots.** One short, freshly authorized request per visible tab
+  per minute batches all subscriptions. All channel reads run concurrently. Markers
+  without bodies may share a bounded 60-second cache after scope resolution; chat
+  and notification bodies remain fresh and uncached. No function waits between polls.
+  Legacy EventSource clients also receive a finite response with a 60-second retry.
+  A temporary JWT denial pauses polling without erasing the mounted subscribers'
+  version baseline, so changes made during silent recovery still trigger refresh.
+  The baseline is cleared when the final subscriber unmounts on sign-out.
 - **Gate re-checks.** The browser gate re-checks every minute while waiting for OTP,
-  attendance or cover approval, and every 5 minutes once allowed. Focus, `recheckAt` and
-  the stream's `crm-access-recheck` signal still refresh immediately.
+  attendance or cover approval. Allowed users have one scheduled review at 10 AM on
+  the next weekday, with no five-minute or focus polling. Every real read/write still
+  verifies fresh access, and `crm-access-recheck` refreshes immediately after a denial.
+  This is a review schedule, not a cached daily authorization grant. Performance CPU
+  and the Vercel deployment settings are unchanged. Compare actual post-deploy GB-hours,
+  active CPU, invocations and latency before claiming a billing reduction.

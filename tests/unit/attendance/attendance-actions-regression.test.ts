@@ -74,7 +74,7 @@ describe('attendance server actions', () => {
       await expect(markMyselfPresentAction({ currentUserId: 'admin-1' })).rejects.toThrow('Unauthorized');
     });
 
-    it('throws if outside of 9-10 ET window', async () => {
+    it('throws if at or after the weekday 10 AM ET cutoff', async () => {
       jest.useFakeTimers();
       // July 27, 2026, 11:00 AM EDT -> 15:00:00Z
       jest.setSystemTime(new Date('2026-07-27T15:00:00Z'));
@@ -87,7 +87,7 @@ describe('attendance server actions', () => {
       await expect(markMyselfPresentAction({ currentUserId: 'agent-1' })).rejects.toThrow('before 10 AM Eastern');
     });
 
-    it('allows marking present between 9-10 ET', async () => {
+    it('allows marking present before 10 AM ET', async () => {
       jest.useFakeTimers();
       // July 27, 2026, 09:30 AM EDT -> 13:30:00Z
       jest.setSystemTime(new Date('2026-07-27T13:30:00Z'));

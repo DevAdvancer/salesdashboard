@@ -5,7 +5,7 @@ import { cookies, headers } from 'next/headers';
 import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import type { AttendanceRecord, User } from '@/lib/types';
 import { getTodayEst } from '@/lib/utils/est-date';
-import { attendanceExempt, attendanceGateApplies, attendanceGateStartsAt, canApproveCrmAccess, normalizeVerificationName } from '@/lib/utils/crm-access-policy';
+import { attendanceExempt, attendanceGateApplies, nextAttendanceReviewAt, canApproveCrmAccess, normalizeVerificationName } from '@/lib/utils/crm-access-policy';
 import { consumeEmailOtp, CRM_PROOF_COOKIE, issueEmailOtp, readAccessPass, signAccessPass, validProof } from '@/lib/server/crm-security-store';
 import { listAllDocuments } from '@/lib/server/appwrite-pagination';
 import { createHash } from 'node:crypto';
@@ -136,10 +136,11 @@ async function readCrmAccessStatus(identity: SecurityIdentity): Promise<CrmAcces
   // Eastern date). Reuse that decision, including any approved-cover attribution.
   if (identity.preverified?.state === 'allowed' && identity.preverified.dateKey === dateKey) return identity.preverified;
   if (attendanceExempt(identity.user.role)) return { state: 'allowed', dateKey };
-  if (!attendanceGateApplies()) return { state: 'allowed', dateKey, recheckAt: attendanceGateStartsAt() };
+  const recheckAt = nextAttendanceReviewAt();
+  if (!attendanceGateApplies()) return { state: 'allowed', dateKey, recheckAt };
   const db = securityDatabase();
   const attendance = await attendanceFor(identity.user.$id, db, dateKey);
-  if (attendance?.present === true) return { state: 'allowed', dateKey };
+  if (attendance?.present === true) return { state: 'allowed', dateKey, recheckAt };
   const assigned = await assignedDelegate(identity, db, attendance);
   if (!assigned) return { state: 'attendance_required', dateKey, canVerifyDelegate: false };
   const rows = await db.listDocuments(DATABASE_ID, COLLECTIONS.CRM_ACCESS_REQUESTS, [
@@ -152,7 +153,7 @@ async function readCrmAccessStatus(identity: SecurityIdentity): Promise<CrmAcces
       const approver = await db.getDocument(DATABASE_ID, COLLECTIONS.USERS, data.decidedById) as unknown as User;
       const delegatePresent = attendanceExempt(assigned.delegate.role) || (await attendanceFor(row.delegateId, db, dateKey))?.present === true;
       if (canApproveCrmAccess(approver, identity.user) && delegatePresent) {
-        return { state: 'allowed', dateKey, requestId: row.$id, actingAs: assigned.delegate.name };
+        return { state: 'allowed', dateKey, requestId: row.$id, actingAs: assigned.delegate.name, recheckAt };
       }
     }
     return { state: row.state === 'denied' ? 'approval_denied' : 'approval_pending', dateKey, requestId: row.$id, canVerifyDelegate: false };

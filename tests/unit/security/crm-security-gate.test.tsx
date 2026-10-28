@@ -196,6 +196,47 @@ it('keeps verified content when an equivalent bootstrap object is refreshed', as
   expect(fetch).not.toHaveBeenCalled();
 });
 
+it('does not poll allowed users every five minutes or on focus', async () => {
+  jest.useFakeTimers().setSystemTime(new Date('2026-10-28T14:00:00Z'));
+  try {
+    mockInitialAccess = { userId: mockUser.$id, status: { state: 'allowed', dateKey: '2026-10-28', recheckAt: '2026-10-29T14:00:00.000Z' } };
+    const view = render(<CrmSecurityGate><div>Private CRM content</div></CrmSecurityGate>);
+    await act(async () => { await jest.advanceTimersByTimeAsync(30 * 60_000); fireEvent(window, new Event('focus')); });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(screen.getByText('Private CRM content')).toBeInTheDocument();
+    view.unmount();
+  } finally { jest.useRealTimers(); }
+});
+
+it('reviews once at the server weekday cutoff and then waits for the next review', async () => {
+  jest.useFakeTimers().setSystemTime(new Date('2026-10-28T13:59:00Z'));
+  try {
+    mockInitialAccess = { userId: mockUser.$id, status: { state: 'allowed', dateKey: '2026-10-28', recheckAt: '2026-10-28T14:00:00.000Z' } };
+    currentState = { state: 'allowed', dateKey: '2026-10-28', recheckAt: '2026-10-29T14:00:00.000Z' };
+    const view = render(<CrmSecurityGate><div>Private CRM content</div></CrmSecurityGate>);
+    await act(async () => { await jest.advanceTimersByTimeAsync(59_999); });
+    expect(fetch).not.toHaveBeenCalled();
+    await act(async () => { await jest.advanceTimersByTimeAsync(1); });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await act(async () => { await jest.advanceTimersByTimeAsync(30 * 60_000); });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    view.unmount();
+  } finally { jest.useRealTimers(); }
+});
+
+it('keeps polling while approval is pending so a manager approval unlocks access', async () => {
+  jest.useFakeTimers();
+  try {
+    mockInitialAccess = { userId: mockUser.$id, status: { state: 'approval_pending', dateKey: '2026-10-28' } };
+    currentState = { state: 'allowed', dateKey: '2026-10-28' };
+    const view = render(<CrmSecurityGate><div>Private CRM content</div></CrmSecurityGate>);
+    await act(async () => { await jest.advanceTimersByTimeAsync(60_000); });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Private CRM content')).toBeInTheDocument();
+    view.unmount();
+  } finally { jest.useRealTimers(); }
+});
+
 it('silently rotates an expired server JWT after an idle tab without showing the sign-in panel', async () => {
   mockInitialAccess = { userId: mockUser.$id, status: { state: 'allowed', dateKey: '2026-10-23' } };
   let unmounts = 0;
