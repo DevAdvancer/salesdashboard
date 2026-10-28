@@ -96,7 +96,7 @@ These features depend on Azure authentication and Outlook access tokens stored i
 - `node-appwrite` for privileged server-side actions
 - Azure MSAL
 - Microsoft Graph `sendMail`
-- Sentry for error monitoring
+- Error boundaries, toast notifications, and application logs for error handling
 
 ### Testing
 

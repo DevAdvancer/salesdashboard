@@ -14,9 +14,7 @@ This file is the quick reference for where the important implementation lives.
 | `tests/` | Unit, integration, and property tests |
 | `README.md` | Older project overview |
 | `SETUP.md` | Older setup guide |
-| `next.config.ts` | Next.js + Sentry config |
-| `instrumentation.ts` | Runtime Sentry registration |
-| `instrumentation-client.ts` | Browser Sentry initialization |
+| `next.config.ts` | Next.js environment flags and asset cache headers |
 | `jest.config.js` | Jest config |
 | `vitest.config.js` | Vitest config |
 | `eslint.config.mjs` | ESLint config |
@@ -66,7 +64,6 @@ This file is the quick reference for where the important implementation lives.
 | `app/signup/page.tsx` | Signup screen |
 | `app/auth-test/page.tsx` | Auth context debug page |
 | `app/test-auth/page.tsx` | Appwrite auth/db manual test page |
-| `app/sentry-example-page/page.tsx` | Sentry sample page |
 
 ### Server Actions
 
@@ -89,7 +86,6 @@ This file is the quick reference for where the important implementation lives.
 | `app/api/assessment/send-email/route.ts` | Assessment email send proxy |
 | `app/api/interview/send-email/route.ts` | Interview email send proxy |
 | `app/api/debug-config/route.ts` | Debug config endpoint |
-| `app/api/sentry-example-api/route.ts` | Sentry sample endpoint |
 
 ## `components/`
 
@@ -174,7 +170,7 @@ This file is the quick reference for where the important implementation lives.
 | `lib/actions/lead-actions.ts` | Lead action helpers |
 | `lib/types/index.ts` | Shared domain types |
 | `lib/utils/branch-visibility.ts` | Branch filtering helper |
-| `lib/utils/error-handler.ts` | Toast + Sentry error helpers |
+| `lib/utils/error-handler.ts` | Toast, retry, and error logging helpers |
 | `lib/utils/form-schema-generator.ts` | Dynamic Zod schema generation |
 | `lib/utils/form-schema-generator.README.md` | Schema generator notes |
 | `lib/utils/form-schema-generator.example.tsx` | Example usage for generator |

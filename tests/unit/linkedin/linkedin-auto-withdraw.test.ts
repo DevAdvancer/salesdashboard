@@ -1,5 +1,6 @@
 import { applyLinkedinWithdrawals, planLinkedinWithdrawals,
   sendLinkedinWithdrawalReport } from '@/lib/server/linkedin-auto-withdraw';
+import { listDeactivationLinkedinRequests } from '@/lib/server/deactivation-linkedin-requests';
 import type { LinkedinRequest, User } from '@/lib/types';
 import { getReportEmails } from '@/lib/server/report-email-settings';
 import { sendNotificationEmail } from '@/lib/server/email-service';
@@ -9,6 +10,8 @@ jest.mock('@/lib/server/report-email-settings', () => ({ getReportEmails: jest.f
 jest.mock('node-appwrite', () => ({ Query: {
   equal: jest.fn((key, value) => `equal:${key}:${JSON.stringify(value)}`),
   select: jest.fn((fields) => `select:${fields.join(',')}`),
+  or: jest.fn(queries => `or:${queries.join('|')}`),
+  limit: jest.fn(limit => `limit:${limit}`),
 } }));
 
 const now = new Date('2026-10-14T16:00:00.000Z');
@@ -18,6 +21,19 @@ const request = (id: string, overrides: Partial<LinkedinRequest> = {}) => ({
   dateSent: '2026-10-13T00:00:00.000Z', acceptedAt: null, withdrawnAt: null,
   leadId: null, ...overrides,
 }) as LinkedinRequest;
+
+it('includes assigned-account requests sent by other agents across more than 100 accounts, without duplicating own requests', async () => {
+  const accountIds = Array.from({ length: 181 }, (_, index) => `account-${index}`);
+  const own = request('own', { accountId: 'different-account' });
+  const fromAccount = request('other-sender', { accountId: 'account-180', agentId: 'other-agent', status: 'accepted', leadId: 'protected-lead' });
+  const db = { clearReadCacheForCollection: jest.fn(), listDocuments: jest.fn(async (_db, _collection, queries) => ({
+    total: queries.some((query: string) => query.includes('account-180')) ? 2 : 1,
+    documents: queries.some((query: string) => query.includes('account-180')) ? [own, fromAccount] : [own],
+  })) };
+  const rows = await listDeactivationLinkedinRequests(db as never, 'agent-inactive', accountIds);
+  expect(rows.map(row => row.$id)).toEqual(['own', 'other-sender']);
+  expect(db.listDocuments).toHaveBeenCalledTimes(3);
+});
 
 it('withdraws every active request of an inactive agent, including accepted requests with leads', () => {
   const users = [{ $id: 'agent-inactive', name: 'Inactive Agent', isActive: false },

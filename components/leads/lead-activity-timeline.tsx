@@ -1,7 +1,8 @@
 'use client';
 
 import { getLeadLifecycleEvents } from '@/lib/utils/lead-payment-cycle';
-import { leadHistoryLabel, parseLeadHistory } from '@/lib/utils/lead-history-snapshot';
+import { parseLeadHistory } from '@/lib/utils/lead-history-snapshot';
+import { readableLeadHistory } from '@/lib/utils/lead-history-display';
 import { LinkedinLeadHistory } from '@/components/linkedin-lead-history';
 import { Activity } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -10,6 +11,7 @@ import { getAuditLogs } from '@/lib/services/audit-service';
 import type { AuditLog } from '@/lib/types';
 import type { Lead } from '@/lib/types';
 import { formatEasternDateTime } from '@/lib/utils/eastern-date';
+import { getUsersNamesAction } from '@/app/actions/user';
 
 interface LeadActivityTimelineProps {
   lead: Lead;
@@ -70,6 +72,20 @@ function buildFollowUpDescription(metadata: unknown) {
 
 export function LeadActivityTimeline({ lead }: LeadActivityTimelineProps) {
   const [followUpLogs, setFollowUpLogs] = useState<AuditLog[]>([]);
+  const [creatorName, setCreatorName] = useState('');
+  const originalOwnerOnly = useMemo(() => { try { return JSON.parse(lead.data || '{}').creatorAttribution === 'original_owner'; } catch { return false; } }, [lead.data]);
+  useEffect(() => {
+    let cancelled = false;
+    setCreatorName('');
+    try {
+      const data = JSON.parse(lead.data || '{}');
+      if (data.creatorName) setCreatorName(String(data.creatorName));
+      else if (typeof data.creatorId === 'string') void getUsersNamesAction([data.creatorId]).then(names => {
+        if (!cancelled) setCreatorName(names[data.creatorId] || data.creatorId);
+      }).catch(() => { /* The full archive remains available if name resolution fails. */ });
+    } catch { /* Older leads may have no creator metadata. The archive remains available. */ }
+    return () => { cancelled = true; };
+  }, [lead.data]);
   const recordedEvents = useMemo(() => parseLeadHistory(lead.history).slice().reverse(), [lead.history]);
 
   useEffect(() => {
@@ -133,6 +149,7 @@ export function LeadActivityTimeline({ lead }: LeadActivityTimelineProps) {
           Activity Timeline
         </CardTitle>
         <LinkedinLeadHistory leadId={lead.$id} />
+        {creatorName && <p className="text-sm text-muted-foreground">{originalOwnerOnly ? 'Original recorded owner' : 'Originally created by'} {creatorName}</p>}
       </CardHeader>
       <CardContent>
         {events.length === 0 && followUpLogs.length === 0 && lifecycleEvents.length === 0 && recordedEvents.length === 0 ? (
@@ -141,13 +158,9 @@ export function LeadActivityTimeline({ lead }: LeadActivityTimelineProps) {
           <div className="space-y-4">
             {recordedEvents.map(event => (
               <div key={event.id} className="border-l-2 border-primary pl-4 text-sm">
-                <p className="font-medium">{leadHistoryLabel(event)}</p>
-                <p className="text-xs text-muted-foreground">{formatDate(event.occurredAt)} · {event.actorName} · {event.actorId}</p>
-                {Object.entries(event.changes).map(([field, change]) => (
-                  <p key={field} className="break-words text-xs text-muted-foreground">
-                    {field.replace(/^data\./, '')}: {JSON.stringify(change.from)} → {JSON.stringify(change.to)}
-                  </p>
-                ))}
+                <p className="font-medium">{readableLeadHistory(event.eventType, event.changes).title}</p>
+                <p className="text-xs text-muted-foreground">{formatDate(event.occurredAt)} · {event.actorName}</p>
+                {readableLeadHistory(event.eventType, event.changes).details.map((detail, index) => <p key={index} className="break-words text-xs text-muted-foreground">{detail}</p>)}
               </div>
             ))}
             {lifecycleEvents.map(event => (

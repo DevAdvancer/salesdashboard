@@ -97,7 +97,7 @@ export async function createSessionClient() {
   throw new Error("No session");
 }
 
-export async function createAdminClient(options?: { systemActor?: HistoryActor }) {
+export async function createAdminClient(options?: { systemActor?: HistoryActor; deactivationHandoff?: { fromUserId: string; toUserId: string; actorId: string; leadId: string; updatedAt: string } }) {
   const client = new Client()
     .setEndpoint(process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!)
     .setProject(process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!)
@@ -121,7 +121,7 @@ export async function createAdminClient(options?: { systemActor?: HistoryActor }
           return effectiveCrmAuditActor({ id: actor.$id, name: actor.name });
         }
         return { id: 'system', name: 'System' };
-      })), {
+      }, options?.deactivationHandoff)), {
         namespace: "admin",
         stores: adminDatabaseCacheStores,
       });

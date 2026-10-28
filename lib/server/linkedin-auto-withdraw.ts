@@ -6,10 +6,11 @@ import { sendNotificationEmail } from "@/lib/server/email-service";
 import { getReportEmails } from "@/lib/server/report-email-settings";
 import type { LinkedinRequest, User } from "@/lib/types";
 import { shouldAutoWithdrawLinkedinRequest } from "@/lib/utils/linkedin-withdrawal-reminders";
+import { listDeactivationLinkedinRequests } from '@/lib/server/deactivation-linkedin-requests';
 
 type Databases = Awaited<ReturnType<typeof createAdminClient>>["databases"];
 
-export type LinkedinWithdrawalReason = "inactive agent" | "expired request";
+export type LinkedinWithdrawalReason = "inactive agent" | "inactive account" | "expired request";
 export type LinkedinWithdrawal = {
   request: LinkedinRequest;
   agentName: string;
@@ -47,7 +48,7 @@ export async function applyLinkedinWithdrawals(databases: Databases, planned: Li
       const current = await databases.getDocument(DATABASE_ID, COLLECTIONS.LINKEDIN_REQUESTS,
         entry.request.$id) as unknown as LinkedinRequest;
       if (current.isActive === false || !["sent", "accepted"].includes(current.status) ||
-          current.agentId !== entry.request.agentId) return;
+          current.agentId !== entry.request.agentId || current.accountId !== entry.request.accountId) return;
       await databases.updateDocument(DATABASE_ID, COLLECTIONS.LINKEDIN_REQUESTS, current.$id, {
         status: "withdrawn", isActive: false, withdrawnAt: now.toISOString(),
       });
@@ -76,11 +77,20 @@ export async function runLinkedinWithdrawalSweep(databases: Databases, now: Date
 
 export async function withdrawLinkedinRequestsForAgent(
   databases: Databases, agent: Pick<User, "$id" | "name">, now: Date,
+  accountIds: string[] = [],
 ) {
-  const requests = await listActiveLinkedinRequests(databases, agent.$id);
-  const planned: LinkedinWithdrawal[] = requests.map(request => ({
-    request, agentName: agent.name, reason: "inactive agent",
-  }));
+  const requests = await listDeactivationLinkedinRequests(databases, agent.$id, accountIds);
+  const planned: LinkedinWithdrawal[] = [];
+  const names = new Map([[agent.$id, agent.name]]);
+  for (const request of requests) {
+    if (!names.has(request.agentId)) {
+      const sender = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, request.agentId)
+        .catch(error => { if (error?.code !== 404) throw error; return null; });
+      names.set(request.agentId, String(sender?.name || request.agentId));
+    }
+    planned.push({ request, agentName: names.get(request.agentId)!,
+      reason: request.agentId === agent.$id ? 'inactive agent' : 'inactive account' });
+  }
   return { planned, ...await applyLinkedinWithdrawals(databases, planned, now) };
 }
 

@@ -117,7 +117,7 @@ export const DEFAULT_FIELDS: FormField[] = [
     required: false,
     visible: true,
     order: 10,
-    options: ['Citizen', 'Green Card', 'H1B', 'F1', 'Other']
+    options: ['Citizen', 'Green Card', 'H1B', 'F1', 'Day 1 CPT', 'Other']
   },
   {
     id: '13',

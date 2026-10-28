@@ -71,7 +71,6 @@ Start here depending on your role:
 | Mock/Assessment/Interview Tools | ✅ | Email-based support tools |
 | Page Tour Guide | ✅ | Driver.js onboarding |
 | Dark/Light Mode | ✅ | Toggle on referral page + CSS vars |
-| Sentry Error Monitoring | ✅ | Client + server |
 | Form Field Management | ⚠️ Disabled | UI exists, service layer disabled |
 | Signup Flow | ⚠️ Disabled | Admin creates users manually |
 
@@ -86,7 +85,7 @@ Start here depending on your role:
 | Styling | Tailwind CSS v4 + CSS custom properties |
 | Backend (BaaS) | Appwrite v22 |
 | Email | Microsoft Graph API |
-| Error Tracking | Sentry |
+| Error Handling | Error boundaries, toast notifications, and application logs |
 | Icons | Lucide React |
 | Charts | Recharts |
 | Forms | React Hook Form + Zod |

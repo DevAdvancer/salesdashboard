@@ -625,6 +625,7 @@ export function ResumeProfileDetail({
                     className="w-full rounded-2xl border border-transparent bg-[var(--input)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                   >
                     <option value="F1">F1</option>
+                    <option value="Day 1 CPT">Day 1 CPT</option>
                     <option value="H1B">H1B</option>
                     <option value="H4 EAD">H4 EAD</option>
                     <option value="L2S">L2S</option>
@@ -750,7 +751,7 @@ export function ResumeProfileDetail({
             </Card>
 
             {/* Section 2: Work Authorization */}
-            {['F1', 'H1B', 'H4 EAD', 'L2S'].includes(visaStatus) && (
+            {['F1', 'Day 1 CPT', 'H1B', 'H4 EAD', 'L2S'].includes(visaStatus) && (
               <Card className="p-5 border border-border shadow-sm space-y-4">
                 <div className="flex items-center justify-between border-b pb-2">
                   <div className="flex items-center gap-2 text-sm font-semibold text-foreground">

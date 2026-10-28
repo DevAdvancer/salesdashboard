@@ -4,6 +4,7 @@ import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { isLeadReleased, leadOwnershipMayChange, leadProfileUrl } from '@/lib/utils/linkedin-lead-protection';
 import { findProtectedLinkedinLead, invalidateLinkedinLeadPreviews, LinkedinLeadProtectionError, profileDocumentId, saveLeadProfileRegistry, withLinkedinProfileLock } from '@/lib/server/linkedin-lead-protection';
 import { parseLeadHistory, type LeadHistorySnapshotEvent } from '@/lib/utils/lead-history-snapshot';
+import { canReceiveDeactivationHandoff, type HandoffUser } from '@/lib/utils/user-deactivation';
 
 type Row = Record<string, unknown>;
 export type HistoryActor = { id: string; name: string };
@@ -49,7 +50,8 @@ export async function appendLeadHistory(databases: Databases, entry: {
 }
 
 /** All active CRM lead actions use this shared admin client; lead pages/data need no changes. */
-export function withLeadHistory(databases: Databases, actor: () => Promise<HistoryActor>): Databases {
+export function withLeadHistory(databases: Databases, actor: () => Promise<HistoryActor>,
+  handoff?: { fromUserId: string; toUserId: string; actorId: string; leadId: string; updatedAt: string }): Databases {
   return new Proxy(databases, {
     get(target, property, receiver) {
       const method = Reflect.get(target, property, receiver);
@@ -74,14 +76,26 @@ export function withLeadHistory(databases: Databases, actor: () => Promise<Histo
         const eventActor = await actor();
         const event = { leadId: isLead ? id : String(proposed?.leadId || before?.leadId || ''),
           requestId: isLead ? '' : id, profileUrl: profileUrl || '', actor: eventActor };
-        const operation = `${isLead ? 'LEAD' : 'REQUEST'}_${creating ? 'CREATE' : deleting ? 'DELETE' : 'UPDATE'}`;
+        const operation = isLead && handoff && id === handoff.leadId ? 'LEAD_HANDOFF' : `${isLead ? 'LEAD' : 'REQUEST'}_${creating ? 'CREATE' : deleting ? 'DELETE' : 'UPDATE'}`;
         const changes = leadHistoryChanges(before,proposed);
         const intentId = ID.unique();
         const run = async () => {
           if (isLead && !creating && !deleting) {
             const fresh = await target.getDocument(String(databaseId),String(collectionId),id);
             if (fresh.$updatedAt !== before?.$updatedAt) throw new Error('This lead changed. Refresh before saving.');
-            if (!leadOwnershipMayChange(fresh,patch || {},process.env.NEXT_PUBLIC_APPWRITE_UNASSIGNED_OWNER_ID || process.env.APPWRITE_UNASSIGNED_OWNER_ID)) {
+            let authorizedHandoff = false;
+            if (handoff && id === handoff.leadId && fresh.$updatedAt === handoff.updatedAt &&
+                (fresh.ownerId === handoff.fromUserId || fresh.assignedToId === handoff.fromUserId) &&
+                patch?.ownerId === handoff.toUserId && patch?.assignedToId === handoff.toUserId &&
+                Object.keys(patch).every(key => ['ownerId', 'assignedToId', 'data'].includes(key))) {
+              const source = await target.getDocument(DATABASE_ID, COLLECTIONS.USERS, handoff.fromUserId);
+              const recipient = await target.getDocument(DATABASE_ID, COLLECTIONS.USERS, handoff.toUserId);
+              const initiatingActor = await target.getDocument(DATABASE_ID, COLLECTIONS.USERS, handoff.actorId);
+              authorizedHandoff = source.isActive === false && canReceiveDeactivationHandoff(
+                initiatingActor as unknown as HandoffUser, source as unknown as HandoffUser, recipient as unknown as HandoffUser);
+            }
+            if (handoff && !authorizedHandoff) throw new Error('Handoff changed. Refresh the preview and retry.');
+            if (!authorizedHandoff && !leadOwnershipMayChange(fresh,patch || {},process.env.NEXT_PUBLIC_APPWRITE_UNASSIGNED_OWNER_ID || process.env.APPWRITE_UNASSIGNED_OWNER_ID)) {
               await appendLeadHistory(target,{...event,eventType:'LEAD_OWNERSHIP_CHANGE_BLOCKED',payload:{changes}});
               throw new Error('Lead ownership is protected until the lead is marked Not Interested or Backed Out.');
             }

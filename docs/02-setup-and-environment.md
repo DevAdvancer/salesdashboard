@@ -69,7 +69,6 @@ The checked-in `.env.local.example` is incomplete. The code currently reads the 
 | `NEXT_PUBLIC_AZURE_TENANT_ID` | Needed for Outlook features | Azure tenant |
 | `NEXT_PUBLIC_AZURE_REDIRECT_URI` | Needed for Outlook features | Azure callback URI |
 | `AZURE_CLIENT_SECRET` | Needed for Outlook features | Server-side token exchange |
-| `NEXT_PUBLIC_SENTRY_DSN` | Optional but recommended | Sentry browser monitoring |
 
 ## Minimum Useful `.env.local`
 
@@ -97,7 +96,6 @@ NEXT_PUBLIC_AZURE_TENANT_ID=your-tenant-id-or-common
 NEXT_PUBLIC_AZURE_REDIRECT_URI=http://localhost:5000
 AZURE_CLIENT_SECRET=your-azure-client-secret
 
-NEXT_PUBLIC_SENTRY_DSN=your-sentry-dsn
 ```
 
 ## Appwrite Setup Expectations
@@ -133,18 +131,6 @@ The code expects:
 
 If Azure is not configured, the main CRM can still work, but the mock, assessment, and interview email features will not.
 
-## Sentry
-
-Sentry is wired through:
-
-- `next.config.ts`
-- `instrumentation.ts`
-- `instrumentation-client.ts`
-- `sentry.server.config.ts`
-- `sentry.edge.config.ts`
-
-If `NEXT_PUBLIC_SENTRY_DSN` is omitted, monitoring will be reduced or unavailable.
-
 ## Important Setup Drift To Know
 
 ### 1. The Example Env File Is Incomplete
@@ -155,7 +141,6 @@ If `NEXT_PUBLIC_SENTRY_DSN` is omitted, monitoring will be reduced or unavailabl
 - Attempt collection IDs
 - Azure config
 - Appwrite admin API key
-- Sentry DSN
 
 ### 2. Older Docs Mention Port 3000
 

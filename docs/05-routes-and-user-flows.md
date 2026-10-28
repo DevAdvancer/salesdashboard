@@ -37,7 +37,6 @@
 | --- | --- | --- |
 | `/auth-test` | Inspect auth context state | Manual debug page |
 | `/test-auth` | Manual Appwrite auth/db test harness | Development-only helper |
-| `/sentry-example-page` | Sentry sample page | Monitoring test surface |
 
 ## API Routes
 
@@ -50,7 +49,6 @@
 | `/api/assessment/send-email` | `POST` | Proxies Graph `sendMail` for assessment emails |
 | `/api/interview/send-email` | `POST` | Proxies Graph `sendMail` for interview emails |
 | `/api/debug-config` | `GET` | Debug config endpoint |
-| `/api/sentry-example-api` | `POST/GET depending on sample` | Sentry sample endpoint |
 
 ## Primary User Flows
 

@@ -12,6 +12,9 @@ import { getUserBranchIds, normalizeUserBranches } from '@/lib/utils/user-branch
 import { getErrorMessage } from '@/lib/utils';
 import { getUsersByIds } from '@/lib/services/user-service';
 import { sendLinkedinWithdrawalReport, withdrawLinkedinRequestsForAgent } from '@/lib/server/linkedin-auto-withdraw';
+import { planUserDeactivation, handoffDeactivatedUserLeads } from '@/lib/server/user-deactivation';
+import { canDeactivateUser, type HandoffUser } from '@/lib/utils/user-deactivation';
+import { withLinkedinProfileLock } from '@/lib/server/linkedin-lead-protection';
 
 // Constants
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
@@ -717,15 +720,30 @@ export async function deleteUserAction(input: {
     }
 }
 
+export async function previewUserDeactivationAction(input: { userId: string; currentUserId: string; recipientId?: string }) {
+    await assertAuthenticatedUserId(input.currentUserId);
+    const { databases } = await createAdminClient();
+    const plan = await planUserDeactivation(databases, input.currentUserId, input.userId, input.recipientId);
+    return { hash: plan.hash, recipientId: plan.recipient?.$id || '',
+        recipients: plan.recipients.map(({ $id, name, role }) => ({ $id, name, role })),
+        openLeads: plan.leads.filter(lead => !lead.isClosed).length,
+        closedLeads: plan.leads.filter(lead => lead.isClosed).length,
+        requests: plan.requests.length, accounts: plan.accounts.length };
+}
+
 export async function setAgentActiveAction(input: {
     userId: string;
     isActive: boolean;
     currentUserId: string;
+    recipientId?: string;
+    planHash?: string;
 }) {
     const { userId, isActive, currentUserId } = input;
 
     await assertAuthenticatedUserId(currentUserId);
 
+    const { users, databases } = await createAdminClient();
+    databases.clearReadCacheForCollection(COLLECTIONS.USERS);
     const callerDoc = await getUserDoc(currentUserId);
     if (!callerDoc) throw new Error("Caller not found");
 
@@ -743,110 +761,112 @@ export async function setAgentActiveAction(input: {
         throw new Error("Permission denied: You can only update the active status of agents on your team");
     }
 
-    if (callerDoc.role === 'senior_tl' && targetUserDoc.department !== callerDoc.department) {
+    if (callerDoc.role === 'senior_tl' && (targetUserDoc.department || 'sales') !== (callerDoc.department || 'sales')) {
         throw new Error("Permission denied: You can only update users in your department");
     }
 
     if (targetUserDoc.role !== 'agent' && targetUserDoc.role !== 'lead_generation' && targetUserDoc.role !== 'monitor' && targetUserDoc.role !== 'operations') {
         throw new Error("Only agents, lead generation users, monitors, and operations can be inactivated from this action");
     }
+    if (!canDeactivateUser(callerDoc as unknown as HandoffUser, targetUserDoc as unknown as HandoffUser)) {
+        throw new Error('Permission denied: You cannot update this user.');
+    }
 
-    const { users, databases } = await createAdminClient();
-    let linkedinWithdrawn = 0;
-    let withdrawalErrors = 0;
-    let reportEmailSent = false;
-    let reportRecipientCount = 0;
-
-    try {
-        await users.updateStatus(userId, isActive);
-
-        const updates = isActive
-            ? { isActive: true }
-            : {
-                isActive: false,
-            };
-
-        const schemaSafeUpdates = await filterUpdatesToExistingUserAttributes(databases, updates);
+    return withLinkedinProfileLock(databases, `crm:user-deactivation:${userId}`, userId, async () => {
+        const plan = !isActive ? await planUserDeactivation(databases, currentUserId, userId, input.recipientId) : null;
+        if (plan && (!input.planHash || plan.hash !== input.planHash)) {
+            throw new Error('The handoff preview changed. Review a fresh preview before inactivating.');
+        }
+        let leadsTransferred = 0;
+        let linkedinWithdrawn = 0;
+        let withdrawalErrors = 0;
+        let reportEmailSent = false;
+        let reportRecipientCount = 0;
 
         try {
-            await databases.updateDocument(
-                DATABASE_ID,
-                USERS_COLLECTION_ID,
-                userId,
-                schemaSafeUpdates
-            );
-        } catch (error: unknown) {
-            if (!isUnknownAttributeError(error, 'isActive')) {
-                throw error;
-            }
+            await users.updateStatus(userId, isActive);
 
-            await ensureUserIsActiveAttribute(databases);
-            await databases.updateDocument(
-                DATABASE_ID,
-                USERS_COLLECTION_ID,
-                userId,
-                schemaSafeUpdates
-            );
-        }
+            const updates = isActive
+                ? { isActive: true }
+                : {
+                    isActive: false,
+                };
 
-        if (!isActive) {
+            const schemaSafeUpdates = await filterUpdatesToExistingUserAttributes(databases, updates);
+
             try {
-                const accountsResponse = await databases.listDocuments(
+                await databases.updateDocument(
                     DATABASE_ID,
-                    COLLECTIONS.LINKEDIN_ACCOUNTS,
-                    [
-                        Query.equal('assignedUserId', userId),
-                        Query.limit(100),
-                    ]
+                    USERS_COLLECTION_ID,
+                    userId,
+                    schemaSafeUpdates
                 );
-                for (const accountDoc of accountsResponse.documents) {
-                    await databases.updateDocument(
-                        DATABASE_ID,
-                        COLLECTIONS.LINKEDIN_ACCOUNTS,
-                        accountDoc.$id,
-                        { isActive: false }
-                    );
+            } catch (error: unknown) {
+                if (!isUnknownAttributeError(error, 'isActive')) {
+                    throw error;
                 }
-            } catch (err) {
-                logger.error({ error: err, userId }, "Failed to deactivate LinkedIn accounts for inactive user");
+
+                await ensureUserIsActiveAttribute(databases);
+                await databases.updateDocument(
+                    DATABASE_ID,
+                    USERS_COLLECTION_ID,
+                    userId,
+                    schemaSafeUpdates
+                );
             }
 
-            try {
-                const now = new Date();
-                const result = await withdrawLinkedinRequestsForAgent(databases,
-                    { $id: targetUserDoc.$id, name: String(targetUserDoc.name ?? userId) }, now);
-                linkedinWithdrawn = result.withdrawn.length;
-                withdrawalErrors = result.errors.length;
-                if (withdrawalErrors > 0) {
-                    logger.error({ userId, errors: result.errors }, "Failed to withdraw some LinkedIn requests for inactive user");
+            if (plan) {
+                // Login is disabled first. Failures leave a visible, retryable handoff
+                // instead of reporting a successful deactivation with stranded leads.
+                try {
+                    for (const accountDoc of plan.accounts) {
+                        if (accountDoc.isActive === false) continue;
+                        await databases.updateDocument(DATABASE_ID, COLLECTIONS.LINKEDIN_ACCOUNTS,
+                            accountDoc.$id, { isActive: false });
+                    }
+                    const now = new Date();
+                    const result = await withdrawLinkedinRequestsForAgent(databases,
+                        { $id: targetUserDoc.$id, name: String(targetUserDoc.name ?? userId) }, now,
+                        plan.accounts.map(account => account.$id));
+                    linkedinWithdrawn = result.withdrawn.length;
+                    withdrawalErrors = result.errors.length;
+                    if (withdrawalErrors) throw new Error(`${withdrawalErrors} LinkedIn withdrawals failed.`);
+                    // Keep each request short. The dialog continues with fresh previews
+                    // of the remaining records under the same confirmed recipient.
+                    leadsTransferred = await handoffDeactivatedUserLeads(plan, 10);
+                    try {
+                        const report = await sendLinkedinWithdrawalReport(databases, result.withdrawn, now);
+                        reportEmailSent = report.emailSent;
+                        reportRecipientCount = report.recipientCount;
+                    } catch (error) { logger.error({ error, userId }, 'Withdrawal report delivery failed'); }
+                } catch (error) {
+                    throw new Error(`Login is disabled. Handoff is incomplete: ${getErrorMessage(error)} Use Complete handoff on the inactive user to retry.`);
                 }
-                const report = await sendLinkedinWithdrawalReport(databases, result.withdrawn, now);
-                reportEmailSent = report.emailSent;
-                reportRecipientCount = report.recipientCount;
-            } catch (err) {
-                withdrawalErrors += 1;
-                logger.error({ error: err, userId }, "Failed to complete LinkedIn withdrawal for inactive user");
             }
+
+            await logAuditAction(
+                databases,
+                'USER_UPDATE',
+                callerDoc.$id,
+                callerDoc.name,
+                userId,
+                targetUserDoc.role,
+                { isActive, recipientId: plan?.recipient?.$id, leadsTransferred, linkedinWithdrawn }
+            );
+
+            // Inactivating a user affects which leads they're visible for.
+            invalidateDepartmentScopedUserIds();
+
+            databases.clearReadCacheForCollection(COLLECTIONS.LEADS);
+            const remainingLeads = plan ? (await databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS,
+                [Query.or([Query.equal('ownerId', userId), Query.equal('assignedToId', userId)]), Query.limit(1)])).total : 0;
+            return { success: true, leadsTransferred, remainingLeads, linkedinWithdrawn, withdrawalErrors, reportEmailSent, reportRecipientCount };
+        } catch (error: unknown) {
+            invalidateDepartmentScopedUserIds();
+            console.error("Agent active status update failed", error);
+            throw new Error("Failed to update agent active status: " + getErrorMessage(error));
         }
-
-        await logAuditAction(
-            databases,
-            'USER_UPDATE',
-            callerDoc.$id,
-            callerDoc.name,
-            userId,
-            targetUserDoc.role,
-            { isActive }
-        );
-
-        // Inactivating a user affects which leads they're visible for.
-        invalidateDepartmentScopedUserIds();
-
-        return { success: true, linkedinWithdrawn, withdrawalErrors, reportEmailSent, reportRecipientCount };
-    } catch (error: unknown) {
-        console.error("Agent active status update failed", error);
-        throw new Error("Failed to update agent active status: " + getErrorMessage(error));
-    }
+    });
 }
 
 export async function getUsersNamesAction(ids: string[]): Promise<Record<string, string>> {

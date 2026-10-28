@@ -538,6 +538,7 @@ export function LeadGenerationNewLeadContent() {
               <option value="H1B">H1B</option>
               <option value="OPT">OPT</option>
               <option value="CPT">CPT</option>
+              <option value="Day 1 CPT">Day 1 CPT</option>
               <option value="Other">Other</option>
             </select>
             {visaStatus === "Other" && (

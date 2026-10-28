@@ -298,7 +298,10 @@ export function ResumeProfilesClient({
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="flex flex-wrap gap-1">
-                          {hasCpt && (
+                          {parsedData.visaStatus === 'Day 1 CPT' && (
+                            <span className="inline-flex items-center rounded-md bg-purple-100 dark:bg-purple-900/40 px-2 py-0.5 text-[10px] font-semibold text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800">Day 1 CPT</span>
+                          )}
+                          {hasCpt && parsedData.visaStatus !== 'Day 1 CPT' && (
                             <span className="inline-flex items-center rounded-md bg-purple-100 dark:bg-purple-900/40 px-2 py-0.5 text-[10px] font-semibold text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
                               CPT
                             </span>
@@ -313,7 +316,7 @@ export function ResumeProfilesClient({
                               STEM OPT
                             </span>
                           )}
-                          {!hasCpt && !hasOpt && !hasStem && (
+                          {!hasCpt && !hasOpt && !hasStem && parsedData.visaStatus !== 'Day 1 CPT' && (
                             <span className="text-xs text-muted-foreground">—</span>
                           )}
                         </div>

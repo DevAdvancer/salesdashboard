@@ -348,6 +348,7 @@ export function ResumeProfileCreateForm({
                   className={INPUT_CLASS}
                 >
                   <option value="F1">F1</option>
+                  <option value="Day 1 CPT">Day 1 CPT</option>
                   <option value="H1B">H1B</option>
                   <option value="H4 EAD">H4 EAD</option>
                   <option value="L2S">L2S</option>
@@ -458,7 +459,7 @@ export function ResumeProfileCreateForm({
           </Card>
 
           {/* Work authorization */}
-          {['F1', 'H1B', 'H4 EAD', 'L2S'].includes(visaStatus) && (
+          {['F1', 'Day 1 CPT', 'H1B', 'H4 EAD', 'L2S'].includes(visaStatus) && (
             <Card className="p-5 border border-border shadow-sm space-y-4">
               <div className={SECTION_HEADER_CLASS}>
                 <ShieldCheck className="h-4 w-4 text-primary" />

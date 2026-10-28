@@ -48,7 +48,7 @@
 
 **Backend:** Appwrite (BaaS — database, auth, storage)  
 **Email:** Microsoft Graph API (Outlook / Microsoft 365)  
-**Error monitoring:** Sentry  
+**Error handling:** Error boundaries, toast notifications, and application logs
 **Deployment:** Docker or direct Node.js
 
 ---
@@ -67,7 +67,7 @@
 | Backend (BaaS) | Appwrite v22 (client SDK) + node-appwrite (server SDK) |
 | Auth | Appwrite Email/Password + Azure AD (MSAL) integration |
 | Email | Microsoft Graph API (client_credentials flow) |
-| Error tracking | Sentry (`@sentry/nextjs`) |
+| Error handling | Error boundaries, toast notifications, and application logs |
 | Tour / Onboarding | Driver.js |
 | Testing | Jest + React Testing Library + Vitest |
 
@@ -174,14 +174,6 @@ AZURE_CLIENT_SECRET=your-client-secret   # SERVER-ONLY — never expose to brows
 ```env
 DUPLICATE_ALERT_BCC_EMAIL=admin@yourcompany.com  # BCC for all duplicate alerts
 NEXT_PUBLIC_APP_URL=https://your-domain.com       # Used in email links
-```
-
-### Sentry
-
-```env
-SENTRY_DSN=...
-SENTRY_ORG=...
-SENTRY_PROJECT=...
 ```
 
 ---
@@ -291,7 +283,7 @@ salesdashboard/
 ├── tests/                        # Jest test files
 ├── scripts/                      # One-off setup scripts (Appwrite provisioning)
 ├── public/                       # Static assets
-├── next.config.ts                # Next.js config (Sentry, redirects)
+├── next.config.ts                # Next.js environment flags and asset cache headers
 ├── Dockerfile                    # Docker build
 └── docker-compose.yml            # Docker compose for local
 ```

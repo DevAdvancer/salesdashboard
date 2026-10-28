@@ -169,10 +169,10 @@ Two collections drive runtime configurability:
 - `lib/utils/error-handler.ts`
 - Toast-based user feedback
 
-### Monitoring
+### Application Logging
 
-- Sentry is initialized for browser, server, and edge paths.
-- Errors are also manually captured from the error utility functions.
+- Error boundaries and error utilities log errors and provide user feedback.
+- `lib/logger.ts` sends application logs to Logflare when its credentials are configured.
 
 ## Dashboard Runtime Behavior
 

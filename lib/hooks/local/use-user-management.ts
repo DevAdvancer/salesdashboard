@@ -12,6 +12,7 @@ import { invalidateUsersCache } from "@/lib/services/user-service";
 import { useIsVisible } from "@/lib/hooks/use-is-visible";
 import { User, Branch, UserRole, Department } from "@/lib/types";
 import { client, databases } from "@/lib/appwrite";
+import { canDeactivateUser } from '@/lib/utils/user-deactivation';
 
 export function useUserManagement() {
   const searchParams = useSearchParams();
@@ -43,6 +44,7 @@ export function useUserManagement() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [activeStatusUserId, setActiveStatusUserId] = useState<string | null>(null);
+  const [userToDeactivate, setUserToDeactivate] = useState<User | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const { confirm, ConfirmDialog } = useConfirmDialog();
@@ -449,14 +451,15 @@ export function useUserManagement() {
   }, [user, isAdmin, isDeveloper, confirm, fetchUsers]);
 
   const handleSetAgentActive = useCallback(async (agent: User, isActive: boolean) => {
-    const isCallerTL = user?.role === "team_lead";
-    const canMutate = isAdmin || isDeveloper || (isCallerTL && agent.teamLeadId === user?.$id);
+    const canMutate = user && canDeactivateUser(user, agent);
 
     if (
       !user ||
       !canMutate ||
       (agent.role !== "agent" && agent.role !== "lead_generation" && agent.role !== "monitor" && agent.role !== "operations")
     ) return;
+
+    if (!isActive) { setUserToDeactivate(agent); return; }
 
     const confirmed = await confirm({
       title: isActive ? `Reactivate ${agent.name}?` : `Inactivate ${agent.name}?`,
@@ -652,6 +655,7 @@ export function useUserManagement() {
     search, setSearch, allBranches, branchMap, isLoading, isCreating,
     showCreateDialog, setShowCreateDialog, editingUser, setEditingUser,
     isUpdating, deletingUserId, activeStatusUserId, error, setError,
+    userToDeactivate, setUserToDeactivate, refreshUsers: fetchUsers,
     ConfirmDialog, formName, setFormName, formEmail, setFormEmail,
     formPassword, setFormPassword, selectedBranchIds, setSelectedBranchIds, selectedPrimaryBranchId, setSelectedPrimaryBranchId,
     selectedTeamLeadId, setSelectedTeamLeadId, createDepartment, setCreateDepartment,

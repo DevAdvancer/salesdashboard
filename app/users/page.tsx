@@ -13,6 +13,11 @@ import { useUserManagement } from "@/lib/hooks/local/use-user-management";
 import { UserTable } from "@/components/users/user-table";
 import { CreateUserDialog } from "@/components/users/create-user-dialog";
 import { EditUserDialog } from "@/components/users/edit-user-dialog";
+import { DeactivateUserDialog } from "@/components/users/deactivate-user-dialog";
+import { invalidateUsersCache } from '@/lib/services/user-service';
+import { databases } from '@/lib/appwrite';
+import { COLLECTIONS } from '@/lib/constants/appwrite';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function UserManagementPage() {
   return (
@@ -23,6 +28,7 @@ export default function UserManagementPage() {
 }
 
 function UserManagementContent() {
+  const queryClient = useQueryClient();
   const {
     user, isAdmin, isDeveloper, isTeamLead, isMonitor, isOperations, activeDashboard,
     currentUsersPage, setCurrentUsersPage, USERS_PAGE_SIZE, usersTotal,
@@ -30,6 +36,7 @@ function UserManagementContent() {
     search, setSearch, branchMap, isLoading, isCreating,
     showCreateDialog, setShowCreateDialog, editingUser, setEditingUser,
     isUpdating, deletingUserId, activeStatusUserId, error, setError,
+    userToDeactivate, setUserToDeactivate, refreshUsers,
     ConfirmDialog, formName, setFormName, formEmail, setFormEmail,
     formPassword, setFormPassword, selectedBranchIds, setSelectedBranchIds, selectedPrimaryBranchId, setSelectedPrimaryBranchId,
     selectedTeamLeadId, setSelectedTeamLeadId, createDepartment, setCreateDepartment,
@@ -187,6 +194,12 @@ function UserManagementContent() {
       />
 
       <ConfirmDialog />
+      <DeactivateUserDialog target={userToDeactivate} actorId={user?.$id || ''}
+        onClose={() => setUserToDeactivate(null)} onComplete={async () => {
+          for (const collection of [COLLECTIONS.USERS, COLLECTIONS.LEADS, COLLECTIONS.LINKEDIN_ACCOUNTS, COLLECTIONS.LINKEDIN_REQUESTS]) databases.clearReadCacheForCollection(collection);
+          invalidateUsersCache(); await refreshUsers();
+          await Promise.all(['leads', 'users', 'linkedin'].map(key => queryClient.invalidateQueries({ queryKey: [key] })));
+        }} />
     </div>
   );
 }

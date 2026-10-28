@@ -33,6 +33,7 @@ jest.mock('node-appwrite', () => ({
   Query: {
     equal: jest.fn((key, value) => `equal:${key}:${JSON.stringify(value)}`),
     limit: jest.fn((limit) => `limit:${limit}`),
+    or: jest.fn((queries) => `or:${JSON.stringify(queries)}`),
   },
   Role: {
     user: jest.fn((userId) => `user:${userId}`),
@@ -60,6 +61,8 @@ describe('setAgentActiveAction authorization and cascading deactivation', () => 
         listDocuments: mockListDocuments,
         getAttribute: jest.fn().mockResolvedValue({}),
         createDocument: jest.fn().mockResolvedValue({}),
+        clearReadCacheForCollection: jest.fn(),
+        deleteDocument: jest.fn().mockResolvedValue({}),
       },
     });
 
@@ -83,9 +86,10 @@ describe('setAgentActiveAction authorization and cascading deactivation', () => 
       return null;
     });
 
-    const { setAgentActiveAction } = await import('@/app/actions/user');
+    const { setAgentActiveAction, previewUserDeactivationAction } = await import('@/app/actions/user');
 
     await setAgentActiveAction({
+      planHash: (await previewUserDeactivationAction({ currentUserId: 'admin-1', userId: 'agent-1' })).hash,
       currentUserId: 'admin-1',
       userId: 'agent-1',
       isActive: false,
@@ -114,9 +118,10 @@ describe('setAgentActiveAction authorization and cascading deactivation', () => 
       return null;
     });
 
-    const { setAgentActiveAction } = await import('@/app/actions/user');
+    const { setAgentActiveAction, previewUserDeactivationAction } = await import('@/app/actions/user');
 
     await setAgentActiveAction({
+      planHash: (await previewUserDeactivationAction({ currentUserId: 'tl-1', userId: 'agent-1' })).hash,
       currentUserId: 'tl-1',
       userId: 'agent-1',
       isActive: false,
@@ -139,7 +144,7 @@ describe('setAgentActiveAction authorization and cascading deactivation', () => 
       return null;
     });
 
-    const { setAgentActiveAction } = await import('@/app/actions/user');
+    const { setAgentActiveAction, previewUserDeactivationAction } = await import('@/app/actions/user');
 
     await expect(
       setAgentActiveAction({
@@ -164,16 +169,17 @@ describe('setAgentActiveAction authorization and cascading deactivation', () => 
     });
 
     // Mock returning some LinkedIn accounts
-    mockListDocuments.mockResolvedValue({
+    mockListDocuments.mockImplementation(async (_db, collection) => collection === 'linkedin_accounts' ? {
       documents: [
         { $id: 'li-acc-1', assignedUserId: 'agent-1', idName: 'LI Account 1' },
       ],
       total: 1,
-    });
+    } : { documents: [], total: 0 });
 
-    const { setAgentActiveAction } = await import('@/app/actions/user');
+    const { setAgentActiveAction, previewUserDeactivationAction } = await import('@/app/actions/user');
 
     await setAgentActiveAction({
+      planHash: (await previewUserDeactivationAction({ currentUserId: 'admin-1', userId: 'agent-1' })).hash,
       currentUserId: 'admin-1',
       userId: 'agent-1',
       isActive: false,
@@ -194,7 +200,7 @@ describe('setAgentActiveAction authorization and cascading deactivation', () => 
       { isActive: false }
     );
     expect(mockWithdrawLinkedinRequestsForAgent).toHaveBeenCalledWith(expect.anything(),
-      { $id: 'agent-1', name: 'Agent' }, expect.any(Date));
+      { $id: 'agent-1', name: 'Agent' }, expect.any(Date), ['li-acc-1']);
   });
 
   it('reports requests withdrawn during agent inactivation', async () => {
@@ -205,10 +211,32 @@ describe('setAgentActiveAction authorization and cascading deactivation', () => 
     const withdrawn = [{ request: { $id: 'request-1' }, agentName: 'Agent', reason: 'inactive agent' }];
     mockWithdrawLinkedinRequestsForAgent.mockResolvedValue({ planned: withdrawn, withdrawn, errors: [] });
     mockSendLinkedinWithdrawalReport.mockResolvedValue({ emailSent: true, recipientCount: 2 });
-    const { setAgentActiveAction } = await import('@/app/actions/user');
-    const result = await setAgentActiveAction({ currentUserId: 'admin-1',
+    const { setAgentActiveAction, previewUserDeactivationAction } = await import('@/app/actions/user');
+    const result = await setAgentActiveAction({ planHash: (await previewUserDeactivationAction({ currentUserId: 'admin-1', userId: 'agent-1' })).hash, currentUserId: 'admin-1',
       userId: 'agent-1', isActive: false });
     expect(result).toMatchObject({ linkedinWithdrawn: 1, withdrawalErrors: 0, reportEmailSent: true });
     expect(mockSendLinkedinWithdrawalReport).toHaveBeenCalledWith(expect.anything(), withdrawn, expect.any(Date));
+  });
+
+  it('requires a reviewed preview before disabling login', async () => {
+    mockGetDocument.mockImplementation(async (_db, _collection, id) => id === 'admin-1'
+      ? { $id: id, role: 'admin', name: 'Admin' } : { $id: id, role: 'agent', name: 'Agent' });
+    const { setAgentActiveAction } = await import('@/app/actions/user');
+    await expect(setAgentActiveAction({ currentUserId: 'admin-1', userId: 'agent-1', isActive: false }))
+      .rejects.toThrow('Review a fresh preview');
+    expect(mockUsersUpdateStatus).not.toHaveBeenCalled();
+    expect(mockUpdateDocument).not.toHaveBeenCalled();
+  });
+
+  it('surfaces withdrawal failures as incomplete handoffs after disabling login', async () => {
+    mockGetDocument.mockImplementation(async (_db, _collection, id) => id === 'admin-1'
+      ? { $id: id, role: 'admin', name: 'Admin' } : { $id: id, role: 'agent', name: 'Agent' });
+    mockWithdrawLinkedinRequestsForAgent.mockResolvedValue({ withdrawn: [], errors: [{ requestId: 'r1' }] });
+    const { setAgentActiveAction, previewUserDeactivationAction } = await import('@/app/actions/user');
+    const preview = await previewUserDeactivationAction({ currentUserId: 'admin-1', userId: 'agent-1' });
+    await expect(setAgentActiveAction({ currentUserId: 'admin-1', userId: 'agent-1', isActive: false, planHash: preview.hash }))
+      .rejects.toThrow('Login is disabled. Handoff is incomplete');
+    expect(mockUsersUpdateStatus).toHaveBeenCalledWith('agent-1', false);
+    expect(mockSendLinkedinWithdrawalReport).not.toHaveBeenCalled();
   });
 });

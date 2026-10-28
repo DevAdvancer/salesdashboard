@@ -192,7 +192,6 @@ These routes:
 ## Debug / Example Routes
 
 - `/api/debug-config`
-- `/api/sentry-example-api`
 
 These are support or debug surfaces rather than core business APIs.
 
@@ -222,7 +221,7 @@ Provides:
 - API error normalization
 - permission and network error handling
 - toast integration
-- Sentry reporting hooks
+- application error logging
 
 ## `lib/utils/branch-visibility.ts`
 

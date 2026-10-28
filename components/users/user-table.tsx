@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getVisibleUserBranches } from "@/lib/utils/branch-visibility";
 import { getPrimaryBranchId } from '@/lib/utils/user-branches';
+import { canDeactivateUser } from '@/lib/utils/user-deactivation';
 
 interface UserTableProps {
   filteredUsers: User[];
@@ -152,7 +153,7 @@ export function UserTable({
                     <th className="text-left py-3 px-4 font-semibold">Status</th>
                     <th className="text-left py-3 px-4 font-semibold">Branches</th>
                     <th className="text-left py-3 px-4 font-semibold">Created</th>
-                    {(isAdmin || isDeveloper || isTeamLead) && (
+                    {(isAdmin || isDeveloper || isTeamLead || user?.role === 'senior_tl') && (
                       <th className="text-left py-3 px-4 font-semibold">Actions</th>
                     )}
                   </tr>
@@ -190,7 +191,7 @@ export function UserTable({
                           ? new Date(u.$createdAt).toLocaleDateString("en-US", { timeZone: "America/New_York" })
                           : "N/A"}
                       </td>
-                      {(isAdmin || isDeveloper || isTeamLead) && (
+                      {(isAdmin || isDeveloper || isTeamLead || user?.role === 'senior_tl') && (
                         <td className="py-3 px-4">
                           <div className="flex flex-wrap gap-2">
                             {(isAdmin ||
@@ -207,7 +208,7 @@ export function UserTable({
                             )}
                             {u.$id !== user?.$id && (
                               <>
-                                {(isAdmin || isDeveloper || (isTeamLead && u.teamLeadId === user?.$id)) &&
+                                {user && canDeactivateUser(user, u) &&
                                   (u.role === "agent" ||
                                     u.role === "lead_generation" ||
                                     u.role === "monitor" ||
@@ -221,6 +222,10 @@ export function UserTable({
                                       {u.isActive === false ? "Reactivate" : "Inactivate"}
                                     </Button>
                                   )}
+                                {u.isActive === false && user && canDeactivateUser(user, u) &&
+                                  ['agent', 'lead_generation', 'monitor', 'operations'].includes(u.role) && (
+                                  <Button variant="outline" size="sm" onClick={() => handleSetAgentActive(u, false)}>Complete handoff</Button>
+                                )}
                                 {(isAdmin || isDeveloper) && (
                                   <Button
                                     variant="outline"

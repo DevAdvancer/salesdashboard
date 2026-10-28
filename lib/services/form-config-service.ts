@@ -68,7 +68,7 @@ export const DEFAULT_FIELDS: FormField[] = [
     required: false,
     visible: true,
     order: 10,
-    options: ['Citizen', 'Green Card', 'H1B', 'F1', 'Other'],
+    options: ['Citizen', 'Green Card', 'H1B', 'F1', 'Day 1 CPT', 'Other'],
   },
   { id: '11', type: 'textarea', label: 'Notes', key: 'notes', required: false, visible: true, order: 11 },
   {
@@ -204,7 +204,10 @@ function dedupeOptions(options: unknown, fieldKey?: string): string[] | undefine
 export function normalizeFormFields(fields: FormField[]): FormField[] {
   return fields.map((field) => {
     if (field.type !== 'dropdown' && field.type !== 'checklist') return field;
-    const options = dedupeOptions(field.options, field.key);
+    // Keep the new status available in configurations saved before it was added.
+    const options = dedupeOptions(field.key === 'visaStatus'
+      ? [...(Array.isArray(field.options) ? field.options : []), 'Day 1 CPT']
+      : field.options, field.key);
     return options ? { ...field, options } : { ...field, options: undefined };
   });
 }
