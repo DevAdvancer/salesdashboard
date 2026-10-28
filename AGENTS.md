@@ -44,8 +44,6 @@ bun run setup:crm-access:lock:dry   # Preview native Appwrite client-access isol
 bun run setup:crm-access:lock       # Disable native client access (requires deployed readiness + writes rollback snapshot to outputs/)
 bun run setup:beta-access:dry       # Preview beta_feature_access schema
 bun run setup:beta-access:apply     # Apply beta_feature_access schema
-bun run setup:maintenance:dry       # Preview maintenance_settings schema
-bun run setup:maintenance:apply     # Apply maintenance_settings schema
 bun run setup:report-emails:dry     # Preview report_email_settings schema
 bun run setup:report-emails:apply   # Apply report_email_settings schema
 bun run promote-admin               # Promote a user to admin
@@ -63,7 +61,7 @@ bun run link:linkedin-leads:dry              bun run link:linkedin-leads:apply -
 ```
 
 Note the mixed defaults across script families:
-- For `migrate:*`, `backfill:*`, `link:*`, and newer `setup:*` scripts (`setup:crm-access`, `setup:beta-access`, `setup:maintenance`, `setup:report-emails`), the **bare or `:dry`** command is the dry run and `:apply` writes.
+- For `migrate:*`, `backfill:*`, `link:*`, and newer `setup:*` scripts (`setup:crm-access`, `setup:beta-access`, `setup:report-emails`), the **bare or `:dry`** command is the dry run and `:apply` writes.
 - For `setup:appwrite`, `setup:appwrite:targets`, `setup:technical-payments`, `setup:pending-amounts`, and `setup:crm-access:lock`, the **bare** command writes and `:dry` is the preview.
 Always read the script's argv handling in [package.json](package.json) before assuming.
 
@@ -126,7 +124,7 @@ See [docs/crm-access-rollout.md](docs/crm-access-rollout.md) for deployment and 
 - Identical concurrent identity/database reads share only their in-flight promise. The proxy forwards a signed 30-second internal access pass from [lib/server/crm-access-pass.ts](lib/server/crm-access-pass.ts) to avoid duplicate profile reads in that same request. It strips browser-supplied passes. Every new request still checks the native session and MFA.
 - `/api/security/changes` is a finite snapshot, batched by the browser once per minute while visible. Collection metadata markers may be cached for 60 seconds, never authorization decisions or message bodies. There is no waiting-screen minute poll, allowed-user five-minute poll or focus access poll. One timer checks the native MFA expiry; blocked real requests dispatch `crm-access-recheck`.
 - Bootstrap returns only the user's own safe profile plus fresh access status. Public GET pages never exempt server actions posted to them. Public referrals use intake-only `POST /api/referrals`.
-- `bun run audit:native-mfa` is read-only and reports enrollment/email-verification readiness. MFA is an Appwrite account-wide setting: verify other apps sharing accounts can complete MFA before enrolling production accounts. Never auto-verify email or bulk-enable MFA on an older deployed login client.
+- `bun run audit:native-mfa` is read-only and reports enrollment/email-verification readiness. MFA is an Appwrite account-wide setting: verify other apps sharing accounts can complete MFA before enrolling production accounts. `bun run enable:native-mfa:dry` previews turning on native MFA for every matching CRM account (all roles); `enable:native-mfa:apply` writes it, and `--verify-emails` also marks matching emails verified. Apply only after every app sharing these accounts (including the UK deployment) runs a native-MFA login client, and only with explicit approval. New accounts are created with MFA on.
 
 ### Three server patterns coexist (and the browser gateway)
 
@@ -152,7 +150,7 @@ Key rules for client vs. server data access:
 
 Server actions run with the **admin** client, which bypasses Appwrite document permissions entirely. Every action must therefore authorize explicitly. Use the helpers in [lib/server/current-user.ts](lib/server/current-user.ts):
 
-- `getAuthenticatedAccount()` for the Appwrite account (automatically runs `assertCrmAccess()` when `CRM_ACCESS_ENFORCEMENT === 'true'` and checks maintenance status)
+- `getAuthenticatedAccount()` for the Appwrite account (automatically runs `assertCrmAccess()` when `CRM_ACCESS_ENFORCEMENT === 'true'`)
 - `assertAuthenticatedUserId(userId)` when the client passes a user id (never trust it)
 - `getAuthenticatedUserDoc()` for the full `User` doc including `department`, `role`, `branchIds`, `primaryBranchId`
 
@@ -202,7 +200,7 @@ That file also carries the authoritative comments on non-obvious collections. Re
 - `call_requests`: Sales to Resume workflow, status `not_called → pending_documents → call_done`, with per-request chat stored as a JSON array
 - `resume_chat_messages`: separate table from `chat_messages`, same shape
 - `linkedin_daily_stats` / `agent_daily_stats`: daily pre-aggregated caches
-- `report_email_settings` / `maintenance_settings` / `beta_feature_access`: server-managed operational settings and per-user beta feature allowlists
+- `report_email_settings` / `beta_feature_access`: server-managed operational settings and per-user beta feature allowlists
 
 ## Access control
 

@@ -1,15 +1,15 @@
 # Native Appwrite MFA and CRM access
 
-Every role uses password plus an emailed native Appwrite MFA code. Native MFA is mandatory by default in CRM. Appwrite handles challenge generation, delivery, verification, expiration and provider rate limits; no CRM OTP route, signed verification cookie, custom attempt table or temporary verification session remains.
+Every role uses password plus an emailed native Appwrite MFA code. Native MFA is mandatory by default in CRM. Appwrite handles challenge generation, delivery, verification, expiration and provider rate limits; no CRM OTP route, custom attempt table or temporary verification session remains.
 
-The server validates the native account and session on real requests, checks activation and the CRM email match, and requires `mfa`, `emailVerification`, password plus a native second factor, and `mfaUpdatedAt` within 12 elapsed hours. Native session expiry can shorten that window. Disabling MFA never provides an access bypass: enrollment is required again. Native email is the login UI's factor; there is no attendance or role exemption.
+The server validates the native account and session on real requests, checks activation and the CRM email match, and requires `mfa`, `emailVerification` and password plus a native second factor. The code is entered once per sign-in; access lasts until the native session expires (session length is set in the Appwrite console). Disabling MFA never provides an access bypass: enrollment is required again. Native email is the login UI's factor; there is no attendance or role exemption.
 
 ## User experience
 
 1. Enter email and password.
 2. For an account without a verified email, complete Appwrite's one-time email ownership link. The callback consumes and removes its secret from the address bar. The user must sign into the matching account first if the link opens another browser.
 3. Native MFA enrollment is automatic after email verification. Enter the six-digit code Appwrite sends to the registered email.
-4. CRM mounts only after fresh server verification. At 12 hours, enter another native email code. A missing or revoked native session requires password sign-in again.
+4. CRM mounts only after fresh server verification. The code is entered once per sign-in and lasts until the native session expires (Appwrite session length, currently one day). A missing or revoked native session requires password sign-in again.
 
 A pending native session may reject `account.get` with `user_more_factors_required`; preserve it and complete MFA before obtaining a JWT. Error and timeout states keep CRM providers blocked. Resend is user-triggered with a local cooldown; Appwrite remains responsible for rate limits. No periodic HTTP requests are needed while waiting for the code.
 
@@ -19,7 +19,7 @@ Attendance records, self-marking before 10 AM New York on weekdays, cover assign
 
 Native OTP enrollment and verification run browser-to-Appwrite. Custom challenge reads, writes, attempt claims, CRM code-delivery calls and attendance/cover access reads are removed. Ordinary role, department, scoped-data and session validation still run on Vercel. Existing finite change polling remains; this migration does not restore native realtime or change Vercel performance settings.
 
-Server account/profile helpers share the identity already checked for the current request. `getAuthenticatedUserDoc` reuses that profile even in actions without an explicit request-context wrapper, avoiding one duplicate user-document read. This adds no authorization TTL or cache across requests; later requests still reject deactivated accounts.
+Server account/profile helpers share the identity already checked for the current request. `getAuthenticatedUserDoc` reuses that profile even in actions without an explicit request-context wrapper, avoiding one duplicate user-document read. After one full check, the server sets a signed HttpOnly `crm_access` cookie bound to a hash of the browser's native credential cookies. `proxy.ts` admits later requests from that cookie with no Appwrite calls. Handlers skip the native session lookup but still read the live user record, so deactivation blocks data and writes immediately. The cookie lasts at most 15 minutes and never past the native session expiry; the browser rotates its JWT about every 10 minutes, which makes the cookie stop matching and triggers one fresh full check. Disabling MFA, or revoking a session in the Appwrite console, therefore takes effect within about 10–15 minutes. Each instance also reuses a validated identity for up to 30 seconds (`CRM_IDENTITY_CACHE_MS`, `0` disables).
 
 Actual savings depend on traffic and Appwrite pricing. Compare equivalent deployed 24-hour periods, separating Fluid memory/CPU, function invocations, database reads and email traffic. Native MFA does not eliminate Vercel security overhead or guarantee a fixed saving.
 
@@ -30,8 +30,8 @@ Appwrite native sessions and authentication logs provide the account/session/dev
 1. Run `bun run audit:native-mfa`. This is read-only, writes an ignored report under `outputs/`, and never verifies emails, enrolls users, changes passwords or revokes sessions. Resolve missing native accounts or mismatching emails before release.
 2. Check all apps sharing these Appwrite accounts. MFA is account-wide: an older UK or other client that cannot finish native MFA can lock out a shared account after enrollment. Deploy compatible login flows for those apps before production enrollment. Do not bulk-enable accounts on an older deployed CRM client.
 3. Run lint, Jest, typecheck, production build and local UI smoke checks. Obtain separate commit and push approvals under AGENTS.md. A push is not production verification.
-4. After deployment, `/api/security/readiness` reports protocol `crm-gateway-native-mfa-v1` and `nativeMfaRequired: true`. Test a consented account's real email delivery, wrong code, correct code, page reload, logout, expired MFA, deactivation and Sales/Resume role scoping. Local mocks do not establish SMTP delivery.
-5. Default enrollment happens on the user's next sign-in. Existing custom proof cookies are ignored and deleted by bridge logout; no old proof is migrated to native MFA.
+4. After deployment, `/api/security/readiness` reports protocol `crm-gateway-native-mfa-v1` and `nativeMfaRequired: true`. Test a consented account's real email delivery, wrong code, correct code, page reload, logout, expired native session, deactivation and Sales/Resume role scoping. Local mocks do not establish SMTP delivery.
+5. Enrollment happens on the user's next sign-in, or in bulk with `bun run enable:native-mfa:dry` then `bun run enable:native-mfa:apply` (all roles; skips missing, email-mismatched and inactive accounts; add `--verify-emails` to skip the one-time email link for profiles whose email matches). New users are created with MFA on. Existing custom proof cookies are ignored and deleted by bridge logout; no old proof is migrated to native MFA.
 6. Keep the data gateway and its authorization rules. Native collection/bucket isolation is a separate operation: `setup:crm-access:lock:dry` must show the exact changes first; apply requires the deployed new readiness protocol and saves a rollback snapshot. Do not restore raw database reads or realtime as part of MFA migration.
 
 Rollback must preserve a client capable of completing native MFA for already-enrolled accounts. Rolling back to the removed custom OTP client can lock them out. Review a native-MFA-compatible rollback build before rollout; never disable user MFA or weaken permissions as an automatic fallback.

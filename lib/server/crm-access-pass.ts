@@ -42,3 +42,33 @@ export function readAccessPass<TStatus, TUser>(token: string | null | undefined,
     return pass;
   } catch { return null; }
 }
+
+/**
+ * HttpOnly browser cookie: "this server already verified native MFA for these exact
+ * sign-in credentials". It is bound to a hash of the native credential cookies, so
+ * it is useless without them and is replaced whenever the browser rotates its JWT.
+ * It lets proxy.ts admit requests without Appwrite round trips; handlers still read
+ * the live user record before returning data or writing.
+ */
+export const ACCESS_COOKIE_TTL_MS = 15 * 60_000;
+export type AccessCookie<TAccount, TSession> = {
+  kind: 'crm-access-cookie'; credential: string; account: TAccount; session: TSession; expiresAt: number;
+};
+/** Returns null when `notAfter` (the native session expiry) has already passed. */
+export function signAccessCookie<TAccount, TSession>(cookie: Omit<AccessCookie<TAccount, TSession>, 'kind' | 'expiresAt'>, notAfter: number, now = Date.now()) {
+  const expiresAt = Math.min(now + ACCESS_COOKIE_TTL_MS, Number.isFinite(notAfter) ? notAfter : now);
+  if (expiresAt <= now) return null;
+  const body = Buffer.from(JSON.stringify({ ...cookie, kind: 'crm-access-cookie', expiresAt })).toString('base64url');
+  return { value: `${body}.${signature(`access-cookie:${body}`)}`, expiresAt };
+}
+export function readAccessCookie<TAccount, TSession>(token: string | null | undefined, credential: string, now = Date.now()) {
+  if (!token || token.length > 4_000) return null;
+  try {
+    const [body, sig, extra] = token.split('.');
+    if (extra || !body || !sig || !equal(signature(`access-cookie:${body}`), sig)) return null;
+    const cookie = JSON.parse(Buffer.from(body, 'base64url').toString()) as AccessCookie<TAccount, TSession>;
+    if (cookie.kind !== 'crm-access-cookie' || cookie.credential !== credential) return null;
+    if (!Number.isFinite(cookie.expiresAt) || cookie.expiresAt <= now || cookie.expiresAt > now + ACCESS_COOKIE_TTL_MS) return null;
+    return cookie;
+  } catch { return null; }
+}

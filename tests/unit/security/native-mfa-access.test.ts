@@ -20,7 +20,7 @@ afterEach(() => { jest.useRealTimers(); if (flag === undefined) delete process.e
 it.each(['agent', 'team_lead', 'senior_tl', 'lead_generation', 'compliance', 'admin', 'developer', 'monitor', 'operations'])(
   'allows native-verified %s without attendance or a cover request', async role => {
     identity.user.role = role as SecurityIdentity['user']['role'];
-    expect(await evaluateCrmAccess(identity)).toMatchObject({ state: 'allowed', recheckAt: '2026-10-29T01:00:00.000Z' });
+    expect(await evaluateCrmAccess(identity)).toMatchObject({ state: 'allowed', recheckAt: '2026-10-30T13:00:00.000Z' });
     expect(mockList).not.toHaveBeenCalled();
   });
 it('never accepts a legacy proof or an old proxy pass instead of native MFA', async () => {

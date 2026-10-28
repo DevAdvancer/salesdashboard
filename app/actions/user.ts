@@ -15,6 +15,7 @@ import { sendLinkedinWithdrawalReport, withdrawLinkedinRequestsForAgent } from '
 import { planUserDeactivation, handoffDeactivatedUserLeads } from '@/lib/server/user-deactivation';
 import { canDeactivateUser, type HandoffUser } from '@/lib/utils/user-deactivation';
 import { withLinkedinProfileLock } from '@/lib/server/linkedin-lead-protection';
+import { clearCrmIdentityCache } from '@/lib/server/crm-identity-cache';
 
 // Constants
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
@@ -26,6 +27,17 @@ type CreateAdminInput = {
     email: string;
     password: string;
 };
+
+/** New accounts start with native MFA on. The sign-in gate completes email
+ * ownership verification and sends the first code; a failure here only defers
+ * enrollment to that gate, which the server requires for every role anyway. */
+async function enableNativeMfa(users: { updateMfa: (userId: string, mfa: boolean) => Promise<unknown> }, userId: string) {
+    try {
+        await users.updateMfa(userId, true);
+    } catch (error) {
+        logger.warn({ userId, error }, 'Could not enable native MFA for new user; enrollment completes at first sign-in');
+    }
+}
 
 function getErrorCode(error: unknown): number | undefined {
     return typeof error === 'object' && error !== null && 'code' in error
@@ -201,6 +213,7 @@ export async function createAdminAction(input: CreateAdminInput & { currentUserI
 
     try {
         await users.create(userId, normalizedEmail, undefined, password, name);
+        await enableNativeMfa(users, userId);
     } catch (e: unknown) {
         if (getErrorCode(e) === 409) throw new Error("A user with this email already exists");
         throw e;
@@ -263,6 +276,7 @@ export async function createDeveloperAction(input: CreateAdminInput & { currentU
 
     try {
         await users.create(userId, normalizedEmail, undefined, password, name);
+        await enableNativeMfa(users, userId);
     } catch (e: unknown) {
         if (getErrorCode(e) === 409) throw new Error("A user with this email already exists");
         throw e;
@@ -326,6 +340,7 @@ export async function createTeamLeadAction(input: CreateTeamLeadInput & { curren
 
     try {
         await users.create(userId, email, undefined, password, name);
+        await enableNativeMfa(users, userId);
     } catch (e: any) {
         if (e.code === 409) throw new Error("A user with this email already exists");
         throw e;
@@ -413,6 +428,7 @@ export async function createAgentAction(input: CreateAgentInput & { currentUserI
 
     try {
         await users.create(userId, email, undefined, password, name);
+        await enableNativeMfa(users, userId);
     } catch (e: any) {
         if (e.code === 409) throw new Error("A user with this email already exists");
         throw e;
@@ -785,6 +801,8 @@ export async function setAgentActiveAction(input: {
 
         try {
             await users.updateStatus(userId, isActive);
+            // Stop reusing this instance's validated sessions; others expire within seconds.
+            if (!isActive) clearCrmIdentityCache();
 
             const updates = isActive
                 ? { isActive: true }

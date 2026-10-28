@@ -78,7 +78,7 @@ it('has no five-minute, attendance-boundary, focus or waiting-user access pollin
     expect(fetch).not.toHaveBeenCalled(); view.unmount();
   } finally { jest.useRealTimers(); }
 });
-it('requests a new native code at the server-selected twelve-hour expiry', async () => {
+it('requests a new sign-in at the server-selected native session expiry', async () => {
   jest.useFakeTimers().setSystemTime(new Date('2026-10-28T16:00:00Z'));
   try {
     mockInitialAccess = { userId: 'agent', status: { state: 'allowed', dateKey: '2026-10-28', recheckAt: '2026-10-28T16:01:00.000Z' } };

@@ -16,10 +16,6 @@ jest.mock("@/lib/server/appwrite", () => ({
   createSessionClient: jest.fn(),
   createAdminClient: jest.fn(),
 }));
-jest.mock("@/lib/server/maintenance", () => ({
-  getRequestMaintenanceStatus: jest.fn().mockResolvedValue({ active: false }),
-  isMaintenanceManager: jest.fn().mockReturnValue(false),
-}));
 
 const mockCreateSessionClient = createSessionClient as jest.MockedFunction<typeof createSessionClient>;
 const mockCreateAdminClient = createAdminClient as jest.MockedFunction<typeof createAdminClient>;

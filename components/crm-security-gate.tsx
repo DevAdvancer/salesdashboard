@@ -27,7 +27,7 @@ export function CrmSecurityGate({ children }: { children: React.ReactNode }) {
   // previously flashed the security panel on every hard refresh.
   const status = !serverSessionReady || !userId ? null : result?.userId === userId ? result.status
     : initialAccess?.userId === userId ? initialAccess?.status : null;
-  const publicPage = pathname === '/referral' || pathname === '/maintenance';
+  const publicPage = pathname === '/referral';
   const refresh = useCallback(async () => {
     if (loading || sessionRestoreError || !userId || !serverSessionReady || publicPage) return;
     if (pendingRefresh.current) return pendingRefresh.current;

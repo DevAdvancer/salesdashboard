@@ -5,7 +5,6 @@ import { account, databases, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite';
 import { User, UserRole, Department, AuthContext as AuthContextType } from '@/lib/types';
 import { deleteAppwritePresence } from '@/lib/utils/appwrite-presences';
 import { clearBrowserQueryClient } from '@/lib/queries/client';
-import { MAINTENANCE_MANAGER_EMAIL, MAINTENANCE_MANAGER_USER_ID } from '@/lib/constants/maintenance';
 import { withClientTimeout } from '@/lib/utils/client-timeout';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -195,20 +194,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const session = await withClientTimeout(() => account.get(), 8_000, 'Could not restore the session. Please retry.', restoreAbort.signal);
         if (cancelled) return;
         if (session) {
-          const maintenance = await withClientTimeout(async signal => {
-            const response = await fetch('/api/maintenance/status', { cache: 'no-store', signal });
-            return response.ok ? await response.json() as { active?: boolean } : null;
-          }, 4_000, 'Could not check maintenance status. Please retry.', restoreAbort.signal);
-          if (cancelled) return;
-          if (maintenance) {
-            if (maintenance.active && (session.$id !== MAINTENANCE_MANAGER_USER_ID ||
-              session.email?.trim().toLowerCase() !== MAINTENANCE_MANAGER_EMAIL)) {
-              // Clear only this site's CRM cookie, not the cross-site Appwrite session.
-              await clearServerSession();
-              if (!cancelled) setUser(null);
-              return;
-            }
-          }
           // The own-profile gateway needs the server JWT before its bootstrap read.
           const refreshed = await syncServerSession({ force: true, bootstrap: true, signal: restoreAbort.signal });
           if (cancelled) return;
@@ -308,13 +293,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     let createdSession = false;
     try {
-      const maintenanceResponse = await fetch('/api/maintenance/status', { cache: 'no-store' });
-      if (maintenanceResponse.ok) {
-        const maintenance = await maintenanceResponse.json() as { active?: boolean };
-        if (maintenance.active && email.trim().toLowerCase() !== MAINTENANCE_MANAGER_EMAIL) {
-          throw new Error('CRM maintenance is in progress. Try again after the scheduled end time.');
-        }
-      }
       // Re-gate for the new session.
       setServerSessionReady(false);
       setInitialAccess(null);

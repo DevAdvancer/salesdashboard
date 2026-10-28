@@ -3,7 +3,9 @@ import { getAuthenticatedAccount } from '@/lib/server/current-user';
 import { createAdminClient } from '@/lib/server/appwrite';
 export async function hasAcknowledgedSecurityNotice() {
   const actor = await getAuthenticatedAccount();
-  return actor.prefs?.crmSecurityNoticeVersion === 'native-mfa-v1';
+  // Read live: the signed access cookie carries no account preferences.
+  const { users } = await createAdminClient();
+  return (await users.getPrefs(actor.$id))?.crmSecurityNoticeVersion === 'native-mfa-v1';
 }
 export async function acknowledgeSecurityNotice() {
   const actor = await getAuthenticatedAccount();

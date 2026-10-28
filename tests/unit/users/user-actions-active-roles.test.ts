@@ -4,6 +4,7 @@ const mockAssertAuthenticatedUserId = jest.fn();
 const mockCreateAdminClient = jest.fn();
 const mockUsersCreate = jest.fn();
 const mockUsersDelete = jest.fn();
+const mockUsersUpdateMfa = jest.fn();
 const mockGetDocument = jest.fn();
 const mockCreateDocument = jest.fn();
 const mockListDocuments = jest.fn();
@@ -57,6 +58,7 @@ describe('active user role creation actions', () => {
       users: {
         create: mockUsersCreate,
         delete: mockUsersDelete,
+        updateMfa: mockUsersUpdateMfa,
       },
       databases: {
         getDocument: mockGetDocument,
@@ -133,6 +135,14 @@ describe('active user role creation actions', () => {
     expect(getCreatedUserPayload()).not.toHaveProperty('managerIds');
     expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerId');
     expect(getCreatedUserPayload()).not.toHaveProperty('assistantManagerIds');
+    expect(mockUsersUpdateMfa).toHaveBeenCalledWith(mockUsersCreate.mock.calls[0][0], true);
+  });
+
+  it('still creates the user when native MFA cannot be enabled yet', async () => {
+    mockUsersUpdateMfa.mockRejectedValueOnce(new Error('Appwrite unavailable'));
+    const { createTeamLeadAction } = await import('@/app/actions/user');
+    await createTeamLeadAction({ currentUserId: 'admin-1', name: 'Team Lead', email: 'tl2@example.com', password: 'password123', branchIds: ['branch-1'] });
+    expect(mockCreateDocument).toHaveBeenCalled();
   });
 
   it('creates agents without retired manager attributes', async () => {

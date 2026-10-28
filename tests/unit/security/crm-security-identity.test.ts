@@ -1,5 +1,5 @@
 /** @jest-environment node */
-import { resolveSecurityIdentity } from '@/lib/server/crm-access';
+import { clearCrmIdentityCache, resolveSecurityIdentity } from '@/lib/server/crm-access';
 const mockAccount = { get: jest.fn(), getSession: jest.fn() };
 const mockDb = { getDocument: jest.fn() };
 jest.mock('node-appwrite', () => ({
@@ -9,6 +9,9 @@ jest.mock('node-appwrite', () => ({
 function jar(jwt: string, legacyProof = 'proof') { return { get: (name: string) => name === 'crm_appwrite_jwt' ? { value: jwt } : name === 'crm_email_verified' ? { value: legacyProof } : undefined }; }
 beforeEach(() => {
   jest.clearAllMocks();
+  // Strict mode: these cases cover the live check with settled reuse switched off.
+  process.env.CRM_IDENTITY_CACHE_MS = '0';
+  clearCrmIdentityCache();
   mockAccount.get.mockResolvedValue({ $id: 'person', email: 'person@example.com' });
   mockAccount.getSession.mockResolvedValue({ $id: 'session' });
   mockDb.getDocument.mockResolvedValue({ $id: 'person', email: 'person@example.com', isActive: true });
@@ -58,5 +61,80 @@ describe('signed pass forwarded by the proxy for the same request', () => {
   it('never reuses a pass once the native session is revoked', async () => {
     mockAccount.get.mockRejectedValueOnce(new Error('Session revoked'));
     await expect(resolveSecurityIdentity(jar('revoked-pass'), pass())).rejects.toThrow('sign in again');
+  });
+});
+describe('short-lived reuse of a validated native session', () => {
+  const session = (expire = new Date(Date.now() + 3_600_000).toISOString()) => ({ $id: 'session', expire });
+  beforeEach(() => { process.env.CRM_IDENTITY_CACHE_MS = '30000'; });
+  afterAll(() => { delete process.env.CRM_IDENTITY_CACHE_MS; });
+  it('reuses a success for the same credentials within the window, ignoring the per-request pass', async () => {
+    mockAccount.getSession.mockResolvedValue(session());
+    await resolveSecurityIdentity(jar('cached'));
+    const again = await resolveSecurityIdentity(jar('cached'), 'any-pass');
+    expect(mockAccount.get).toHaveBeenCalledTimes(1); expect(mockDb.getDocument).toHaveBeenCalledTimes(1);
+    expect(again.preverified).toBeUndefined();
+    await resolveSecurityIdentity(jar('other-cached'));
+    expect(mockAccount.get).toHaveBeenCalledTimes(2);
+  });
+  it('rechecks after the window, after clearing, and never caches failures', async () => {
+    jest.useFakeTimers({ now: Date.now() });
+    try {
+      mockAccount.getSession.mockResolvedValue(session());
+      await resolveSecurityIdentity(jar('expiring'));
+      jest.advanceTimersByTime(30_001);
+      mockAccount.get.mockRejectedValueOnce(new Error('Session revoked'));
+      await expect(resolveSecurityIdentity(jar('expiring'))).rejects.toThrow('sign in again');
+      await resolveSecurityIdentity(jar('expiring'));
+      clearCrmIdentityCache();
+      await resolveSecurityIdentity(jar('expiring'));
+      expect(mockAccount.get).toHaveBeenCalledTimes(4);
+    } finally { jest.useRealTimers(); }
+  });
+  it('never reuses a session past its native expiry', async () => {
+    mockAccount.getSession.mockResolvedValue(session(new Date(Date.now() - 1).toISOString()));
+    await resolveSecurityIdentity(jar('expired'));
+    await resolveSecurityIdentity(jar('expired'));
+    expect(mockAccount.get).toHaveBeenCalledTimes(2);
+  });
+});
+describe('signed access cookie issued after one full check', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { accessCookieFor, assertCrmAccessForProxy } = require('@/lib/server/crm-access');
+  const verified = { $id: 'person', email: 'person@example.com', mfa: true, emailVerification: true, status: true };
+  const nativeSession = () => ({ $id: 'session', userId: 'person', factors: ['password', 'email'],
+    mfaUpdatedAt: new Date(Date.now() - 3_600_000).toISOString(), expire: new Date(Date.now() + 86_400_000).toISOString() });
+  function withCookie(jwt: string, value?: string) {
+    return { get: (name: string) => name === 'crm_appwrite_jwt' ? { value: jwt } : name === 'crm_access' && value ? { value } : undefined };
+  }
+  async function issued(jwt: string) {
+    const { cookie } = await assertCrmAccessForProxy(withCookie(jwt));
+    expect(cookie).toMatchObject({ name: 'crm_access', options: { httpOnly: true, sameSite: 'lax', path: '/' } });
+    jest.clearAllMocks();
+    return cookie.value as string;
+  }
+  beforeEach(() => { mockAccount.get.mockResolvedValue(verified); mockAccount.getSession.mockResolvedValue(nativeSession()); });
+  it('lets the proxy admit later requests with no Appwrite calls', async () => {
+    const value = await issued('jwt-a');
+    await expect(assertCrmAccessForProxy(withCookie('jwt-a', value))).resolves.toEqual({ pass: null, cookie: null });
+    expect(mockAccount.get).not.toHaveBeenCalled(); expect(mockDb.getDocument).not.toHaveBeenCalled();
+  });
+  it('skips the native session lookup in handlers but still reads the live user record', async () => {
+    const value = await issued('jwt-b');
+    await expect(resolveSecurityIdentity(withCookie('jwt-b', value))).resolves.toMatchObject({ account: { $id: 'person' }, session: { $id: 'session' } });
+    expect(mockAccount.get).not.toHaveBeenCalled(); expect(mockDb.getDocument).toHaveBeenCalledTimes(1);
+    mockDb.getDocument.mockResolvedValueOnce({ $id: 'person', email: 'person@example.com', isActive: false });
+    await expect(resolveSecurityIdentity(withCookie('jwt-b', value))).rejects.toMatchObject({ code: 'ACCOUNT_INACTIVE' });
+  });
+  it('is ignored for other credentials, when tampered with, or once the native session expired', async () => {
+    const value = await issued('jwt-c');
+    const [body, sig] = value.split('.');
+    const forged = `${Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(body, 'base64url').toString()), credential: 'x' })).toString('base64url')}.${sig}`;
+    for (const jar of [withCookie('jwt-other', value), withCookie('jwt-c', forged)]) {
+      await assertCrmAccessForProxy(jar);
+    }
+    expect(mockAccount.get).toHaveBeenCalledTimes(2);
+    expect(accessCookieFor({ account: verified, session: { ...nativeSession(), expire: new Date(Date.now() - 1).toISOString() },
+      user: { $id: 'person' } }, withCookie('jwt-c'))).toBeNull();
+    expect(accessCookieFor({ account: verified, session: { ...nativeSession(), factors: ['password'] }, user: { $id: 'person' } }, withCookie('jwt-c'))).toBeNull();
   });
 });

@@ -106,7 +106,7 @@ export function NativeMfaGate({ onVerified, onSignOut }: Props) {
         {verificationSent && <p role="status">Open the link in your email, then continue here. If it opens another device, sign in there first.</p>}
         <Button variant="outline" disabled={busy} onClick={() => void run(sendCode)}>I verified my email</Button>
       </> : <>
-        <p>Enter the six-digit code sent by Appwrite to your registered email. Verification lasts up to 12 hours.</p>
+        <p>Enter the six-digit code sent by Appwrite to your registered email. You only need a code once per sign-in.</p>
         <form onSubmit={event => { event.preventDefault(); void verify(); }} className="space-y-3">
           <Label htmlFor="native-mfa-code">Email verification code</Label>
           <Input id="native-mfa-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} pattern="[0-9]{6}" required

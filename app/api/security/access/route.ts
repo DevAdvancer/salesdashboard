@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { crmAccessEnabled, CrmAccessError, evaluateCrmAccess, resolveSecurityIdentity } from '@/lib/server/crm-access';
+import { accessCookieFor, crmAccessEnabled, CrmAccessError, evaluateCrmAccess, resolveSecurityIdentity, type SecurityIdentity } from '@/lib/server/crm-access';
 import { publicUser } from '@/lib/server/crm-browser-data';
-import { getRequestMaintenanceStatus, isMaintenanceManager } from '@/lib/server/maintenance';
 import { getTodayEst } from '@/lib/utils/est-date';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
+/** Lets the proxy admit this sign-in's next requests without Appwrite calls. */
+function withAccessCookie(request: NextRequest, response: NextResponse, identity: SecurityIdentity) {
+  if (!crmAccessEnabled()) return response;
+  const cookie = accessCookieFor(identity, request.cookies);
+  if (cookie) response.cookies.set(cookie.name, cookie.value, cookie.options);
+  return response;
+}
 
 /** Read native session state only. Codes are sent and verified directly by Appwrite. */
 export async function GET(request: NextRequest) {
@@ -16,12 +22,10 @@ export async function GET(request: NextRequest) {
   try {
     const identity = await resolveSecurityIdentity();
     if (view === 'bootstrap') {
-      const maintenance = await getRequestMaintenanceStatus(request.headers);
-      if (maintenance.active && !isMaintenanceManager(identity.account)) return json({ error: 'CRM maintenance is in progress.' }, 503);
-      return json({ user: publicUser(identity.user as unknown as Record<string, unknown>, true),
-        status: crmAccessEnabled() ? await evaluateCrmAccess(identity) : { state: 'disabled', dateKey: getTodayEst() } });
+      return withAccessCookie(request, json({ user: publicUser(identity.user as unknown as Record<string, unknown>, true),
+        status: crmAccessEnabled() ? await evaluateCrmAccess(identity) : { state: 'disabled', dateKey: getTodayEst() } }), identity);
     }
-    return json(await evaluateCrmAccess(identity));
+    return withAccessCookie(request, json(await evaluateCrmAccess(identity)), identity);
   } catch (error) {
     if (error instanceof CrmAccessError) return json({ error: error.message, code: error.code }, error.status);
     return json({ error: 'CRM access verification is temporarily unavailable. Please retry.' }, 503);

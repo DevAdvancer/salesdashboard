@@ -3,7 +3,6 @@ import { createAdminClient, createSessionClient } from "@/lib/server/appwrite";
 import { bumpRequestCount } from "@/lib/server/appwrite-request-meter";
 import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
 import type { User } from "@/lib/types";
-import { getRequestMaintenanceStatus, isMaintenanceManager } from "@/lib/server/maintenance";
 
 import { cache } from "react";
 import { memoizeCrmRequest } from '@/lib/server/crm-request-context';
@@ -29,10 +28,6 @@ const getAuthenticatedContext = cache(() => memoizeCrmRequest(accountRequestKey,
     // `/v1/account` bypasses the database read cache.
     bumpRequestCount();
     authenticated = await account.get();
-  }
-  const maintenance = await getRequestMaintenanceStatus();
-  if (maintenance.active && !isMaintenanceManager(authenticated)) {
-    throw new Error("CRM maintenance is in progress. Try again after the scheduled end time.");
   }
   return { account: authenticated, checkedUser };
 }));

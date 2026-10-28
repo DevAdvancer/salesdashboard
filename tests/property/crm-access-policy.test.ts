@@ -36,7 +36,7 @@ it('exempts exactly the four agreed leadership roles from attendance', () => {
   }));
 });
 it('does not let server actions inherit public-page exceptions or expose mail routes', () => {
-  fc.assert(fc.property(fc.constantFrom('/login', '/referral', '/api/referrals', '/maintenance', '/api/security/access', '/api/cron/payment-reminders'), path => {
+  fc.assert(fc.property(fc.constantFrom('/login', '/referral', '/api/referrals', '/api/security/access', '/api/cron/payment-reminders'), path => {
     expect(bypassCrmGate(path, 'POST', true)).toBe(false);
   }));
   expect(bypassCrmGate('/api/referrals', 'POST', false)).toBe(true);
@@ -51,4 +51,8 @@ it('does not let server actions inherit public-page exceptions or expose mail ro
     expect(bypassCrmGate(path, 'GET', false)).toBe(false);
     expect(bypassCrmGate(path, 'POST', false)).toBe(false);
   }
+});
+it('no longer exposes the retired maintenance page or status endpoint without CRM access', () => {
+  expect(bypassCrmGate('/maintenance', 'GET', false)).toBe(false);
+  expect(bypassCrmGate('/api/maintenance/status', 'GET', false)).toBe(false);
 });

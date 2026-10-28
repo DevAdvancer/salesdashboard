@@ -1,14 +1,15 @@
 import { proxy } from '@/proxy';
 import { assertCrmAccessForProxy as assertCrmAccess, crmAccessEnabled, CrmAccessError } from '@/lib/server/crm-access';
 import type { NextRequest } from 'next/server';
-const mockNext = jest.fn((init?: { request?: { headers?: Headers } }) => { void init; return { allowed: true }; });
+const mockCookies = { set: jest.fn(), delete: jest.fn() };
+const mockNext = jest.fn((init?: { request?: { headers?: Headers } }) => { void init; return { allowed: true, cookies: mockCookies }; });
 jest.mock('@/lib/server/crm-access', () => ({ assertCrmAccessForProxy: jest.fn(), crmAccessEnabled: jest.fn(),
-  CRM_ACCESS_PASS_HEADER: 'x-crm-access-pass',
+  CRM_ACCESS_PASS_HEADER: 'x-crm-access-pass', CRM_ACCESS_COOKIE: 'crm_access',
   CrmAccessError: class extends Error { constructor(public status: number, message: string, public code: string) { super(message); } },
 }));
 jest.mock('next/server', () => ({ NextResponse: {
-  next: (init?: { request?: { headers?: Headers } }) => mockNext(init), json: (body: unknown, options: unknown) => ({ body, options }),
-  redirect: (url: URL) => ({ redirect: url.toString() }),
+  next: (init?: { request?: { headers?: Headers } }) => mockNext(init), json: (body: unknown, options: unknown) => ({ body, options, cookies: mockCookies }),
+  redirect: (url: URL) => ({ redirect: url.toString(), cookies: mockCookies }),
 } }));
 function request(path: string, method = 'POST', action = false, extra: Record<string, string> = {}) {
   const headers = new Headers(extra);
@@ -33,14 +34,14 @@ it('fails closed when access checks fail unexpectedly', async () => {
   expect(await proxy(request('/api/mock/send-email'))).toMatchObject({ options: { status: 503 } });
 });
 it('keeps the sign-in, verification and session-sync endpoints reachable without approving CRM access', async () => {
-  expect(await proxy(request('/login', 'GET'))).toEqual({ allowed: true });
-  expect(await proxy(request('/api/security/access'))).toEqual({ allowed: true });
-  expect(await proxy(request('/api/auth/appwrite-session'))).toEqual({ allowed: true });
+  expect(await proxy(request('/login', 'GET'))).toMatchObject({ allowed: true });
+  expect(await proxy(request('/api/security/access'))).toMatchObject({ allowed: true });
+  expect(await proxy(request('/api/auth/appwrite-session'))).toMatchObject({ allowed: true });
   expect(assertCrmAccess).not.toHaveBeenCalled();
 });
 it('forwards a fresh signed pass to the handler of an approved request', async () => {
-  (assertCrmAccess as jest.Mock).mockResolvedValue('signed-pass');
-  expect(await proxy(request('/api/leads/list', 'GET', false, { 'x-crm-access-pass': 'forged' }))).toEqual({ allowed: true });
+  (assertCrmAccess as jest.Mock).mockResolvedValue({ pass: 'signed-pass', cookie: null });
+  expect(await proxy(request('/api/leads/list', 'GET', false, { 'x-crm-access-pass': 'forged' }))).toMatchObject({ allowed: true });
   expect(forwardedHeaders().get('x-crm-access-pass')).toBe('signed-pass');
 });
 it('strips a browser-supplied pass on public and bypassed paths', async () => {
@@ -53,9 +54,19 @@ it('strips a browser-supplied pass on public and bypassed paths', async () => {
   expect(forwardedHeaders().get('x-crm-access-pass')).toBeNull();
 });
 it('lets only the changes GET authorize in its handler while other methods still pass the proxy gate', async () => {
-  expect(await proxy(request('/api/security/changes', 'GET'))).toEqual({ allowed: true });
+  expect(await proxy(request('/api/security/changes', 'GET'))).toMatchObject({ allowed: true });
   expect(assertCrmAccess).not.toHaveBeenCalled();
   (assertCrmAccess as jest.Mock).mockRejectedValue(new CrmAccessError(403, 'Verify your email', 'otp_required'));
   expect(await proxy(request('/api/security/changes', 'POST'))).toMatchObject({ options: { status: 403 } });
   expect(await proxy(request('/api/security/changes', 'POST', true))).toMatchObject({ options: { status: 403 } });
+});
+it('sets the signed access cookie after a full check and clears it when access is refused', async () => {
+  const cookie = { name: 'crm_access', value: 'signed', options: { httpOnly: true } };
+  (assertCrmAccess as jest.Mock).mockResolvedValue({ pass: null, cookie });
+  await proxy(request('/leads', 'GET'));
+  expect(mockCookies.set).toHaveBeenCalledWith('crm_access', 'signed', { httpOnly: true });
+  (assertCrmAccess as jest.Mock).mockRejectedValue(new CrmAccessError(401, 'Please sign in again.', 'UNAUTHENTICATED'));
+  await proxy(request('/leads', 'GET'));
+  await proxy(request('/api/leads/list', 'GET'));
+  expect(mockCookies.delete).toHaveBeenCalledTimes(2);
 });

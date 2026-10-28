@@ -12,20 +12,21 @@ jest.mock('next/headers', () => ({ cookies: async () => ({ get: (name: string) =
   headers: async () => ({ get: (name: string) => name === 'x-crm-access-pass' ? mockPassHeader : null }) }));
 jest.mock('@/lib/server/crm-access-pass', () => ({ readAccessPass: (...args: unknown[]) => (mockReadAccessPass as (...a: unknown[]) => unknown)(...args), signAccessPass: () => 'pass' }));
 jest.mock('@/lib/server/appwrite', () => ({ createAdminClient: async () => ({ databases: { clearReadCacheForCollection: jest.fn() } }) }));
-jest.mock('@/lib/server/maintenance', () => ({ getRequestMaintenanceStatus: async () => ({ active: false }) }));
-import { assertCrmAccess } from '@/lib/server/crm-access';
+import { assertCrmAccess, clearCrmIdentityCache } from '@/lib/server/crm-access';
 import { getAuthenticatedUserDoc } from '@/lib/server/current-user';
 import { withCrmRequestContext } from '@/lib/server/crm-request-context';
 const originalFlag = process.env.CRM_ACCESS_ENFORCEMENT;
 beforeEach(() => {
   jest.useFakeTimers().setSystemTime(new Date('2026-10-23T15:00:00Z'));
+  // These cases cover the live per-request check; settled reuse is tested separately.
+  process.env.CRM_IDENTITY_CACHE_MS = '0'; clearCrmIdentityCache();
   process.env.CRM_ACCESS_ENFORCEMENT = 'true'; jest.clearAllMocks(); mockPassHeader = null; mockReadAccessPass.mockReturnValue(null);
   mockAccount.get.mockResolvedValue({ $id: 'person', email: 'person@example.com', mfa: true, emailVerification: true });
   mockAccount.getSession.mockResolvedValue({ $id: 'session', userId: 'person', factors: ['password', 'email'], mfaUpdatedAt: '2026-10-23T14:00:00Z', expire: '2026-10-24T00:00:00Z' });
   mockDb.getDocument.mockResolvedValue({ $id: 'person', name: 'Person', department: 'resume', role: 'agent', email: 'person@example.com', isActive: true });
   mockDb.listDocuments.mockResolvedValue({ documents: [{ userId: 'person', present: true }] });
 });
-afterEach(() => { jest.useRealTimers(); if (originalFlag === undefined) delete process.env.CRM_ACCESS_ENFORCEMENT; else process.env.CRM_ACCESS_ENFORCEMENT = originalFlag; });
+afterEach(() => { jest.useRealTimers(); delete process.env.CRM_IDENTITY_CACHE_MS; if (originalFlag === undefined) delete process.env.CRM_ACCESS_ENFORCEMENT; else process.env.CRM_ACCESS_ENFORCEMENT = originalFlag; });
 
 it('uses one live profile and native MFA lookup for an entire save, preserving department', async () => {
   await withCrmRequestContext(async () => {
@@ -84,12 +85,12 @@ it('reuses the proxy decision for the same request without re-reading the profil
   expect(mockDb.listDocuments).not.toHaveBeenCalled();
 });
 
-it('does not let an internal proxy pass bypass the native 12-hour MFA expiry', async () => {
+it('does not let an internal proxy pass outlive the native session', async () => {
   mockPassHeader = 'signed-pass';
   mockReadAccessPass.mockReturnValue({ accountId: 'person', sessionId: 'session', dateKey: '2026-10-23',
     status: { state: 'allowed', dateKey: '2026-10-23' }, user: { $id: 'person', role: 'agent', email: 'person@example.com', isActive: true } });
   mockAccount.getSession.mockResolvedValue({ $id: 'session', userId: 'person', factors: ['password', 'email'],
-    mfaUpdatedAt: '2026-10-22T14:00:00Z', expire: '2026-10-24T00:00:00Z' });
+    mfaUpdatedAt: '2026-10-22T14:00:00Z', expire: '2026-10-23T14:30:00Z' });
   await expect(withCrmRequestContext(() => assertCrmAccess())).rejects.toThrow('sign-in code');
   expect(mockDb.listDocuments).not.toHaveBeenCalled();
 });

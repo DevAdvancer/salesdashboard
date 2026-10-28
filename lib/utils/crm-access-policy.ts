@@ -40,7 +40,7 @@ export function bypassCrmGate(path: string, method: string, serverAction: boolea
   // This handler enforces the gate itself, with a narrow own-profile bootstrap exception.
   if (path.startsWith('/api/appwrite/')) return true;
   if (method === 'GET' || method === 'HEAD') {
-    return ['/login', '/referral', '/maintenance', '/api/maintenance/status', '/api/security/readiness'].includes(path);
+    return ['/login', '/referral', '/api/security/readiness'].includes(path);
   }
   return false;
 }

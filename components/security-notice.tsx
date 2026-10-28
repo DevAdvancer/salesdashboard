@@ -9,7 +9,7 @@ export function SecurityNoticeText() {
     <h2 className="text-xl font-semibold">Security Notice · CRM HUB v6.0</h2>
     <p>Your account is personal to you. Keep your password and verification codes confidential. You are responsible for protecting your account and reporting suspicious activity promptly to your TL, manager or administrator. Sharing credentials or failing to report a known problem can leave your account exposed and you accountable for its use.</p>
     <p>Each login requires a verification code sent to your registered email. Never share this code. Report any sign-in code you did not request.</p>
-    <p>Native Appwrite multi-factor authentication is required for every CRM role. Your email must be verified before enrollment. A successful code verification lasts up to 12 hours, or until your native session expires.</p>
+    <p>Native Appwrite multi-factor authentication is required for every CRM role. Your email must be verified before enrollment. You enter a code once per sign-in; it lasts until your sign-in session expires.</p>
     <p>Attendance is recorded separately and does not block CRM access. Actions are attributed to your signed-in account. Read this notice any time in Settings - Security Notice.</p>
   </section>;
 }

@@ -1,6 +1,6 @@
 import { easternWallTimeToIso } from '@/lib/utils/eastern-date';
 
-test('interprets the chosen maintenance end in Eastern time across DST', () => {
+test('interprets an Eastern wall time across DST', () => {
   expect(easternWallTimeToIso('2026-10-14T15:30')).toBe('2026-10-14T19:30:00.000Z');
   expect(easternWallTimeToIso('2026-12-14T15:30')).toBe('2026-12-14T20:30:00.000Z');
 });

@@ -11,7 +11,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 const secretCollections = new Set([COLLECTIONS.SECURITY_CHALLENGES, COLLECTIONS.CRM_ACCESS_REQUESTS, COLLECTIONS.LEAD_HISTORY,
-  COLLECTIONS.LINKEDIN_LEAD_REGISTRY, COLLECTIONS.MAINTENANCE_SETTINGS, COLLECTIONS.REPORT_EMAIL_SETTINGS, COLLECTIONS.BETA_FEATURE_ACCESS]);
+  COLLECTIONS.LINKEDIN_LEAD_REGISTRY, COLLECTIONS.REPORT_EMAIL_SETTINGS, COLLECTIONS.BETA_FEATURE_ACCESS]);
 // Share only empty-payload change markers, after fresh authorization and scope
 // resolution. Chat/notification bodies and access decisions are never cached here.
 const markers = createBriefReadCache<Awaited<ReturnType<typeof readChange>>>(60_000, 512);

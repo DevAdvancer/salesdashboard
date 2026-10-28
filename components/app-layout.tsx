@@ -7,9 +7,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import { checkAndNotifyAdminAttendanceEscalationsAction } from '@/app/actions/attendance/notifications';
 import { LoaderOverlay } from '@/components/loader/LoaderOverlay';
-import { MAINTENANCE_MANAGER_EMAIL, MAINTENANCE_MANAGER_USER_ID } from '@/lib/constants/maintenance';
 
-const PUBLIC_ROUTES = ['/login', '/referral', '/maintenance'];
+const PUBLIC_ROUTES = ['/login', '/referral'];
 const ADMIN_ATTENDANCE_PING_COOLDOWN_MS = 30 * 60 * 1000;
 const ADMIN_ATTENDANCE_PING_STORAGE_KEY = 'crm:last-admin-attendance-ping-at';
 
@@ -24,40 +23,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const { isSidebarCollapsed, setSidebarCollapsed } = useUIStore();
   const lastRedirectPath = useRef<string | null>(null);
   const lastAttendancePingAt = useRef(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    let checking = false;
-    const checkMaintenance = async () => {
-      if (checking) return;
-      checking = true;
-      try {
-        const response = await fetch('/api/maintenance/status', { cache: 'no-store' });
-        if (!response.ok || cancelled) return;
-        const status = await response.json() as { active: boolean };
-        if (cancelled) return;
-        const manager = user?.$id === MAINTENANCE_MANAGER_USER_ID &&
-          user.email.toLowerCase() === MAINTENANCE_MANAGER_EMAIL && user.role === 'admin';
-        if (status.active && !manager) {
-          // Keep the shared Appwrite session intact for other origins such as localhost.
-          if (!cancelled && pathname !== '/maintenance') router.replace('/maintenance');
-        } else if (!status.active && pathname === '/maintenance') {
-          router.replace(user ? '/dashboard' : '/login');
-        }
-      } catch {
-        // A temporary status error should not force a logout.
-      } finally {
-        checking = false;
-      }
-    };
-    // Maintenance is rare, so there is no background poll: check on page load,
-    // on every navigation (pathname is a dependency) and when the tab regains
-    // focus. The server still blocks every action while maintenance is active.
-    void checkMaintenance();
-    const onFocus = () => { void checkMaintenance(); };
-    window.addEventListener('focus', onFocus);
-    return () => { cancelled = true; window.removeEventListener('focus', onFocus); };
-  }, [pathname, router, user]);
 
   useEffect(() => {
     // Post-login landing page depends on the user's active dashboard. Resume-
