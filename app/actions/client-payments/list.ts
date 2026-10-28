@@ -15,7 +15,7 @@ import { getActor, ensureComponentAccess, isAdminLikeReadRole, assertCanMutateCl
 export async function listClientPaymentSummariesAction(input: {
       actorId: string;
       leadIds: string[];
-    }): Promise<Array<{ leadId: string; status: PaymentStatus; personalDetails: Record<string, unknown>; paymentPlan: ClientPaymentPlan }>> {
+    }): Promise<Array<{ leadId: string; status: PaymentStatus; personalDetails: Record<string, unknown>; paymentPlan: ClientPaymentPlan; paidAmount: number }>> {
     const actor = await getActor(input.actorId);
     ensureComponentAccess(actor.role, "history");
     const leadIds = Array.isArray(input.leadIds)
@@ -84,7 +84,16 @@ export async function listClientPaymentSummariesAction(input: {
     paymentDocuments.push(...docs);
     }
 
-    const results: Array<{ leadId: string; status: PaymentStatus; personalDetails: Record<string, unknown>; paymentPlan: ClientPaymentPlan }> = [];
+    // Total collected across every payment cycle of the lead, as in
+    // listLeadPaidAmountsAction, so the dashboard needs no second payments read.
+    const paidByLead = new Map<string, number>();
+    for (const doc of paymentDocuments) {
+    const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
+    if (!leadId) continue;
+    paidByLead.set(leadId, (paidByLead.get(leadId) ?? 0) + sumPaidUpdates(doc));
+    }
+
+    const results: Array<{ leadId: string; status: PaymentStatus; personalDetails: Record<string, unknown>; paymentPlan: ClientPaymentPlan; paidAmount: number }> = [];
     const seen = new Set<string>();
     for (const doc of paymentDocuments) {
     const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
@@ -94,7 +103,7 @@ export async function listClientPaymentSummariesAction(input: {
     const personalDetails = parseJsonOr<Record<string, unknown>>(doc.personalDetails ?? doc.personalDetailsJson, {});
     const paymentPlan = parseJsonOr<ClientPaymentPlan>(doc.paymentPlan ?? doc.paymentPlanJson, { percent: 0, months: 0, upfrontAmount: 0 });
     const status = (doc.status as PaymentStatus) ?? "not_paid";
-    results.push({ leadId, status, personalDetails, paymentPlan });
+    results.push({ leadId, status, personalDetails, paymentPlan, paidAmount: paidByLead.get(leadId) ?? 0 });
     }
 
     return results;
@@ -207,17 +216,21 @@ export async function listLeadPaidAmountsAction(input: {
     for (const doc of paymentDocuments) {
     const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
     if (!leadId || !allowedLeadIds.has(leadId)) continue;
-    const updates = parseJsonOr<ClientPaymentUpdate[]>(doc.updates ?? doc.updatesJson, []);
-    const paid = updates.reduce((sum, u) => {
-      if (u && typeof u.amount === "number" && Number.isFinite(u.amount) && u.amount > 0) {
-        return sum + u.amount;
-      }
-      return sum;
-    }, 0);
+    const paid = sumPaidUpdates(doc);
     if (paid > 0) {
       out[leadId] = (out[leadId] ?? 0) + paid;
     }
     }
 
     return out;
+}
+
+function sumPaidUpdates(doc: { updates?: unknown; updatesJson?: unknown }): number {
+    const updates = parseJsonOr<ClientPaymentUpdate[]>(doc.updates ?? doc.updatesJson, []);
+    return updates.reduce((sum, u) => {
+      if (u && typeof u.amount === "number" && Number.isFinite(u.amount) && u.amount > 0) {
+        return sum + u.amount;
+      }
+      return sum;
+    }, 0);
 }

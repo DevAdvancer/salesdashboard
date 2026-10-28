@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { buildScope, queryKeys } from "@/lib/queries/keys";
 import type { LeadListFilters, UserRole } from "@/lib/types";
 import { listLeadCountsAction } from "@/app/actions/lead/queries";
+import { wantsFreshLeadRead } from "@/lib/queries/leads/use-lead-change-refresh";
 
 /**
  * Lightweight "count only" query. Replaces the dashboard's two
@@ -25,7 +26,7 @@ export function useLeadCountsQuery({
 
   return useQuery({
     queryKey: queryKeys.leads.counts(scope, { ...filters, branchIds }),
-    queryFn: () => listLeadCountsAction(userId, role, branchIds, filters ?? {}),
+    queryFn: () => listLeadCountsAction(userId, role, branchIds, filters ?? {}, { fresh: wantsFreshLeadRead() }),
     enabled: Boolean(userId),
   });
 }

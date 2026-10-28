@@ -1,7 +1,6 @@
 import { Query } from "node-appwrite";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
-import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 
 type Databases = Awaited<ReturnType<typeof createAdminClient>>["databases"];
 
@@ -23,29 +22,15 @@ export async function getLinkedinAccountUsage(
   return typeof response.total === "number" ? response.total : response.documents.length;
 }
 
+/** One count query per account: Appwrite returns `total` without reading every
+ * request row, so a busy account costs one read instead of one per send. */
 export async function getLinkedinAccountUsageByAccount(
   databases: Databases,
   accountIds: string[],
   dateSent: string,
 ): Promise<Record<string, number>> {
-  const usage = Object.fromEntries(accountIds.map((id) => [id, 0])) as Record<string, number>;
-  if (accountIds.length === 0) return usage;
-
-  databases.clearReadCacheForCollection(COLLECTIONS.LINKEDIN_REQUESTS);
-  for (let offset = 0; offset < accountIds.length; offset += 100) {
-    const rows = await listAllDocuments<{ accountId: string }>({
-      databases,
-      databaseId: DATABASE_ID,
-      collectionId: COLLECTIONS.LINKEDIN_REQUESTS,
-      queries: [
-        Query.equal("accountId", accountIds.slice(offset, offset + 100)),
-        Query.equal("dateSent", dateSent),
-        Query.select(["$id", "accountId"]),
-      ],
-    });
-    for (const row of rows) {
-      if (Object.hasOwn(usage, row.accountId)) usage[row.accountId] += 1;
-    }
-  }
-  return usage;
+  const counts = await Promise.all(
+    accountIds.map(async (id) => [id, await getLinkedinAccountUsage(databases, id, dateSent)] as const),
+  );
+  return Object.fromEntries(counts);
 }

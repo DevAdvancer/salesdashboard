@@ -125,11 +125,12 @@ function LinkedinRequestsContent() {
     queryKey: ['linkedin-account-usage', user?.$id, today],
     queryFn: () => listMyLinkedinAccountsWithUsageAction({ currentUserId: user!.$id }),
     enabled: !!user && serverSessionReady,
-    staleTime: 0,
-    // Returning to the tab and this page's own actions refresh usage immediately
-    // (focus refetch + invalidateQueries). The timer only catches sends made from
-    // elsewhere while this tab stays focused, so 2 minutes is plenty and cuts
-    // the access-check, account and usage reads it triggers by 4x.
+    // This page's own actions refresh usage immediately (invalidateQueries).
+    // Returning to the tab refreshes it unless it was read in the last 30s, so
+    // quick tab switches cost nothing. The timer only catches sends made from
+    // elsewhere while this tab stays focused. The server re-counts before every
+    // send, so the shown quota never decides whether a send is allowed.
+    staleTime: 30 * 1000,
     refetchOnWindowFocus: true,
     refetchInterval: 2 * 60 * 1000,
   });

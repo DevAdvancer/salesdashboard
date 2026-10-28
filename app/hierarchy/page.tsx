@@ -122,7 +122,7 @@ function HierarchyContent() {
         }
         reloadTimeoutRef.current = window.setTimeout(() => {
           try {
-            databases.clearReadCache();
+            databases.clearReadCacheForCollection(collectionId);
           } catch {}
           void loadData();
         }, 250);

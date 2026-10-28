@@ -96,10 +96,14 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
     forExport?: boolean;
     /** If true, skip admin-only department post-filtering on historical exports. */
     skipDepartmentScope?: boolean;
+    /** If true, skip this instance's cached lead reads (a change signal fired). */
+    fresh?: boolean;
     }): Promise<{ leads: Lead[]; total: number; page: number; pageSize: number }> {
     try {
     await assertAuthenticatedUserId(userId);
     const { databases } = await createAdminClient();
+    // Another instance may have written the change, so this one's cache can be stale.
+    if (options?.fresh) databases.clearReadCacheForCollection(COLLECTIONS.LEADS);
     const queries: string[] = [];
 
     // Role-based filtering
@@ -410,10 +414,11 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
     }
 }
 
-export async function listLeadCountsAction(userId: string, _userRole: UserRole, branchIds?: string[], filters?: LeadListFilters): Promise<LeadCounts> {
+export async function listLeadCountsAction(userId: string, _userRole: UserRole, branchIds?: string[], filters?: LeadListFilters, options?: { fresh?: boolean }): Promise<LeadCounts> {
     try {
     await assertAuthenticatedUserId(userId);
     const { databases } = await createAdminClient();
+    if (options?.fresh) databases.clearReadCacheForCollection(COLLECTIONS.LEADS);
 
     // Fetch the caller doc once so we can build the visibility queries.
     const userDoc = await databases.getDocument(

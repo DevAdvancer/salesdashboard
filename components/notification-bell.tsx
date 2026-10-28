@@ -147,13 +147,13 @@ export function NotificationBell({ className }: { className?: string }) {
         Date.now() - lastLoadedAt.current >= NOTIFICATION_FALLBACK_POLL_MS;
       void load({ forceRefresh: shouldForceRefresh });
     }, NOTIFICATION_FALLBACK_POLL_MS);
-    window.addEventListener('focus', forceLoad);
+    // No focus reload: the change stream re-checks as soon as the tab becomes
+    // visible again, and only a real change for this user forces a reload.
 
     return () => {
       window.clearInterval(intervalId);
-      window.removeEventListener('focus', forceLoad);
     };
-  }, [canSeeNotifications, forceLoad, load]);
+  }, [canSeeNotifications, load]);
 
   useEffect(() => {
     if (!user || !canSeeNotifications || !isVisible) return;
@@ -180,8 +180,14 @@ export function NotificationBell({ className }: { className?: string }) {
   const markRead = async (notificationId: string) => {
     if (!user) return;
     try {
-      await markNotificationRead(user.$id, notificationId);
-      await load();
+      const updated = await markNotificationRead(user.$id, notificationId);
+      setNotifications((current) =>
+        current.map((notification) =>
+          notification.$id === notificationId
+            ? { ...notification, readAt: updated?.readAt ?? new Date().toISOString() }
+            : notification
+        )
+      );
     } catch (error) {
       console.error('Failed to mark notification read:', error);
     }

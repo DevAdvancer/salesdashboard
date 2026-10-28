@@ -6,6 +6,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listLeadsForExport, clearLeadReadCache } from "@/lib/services/lead-action-service";
 import { useLeadsQuery } from "@/lib/queries/leads/use-leads-query";
+import { useLeadChangeRefresh } from "@/lib/queries/leads/use-lead-change-refresh";
 import { useToast } from "@/components/ui/use-toast";
 import { queryKeys } from "@/lib/queries/keys";
 import { COLLECTIONS } from "@/lib/constants/appwrite";
@@ -347,6 +348,7 @@ function LeadsContent() {
     page: currentPage,
     pageSize: ITEMS_PER_PAGE,
   });
+  useLeadChangeRefresh(Boolean(user));
 
   const queryClient = useQueryClient();
 

@@ -3,7 +3,7 @@
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useCurrentMonthBounds } from "@/lib/hooks/use-current-month-bounds";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ProtectedRoute } from "@/components/protected-route";
@@ -154,6 +154,8 @@ function MainDashboard({
 
   // Date range
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  // Bumped by the shared lead change check; reloads only the lead-backed cards.
+  const [leadsVersion, setLeadsVersion] = useState(0);
   const [dateFilterType, setDateFilterType] = useState<'today' | 'month' | 'custom' | null>(null);
 
   useEffect(() => {
@@ -547,6 +549,7 @@ function MainDashboard({
 
     (async () => {
       try {
+        const fresh = leadsVersion > 0;
         const [{ listLeadCountsAction, listLeadsAction }] = await Promise.all([
           import("@/app/actions/lead/queries"),
         ]);
@@ -555,7 +558,7 @@ function MainDashboard({
           listLeadCountsAction(user.$id, user.role, user.branchIds, {
             dateFrom: dateRange?.from,
             dateTo: dateRange?.to,
-          }),
+          }, { fresh }),
           listLeadsAction(
             {
               isClosed: false,
@@ -565,7 +568,7 @@ function MainDashboard({
             user.$id,
             user.role,
             user.branchIds,
-            { page: 1, pageSize: 5 }
+            { page: 1, pageSize: 5, fresh }
           ),
           listLeadsAction(
             {
@@ -576,7 +579,7 @@ function MainDashboard({
             user.$id,
             user.role,
             user.branchIds,
-            { page: 1, pageSize: 5 }
+            { page: 1, pageSize: 5, fresh }
           ),
         ]);
 
@@ -605,7 +608,10 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, isAdminLike, isTeamLead, dateRange]);
+  }, [user, isAdminLike, isTeamLead, dateRange, leadsVersion]);
+
+  const bumpLeadsVersion = useCallback(() => setLeadsVersion((version) => version + 1), []);
+  useRealtimeCollection(COLLECTIONS.LEADS, bumpLeadsVersion, { enabled: Boolean(user) });
 
   // KPI section mode + target derived from range
   const kpiMode = (dateRange && isSingleDay(dateRange)) ? "daily" : "monthly";

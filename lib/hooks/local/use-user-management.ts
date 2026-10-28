@@ -259,7 +259,7 @@ export function useUserManagement() {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         try {
-          databases.clearReadCache();
+          databases.clearReadCacheForCollection(collectionId);
         } catch {}
         invalidateUsersCache();
         void fetchUsers();

@@ -3,7 +3,7 @@
 import { countAssessmentEmailsSentInRange } from "@/app/actions/assessment";
 import { listHolidayCalendarAction } from "@/app/actions/holiday-calendar";
 import { listAllPaymentInsightsAction } from "@/app/actions/client-payments/insights";
-import { listClientPaymentSummariesAction, listLeadPaidAmountsAction } from "@/app/actions/client-payments/list";
+import { listClientPaymentSummariesAction } from "@/app/actions/client-payments/list";
 import type { PaymentInsightRecord } from "@/app/actions/client-payments/shared";
 import { countInterviewEmailsSentInRange } from "@/app/actions/interview";
 import { listLgHandoffsAction } from "@/app/actions/lg-handoffs";
@@ -463,17 +463,19 @@ export async function loadDashboardReferralStats(
       // Build a leadId → total-paid lookup from actual payment records so
       // the referral / non-referral totals reflect money actually
       // collected, not the planned leadAmount from the lead form.
+      // One payments read supplies the paid totals, upfront plans and statuses.
       const leadIds = leads.map((l) => l.$id);
-      const paidRecord = leadIds.length > 0
-        ? await listLeadPaidAmountsAction({ actorId: input.userId, leadIds })
-        : {};
-      const paidMap = new Map<string, number>(Object.entries(paidRecord));
       const paymentSummaries = leadIds.length > 0
         ? await listClientPaymentSummariesAction({
             actorId: input.userId,
             leadIds,
           })
         : [];
+      const paidMap = new Map<string, number>(
+        paymentSummaries
+          .filter((summary) => summary.paidAmount > 0)
+          .map((summary) => [summary.leadId, summary.paidAmount]),
+      );
       const upfrontMap = new Map<string, number>(
         paymentSummaries.map((summary) => [
           summary.leadId,

@@ -20,6 +20,9 @@ export async function GET(request: NextRequest) {
       throw error;
     }
     const plan = await profileIndexPlan(db);
+    // No lead changed since the checkpoint, so the lookup delta is already empty.
+    // Skip the lock, re-plan, verification and checkpoint writes of a no-op run.
+    if (plan.scanned === 0) return NextResponse.json({ skipped: 'No lead changes since the last checkpoint.' });
     return NextResponse.json(await plan.apply());
   } catch {
     return NextResponse.json({ error: 'Profile index refresh failed; the previous checkpoint remains safe.' }, { status: 503 });

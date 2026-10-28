@@ -3,7 +3,7 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { buildScope, queryKeys } from "@/lib/queries/keys";
 import type { LeadListFilters, UserRole } from "@/lib/types";
-import { listLeadsAction } from "@/app/actions/lead/queries";
+import { wantsFreshLeadRead } from "@/lib/queries/leads/use-lead-change-refresh";
 
 export interface UseLeadsQueryArgs {
   userId: string;
@@ -51,7 +51,7 @@ export function useLeadsQuery({
           userId,
           role,
           branchIds,
-          options: { page, pageSize }
+          options: { page, pageSize, ...(wantsFreshLeadRead() ? { fresh: true } : {}) }
         }),
         signal
       });

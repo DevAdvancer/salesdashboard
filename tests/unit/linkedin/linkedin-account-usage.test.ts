@@ -20,21 +20,23 @@ describe("LinkedIn account daily usage", () => {
     );
   });
 
-  it("counts every saved request for each account across pages", async () => {
-    const rows = [
-      ...Array.from({ length: 123 }, (_, index) => ({ $id: `main-${index}`, accountId: "main-id" })),
-      ...Array.from({ length: 2 }, (_, index) => ({ $id: `sudo-${index}`, accountId: "sudo-id" })),
-    ];
+  it("counts each account with one total query instead of reading every row", async () => {
+    const totals: Record<string, number> = { "main-id": 123, "sudo-id": 2, "empty-id": 0 };
     const databases = {
       clearReadCacheForCollection: jest.fn(),
-      listDocuments: jest.fn().mockResolvedValueOnce({ documents: rows.slice(0, 100) })
-        .mockResolvedValueOnce({ documents: rows.slice(100) }),
+      listDocuments: jest.fn().mockImplementation((_db: string, _collection: string, queries: string[]) => {
+        const account = queries.map((query) => JSON.parse(query)).find((query) => query.attribute === "accountId");
+        return Promise.resolve({ total: totals[account.value], documents: [] });
+      }),
     };
 
     expect(await getLinkedinAccountUsageByAccount(databases as never,
       ["main-id", "sudo-id", "empty-id"], "2026-10-14T00:00:00.000Z"))
       .toEqual({ "main-id": 123, "sudo-id": 2, "empty-id": 0 });
-    expect(databases.listDocuments).toHaveBeenCalledTimes(2);
+    expect(databases.listDocuments).toHaveBeenCalledTimes(3);
+    for (const [, , queries] of databases.listDocuments.mock.calls) {
+      expect(queries).toContain(JSON.stringify({ limit: 1 }));
+    }
     expect(databases.clearReadCacheForCollection).toHaveBeenCalledWith(COLLECTIONS.LINKEDIN_REQUESTS);
   });
 });

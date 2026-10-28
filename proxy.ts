@@ -35,6 +35,8 @@ function withoutAccessCookie(response: NextResponse) {
   response.cookies.delete(CRM_ACCESS_COOKIE);
   return response;
 }
+// Skip paths bypassCrmGate always admits (each handler authorizes itself), public
+// downloads and static files: running the proxy there only adds an invocation.
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|css|js|map)$).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|downloads/|api/(?:appwrite|cron)/|api/security/(?:changes|access)$|api/auth/appwrite-session$|.*\\.(?:png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|css|js|map|mp3|zip|txt|xml|webmanifest)$).*)'],
 };

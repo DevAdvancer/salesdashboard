@@ -10,7 +10,7 @@ const previousSecret = process.env.CRON_SECRET;
 beforeEach(() => {
   jest.clearAllMocks(); process.env.CRON_SECRET = 'test-secret';
   mockGet.mockResolvedValue({ leadId: 'ready' });
-  mockPlan.mockResolvedValue({ apply: mockApply });
+  mockPlan.mockResolvedValue({ scanned: 1, apply: mockApply });
   mockApply.mockResolvedValue({ indexRecordsWritten: 0 });
 });
 afterEach(() => { if (previousSecret === undefined) delete process.env.CRON_SECRET; else process.env.CRON_SECRET = previousSecret; });
@@ -31,4 +31,9 @@ it('does not reactivate an index that an administrator deliberately disabled', a
   mockGet.mockResolvedValueOnce({ leadId: 'disabled' });
   const result = await GET(new NextRequest('http://localhost/api/cron/refresh-lead-profile-index', { headers: { authorization: 'Bearer test-secret' } }));
   expect(result.status).toBe(200); expect(mockPlan).not.toHaveBeenCalled();
+});
+it('skips the locked refresh when no lead changed since the checkpoint', async () => {
+  mockPlan.mockResolvedValueOnce({ scanned: 0, apply: mockApply });
+  const result = await GET(new NextRequest('http://localhost/api/cron/refresh-lead-profile-index', { headers: { authorization: 'Bearer test-secret' } }));
+  expect(result.status).toBe(200); expect(mockApply).not.toHaveBeenCalled();
 });
