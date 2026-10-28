@@ -1,4 +1,3 @@
-import type { User } from '@/lib/types';
 import { addDays, format, isWeekend, parseISO } from 'date-fns';
 import { easternWallTimeToIso, getCurrentEasternIsoDate } from '@/lib/utils/eastern-date';
 
@@ -27,21 +26,6 @@ export function nextAttendanceReviewAt(now = new Date()) {
 export const ATTENDANCE_EXEMPT_ROLES = ['admin', 'developer', 'monitor', 'operations'] as const;
 export function attendanceExempt(role: string) {
   return (ATTENDANCE_EXEMPT_ROLES as readonly string[]).includes(role);
-}
-
-type ManagedUser = Pick<User, '$id' | 'role' | 'department' | 'teamLeadId' | 'isActive'> & {
-  managerId?: string | null; managerIds?: string[]; assistantManagerIds?: string[];
-};
-export function canApproveCrmAccess(actor: ManagedUser, target: ManagedUser) {
-  if (actor.isActive === false || target.isActive === false || actor.$id === target.$id) return false;
-  if (actor.role === 'admin' || actor.role === 'developer' || actor.role === 'operations') return true;
-  if ((actor.department || 'sales') !== (target.department || 'sales')) return false;
-  if (actor.role !== 'team_lead' && actor.role !== 'senior_tl') return false;
-  return [target.teamLeadId, target.managerId, ...target.managerIds || [], ...target.assistantManagerIds || []].includes(actor.$id);
-}
-
-export function normalizeVerificationName(name: string) {
-  return name.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US');
 }
 
 /** Public GET pages do not exempt server actions posted to the same URL. */

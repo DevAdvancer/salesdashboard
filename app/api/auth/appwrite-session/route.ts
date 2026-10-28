@@ -2,7 +2,6 @@ import { Account, Client } from "node-appwrite";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestMaintenanceStatus, isMaintenanceManager } from "@/lib/server/maintenance";
-import { CRM_PROOF_COOKIE } from '@/lib/server/crm-security-store';
 import { crmAccessEnabled, evaluateCrmAccess, resolveSecurityIdentity } from '@/lib/server/crm-access';
 import { publicUser } from '@/lib/server/crm-browser-data';
 import { getTodayEst } from '@/lib/utils/est-date';
@@ -56,6 +55,7 @@ export async function POST(request: NextRequest) {
 export async function DELETE() {
   const cookieStore = await cookies();
   cookieStore.delete(APPWRITE_JWT_COOKIE);
-  cookieStore.delete(CRM_PROOF_COOKIE);
+  // Remove a legacy cookie during migration; it is never read or accepted.
+  cookieStore.delete('crm_email_verified');
   return NextResponse.json({ success: true });
 }

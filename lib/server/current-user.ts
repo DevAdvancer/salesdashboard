@@ -6,17 +6,22 @@ import type { User } from "@/lib/types";
 import { getRequestMaintenanceStatus, isMaintenanceManager } from "@/lib/server/maintenance";
 
 import { cache } from "react";
-import { hasCrmRequestContext, memoizeCrmRequest } from '@/lib/server/crm-request-context';
+import { memoizeCrmRequest } from '@/lib/server/crm-request-context';
 const accountRequestKey = Symbol('crm-account');
 const userRequestKey = Symbol('crm-user');
 
-export const getAuthenticatedAccount = cache(() => memoizeCrmRequest(accountRequestKey, async () => {
+// Share the checked profile with account/user helpers in this request. Keeping
+// the two together also avoids another database read in actions outside the
+// explicit AsyncLocalStorage wrapper; React owns their request scope.
+const getAuthenticatedContext = cache(() => memoizeCrmRequest(accountRequestKey, async () => {
   let authenticated;
+  let checkedUser: User | undefined;
   if (process.env.CRM_ACCESS_ENFORCEMENT === 'true') {
     const { assertCrmAccess } = await import('@/lib/server/crm-access');
     const identity = await assertCrmAccess();
     if (!identity) throw new Error('Unauthorized');
     authenticated = identity.account;
+    checkedUser = identity.user;
     // Keep authorization reads fresh without performing a second native account lookup.
     (await createAdminClient()).databases.clearReadCacheForCollection?.(COLLECTIONS.USERS);
   } else {
@@ -29,8 +34,10 @@ export const getAuthenticatedAccount = cache(() => memoizeCrmRequest(accountRequ
   if (maintenance.active && !isMaintenanceManager(authenticated)) {
     throw new Error("CRM maintenance is in progress. Try again after the scheduled end time.");
   }
-  return authenticated;
+  return { account: authenticated, checkedUser };
 }));
+
+export const getAuthenticatedAccount = cache(async () => (await getAuthenticatedContext()).account);
 
 export async function assertAuthenticatedUserId(userId: string | null | undefined) {
   if (!userId) {
@@ -46,15 +53,11 @@ export async function assertAuthenticatedUserId(userId: string | null | undefine
 }
 
 export const getAuthenticatedUserDoc = cache(() => memoizeCrmRequest(userRequestKey, async (): Promise<User> => {
-  const account = await getAuthenticatedAccount();
+  const { account, checkedUser } = await getAuthenticatedContext();
   const doc = await (async () => {
-    if (hasCrmRequestContext() && process.env.CRM_ACCESS_ENFORCEMENT === 'true') {
-      // The scoped native-session check already fetched this live user. Reuse
-      // that exact profile, including current department and activation state.
-      const { resolveSecurityIdentity } = await import('@/lib/server/crm-access');
-      const identity = await resolveSecurityIdentity();
-      if (identity.account.$id !== account.$id) throw new Error('Unauthorized');
-      return identity.user;
+    if (checkedUser) {
+      if (checkedUser.$id !== account.$id) throw new Error('Unauthorized');
+      return checkedUser;
     }
     try {
       const { databases } = await createAdminClient();

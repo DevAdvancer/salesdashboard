@@ -36,7 +36,7 @@ async function main() {
   if (new URL(origin).protocol !== 'https:') throw new Error('Cutover requires the deployed HTTPS CRM URL.');
   let readiness: { protocol?: string; cutoverReady?: boolean } = {};
   try { const response = await fetch(new URL('/api/security/readiness', origin), { signal: AbortSignal.timeout(15_000), redirect: 'error' }); if (response.ok) readiness = await response.json(); } catch { /* Report as not ready. */ }
-  const ready = readiness.protocol === 'crm-gateway-appwrite-otp-v1' && readiness.cutoverReady === true;
+  const ready = readiness.protocol === 'crm-gateway-native-mfa-v1' && readiness.cutoverReady === true;
   console.log(JSON.stringify({ mode: apply ? 'apply' : 'dry-run', database: DATABASE_ID, deployedGatewayReady: ready,
     collections: collections.filter(row => row.enabled).map(row => ({ id: row.$id, enabledBefore: true, enabledAfter: false })),
     bucket: { id: bucket.$id, enabledBefore: bucket.enabled, enabledAfter: false },

@@ -14,7 +14,7 @@ export async function proxy(request: NextRequest) {
   try {
     const pass = await assertCrmAccessForProxy(request.cookies);
     // Hand the decision just made to this same request's handler so it does not
-    // re-read the user record and attendance. The pass is internal and short-lived.
+    // re-read the user record. The pass is internal and short-lived.
     if (pass) forwarded.set(CRM_ACCESS_PASS_HEADER, pass);
     return next();
   } catch (error) {

@@ -12,7 +12,7 @@ export const browserReadCollections = () => [COLLECTIONS.USERS, COLLECTIONS.BRAN
 
 export async function verifiedBrowserActor(existingIdentity?: SecurityIdentity) {
   const identity = existingIdentity || await resolveSecurityIdentity();
-  if (crmAccessEnabled() && (await evaluateCrmAccess(identity)).state !== 'allowed') throw new CrmAccessError(403, 'Email verification and attendance approval are required.');
+  if (crmAccessEnabled() && (await evaluateCrmAccess(identity)).state !== 'allowed') throw new CrmAccessError(403, 'Native MFA verification is required.');
   return identity.user;
 }
 export function validateBrowserQueries(queries: string[], collectionId = COLLECTIONS.USERS) {

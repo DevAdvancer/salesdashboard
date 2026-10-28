@@ -38,7 +38,7 @@ bun run setup:appwrite              # Apply collections + backfill user.departme
 bun run sync:appwrite:dry           # Same script, alternate alias
 bun run setup:appwrite:targets:dry  # Monthly targets preview
 bun run setup:appwrite:targets      # Monthly targets collections
-bun run setup:crm-access:dry        # Preview security_challenges, crm_access_requests, leads.history
+bun run setup:crm-access:dry        # Preview resume upload manifests and leads.history
 bun run setup:crm-access:apply      # Create security/access schema (does not alter native client access)
 bun run setup:crm-access:lock:dry   # Preview native Appwrite client-access isolation cutover
 bun run setup:crm-access:lock       # Disable native client access (requires deployed readiness + writes rollback snapshot to outputs/)
@@ -111,32 +111,22 @@ AzureMsalProvider
 ```
 
 `GlobalLoader` sits outside the chain in a `Suspense` boundary. Order matters:
-- `CrmSecurityGate` ([components/crm-security-gate.tsx](components/crm-security-gate.tsx)) mounts before `QueryProvider`, `AccessControlProvider`, and `NotificationProvider`, and **does not mount CRM data providers while blocked** by login OTP or attendance/cover approval.
+- `CrmSecurityGate` ([components/crm-security-gate.tsx](components/crm-security-gate.tsx)) mounts before `QueryProvider`, `AccessControlProvider`, and `NotificationProvider`, and **does not mount CRM data providers while blocked** by native MFA verification.
 - `QueryProvider` ([app/providers/query-provider.tsx](app/providers/query-provider.tsx)) keeps a single stable provider tree while IndexedDB cache restoration completes to avoid dashboard remounts.
 - `AccessControlProvider` reads the authenticated user, and `NotificationProvider` reads access state.
 
-### Security gateway, Email OTP, and daily attendance enforcement
+### Security gateway and mandatory native Appwrite MFA
 
-See [docs/crm-access-rollout.md](docs/crm-access-rollout.md) for the full operational specification:
+See [docs/crm-access-rollout.md](docs/crm-access-rollout.md) for deployment and verification.
 
-1. **Middleware & Server Gate**: [proxy.ts](proxy.ts), [lib/server/crm-access.ts](lib/server/crm-access.ts), and [lib/utils/crm-access-policy.ts](lib/utils/crm-access-policy.ts) enforce CRM access across pages, API routes, server actions, mail routes, browser CRUD, and change subscriptions when `CRM_ACCESS_ENFORCEMENT === 'true'` (default in [next.config.ts](next.config.ts)).
-2. **Appwrite Native Email OTP**: Every CRM login (including `admin`, `developer`, `monitor`, `operations`) requires an Email OTP sent and verified via Appwrite's native Email OTP APIs ([lib/server/crm-security-store.ts](lib/server/crm-security-store.ts)) using project SMTP (never the Google transporter). Before sending, the server verifies the native auth account is active and its email matches the CRM `users` record. Verification creates a temporary Appwrite session that the server immediately deletes before issuing an HttpOnly signed proof cookie (`crm_email_verified`) bound to `(userId, sessionId)` for up to 12 hours (or native session expiry). Challenges expire in 10 minutes, allow 5 attempts, and enforce atomic consumption and rate limits in `security_challenges`.
-3. **Daily Attendance & Assigned Cover**:
-   - `admin`, `developer`, `monitor`, and `operations` (`ATTENDANCE_EXEMPT_ROLES`) are exempt from daily attendance.
-   - All other roles can enter after OTP and self-mark attendance before **10 AM America/New_York, Monday-Friday**. From 10 AM on weekdays, they require today's Eastern-date attendance (`present === true`) or approved cover. Duplicate attendance rows fail closed. Weekends skip attendance enforcement but still require login OTP. The server enforces the cutoff; browser `recheckAt` is only a UI scheduling hint.
-   - If absent/unmarked **without** an assigned cover (`delegateUserId`), the gate shows instructions to contact their TL/manager and **never** renders a name input.
-   - If absent **with** an assigned active same-department cover, the user must enter the assigned cover's matching normalized full name, triggering a second Appwrite OTP to the cover's registered email. Verifying that OTP creates a `pending` row in `crm_access_requests` bound to `(userId, delegateId, dateKey, sessionId, assignedAt)`.
-   - A separate authorized TL/manager, `admin`, `developer`, or `operations` user approves or revokes the request in **Attendance → CRM access approvals** ([components/attendance-access-approvals.tsx](components/attendance-access-approvals.tsx)). `monitor` cannot approve, and neither the absent user nor the covering delegate can approve their own request. Approval does **not** mark the absent user present, and has no mark-present control/API.
-   - Cover must remain active and present (or exempt). Reassignment, deactivation, revocation, or Eastern midnight invalidates the grant immediately. When acting under approved cover, `effectiveCrmAuditActor` records the covering delegate as the actor in `lead_history` and `leads.history`.
-4. **Fast Bootstrap & In-Flight Deduplication**:
-   - `/api/auth/appwrite-session` (`bootstrap: true`) and `/api/security/access?view=bootstrap` return the user's own safe profile and fresh access status in a single round-trip. Never trust browser-stored access decisions.
-   - Parallel identical identity/database reads in [lib/server/crm-access.ts](lib/server/crm-access.ts) share only their in-flight promise ([lib/utils/in-flight.ts](lib/utils/in-flight.ts)) with **no settled TTL cache**, so revocations and attendance changes take effect immediately on the next request.
-   - **Proxy → handler access pass**: after [proxy.ts](proxy.ts) approves a request it forwards a signed, 30-second, server-only `x-crm-access-pass` request header (`assertCrmAccessForProxy`, `signAccessPass`/`readAccessPass` in [lib/server/crm-security-store.ts](lib/server/crm-security-store.ts)). The handler of that **same request** still validates the native Appwrite session, and reuses the proxy's user record and `allowed` decision only when the pass is genuine and bound to that exact account, session and Eastern date. The proxy strips any browser-supplied copy on every path. This removes the duplicate user/attendance reads per request without adding a settled cache: every new request is still checked fresh.
-   - **Change snapshots** (`/api/security/changes?mode=poll`) batch subscriptions into one short, freshly authorized request per minute while the tab is visible. No idle server loop or long-held connection remains. Metadata markers can share a scoped 60-second cache; chat/notification bodies and access decisions are uncached. Legacy EventSource tabs receive finite SSE with a 60-second retry hint. The exact GET route authorizes in its handler before any marker read, avoiding duplicate proxy/handler native-session checks; other methods/subpaths and server actions get no exception. Pages, data reads and actions are still checked on every request.
-   - **Gate re-check cadence**: [components/crm-security-gate.tsx](components/crm-security-gate.tsx) re-checks every minute while a visible user is waiting (OTP, attendance, cover approval). Allowed users have no five-minute or focus polling; `recheckAt` schedules the next weekday 10 AM review. `crm-access-recheck` events still refresh immediately.
-5. **Public & Bypass Boundaries**:
-   - Public GET pages (`/login`, `/referral`, `/maintenance`) do **not** exempt server actions POSTed to the same URL (`bypassCrmGate` rejects when `next-action` header is present).
-   - Public referral submissions use the dedicated intake-only `POST /api/referrals` endpoint ([app/api/referrals/route.ts](app/api/referrals/route.ts)), which validates origin and payload without allowing CRM reads.
+- Every role signs in with password plus Appwrite native email MFA. [components/native-mfa-gate.tsx](components/native-mfa-gate.tsx) uses the browser Account SDK directly for enrollment, verified-email setup, challenge delivery and verification. Appwrite owns challenges, expiry and rate limits; CRM never creates an OTP proof cookie or temporary login session.
+- [lib/server/crm-access.ts](lib/server/crm-access.ts) validates the native account/session and live CRM activation/email match. [lib/utils/native-mfa-policy.ts](lib/utils/native-mfa-policy.ts) requires native MFA enabled, verified email, password plus a native second factor, and `mfaUpdatedAt` within 12 elapsed hours (also bounded by native session expiry). No role is exempt. Browser flags and retired cookies cannot authorize access.
+- Pending native sessions return `user_more_factors_required`; AuthProvider preserves that session and mounts the MFA screen before requesting a JWT or CRM profile. CRM data providers stay unmounted until server bootstrap confirms access.
+- Attendance, same-department cover assignment, reports and the weekday 10 AM Eastern self-mark cutoff remain business workflows. Absence never blocks CRM access. Cover access approvals and delegated login audit attribution are removed; actions belong to the signed-in account.
+- Identical concurrent identity/database reads share only their in-flight promise. The proxy forwards a signed 30-second internal access pass from [lib/server/crm-access-pass.ts](lib/server/crm-access-pass.ts) to avoid duplicate profile reads in that same request. It strips browser-supplied passes. Every new request still checks the native session and MFA.
+- `/api/security/changes` is a finite snapshot, batched by the browser once per minute while visible. Collection metadata markers may be cached for 60 seconds, never authorization decisions or message bodies. There is no waiting-screen minute poll, allowed-user five-minute poll or focus access poll. One timer checks the native MFA expiry; blocked real requests dispatch `crm-access-recheck`.
+- Bootstrap returns only the user's own safe profile plus fresh access status. Public GET pages never exempt server actions posted to them. Public referrals use intake-only `POST /api/referrals`.
+- `bun run audit:native-mfa` is read-only and reports enrollment/email-verification readiness. MFA is an Appwrite account-wide setting: verify other apps sharing accounts can complete MFA before enrolling production accounts. Never auto-verify email or bulk-enable MFA on an older deployed login client.
 
 ### Three server patterns coexist (and the browser gateway)
 
@@ -149,7 +139,7 @@ See [docs/crm-access-rollout.md](docs/crm-access-rollout.md) for the full operat
 
 Key rules for client vs. server data access:
 - **Browser SDK routing**: In [lib/appwrite.ts](lib/appwrite.ts), `account` talks directly to Appwrite Auth, while `databases` and `storage` route through `/api/appwrite` ([app/api/appwrite/[...path]/route.ts](app/api/appwrite/[...path]/route.ts)) and `client.subscribe` uses batched `/api/security/changes?mode=poll` snapshots ([lib/utils/crm-realtime-client.ts](lib/utils/crm-realtime-client.ts)).
-- **Browser read restrictions** ([lib/server/crm-browser-data.ts](lib/server/crm-browser-data.ts)): Before OTP/attendance, a user may only read their own safe profile (`users/<own-id>`). After verification, browser reads are limited to `users` (sanitized via `publicUser`, department-scoped for non-leadership, private preferences stripped from other users), `branches`, `form_config`, and `leads` (**leadership only**; non-leadership must use scoped server actions). Browser writes are rejected except `admin`/`developer` mutations on `branches`.
+- **Browser read restrictions** ([lib/server/crm-browser-data.ts](lib/server/crm-browser-data.ts)): Before native MFA, a user may only read their own safe profile (`users/<own-id>`). After verification, browser reads are limited to `users` (sanitized via `publicUser`, department-scoped for non-leadership, private preferences stripped from other users), `branches`, `form_config`, and `leads` (**leadership only**; non-leadership must use scoped server actions). Browser writes are rejected except `admin`/`developer` mutations on `branches`.
 - **Shared reference services**: Services like `user-service`, `branch-service`, and `form-config-service` use `referenceDatabases` ([lib/services/reference-databases.ts](lib/services/reference-databases.ts)) so server actions invoke `readCrmReferenceAction` ([app/actions/crm-reference.ts](app/actions/crm-reference.ts)) in-process rather than making HTTP calls back to localhost or relying on native public Appwrite reads.
 - **Resume storage gateway** ([lib/server/crm-resume-gateway.ts](lib/server/crm-resume-gateway.ts), [lib/server/crm-resume-upload.ts](lib/server/crm-resume-upload.ts)): Browser uploads use `Client.CHUNK_SIZE = 2 MiB` parts to fit Vercel request limits. Because Appwrite rejects 2 MiB native `Content-Range` chunks, each part is stored temporarily in `resumes` and tracked in `security_challenges` (`kind: 'resume-upload'`, 1-hour expiry, max 20 MiB total), then assembled server-side with server-selected permissions (`read`/`update`/`delete` for actor, `read` for `teamLeadId`). Resume team members cannot upload lead resumes; `monitor`/`operations` have read-only access.
 - **Admin client proxies** ([lib/server/appwrite.ts](lib/server/appwrite.ts)): `createAdminClient()` wraps `databases` in:
@@ -201,8 +191,8 @@ Every collection ID is an env-overridable constant in [lib/constants/appwrite.ts
 
 That file also carries the authoritative comments on non-obvious collections. Read them before touching:
 
-- `security_challenges`: server-only OTP challenges, atomic attempt/rate-limit claims, and temporary chunked resume upload manifests
-- `crm_access_requests`: server-only daily attendance cover approval requests (`pending` / `approved` / `denied`)
+- `security_challenges`: server-only temporary chunked resume upload manifests; legacy OTP rows expire through cleanup
+- `crm_access_requests`: historical cover approval archive only; no native MFA access reads or writes
 - `linkedin_lead_registry`: server-only LinkedIn profile reservations (`p_...`) and per-profile operation locks (`l_...`). A withdrawal never releases a lead.
 - `lead_history`: append-only lead and LinkedIn request event archive (intents, completions, failures, blocked takeovers); no browser write/update/delete permissions
 - `lg_handoffs`: append-only, one row per Lead Gen to Team Lead handoff, never updated
@@ -227,12 +217,12 @@ Hiding a nav item is not security. An action that does not check the actor is op
 
 | Role | Scope |
 |---|---|
-| `admin` | Full access, bypasses checks, attendance-exempt |
+| `admin` | Full access, full business permissions, attendance-exempt; native MFA required |
 | `developer` | Same as admin, attendance-exempt |
-| `monitor` | Admin-level read visibility, attendance-exempt. **Not read-only**: may close/reopen leads, update own/assigned leads, and mutate client payments. Cannot approve cover requests, set monthly targets, or mutate followup payments. |
-| `operations` | Admin-level read visibility, attendance-exempt. Can approve CRM cover requests, but blocked from mutating leads, client payments, monthly targets, and followup payments. |
-| `senior_tl` | Hierarchy, reports, team management, leads, attendance, cover approvals for own hierarchy |
-| `team_lead` | Own team's agents, team leads, attendance, cover approvals for own hierarchy |
+| `monitor` | Admin-level read visibility, attendance-exempt. **Not read-only**: may close/reopen leads, update own/assigned leads, and mutate client payments. Cannot set monthly targets or mutate followup payments. |
+| `operations` | Admin-level read visibility, attendance-exempt. Blocked from mutating leads, client payments, monthly targets, and followup payments. |
+| `senior_tl` | Hierarchy, reports, team management, leads, attendance |
+| `team_lead` | Own team's agents, team leads, attendance |
 | `agent` | Own leads, LinkedIn outreach |
 | `lead_generation` | Create leads and LinkedIn requests, assign to Sales TLs/Senior TLs/Agents only, no history or reports |
 | `compliance` | Compliance dashboard and settings |

@@ -6,12 +6,12 @@ jest.mock('node-appwrite', () => ({
   Client: class { setEndpoint() { return this; } setProject() { return this; } setKey() { return this; } setJWT() { return this; } },
   Account: jest.fn(() => mockAccount), Databases: jest.fn(() => mockDb),
 }));
-function jar(jwt: string, proof = 'proof') { return { get: (name: string) => name === 'crm_appwrite_jwt' ? { value: jwt } : name === 'crm_email_verified' ? { value: proof } : undefined }; }
+function jar(jwt: string, legacyProof = 'proof') { return { get: (name: string) => name === 'crm_appwrite_jwt' ? { value: jwt } : name === 'crm_email_verified' ? { value: legacyProof } : undefined }; }
 beforeEach(() => {
   jest.clearAllMocks();
   mockAccount.get.mockResolvedValue({ $id: 'person', email: 'person@example.com' });
   mockAccount.getSession.mockResolvedValue({ $id: 'session' });
-  mockDb.getDocument.mockResolvedValue({ $id: 'person', isActive: true });
+  mockDb.getDocument.mockResolvedValue({ $id: 'person', email: 'person@example.com', isActive: true });
 });
 it('coalesces parallel identity reads without caching a settled authorization result', async () => {
   await Promise.all(Array.from({ length: 20 }, () => resolveSecurityIdentity(jar('parallel'))));
@@ -20,24 +20,28 @@ it('coalesces parallel identity reads without caching a settled authorization re
   mockDb.getDocument.mockResolvedValueOnce({ $id: 'person', isActive: false });
   await expect(resolveSecurityIdentity(jar('parallel'))).rejects.toThrow('inactive');
   expect(mockAccount.get).toHaveBeenCalledTimes(2);
-  await expect(resolveSecurityIdentity(jar('parallel'))).resolves.toMatchObject({ user: { isActive: true } });
+  await expect(resolveSecurityIdentity(jar('parallel'))).resolves.toMatchObject({ user: { email: 'person@example.com', isActive: true } });
 });
-it('isolates session credentials and OTP proofs even when requests overlap', async () => {
+it('isolates native credentials and ignores retired proof cookies', async () => {
   await Promise.all([resolveSecurityIdentity(jar('one', 'proof-one')), resolveSecurityIdentity(jar('two', 'proof-one')), resolveSecurityIdentity(jar('one', 'proof-two'))]);
-  expect(mockAccount.get).toHaveBeenCalledTimes(3);
+  expect(mockAccount.get).toHaveBeenCalledTimes(2);
 });
 it('does not reuse a prior success after the native session has been revoked', async () => {
   await resolveSecurityIdentity(jar('revoked'));
   mockAccount.get.mockRejectedValueOnce(new Error('Session revoked'));
   await expect(resolveSecurityIdentity(jar('revoked'))).rejects.toThrow('sign in again');
 });
+it('refuses an account whose native email no longer matches its CRM profile', async () => {
+  mockDb.getDocument.mockResolvedValueOnce({ $id: 'person', email: 'other@example.com', isActive: true });
+  await expect(resolveSecurityIdentity(jar('mismatch'))).rejects.toMatchObject({ code: 'ACCOUNT_EMAIL_MISMATCH', status: 403 });
+});
 describe('signed pass forwarded by the proxy for the same request', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { signAccessPass } = require('@/lib/server/crm-security-store');
+  const { signAccessPass } = require('@/lib/server/crm-access-pass');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const today = () => require('@/lib/utils/est-date').getTodayEst();
   const pass = (accountId = 'person', sessionId = 'session') => signAccessPass({ accountId, sessionId, dateKey: today(),
-    status: { state: 'allowed', dateKey: today() }, user: { $id: accountId, isActive: true, role: 'agent' } });
+    status: { state: 'allowed', dateKey: today() }, user: { $id: accountId, email: 'person@example.com', isActive: true, role: 'agent' } });
   it('still validates the native session but skips re-reading the user record', async () => {
     const identity = await resolveSecurityIdentity(jar('with-pass'), pass());
     expect(mockAccount.get).toHaveBeenCalledTimes(1); expect(mockAccount.getSession).toHaveBeenCalledTimes(1);

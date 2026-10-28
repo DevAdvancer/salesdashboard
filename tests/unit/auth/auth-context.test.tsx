@@ -109,6 +109,39 @@ describe('AuthContext', () => {
   });
 
   describe('login', () => {
+    it('preserves the pending native password session for the email code without bootstrapping a JWT or CRM profile', async () => {
+      mockAccount.get.mockRejectedValue(Object.assign(new Error('No session'), { code: 401 }));
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      jest.clearAllMocks();
+      mockAccount.createEmailPasswordSession.mockResolvedValue({ userId: 'pending-user' } as any);
+      mockAccount.get.mockRejectedValue({ code: 401, type: 'user_more_factors_required' });
+      await act(async () => { await result.current.login('person@test.com', 'password123'); });
+      expect(result.current.nativeMfaPending).toBe(true);
+      expect(result.current.user).toBeNull();
+      expect(result.current.serverSessionReady).toBe(false);
+      expect(mockAccount.deleteSession).not.toHaveBeenCalled();
+      expect(mockAccount.createJWT).not.toHaveBeenCalled();
+      expect(mockDatabases.getDocument).not.toHaveBeenCalled();
+    });
+
+    it('restores a pending native MFA login after a reload, then restores the CRM session after a successful code', async () => {
+      mockAccount.get.mockRejectedValue({ code: 401, type: 'user_more_factors_required' });
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await waitFor(() => expect(result.current.nativeMfaPending).toBe(true));
+      expect(mockAccount.deleteSession).not.toHaveBeenCalled();
+      const user = { $id: 'person', email: 'person@test.com', name: 'Person', role: 'agent', department: 'resume' };
+      mockAccount.get.mockResolvedValue(user as any);
+      mockFetch.mockImplementation(async (url: string) => ({ ok: true, json: async () =>
+        url.startsWith('/api/security/access') ? { user, status: { state: 'allowed', dateKey: '2026-10-28' } } : { active: false } }));
+      await act(async () => { result.current.retrySessionRestore?.(); });
+      await waitFor(() => expect(result.current.user?.$id).toBe('person'));
+      expect(result.current.nativeMfaPending).toBe(false);
+      expect(result.current.serverSessionReady).toBe(true);
+      expect(result.current.user?.department).toBe('resume');
+      expect(result.current.initialAccess?.status.state).toBe('allowed');
+    });
+
     it('should login with valid credentials and set agent role', async () => {
       const mockAccountData = {
         $id: 'user-456',
@@ -130,7 +163,7 @@ describe('AuthContext', () => {
 
       mockAccount.get.mockRejectedValueOnce(new Error('No session'));
       mockAccount.createEmailPasswordSession.mockResolvedValue({} as any);
-      mockAccount.get.mockResolvedValueOnce(mockAccountData as any);
+      mockAccount.get.mockResolvedValue(mockAccountData as any);
       mockDatabases.getDocument.mockResolvedValue(mockUserDoc as any);
 
       const { result } = renderHook(() => useAuth(), { wrapper });
@@ -174,7 +207,7 @@ describe('AuthContext', () => {
 
       mockAccount.get.mockRejectedValueOnce(new Error('No session'));
       mockAccount.createEmailPasswordSession.mockResolvedValue({} as any);
-      mockAccount.get.mockResolvedValueOnce(mockAccountData as any);
+      mockAccount.get.mockResolvedValue(mockAccountData as any);
       mockDatabases.getDocument.mockResolvedValue(mockUserDoc as any);
 
       const { result } = renderHook(() => useAuth(), { wrapper });

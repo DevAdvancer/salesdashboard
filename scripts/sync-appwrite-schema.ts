@@ -76,15 +76,6 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
       { key: 'expiresAt', type: 'datetime', required: true }],
     indexes: [{ key: 'expiry_idx', type: 'key', attributes: ['expiresAt'] }],
   },
-  [COLLECTIONS.CRM_ACCESS_REQUESTS]: {
-    attributes: [
-      { key: 'userId', type: 'string', required: true, size: 255 },
-      { key: 'delegateId', type: 'string', required: true, size: 255 },
-      { key: 'dateKey', type: 'string', required: true, size: 10 },
-      { key: 'state', type: 'enum', required: true, values: ['pending', 'approved', 'denied'] },
-      { key: 'data', type: 'string', required: true, size: 4000 },
-    ], indexes: [{ key: 'user_date_idx', type: 'key', attributes: ['userId', 'dateKey'] }],
-  },
   [COLLECTIONS.LINKEDIN_LEAD_REGISTRY]: {
     attributes: [
       { key:'kind',type:'string',required:true,size:20 },

@@ -5,7 +5,6 @@ const mockToday = '2026-10-23';
 let mockUser = { $id: 'tl', role: 'team_lead', name: 'Team Lead' };
 jest.mock('@/lib/contexts/auth-context', () => ({ useAuth: () => ({ user: mockUser }) }));
 jest.mock('@/components/protected-route', () => ({ ProtectedRoute: ({ children }: any) => children }));
-jest.mock('@/components/attendance-access-approvals', () => ({ AttendanceAccessApprovals: () => null }));
 jest.mock('@/components/ui/date-picker', () => ({ DatePicker: ({ value, onChange }: any) => <input aria-label="Attendance date" value={value} onChange={event => onChange(event.target.value)} /> }));
 jest.mock('@/components/ui/use-toast', () => ({ useToast: () => ({ toast: jest.fn() }) }));
 jest.mock('@/app/actions/attendance/bootstrap', () => ({ loadAttendanceTeamAction: jest.fn() }));

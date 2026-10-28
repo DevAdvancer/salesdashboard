@@ -21,11 +21,11 @@ it('restores profile and access in one request without minting JWTs or repeating
 });
 it('carries the blocked state from the server without trusting stored user or access data', async () => {
   localStorage.setItem('crm.user', JSON.stringify({ ...user, role: 'admin' }));
-  global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ ...bootstrap, status: { state: 'attendance_required', dateKey: '2026-10-22' } }) });
+  global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ ...bootstrap, status: { state: 'mfa_required', dateKey: '2026-10-22' } }) });
   const { result } = renderHook(() => useAuth(), { wrapper });
   await waitFor(() => expect(result.current.loading).toBe(false));
   expect(result.current.user?.role).toBe('agent');
-  expect(result.current.initialAccess?.status.state).toBe('attendance_required');
+  expect(result.current.initialAccess?.status.state).toBe('mfa_required');
   localStorage.removeItem('crm.user');
 });
 it('receives the new profile/access with JWT sync after login instead of another bootstrap/profile request', async () => {
@@ -37,13 +37,14 @@ it('receives the new profile/access with JWT sync after login instead of another
   const { result } = renderHook(() => useAuth(), { wrapper });
   await waitFor(() => expect(result.current.loading).toBe(false));
   (fetch as jest.Mock).mockClear(); (account.get as jest.Mock).mockClear();
+  (account.get as jest.Mock).mockResolvedValue(user);
   await act(async () => { await result.current.login(user.email, 'password'); });
   expect(result.current.initialAccess?.status.state).toBe('allowed');
-  expect(account.get).not.toHaveBeenCalled(); expect(databases.getDocument).not.toHaveBeenCalled();
+  expect(account.get).toHaveBeenCalledTimes(1); expect(databases.getDocument).not.toHaveBeenCalled();
   expect((fetch as jest.Mock).mock.calls.some(([url]) => String(url).includes('view=bootstrap'))).toBe(false);
 });
 
-it('recovers a stalled bootstrap body through the native session without clearing OTP proof', async () => {
+it('recovers a stalled bootstrap body through the native session without clearing it', async () => {
   jest.useFakeTimers();
   try {
     global.fetch = jest.fn(async (url, options) => {

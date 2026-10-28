@@ -594,6 +594,8 @@ export interface AuthContext {
   recoverServerSession: () => Promise<void>;
   sessionRestoreError?: string;
   retrySessionRestore?: () => void;
+  /** Native password session exists, but its second factor is not complete. */
+  nativeMfaPending?: boolean;
   /** Fresh server bootstrap; never restored from browser storage. */
   initialAccess?: { userId: string; status: import('@/lib/server/crm-access').CrmAccessStatus } | null;
   login: (email: string, password: string) => Promise<User | null>;

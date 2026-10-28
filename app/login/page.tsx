@@ -41,7 +41,7 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true); setError(null);
     try {
-      // CrmSecurityGate owns navigation after OTP and attendance verification.
+      // CrmSecurityGate owns navigation after native email MFA verification.
       await login(data.email, data.password);
     } catch (err: unknown) {
       setError(handleApiError(err, { title: 'Login Failed', showToast: true, retry: () => onSubmit(data) }));

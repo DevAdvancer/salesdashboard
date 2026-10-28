@@ -33,6 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Pages that fire server actions from useEffect should wait on this
   // flag to avoid a 500 race on the crm_appwrite_jwt cookie.
   const [serverSessionReady, setServerSessionReady] = useState(false);
+  const [nativeMfaPending, setNativeMfaPending] = useState(false);
   const [initialAccess, setInitialAccess] = useState<AuthContextType['initialAccess']>(null);
   const [sessionRestoreError, setSessionRestoreError] = useState('');
   const [restoreAttempt, setRestoreAttempt] = useState(0);
@@ -175,6 +176,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // attempt before downstream pages fire server actions.
       setServerSessionReady(false);
       setSessionRestoreError('');
+      setNativeMfaPending(false);
       setLoading(true);
       try {
         // A valid HttpOnly session can restore profile and access in one request.
@@ -256,8 +258,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         if (cancelled) return;
-        if ((error as { code?: number })?.code === 401) {
-          // Only a confirmed native session expiry clears the OTP proof.
+        if ((error as { type?: string })?.type === 'user_more_factors_required') {
+          setUser(null); setInitialAccess(null); setNativeMfaPending(true);
+        } else if ((error as { code?: number })?.code === 401) {
+          // Only a confirmed native session expiry clears the server bridge.
           await clearServerSession();
           if (!cancelled) { setUser(null); setServerSessionReady(true); }
         } else {
@@ -314,14 +318,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Re-gate for the new session.
       setServerSessionReady(false);
       setInitialAccess(null);
+      setNativeMfaPending(false);
 
-      // Create email session
+      // Discard any previous account's bridge before creating a new session.
       await serverSessionSyncPromise.current?.catch(() => {});
+      await clearServerSession();
       const created = await account.createEmailPasswordSession(email, password);
       createdSession = true;
+      // Appwrite keeps a password session while requiring its second factor.
+      // Do not attempt JWT bootstrap or delete that pending session.
+      const signedInAccount = await account.get();
 
       const restored = await syncServerSession({ force: true, bootstrap: true });
-      const accountId = restored?.user.$id || created?.userId || (await account.get()).$id;
+      const accountId = restored?.user.$id || created?.userId || signedInAccount.$id;
       const userDoc = await fetchUserDocument(accountId, restored?.user);
 
       if (!userDoc) {
@@ -343,6 +352,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // (state updates are async — reading `user` right after login is stale).
       return userDoc;
     } catch (error) {
+      if ((error as { type?: string })?.type === 'user_more_factors_required') {
+        setUser(null); setInitialAccess(null); setNativeMfaPending(true); setSessionRestoreError('');
+        return null;
+      }
       console.error('Login error:', error);
       if (createdSession) {
         try { await account.deleteSession('current'); } catch { /* Session may already be gone. */ }
@@ -368,7 +381,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await clearServerSession();
       databases.clearReadCache?.();
       clearBrowserQueryClient();
-      setUser(null);
+      setUser(null); setNativeMfaPending(false);
     }
   }, [clearServerSession, user]);
 
@@ -433,6 +446,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sessionRestoreError,
       retrySessionRestore,
       initialAccess,
+      nativeMfaPending,
       login,
       logout,
       signup,
@@ -459,6 +473,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sessionRestoreError,
       retrySessionRestore,
       initialAccess,
+      nativeMfaPending,
       login,
       logout,
       signup,

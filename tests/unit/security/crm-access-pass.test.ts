@@ -1,5 +1,5 @@
 /** @jest-environment node */
-import { ACCESS_PASS_TTL_MS, readAccessPass, signAccessPass, signProof } from '@/lib/server/crm-security-store';
+import { ACCESS_PASS_TTL_MS, readAccessPass, signAccessPass } from '@/lib/server/crm-access-pass';
 
 const allowed = { state: 'allowed', dateKey: '2026-10-23' };
 const user = { $id: 'person', role: 'agent', isActive: true };
@@ -21,11 +21,6 @@ it('rejects forged, tampered and unsigned values', () => {
   expect(readAccessPass(body, 'person', 'session')).toBeNull();
   expect(readAccessPass('forged', 'person', 'session')).toBeNull();
   expect(readAccessPass(undefined, 'person', 'session')).toBeNull();
-});
-
-it('cannot be confused with the email-verification proof cookie', () => {
-  const proof = signProof({ userId: 'person', sessionId: 'session', expiresAt: Date.now() + 60_000 });
-  expect(readAccessPass(proof, 'person', 'session')).toBeNull();
 });
 
 it('expires quickly and rejects passes dated in the future', () => {
