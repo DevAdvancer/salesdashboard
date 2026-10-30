@@ -1,10 +1,10 @@
 import { COLLECTIONS } from '@/lib/constants/appwrite';
 import type { Lead } from '@/lib/types';
 import { getPaymentCycleAttribution, recordLeadLifecycleEvent } from '@/lib/utils/lead-payment-cycle';
-import { createPreviousFollowupsPaymentAction, updatePreviousFollowupsPaymentAction } from '@/app/actions/previous-followups-payments';
+import { createPreviousFollowupsPaymentAction, updatePreviousFollowupsPaymentAction, listPreviousFollowupsPaymentsAction } from '@/app/actions/previous-followups-payments';
 import { FOLLOWUPS_PAYMENT_COMPANIES } from '@/lib/types';
 import { getClientPaymentRecordAction, upsertClientPaymentRecordAction, addClientPaymentUpdateAction } from '@/app/actions/client-payments/record';
-import { listClientPaymentSummariesAction } from '@/app/actions/client-payments/list';
+import { listClientPaymentSummariesAction, listLeadPaidAmountsAction } from '@/app/actions/client-payments/list';
 import { listPaymentsReportAction, listAllPaymentInsightsAction } from '@/app/actions/client-payments/insights';
 
 const mockDocs = new Map<string, any>();
@@ -131,13 +131,28 @@ describe('closure payment cycles', () => {
 
   it('records only the signed adjustment when a followup payment is edited or refunded', async () => {
     await upsertClientPaymentRecordAction(input);
+    mockDocs.set('followup-1', { $id: 'followup-1', leadId: 'lead', amount: 200, date: '2026-08-20' });
     const update = { actorId: 'admin', leadId: 'lead', status: 'fully_paid' as const, amount: 200, sourceFollowupId: 'followup-1' };
     await addClientPaymentUpdateAction(update);
     await addClientPaymentUpdateAction(update);
     expect(JSON.parse(payments()[0].updates)).toHaveLength(2);
+    mockDocs.set('followup-1', { ...mockDocs.get('followup-1'), status: 'refunded' });
     const refunded = await addClientPaymentUpdateAction({ ...update, status: 'refunded', amount: -200 });
     expect(refunded.updates[0].amount).toBe(-400);
+    expect(refunded.updates[0].paymentDate).toBe('2026-08-20');
     expect(refunded.updates.reduce((sum, u) => sum + (u.amount ?? 0), 0)).toBe(1400);
+  });
+
+  it('creates BGC without a lead or client payment and keeps its category when edited', async () => {
+    const row = await createPreviousFollowupsPaymentAction({ actorId: 'admin', category: 'bgc',
+      company: FOLLOWUPS_PAYMENT_COMPANIES[0], candidateName: 'Independent profile', amount: 300,
+      date: '2026-08-20', status: 'paid' });
+    expect(row).toMatchObject({ category: 'bgc', leadId: 'manual_followup:bgc:unique', creditedAgentId: 'admin', amount: 300 });
+    expect(payments()).toHaveLength(0);
+    const edited = await updatePreviousFollowupsPaymentAction({ actorId: 'admin', paymentId: row.$id, amount: 150 });
+    expect(edited).toMatchObject({ category: 'bgc', leadId: row.leadId, amount: 150 });
+    const history = await listPreviousFollowupsPaymentsAction({ actorId: 'admin' });
+    expect(history).toEqual([expect.objectContaining({ $id: row.$id, date: '2026-08-20' })]);
   });
 
   it('stores a nonnegative refund magnitude and returns the signed amount', async () => {
@@ -146,6 +161,21 @@ describe('closure payment cycles', () => {
       date: '2026-10-19', status: 'refunded' });
     expect(row).toMatchObject({ amount: -200, status: 'refunded' });
     expect(mockDocs.get(row.$id)).toMatchObject({ amount: 200, status: 'refunded' });
+  });
+
+  it('credits the assigned profile when an admin records a client followup and preserves the actual audit actor', async () => {
+    mockDocs.set('pankaj', { $id: 'pankaj', name: 'Pankaj Rajput', role: 'agent', department: 'sales' });
+    mockDocs.set('lead', { ...mockDocs.get('lead'), assignedToId: 'pankaj' });
+    await upsertClientPaymentRecordAction(input);
+    const followup = await createPreviousFollowupsPaymentAction({ actorId: 'admin', leadId: 'lead',
+      company: FOLLOWUPS_PAYMENT_COMPANIES[0], candidateName: 'Client', amount: 800, date: '2026-07-10',
+      creditedAgentId: null, status: 'paid' });
+    expect(followup).toMatchObject({ creditedAgentId: 'pankaj', createdById: 'admin', createdByName: 'Admin' });
+    await addClientPaymentUpdateAction({ actorId: 'admin', leadId: 'lead', amount: 800, status: 'fully_paid',
+      sourceFollowupId: followup.$id, note: 'Followup payment added' });
+    const history = await getClientPaymentRecordAction('admin', 'lead');
+    expect(history?.followupUpdates?.[0]).toMatchObject({ creditedAgentId: 'pankaj', creditedAgentName: 'Pankaj Rajput', actorName: 'Admin' });
+    expect(history?.updates[0]).toMatchObject({ actorId: 'admin', actorName: 'Admin' });
   });
 
   it('edits a refund, preserves its sign on unrelated edits, and can change it back to paid', async () => {
@@ -181,5 +211,34 @@ describe('closure payment cycles', () => {
     }) }, { ownerId: 'new-owner', assignedToId: 'new-agent', closedAt: '2026-10-19T16:00:00Z', data: '{"paymentCycleId":"second"}' });
     expect(attribution).toMatchObject({ ownerId: 'old-owner', assignedToId: undefined,
       closedAt: '2026-08-25T20:00:00Z', isCurrent: false });
+  });
+
+  it('reconciles a legacy edit across history, summaries and reports, and does not append another receipt on save', async () => {
+    const record = await upsertClientPaymentRecordAction(input);
+    const rows = [
+      { id: 'edit', status: 'fully_paid', amount: 500, note: 'Followup payment added', actorId: 'admin', actorName: 'Admin', createdAt: '2026-10-01T15:21:07Z' },
+      { id: 'receipt', status: 'fully_paid', amount: 500, note: 'Followup payment added', actorId: 'alisha', actorName: 'Alisha', createdAt: '2026-10-01T14:18:34Z' },
+      { id: 'initial', status: 'partially_paid', amount: 1000, note: 'Initialized', actorId: 'alisha', actorName: 'Alisha', createdAt: '2026-08-18T19:39:30Z' },
+    ];
+    mockDocs.set(record.$id, { ...mockDocs.get(record.$id), updates: JSON.stringify(rows), status: 'fully_paid' });
+    mockDocs.set('legacy-source', { $id: 'legacy-source', leadId: 'lead', amount: 500, status: 'paid', date: '2026-09-30',
+      createdAt: '2026-10-01T14:18:33Z', updatedAt: '2026-10-01T15:21:06Z', $createdAt: '2026-10-01T15:21:07Z' });
+    const before = JSON.stringify(mockDocs.get(record.$id));
+    const history = await getClientPaymentRecordAction('admin', 'lead');
+    expect(history?.updates.reduce((sum, update) => sum + (update.amount ?? 0), 0)).toBe(1500);
+    expect((await listPaymentsReportAction({ actorId: 'admin' }))[0].totalPaid).toBe(1500);
+    expect((await listAllPaymentInsightsAction('admin'))[0].totalPaid).toBe(1500);
+    expect((await listClientPaymentSummariesAction({ actorId: 'admin', leadIds: ['lead'] }))[0].paidAmount).toBe(1500);
+    expect((await listLeadPaidAmountsAction({ actorId: 'admin', leadIds: ['lead'] })).lead).toBe(1500);
+    mockUpdateDocument.mockClear();
+    await addClientPaymentUpdateAction({ actorId: 'admin', leadId: 'lead', status: 'fully_paid', amount: 500, sourceFollowupId: 'legacy-source' });
+    expect(mockUpdateDocument).not.toHaveBeenCalled();
+    expect(JSON.stringify(mockDocs.get(record.$id))).toBe(before);
+    jest.setSystemTime(new Date('2026-10-02T12:00:00Z'));
+    mockDocs.set('legacy-source', { ...mockDocs.get('legacy-source'), amount: 700, updatedAt: '2026-10-02T12:00:00Z' });
+    const adjusted = await addClientPaymentUpdateAction({ actorId: 'admin', leadId: 'lead', status: 'fully_paid', amount: 700, sourceFollowupId: 'legacy-source' });
+    expect(JSON.parse(mockDocs.get(record.$id).updates)[0]).toMatchObject({ amount: 200, sourceFollowupId: 'legacy-source' });
+    expect(adjusted.updates.reduce((sum, update) => sum + (update.amount ?? 0), 0)).toBe(1700);
+    expect((await listPaymentsReportAction({ actorId: 'admin' }))[0].totalPaid).toBe(1700);
   });
 });

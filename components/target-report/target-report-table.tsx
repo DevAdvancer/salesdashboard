@@ -281,6 +281,7 @@ export function TargetReportTable({ result, isAgent, monthKey, actorId }: Target
                                   </TableCell>
                                   <TableCell className="text-right tabular-nums">
                                     {currency.format(agent.achieved)}
+                                    {!!agent.bgcAmount && <span className="block text-xs text-muted-foreground">BGC: {currency.format(agent.bgcAmount)}</span>}
                                   </TableCell>
                                   <TableCell className="w-[200px]">
                                     <div className="flex flex-col gap-1">

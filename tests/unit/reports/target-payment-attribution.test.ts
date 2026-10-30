@@ -15,17 +15,48 @@ test('credits Admin and Monitor updates to their profiles while retaining ordina
   expect(targetPaymentRecipient('admin', 'agent', contributorIds, 'explicit-credit')).toBe('explicit-credit');
 });
 
-test('deducts each followup only once when a payment has multiple credited people', () => {
+test('does not subtract independent followups from unrelated payment events', () => {
   const totals = targetUpfrontAmounts({ payment: payment([paid('admin', 100), paid('monitor', 200), paid('agent', 50)]),
     lead, from, to, contributorIds, followups: [{ leadId: 'lead', amount: 60 }] });
-  expect([...totals.values()].reduce((sum, amount) => sum + amount, 0)).toBe(290);
+  expect([...totals.values()].reduce((sum, amount) => sum + amount, 0)).toBe(350);
 });
 
-test('does not count out-of-range updates or payments from prior closure cycles', () => {
+test('uses payment event dates even when the lead closed in an earlier month', () => {
   expect(targetUpfrontAmounts({ payment: payment([{ ...paid('admin', 100), createdAt: '2026-09-10T12:00:00Z' }]),
     lead, from, to, contributorIds, followups: [] }).size).toBe(0);
   expect(targetUpfrontAmounts({ payment: payment([paid('admin', 100)]),
-    lead: { ...lead, closedAt: '2026-09-01T12:00:00Z' }, from, to, contributorIds, followups: [] }).size).toBe(0);
+    lead: { ...lead, closedAt: '2026-09-01T12:00:00Z' }, from, to, contributorIds, followups: [] }).get('admin')).toBe(100);
+});
+
+test('a followup refund never increases upfront revenue and mirrored entries count only at their source', () => {
+  const totals = targetUpfrontAmounts({ payment: payment([
+    paid('agent', 500), { ...paid('agent', 200), sourceFollowupId: 'followup' },
+    { ...paid('agent', -200), status: 'refunded', sourceFollowupId: 'refund' },
+  ]), lead, from, to, contributorIds,
+    followups: [{ leadId: 'lead', amount: 200, status: 'refunded' }] });
+  expect(totals.get('agent')).toBe(500);
+});
+
+test('a direct refund reduces its payment month, regardless of when the record was last edited', () => {
+  const cp = { ...payment([{ ...paid('agent', 200), status: 'refunded', paymentDate: '2026-08-31' }]),
+    updatedAt: '2026-10-20T12:00:00Z' };
+  const args = { payment: cp, lead, contributorIds, followups: [] };
+  expect(targetUpfrontAmounts({ ...args, from: '2026-08-01', to: '2026-08-31' }).get('agent')).toBe(-200);
+  expect(targetUpfrontAmounts({ ...args, from: '2026-09-01', to: '2026-09-30' }).size).toBe(0);
+});
+
+test('payments at the UTC month boundary belong to their Eastern calendar month', () => {
+  const cp = payment([{ ...paid('agent', 100), createdAt: '2026-09-01T02:00:00Z' }]);
+  const args = { payment: cp, lead, contributorIds, followups: [] };
+  expect(targetUpfrontAmounts({ ...args, from: '2026-08-01', to: '2026-08-31' }).get('agent')).toBe(100);
+  expect(targetUpfrontAmounts({ ...args, from: '2026-09-01', to: '2026-09-30' }).size).toBe(0);
+});
+
+test('legacy followup mirrors are matched individually without reducing another contributor', () => {
+  const totals = targetUpfrontAmounts({ payment: payment([paid('admin', 100),
+    { ...paid('agent', 200), note: 'Followup payment added' }]), lead, from, to, contributorIds,
+    followups: [{ leadId: 'lead', amount: 200, createdAt: '2026-10-10T12:00:01Z' }] });
+  expect(Object.fromEntries(totals)).toEqual({ admin: 100 });
 });
 
 test('shows Admin and Monitor contributions and raises both report totals without requiring team assignments', () => {

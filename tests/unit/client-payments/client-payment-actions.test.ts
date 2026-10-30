@@ -1,4 +1,7 @@
 export {};
+jest.mock('@/lib/server/client-payment-reconciliation', () => ({
+  readReconciledPaymentDocuments: async (_databases: unknown, documents: unknown[]) => documents,
+}));
 
 const mockAssertAuthenticatedUserId = jest.fn();
 const mockCreateAdminClient = jest.fn();

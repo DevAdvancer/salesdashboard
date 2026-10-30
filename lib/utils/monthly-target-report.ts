@@ -1,21 +1,15 @@
 import type { Lead, MonthlyTarget, MonthlyTargetAssignment, User } from "@/lib/types";
 import { getPrimaryBranchId } from '@/lib/utils/user-branches';
+import { UNASSIGNED_FOLLOWUP_PROFILE_ID } from '@/lib/utils/followup-payment-attribution';
 
 /**
  * Pure helpers that compute the per-agent and per-TL rows shown on the
  * Target-Report page. No I/O — the caller fetches leads, payments,
  * targets, and assignments, then hands them in.
  *
- * Attribution rules:
- *   • A lead is attributed to its `ownerId` (the agent who created it).
- *   • Money counted for a lead is the sum of `client_payments.updates[].amount`
- *     (or `paymentPlan.upfrontAmount` if no update carried an amount) — the
- *     same source the Payments-Report uses.
- *   • Referral leads are excluded entirely (matched on `data.source`).
- *   • Date filter: a lead counts when its `closedAt` falls inside the
- *     month window; if `closedAt` is missing, the lead's `$createdAt`
- *     is used as a fallback so client_payments created in-window are
- *     still attributed.
+ * Financial amounts are computed from dated payment history by the caller.
+ * Lead activity counts remain separate. Followups (including independent BGC)
+ * are added once to the credited profile; bgcAmount is a breakdown of achieved.
  */
 
 export interface TargetReportAgentRow {
@@ -25,6 +19,9 @@ export interface TargetReportAgentRow {
   target: number;
   /** Sum of money received from non-referral leads owned by this user, in window. */
   achieved: number;
+  /** BGC is included in achieved; exposed separately for the profile breakdown. */
+  bgcAmount?: number;
+  followupsAmount?: number;
   /** achieved / target as a 0-1 fraction. Null when no target has been set. */
   percent: number | null;
   leadCount: number;
@@ -176,6 +173,9 @@ export function buildTargetReport(input: {
    * Optional. Sum of followup payments collected by each agent in the selected month.
    */
   followupsByAgentId?: Record<string, number>;
+  bgcByAgentId?: Record<string, number>;
+  /** Only leadership callers may supply unattributed independent payments. */
+  unassignedFollowupsAmount?: number;
   /**
    * Optional. Sum of technical payments collected by each agent in the selected month.
    */
@@ -200,6 +200,8 @@ export function buildTargetReport(input: {
     const teamAgentIds = new Set<string>([
       target.teamLeadId,
       ...assignments.map((a) => a.agentId),
+      ...[...usersByAgentId.values()].filter(user => user.teamLeadId === target.teamLeadId &&
+        ((agentStatsByUserId[user.$id]?.achieved ?? 0) !== 0 || (followupsByAgentId[user.$id] ?? 0) !== 0)).map(user => user.$id),
     ]);
 
     const agents: TargetReportAgentRow[] = [];
@@ -238,6 +240,8 @@ export function buildTargetReport(input: {
         userName: agent.name,
         target: agentTarget,
         achieved,
+        bgcAmount: input.bgcByAgentId?.[agentId] ?? 0,
+        followupsAmount: (followupsByAgentId[agentId] ?? 0) - (input.bgcByAgentId?.[agentId] ?? 0),
         percent: toPercent(achieved, agentTarget),
         leadCount: stats.leadCount,
         referralExcludedCount: stats.referralExcludedCount,
@@ -271,21 +275,35 @@ export function buildTargetReport(input: {
 
   }
 
-  // Admin/Monitor contributions have their own profile row even without a TL
-  // target assignment. Each contribution increases both target and achieved.
+  // Keep revenue visible even without a target assignment. Admin/Monitor
+  // contributions retain their existing automatic target; other profiles use 0.
   for (const [userId, user] of usersByAgentId) {
-    if (resolvedAgentIds.has(userId) || (user.role !== 'admin' && user.role !== 'monitor')) continue;
+    if (resolvedAgentIds.has(userId)) continue;
     const stats = agentStatsByUserId[userId];
     const achieved = (stats?.achieved ?? 0) + (followupsByAgentId[userId] ?? 0);
-    if (!(achieved > 0)) continue;
+    if (achieved === 0) continue;
+    const autoTarget = user.role === 'admin' || user.role === 'monitor';
+    const target = autoTarget ? Math.max(0, achieved) : 0;
+    const percent = toPercent(achieved, target);
     const primary = getPrimaryBranchId(user);
-    const agent: TargetReportAgentRow = { userId, userName: user.name, target: achieved, achieved, percent: 1,
+    const agent: TargetReportAgentRow = { userId, userName: user.name, target, achieved, percent,
+      bgcAmount: input.bgcByAgentId?.[userId] ?? 0,
+      followupsAmount: (followupsByAgentId[userId] ?? 0) - (input.bgcByAgentId?.[userId] ?? 0),
       leadCount: stats?.leadCount ?? 0, referralExcludedCount: stats?.referralExcludedCount ?? 0,
       notInterestedCount: stats?.notInterestedCount ?? 0, branchName: primary ? input.branchMap?.get(primary) || primary : '',
       branches: primary ? [{ id: primary, name: input.branchMap?.get(primary) || primary, primary: true }] : [] };
-    rows.push({ teamLeadId: userId, teamLeadName: `${user.name} (${user.role === 'admin' ? 'Admin' : 'Monitor'})`,
-      target: achieved, achieved, percent: 1, agents: [agent], needsSplit: false, kind: 'contributor' });
+    rows.push({ teamLeadId: userId, teamLeadName: `${user.name} (${autoTarget ? user.role === 'admin' ? 'Admin' : 'Monitor' : 'No target assigned'})`,
+      target, achieved, percent, agents: [agent], needsSplit: false, kind: 'contributor' });
     resolvedAgentIds.add(userId);
+  }
+
+  if (input.unassignedFollowupsAmount) {
+    const name = 'Unassigned manual follow-ups';
+    const agent: TargetReportAgentRow = { userId: UNASSIGNED_FOLLOWUP_PROFILE_ID, userName: name,
+      target: 0, achieved: input.unassignedFollowupsAmount, followupsAmount: input.unassignedFollowupsAmount,
+      percent: null, leadCount: 0, referralExcludedCount: 0, notInterestedCount: 0 };
+    rows.push({ teamLeadId: UNASSIGNED_FOLLOWUP_PROFILE_ID, teamLeadName: name, target: 0,
+      achieved: agent.achieved, percent: null, agents: [agent], needsSplit: false, kind: 'contributor' });
   }
 
   rows.sort((a, b) => b.achieved - a.achieved || a.teamLeadName.localeCompare(b.teamLeadName));
@@ -300,7 +318,7 @@ export function buildTargetReport(input: {
       target: totalTarget,
       achieved: totalAchieved,
       percent: toPercent(totalAchieved, totalTarget),
-      agentCount: rows.reduce((sum, r) => sum + r.agents.length, 0),
+      agentCount: rows.reduce((sum, r) => sum + r.agents.filter(agent => agent.userId !== UNASSIGNED_FOLLOWUP_PROFILE_ID).length, 0),
     },
     unresolvedAgentIds: Array.from(usersByAgentId.keys()).filter((id) => !resolvedAgentIds.has(id)),
   };

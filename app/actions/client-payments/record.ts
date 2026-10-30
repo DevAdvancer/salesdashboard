@@ -15,6 +15,9 @@ import { mergeLockedClientContactDetails } from '@/lib/utils/lead-contact-lock';
 import type { LeadData } from '@/lib/types';
 import { getLeadLifecycleEvents, getPaymentCycleId, snapshotPaymentPlan } from '@/lib/utils/lead-payment-cycle';
 import { mapFollowupHistoryUpdate } from '@/lib/utils/client-payment-history';
+import { followupPaymentRecipient } from '@/lib/utils/followup-payment-attribution';
+import { getFollowupsPaymentAmount } from '@/lib/utils/followups-payment-amount';
+import { reconcilePaymentDocuments } from '@/lib/utils/client-payment-reconciliation';
 
 
 export async function getClientPaymentRecordAction(actorId: string, leadId: string): Promise<ClientPaymentRecord | null> {
@@ -41,10 +44,25 @@ export async function getClientPaymentRecordAction(actorId: string, leadId: stri
         requireComplete: true,
       }),
     ]);
+    const creditNames = new Map<string, string>();
+    const creditedIds = [...new Set(followups.map(source => followupPaymentRecipient(source, lead)))].filter(Boolean);
+    for (let index = 0; index < creditedIds.length; index += 100) {
+      const users = await listAllDocuments<{ $id: string; name: string }>({
+        databases: historyReads, databaseId: DATABASE_ID, collectionId: COLLECTIONS.USERS,
+        queries: [Query.equal('$id', creditedIds.slice(index, index + 100)), Query.select(['$id', 'name'])],
+        pageLimit: 100, maxPages: 1,
+      });
+      for (const user of users) creditNames.set(user.$id, user.name);
+    }
+    const financialRecords = reconcilePaymentDocuments(records, followups);
     return {
-      ...mapRecord(records[0]),
-      previousRecords: records.slice(1).map(mapRecord),
-      followupUpdates: followups.map(mapFollowupHistoryUpdate),
+      ...mapRecord(financialRecords[0]),
+      previousRecords: financialRecords.slice(1).map(mapRecord),
+      followupUpdates: followups.map(source => {
+        const id = followupPaymentRecipient(source, lead);
+        const name = creditNames.get(id) || (id === source.createdById ? String(source.createdByName || id) : id);
+        return mapFollowupHistoryUpdate({ ...source, creditedAgentId: id, creditedAgentName: name });
+      }),
       lifecycleEvents: getLeadLifecycleEvents(JSON.parse(lead?.data || '{}')),
     };
 }
@@ -147,14 +165,30 @@ export async function addClientPaymentUpdateAction(input: {
     }
 
     let existing = await findRecordByLeadId(input.leadId);
+    let financialUpdates: ClientPaymentUpdate[] | undefined;
+    let reconciledSourceTotal: number | undefined;
+    let sourceFollowup: Record<string, unknown> | undefined;
+    let sourceRecords: Record<string, unknown>[] = [];
+    let paymentDate: string | undefined;
     if (input.sourceFollowupId) {
       const { databases } = await createAdminClient();
+      const source = await databases.getDocument(DATABASE_ID, COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS, input.sourceFollowupId);
+      if (source.leadId !== input.leadId) throw new Error('Followup does not belong to this client');
+      sourceFollowup = source;
+      paymentDate = source.date;
       const records = await listAllDocuments<any>({
         databases, databaseId: DATABASE_ID, collectionId: COLLECTIONS.CLIENT_PAYMENTS,
         queries: [Query.equal('leadId', input.leadId)],
       });
-      existing = records.find(record => parseJsonOr<ClientPaymentUpdate[]>(record.updates ?? record.updatesJson, [])
+      const reconciled = reconcilePaymentDocuments(records, [source]);
+      sourceRecords = records;
+      reconciledSourceTotal = reconciled.flatMap(record => parseJsonOr<ClientPaymentUpdate[]>(record.updates, []))
+        .filter(update => update.sourceFollowupId === input.sourceFollowupId).reduce((sum, update) => sum + (update.amount ?? 0), 0);
+      const matched = reconciled.find(record => parseJsonOr<ClientPaymentUpdate[]>(record.updates ?? record.updatesJson, [])
         .some(update => update.sourceFollowupId === input.sourceFollowupId)) ?? existing;
+      existing = records.find(record => record.$id === matched?.$id) ?? existing;
+      const financialRecord = reconciled.find(record => record.$id === existing?.$id);
+      financialUpdates = financialRecord ? parseJsonOr<ClientPaymentUpdate[]>(financialRecord.updates, []) : undefined;
     }
     if (!existing) {
     throw new Error("Payment record not found");
@@ -164,15 +198,21 @@ export async function addClientPaymentUpdateAction(input: {
     const now = new Date().toISOString();
     const suppliedAmount = typeof input.amount === "number" && Number.isFinite(input.amount)
       ? (input.status === 'refunded' ? -Math.abs(input.amount) : input.amount) : null;
+    if (sourceFollowup && suppliedAmount !== null && suppliedAmount !== getFollowupsPaymentAmount(sourceFollowup)) {
+      throw new Error('The followup payment changed. Reload it before updating client history.');
+    }
     const previousSourceTotal = input.sourceFollowupId
-      ? updates.filter(u => u.sourceFollowupId === input.sourceFollowupId).reduce((sum, u) => sum + (u.amount ?? 0), 0)
+      ? reconciledSourceTotal ?? updates.filter(u => u.sourceFollowupId === input.sourceFollowupId).reduce((sum, u) => sum + (u.amount ?? 0), 0)
       : 0;
     const sanitizedAmount = suppliedAmount === null ? null : suppliedAmount - previousSourceTotal;
-    if (input.sourceFollowupId && sanitizedAmount === 0 && existing.status === input.status) return mapRecord(existing);
+    if (input.sourceFollowupId && sanitizedAmount === 0 && existing.status === input.status) {
+      return { ...mapRecord(existing), updates: financialUpdates ?? updates };
+    }
     const nextUpdates: ClientPaymentUpdate[] = [
             {
               id: crypto.randomUUID(),
               ...(input.sourceFollowupId ? { sourceFollowupId: input.sourceFollowupId } : {}),
+              ...(paymentDate ? { paymentDate } : {}),
               status: input.status,
               note: input.note ?? null,
               actorId: actor.$id,
@@ -209,6 +249,10 @@ export async function addClientPaymentUpdateAction(input: {
     }
     }
 
+    if (sourceFollowup) {
+      const reconciled = reconcilePaymentDocuments(sourceRecords.map(record => record.$id === doc.$id ? doc as unknown as Record<string, unknown> : record), [sourceFollowup]);
+      return mapRecord(reconciled.find(record => record.$id === doc.$id) ?? doc);
+    }
     return mapRecord(doc);
 }
 

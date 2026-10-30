@@ -107,3 +107,40 @@ it('keeps refund adjustments and shows an unsynced refund with a signed amount',
   expect(record.status).toBe('partially_paid');
   expect(record.updates.reduce((sum, update) => sum + (update.amount ?? 0), 0)).toBe(1000);
 });
+
+it('shows the screenshot legacy receipt once, credited to Pankaj while preserving Abhirup as the recorder', () => {
+  const record: ClientPaymentRecord = { ...base, updates: [{ id: 'legacy', amount: 800, status: 'fully_paid',
+    note: 'Followup payment added', actorId: 'admin', actorName: 'Abhirup Kumar', createdAt: '2026-09-15T14:12:00Z' }],
+    followupUpdates: [mapFollowupHistoryUpdate({ $id: 'followup', amount: 800, status: 'paid', date: '2026-07-10',
+      createdAt: '2026-09-15T14:12:00Z', createdById: 'pankaj', createdByName: 'Pankaj Rajput' })] };
+  const before = JSON.stringify(record);
+  render(<ClientPaymentTimelineCard paymentRecord={record} />);
+  expect(screen.getByText('Credited to: Pankaj Rajput')).toBeInTheDocument();
+  expect(screen.getByText('Updated by: Abhirup Kumar')).toBeInTheDocument();
+  expect(screen.getByText('Follow-up date: 2026-07-10')).toBeInTheDocument();
+  expect(screen.getAllByText(/Amount: \$800/)).toHaveLength(1);
+  expect(screen.queryByText('Payment follow-up recorded')).not.toBeInTheDocument();
+  expect(JSON.stringify(record)).toBe(before);
+});
+
+it('does not guess when two old followups could match the same financial update', () => {
+  const source = { amount: 800, status: 'paid' as const, note: null, actorId: 'agent', actorName: 'Agent',
+    createdAt: '2026-09-15T14:12:00Z', paymentDate: '2026-07-10' };
+  const entries = buildClientPaymentHistory({ ...base, updates: [{ id: 'legacy', amount: 800, status: 'fully_paid',
+    note: 'Followup payment added', actorId: 'admin', actorName: 'Admin', createdAt: source.createdAt }],
+    followupUpdates: [{ ...source, id: 'a' }, { ...source, id: 'b' }] });
+  expect(entries).toHaveLength(3);
+});
+
+it('renders an unchanged legacy followup edit without another $500 payment amount', () => {
+  render(<ClientPaymentTimelineCard paymentRecord={{ ...base, updates: [
+    { id: 'edit', status: 'fully_paid', amount: 500, note: 'Followup payment added', actorId: 'admin', actorName: 'Abhirup', createdAt: '2026-10-01T15:21:07Z' },
+    { id: 'receipt', status: 'fully_paid', amount: 500, note: 'Followup payment added', actorId: 'alisha', actorName: 'Alisha', createdAt: '2026-10-01T14:18:34Z' },
+  ], followupUpdates: [mapFollowupHistoryUpdate({ $id: 'source', amount: 500, status: 'paid', date: '2026-09-30',
+    createdAt: '2026-10-01T14:18:33Z', updatedAt: '2026-10-01T15:21:06Z', createdById: 'alisha', createdByName: 'Alisha',
+    updatedById: 'admin', updatedByName: 'Abhirup' })] }} />);
+  expect(screen.getAllByText('Payment Amount: $500.00')).toHaveLength(1);
+  expect(screen.getByText('Follow-up details updated')).toBeInTheDocument();
+  expect(screen.getByText('Updated by: Abhirup')).toBeInTheDocument();
+  expect(screen.queryByText('Follow-up Amount: $500.00')).not.toBeInTheDocument();
+});

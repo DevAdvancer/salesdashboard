@@ -1,8 +1,10 @@
 "use server";
 
+import { followupPaymentRecipient, isIndependentFollowup, UNASSIGNED_FOLLOWUP_PROFILE_ID } from '@/lib/utils/followup-payment-attribution';
+import { followupsPaymentCategory } from '@/lib/utils/followups-payment-category';
 import { getFollowupsPaymentAmount } from "@/lib/utils/followups-payment-amount";
 import { listTargetReportContributors } from '@/lib/server/target-report-contributors';
-import { targetPaymentRecipient, targetUpfrontAmounts } from '@/lib/utils/target-payment-attribution';
+import { targetUpfrontAmounts } from '@/lib/utils/target-payment-attribution';
 import { getTargetMonthBound } from "@/app/actions/target-month-bounds";
 
 import { Query } from "node-appwrite";
@@ -21,13 +23,15 @@ export interface AgentPaymentDetail {
   amount: number;
   leadId: string;
   /** "upfront" | "technical" | "followup" */
-  category: "upfront" | "technical" | "followup";
+  category: "upfront" | "technical" | "followup" | "bgc";
 }
 
 export interface AgentPaymentDetailsResult {
   agentName: string;
   upfront: AgentPaymentDetail[];
   technicalAndFollowups: AgentPaymentDetail[];
+  bgc: AgentPaymentDetail[];
+  bgcTotal: number;
   totalAmount: number;
   upfrontTotal: number;
   technicalAndFollowupsTotal: number;
@@ -133,6 +137,7 @@ export async function getAgentPaymentDetailsAction(input: {
     actor.role === "monitor" ||
     actor.role === "operations";
   const isTl = actor.role === "team_lead";
+  if (input.agentId === UNASSIGNED_FOLLOWUP_PROFILE_ID && !isAdminLike) throw new Error('Not authorized');
 
   if (!isAdminLike && !isTl) {
     // Agent — can only see self
@@ -142,7 +147,7 @@ export async function getAgentPaymentDetailsAction(input: {
   } else if (isTl) {
     // TL — can see self + own team
     if (input.agentId !== actor.$id) {
-      const agents = await getAgentsByTeamLead(actor.$id, "sales");
+      const agents = await getAgentsByTeamLead(actor.$id, "sales", true);
       const teamIds = new Set([actor.$id, ...agents.map((a) => a.$id)]);
       if (!teamIds.has(input.agentId)) {
         throw new Error("Not authorized to view this agent's details.");
@@ -156,7 +161,7 @@ export async function getAgentPaymentDetailsAction(input: {
   const agentDoc = await databases
     .getDocument(DATABASE_ID, COLLECTIONS.USERS, input.agentId)
     .catch(() => null);
-  const agentName = agentDoc?.name ?? input.agentId;
+  const agentName = input.agentId === UNASSIGNED_FOLLOWUP_PROFILE_ID ? "Unassigned manual follow-ups" : agentDoc?.name ?? input.agentId;
 
   const { from: monthFromIso, to: monthToIso } = monthBounds(input.monthKey);
   const monthStartIso = `${monthFromIso}T00:00:00.000Z`;
@@ -181,10 +186,10 @@ export async function getAgentPaymentDetailsAction(input: {
     databases,
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS,
-    queries: [
-      Query.greaterThanEqual("date", monthFromIso),
-      Query.lessThanEqual("date", monthToIso),
-    ],
+    // Older financial mirrors can have an audit date in a different month.
+    // Read their sources across dates; apply the business window below.
+    queries: [Query.orderAsc("$id")],
+    requireComplete: true,
     pageLimit: 100,
     maxPages: 100,
   });
@@ -214,30 +219,15 @@ export async function getAgentPaymentDetailsAction(input: {
   }
 
   for (const doc of followupDocs) {
+    if (typeof doc.date !== 'string' || doc.date < leadsAndPaymentsFromIso || doc.date > leadsAndPaymentsToIso) continue;
     const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
     const amount = getFollowupsPaymentAmount(doc);
-    if (!leadId || amount === 0) continue;
+    if (amount === 0) continue;
 
-    let targetAgentId = "";
-    let candidateName = typeof doc.candidateName === "string" && doc.candidateName.trim() ? doc.candidateName.trim() : "Unknown";
-
-    const creditedAgentId = typeof doc.creditedAgentId === "string" && doc.creditedAgentId.trim() !== "" ? doc.creditedAgentId : null;
-
-    if (leadId.startsWith("manual_followup:")) {
-      const createdById = typeof doc.createdById === "string" ? doc.createdById : "";
-      targetAgentId = creditedAgentId || createdById;
-    } else {
-      const lead = followupLeadById.get(leadId);
-      if (lead) {
-        const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : "";
-        const assignedToId = typeof lead.assignedToId === "string" ? lead.assignedToId : "";
-        // If a specific agent was credited in the followup, honor it! Otherwise fallback to the lead's agent.
-        targetAgentId = creditedAgentId || assignedToId || ownerId;
-        candidateName = parseLeadName(lead);
-      }
-    }
-
-    targetAgentId = targetPaymentRecipient(doc.createdById, targetAgentId, contributorIds, creditedAgentId);
+    const lead = followupLeadById.get(leadId);
+    const targetAgentId = followupPaymentRecipient(doc, lead) || (isIndependentFollowup(leadId) ? UNASSIGNED_FOLLOWUP_PROFILE_ID : "");
+    const candidateName = typeof doc.candidateName === "string" && doc.candidateName.trim()
+      ? doc.candidateName.trim() : lead ? parseLeadName(lead) : "Unknown";
     if (!targetAgentId) continue;
     if (targetAgentId !== input.agentId) continue;
 
@@ -245,7 +235,7 @@ export async function getAgentPaymentDetailsAction(input: {
       candidateName,
       amount,
       leadId,
-      category: "followup",
+      category: followupsPaymentCategory(leadId),
     });
   }
 
@@ -259,9 +249,9 @@ export async function getAgentPaymentDetailsAction(input: {
     databases,
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.CLIENT_PAYMENTS,
+    requireComplete: true,
     queries: [
-      Query.greaterThanEqual("updatedAt", leadsAndPaymentsStartIso),
-      Query.lessThanEqual("updatedAt", leadsAndPaymentsEndIso),
+      Query.orderAsc("$id"),
     ],
     pageLimit: 100,
     maxPages: 200,
@@ -288,13 +278,12 @@ export async function getAgentPaymentDetailsAction(input: {
 
   for (const cp of clientPayments) {
     const leadId = cp.leadId as string;
-    const lead = cpLeadById.get(leadId);
-    if (!lead) continue;
+    const lead = cpLeadById.get(leadId) ?? {};
 
     const totalForLead = targetUpfrontAmounts({ payment: cp, lead,
       from: leadsAndPaymentsStartIso, to: leadsAndPaymentsEndIso, contributorIds,
       followups: followupDocs }).get(input.agentId) ?? 0;
-    if (totalForLead > 0) {
+    if (totalForLead !== 0) {
       upfrontDetails.push({ candidateName: parseLeadName(lead), amount: totalForLead, leadId, category: 'upfront' });
     }
   }
@@ -347,7 +336,9 @@ export async function getAgentPaymentDetailsAction(input: {
   }
 
   // ── Assemble result ───────────────────────────────────────────────────
-  const technicalAndFollowups = [...techDetails, ...followupDetails];
+  const bgc = followupDetails.filter(detail => detail.category === "bgc");
+  const bgcTotal = bgc.reduce((sum, detail) => sum + detail.amount, 0);
+  const technicalAndFollowups = [...techDetails, ...followupDetails.filter(detail => detail.category !== "bgc")];
   const upfrontTotal = upfrontDetails.reduce((s, d) => s + d.amount, 0);
   const technicalAndFollowupsTotal = technicalAndFollowups.reduce((s, d) => s + d.amount, 0);
 
@@ -355,7 +346,9 @@ export async function getAgentPaymentDetailsAction(input: {
     agentName,
     upfront: upfrontDetails,
     technicalAndFollowups,
-    totalAmount: upfrontTotal + technicalAndFollowupsTotal,
+    bgc,
+    bgcTotal,
+    totalAmount: upfrontTotal + technicalAndFollowupsTotal + bgcTotal,
     upfrontTotal,
     technicalAndFollowupsTotal,
   };

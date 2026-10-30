@@ -637,11 +637,19 @@ export interface ClientPaymentPlan {
 export interface ClientPaymentUpdate {
   id: string;
   sourceFollowupId?: string;
+  creditedAgentId?: string;
+  creditedAgentName?: string;
   status: PaymentStatus;
   note?: string | null;
   actorId: string;
   actorName: string;
   createdAt: string;
+  /** Business date of the payment; createdAt remains the audit timestamp. */
+  paymentDate?: string;
+  /** Read-time interpretation of a legacy followup edit, not a new receipt. */
+  followupEdit?: boolean;
+  /** Original stored snapshot amount, retained when deriving an adjustment. */
+  recordedAmount?: number;
   /** Amount paid on this specific update, if any. Stored in the
    * `updates` JSON string; older records have no amount. */
   amount?: number | null;
@@ -672,6 +680,11 @@ export interface ClientPaymentFollowupUpdate {
   note: string | null;
   actorId: string;
   actorName: string;
+  creditedAgentId?: string;
+  creditedAgentName?: string;
+  /** Original entry timestamp, retained separately from a later edit. */
+  recordedAt?: string;
+  systemCreatedAt?: string;
   createdAt: string;
   paymentDate: string;
 }
@@ -827,6 +840,7 @@ export type FollowupsPaymentStatus = 'paid' | 'refunded';
 export interface PreviousFollowupsPayment {
   $id: string;
   leadId: string;
+  category?: import('@/lib/utils/followups-payment-category').FollowupsPaymentCategory;
   company: FollowupsPaymentCompany;
   candidateName: string;
   amount: number;
@@ -836,6 +850,7 @@ export interface PreviousFollowupsPayment {
   createdAt: string;
   createdById?: string | null;
   creditedAgentId?: string | null;
+  creditedAgentName?: string | null;
   createdByName?: string | null;
   updatedAt?: string | null;
   updatedById?: string | null;

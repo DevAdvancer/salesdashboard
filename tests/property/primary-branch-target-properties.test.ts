@@ -25,7 +25,7 @@ test('persists all memberships and counts each contribution exactly once under t
     }));
 });
 
-test('contributor rows include only readable Admin and Monitor profiles and preserve aggregate money', () => {
+test('unassigned contribution rows preserve readable revenue while only Admin and Monitor get automatic targets', () => {
   fc.assert(fc.property(fc.array(fc.record({ role: fc.constantFrom('admin', 'monitor', 'agent'),
     visible: fc.boolean(), amount: fc.integer({ min: 0, max: 100000 }) }), { maxLength: 30 }), records => {
       const users = records.map((record, i) => ({ $id: String(i), name: String(i), role: record.role, branchIds: [] })) as User[];
@@ -38,7 +38,7 @@ test('contributor rows include only readable Admin and Monitor profiles and pres
       const expected = records.reduce((sum, record) => sum +
         (record.visible && record.role !== 'agent' ? record.amount : 0), 0);
       expect(result.totals.target).toBe(expected);
-      expect(result.totals.achieved).toBe(expected);
+      expect(result.totals.achieved).toBe(records.reduce((sum, record) => sum + (record.visible ? record.amount : 0), 0));
       expect(result.rows.every(row => records[Number(row.teamLeadId)].visible)).toBe(true);
     }));
 });

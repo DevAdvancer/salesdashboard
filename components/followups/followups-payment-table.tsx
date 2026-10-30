@@ -53,6 +53,7 @@ export function FollowupsPaymentTable({
           <TableRow>
             <TableHead>Date</TableHead>
             <TableHead>Company</TableHead>
+            <TableHead>Category</TableHead>
             <TableHead>Candidate Name</TableHead>
             <TableHead>Remark</TableHead>
             <TableHead className="text-right">Amount</TableHead>
@@ -69,6 +70,7 @@ export function FollowupsPaymentTable({
               <TableCell className="text-muted-foreground">
                 {payment.company}
               </TableCell>
+              <TableCell>{payment.category === "bgc" ? "BGC" : "Followup"}</TableCell>
               <TableCell className="font-medium">
                 {payment.candidateName}
               </TableCell>

@@ -1,6 +1,9 @@
+import { followupPaymentRecipient, isIndependentFollowup } from '@/lib/utils/followup-payment-attribution';
+import { followupsPaymentCategory } from '@/lib/utils/followups-payment-category';
 import { getFollowupsPaymentAmount } from "@/lib/utils/followups-payment-amount";
 import { getTargetMonthBound } from "@/app/actions/target-month-bounds";
 import { NextResponse, type NextRequest } from "next/server";
+import { targetUpfrontAmounts } from "@/lib/utils/target-payment-attribution";
 import { getPaymentCycleAttribution } from '@/lib/utils/lead-payment-cycle';
 import { Query } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
@@ -177,16 +180,19 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  let unassignedFollowupsAmount = 0;
   const followupsByAgentId: Record<string, number> = {};
+  const bgcByAgentId: Record<string, number> = {};
   const readableSet = new Set(readableAgentIds);
+  const contributorIds = new Set<string>(allUsers.filter(user => user.role === 'admin' || user.role === 'monitor').map(user => user.$id));
   const followupsDocs = await listAllDocuments<any>({
     databases,
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS,
-    queries: [
-      Query.greaterThanEqual("date", monthFromIso),
-      Query.lessThanEqual("date", monthToIso),
-    ],
+    // Older financial mirrors can have an audit date in a different month.
+    // Read their sources across dates; apply the business window below.
+    queries: [Query.orderAsc("$id")],
+    requireComplete: true,
     pageLimit: 100,
     maxPages: 100,
   });
@@ -213,36 +219,27 @@ export async function GET(request: NextRequest) {
   }
 
   for (const doc of followupsDocs) {
+    if (typeof doc.date !== 'string' || doc.date < leadsAndPaymentsFromIso || doc.date > leadsAndPaymentsToIso) continue;
     const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
     const amount = getFollowupsPaymentAmount(doc);
-    if (!leadId || amount === 0) continue;
+    if (amount === 0) continue;
 
-    let targetAgentId = "";
-    const creditedAgentId = typeof doc.creditedAgentId === "string" && doc.creditedAgentId.trim() !== "" ? doc.creditedAgentId : null;
-
-    if (leadId.startsWith("manual_followup:")) {
-      const createdById = typeof doc.createdById === "string" ? doc.createdById : "";
-      targetAgentId = creditedAgentId || createdById;
-    } else {
-      const lead = followupLeadById.get(leadId);
-      if (lead) {
-        const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : "";
-        const assignedToId = typeof lead.assignedToId === "string" ? lead.assignedToId : "";
-        targetAgentId = creditedAgentId || assignedToId || ownerId;
-      }
-    }
-    
+    const targetAgentId = followupPaymentRecipient(doc, followupLeadById.get(leadId));
+    if (!targetAgentId && isIndependentFollowup(leadId)) { unassignedFollowupsAmount += amount; continue; }
     if (!targetAgentId || !readableSet.has(targetAgentId)) continue;
     followupsByAgentId[targetAgentId] = (followupsByAgentId[targetAgentId] ?? 0) + amount;
+    if (followupsPaymentCategory(leadId) === 'bgc') {
+      bgcByAgentId[targetAgentId] = (bgcByAgentId[targetAgentId] ?? 0) + amount;
+    }
   }
 
   const clientPayments = await listAllDocuments<any>({
     databases,
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.CLIENT_PAYMENTS,
+    requireComplete: true,
     queries: [
-      Query.greaterThanEqual("updatedAt", leadsAndPaymentsStartIso),
-      Query.lessThanEqual("updatedAt", leadsAndPaymentsEndIso),
+      Query.orderAsc("$id"),
     ],
     pageLimit: 100,
     maxPages: 200,
@@ -267,82 +264,13 @@ export async function GET(request: NextRequest) {
 
   for (const cp of clientPayments) {
     const leadId = cp.leadId as string;
-    const lead = cpLeadById.get(leadId);
-    if (!lead) continue;
+    const lead = cpLeadById.get(leadId) ?? {};
 
-    const cycle = getPaymentCycleAttribution(cp, lead);
-    const ownerId = cycle.ownerId;
-    const assignedToId = cycle.assignedToId;
-    const attributedTo = assignedToId || ownerId;
-
-    const leadCreated = cycle.closedAt || (lead.$createdAt as string) || (lead.createdAt as string);
-    if (leadCreated && leadCreated < leadsAndPaymentsStartIso) {
-      continue;
-    }
-
-    let updates: any[] = [];
-    try {
-      const raw = cp.updates ?? cp.updatesJson;
-      updates = JSON.parse(typeof raw === "string" ? raw : "[]");
-      if (!Array.isArray(updates)) updates = [];
-    } catch {
-      updates = [];
-    }
-
-    let totalForLead = 0;
-    const agentTotals = new Map<string, number>();
-
-    for (const u of updates) {
-      if (
-        u.createdAt &&
-        u.createdAt >= leadsAndPaymentsStartIso &&
-        u.createdAt <= leadsAndPaymentsEndIso &&
-        (u.status === "partially_paid" || u.status === "fully_paid")
-      ) {
-        if (attributedTo) {
-          const amount = Number(u.amount) || 0;
-          if (amount > 0) {
-            agentTotals.set(attributedTo, (agentTotals.get(attributedTo) ?? 0) + amount);
-            totalForLead += amount;
-          }
-        }
-      }
-    }
-
-    if (totalForLead === 0 && updates.length === 0) {
-      const createdAt = cp.createdAt as string | undefined;
-      if (
-        createdAt &&
-        createdAt >= leadsAndPaymentsStartIso &&
-        createdAt <= leadsAndPaymentsEndIso &&
-        ((cp.status as string) === "partially_paid" || (cp.status as string) === "fully_paid")
-      ) {
-        if (attributedTo) {
-          let plan: any = {};
-          try {
-            plan = JSON.parse(typeof (cp.paymentPlan ?? cp.paymentPlanJson) === "string" ? (cp.paymentPlan ?? cp.paymentPlanJson) as string : "{}");
-          } catch {}
-          const amount = Number(plan.upfrontAmount) || 0;
-          if (amount > 0) {
-            agentTotals.set(attributedTo, (agentTotals.get(attributedTo) ?? 0) + amount);
-          }
-        }
-      }
-    }
-
-    const followupsForThisLead = followupsDocs
-      .filter((doc) => doc.leadId === leadId && cycle.isCurrent)
-      .reduce((sum, doc) => sum + getFollowupsPaymentAmount(doc), 0);
-
-    for (const [agentId, initialAmount] of agentTotals.entries()) {
-      let amount = initialAmount;
-      amount -= followupsForThisLead;
-      if (amount < 0) amount = 0;
-      
-      if (amount > 0 && readableAgentIds.includes(agentId)) {
-        if (!agentStatsByUserId[agentId]) {
-          agentStatsByUserId[agentId] = { achieved: 0, leadCount: 0, referralExcludedCount: 0, notInterestedCount: 0 };
-        }
+    const agentTotals = targetUpfrontAmounts({ payment: cp, lead,
+      from: leadsAndPaymentsStartIso, to: leadsAndPaymentsEndIso, contributorIds, followups: followupsDocs });
+    for (const [agentId, amount] of agentTotals) {
+      if (amount !== 0 && readableSet.has(agentId)) {
+        agentStatsByUserId[agentId] ??= { achieved: 0, leadCount: 0, referralExcludedCount: 0, notInterestedCount: 0 };
         agentStatsByUserId[agentId].achieved += amount;
       }
     }
@@ -358,7 +286,7 @@ export async function GET(request: NextRequest) {
     maxPages: 100,
   });
   techPayments.forEach((p) => {
-    const actorId = p.actorId;
+    const actorId = p.userId;
     if (actorId && readableAgentIds.includes(actorId)) {
       technicalPaymentsByAgentId[actorId] = (technicalPaymentsByAgentId[actorId] || 0) + (Number(p.amount) || 0);
     }
@@ -382,6 +310,8 @@ export async function GET(request: NextRequest) {
     usersByAgentId,
     agentStatsByUserId,
     followupsByAgentId,
+    bgcByAgentId,
+    unassignedFollowupsAmount,
     technicalPaymentsByAgentId,
     branchMap,
   });

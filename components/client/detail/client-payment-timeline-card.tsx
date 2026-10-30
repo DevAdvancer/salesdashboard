@@ -60,6 +60,9 @@ export function ClientPaymentTimelineCard({ paymentRecord }: ClientPaymentTimeli
                     Note: {update.note}
                   </p>
                 )}
+                {update.creditedAgentName && (
+                  <p className="text-xs text-muted-foreground">Credited to: {update.creditedAgentName}</p>
+                )}
                 <p className="text-xs text-muted-foreground mt-1">
                   Updated by: {update.actorName}
                 </p>

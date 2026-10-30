@@ -1,6 +1,8 @@
 "use server";
 
 import { getFollowupsPaymentAmount } from "@/lib/utils/followups-payment-amount";
+import { readReconciledPaymentDocuments } from '@/lib/server/client-payment-reconciliation';
+import { paymentBusinessDate } from '@/lib/utils/target-payment-attribution';
 import crypto from "crypto";
 import { upsertPendingAmountAction } from "@/app/actions/pending-amounts";
 import { ID, Query } from "node-appwrite";
@@ -33,14 +35,14 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
     paymentQueries.push(Query.greaterThanEqual("updatedAt", dateFrom.trim()));
     }
 
-    const paymentDocs = await listAllDocuments<any>({
+    const paymentDocs = await readReconciledPaymentDocuments(databases, await listAllDocuments<any>({
             databases,
             databaseId: DATABASE_ID,
             collectionId: COLLECTIONS.CLIENT_PAYMENTS,
             queries: paymentQueries,
             pageLimit: 100,
             maxPages: 500,
-          });
+          }));
     if (paymentDocs.length === 0) return [];
     const leadIds = Array.from(
             new Set(
@@ -153,6 +155,7 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
           });
     const followupsMap = new Map<string, { total: number; count: number; monthlyAmounts: Record<string, number> }>();
     const followupsDetailsMap = new Map<string, Array<{
+            id: string;
             company: string;
             candidateName: string;
             amount: number;
@@ -179,6 +182,7 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
     const amount = getFollowupsPaymentAmount(fDoc);
     const date = typeof fDoc.date === "string" ? fDoc.date : "";
     const detail = {
+      id: String(fDoc.$id),
       company,
       candidateName: fDoc.candidateName,
       amount,
@@ -250,7 +254,10 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
     const paidMonthlyAmounts: Record<string, number> = {};
     for (const u of paidUpdates) {
       if (!u.createdAt) continue;
-      const monthKey = u.createdAt.slice(0, 7); // "YYYY-MM"
+      const source = u.sourceFollowupId
+        ? (followupsDetailsMap.get(leadId) || []).find(followup => followup.id === u.sourceFollowupId)
+        : undefined;
+      const monthKey = paymentBusinessDate(source?.date || u.paymentDate || u.createdAt).slice(0, 7);
       const amount = u.amount ?? 0;
       if (amount !== 0) {
         paidMonthlyAmounts[monthKey] = (paidMonthlyAmounts[monthKey] || 0) + amount;
@@ -391,14 +398,14 @@ export async function listAdminClientHistoryRowsAction(actorId: string): Promise
     }
 
     const { databases } = await createAdminClient();
-    const paymentDocs = await listAllDocuments<any>({
+    const paymentDocs = await readReconciledPaymentDocuments(databases, await listAllDocuments<any>({
             databases,
             databaseId: DATABASE_ID,
             collectionId: COLLECTIONS.CLIENT_PAYMENTS,
             queries: [],
             pageLimit: 100,
             maxPages: 500,
-          });
+          }));
     if (paymentDocs.length === 0) return [];
     const leadIds = Array.from(
             new Set(
@@ -500,14 +507,14 @@ export async function listPaymentsReportAction(input: {
     }
 
     const { databases } = await createAdminClient();
-    const paymentDocs = await listAllDocuments<any>({
+    const paymentDocs = await readReconciledPaymentDocuments(databases, await listAllDocuments<any>({
             databases,
             databaseId: DATABASE_ID,
             collectionId: COLLECTIONS.CLIENT_PAYMENTS,
             queries: [],
             pageLimit: 100,
             maxPages: 500,
-          });
+          }));
     if (paymentDocs.length === 0) return [];
     const leadIds = Array.from(
             new Set(

@@ -1,6 +1,8 @@
 "use server";
 
 import { getFollowupsPaymentAmount, getStoredFollowupsPaymentAmount } from "@/lib/utils/followups-payment-amount";
+import { BGC_FOLLOWUP_PREFIX, followupsPaymentCategory, type FollowupsPaymentCategory } from '@/lib/utils/followups-payment-category';
+import { canActorAccessLead } from '@/app/actions/client-payments/shared';
 
 import { ID, Query } from "node-appwrite";
 import { readFile } from "node:fs/promises";
@@ -102,6 +104,9 @@ function buildFollowupRepairPayload(doc: Record<string, unknown>): Record<string
   }
   if (typeof doc.updatedByName === "string" && doc.updatedByName.trim()) {
     payload.updatedByName = doc.updatedByName;
+  }
+  for (const field of ['createdById', 'createdByName', 'creditedAgentId']) {
+    if (typeof doc[field] === 'string' && doc[field]) payload[field] = doc[field];
   }
 
   return payload;
@@ -275,6 +280,7 @@ function mapFollowupsDoc(doc: any): PreviousFollowupsPayment {
   return {
     $id: doc.$id,
     leadId: doc.leadId,
+    category: followupsPaymentCategory(doc.leadId),
     company,
     candidateName: doc.candidateName,
     amount: getFollowupsPaymentAmount(doc),
@@ -300,13 +306,14 @@ function normalizeCompany(company: string): FollowupsPaymentCompany {
   throw new Error("Invalid company");
 }
 
-function makeManualLeadId(): string {
-  return `${MANUAL_FOLLOWUP_LEAD_ID_PREFIX}${ID.unique()}`;
+function makeManualLeadId(category?: FollowupsPaymentCategory): string {
+  return `${category === 'bgc' ? BGC_FOLLOWUP_PREFIX : MANUAL_FOLLOWUP_LEAD_ID_PREFIX}${ID.unique()}`;
 }
 
 export async function createPreviousFollowupsPaymentAction(input: {
   actorId: string;
   leadId?: string | null;
+  category?: FollowupsPaymentCategory;
   company: FollowupsPaymentCompany;
   candidateName: string;
   amount: number;
@@ -321,33 +328,32 @@ export async function createPreviousFollowupsPaymentAction(input: {
 
   const { databases } = await createAdminClient();
   if (input.status && input.status !== 'paid' && input.status !== 'refunded') throw new Error('Invalid payment status');
+  if (input.category && input.category !== 'bgc' && input.category !== 'followup') throw new Error('Invalid category');
+  if (!input.candidateName.trim() || !Number.isFinite(input.amount) || !/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new Error('Enter a candidate, valid amount and payment date');
+  if (input.category === 'bgc' && input.leadId && !input.leadId.startsWith(BGC_FOLLOWUP_PREFIX)) throw new Error('BGC profiles must be independent of leads');
 
-  let finalCreatedById = actor.$id;
-  let finalCreatedByName = actor.name;
-
-  if (input.creditedAgentId && input.creditedAgentId !== actor.$id) {
-    if (actor.role === "admin" || actor.role === "developer" || actor.role === "operations" || actor.role === "team_lead") {
-      try {
-        const agentDoc = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, input.creditedAgentId);
-        finalCreatedById = agentDoc.$id;
-        finalCreatedByName = agentDoc.name;
-      } catch (err) {
-        console.error("Failed to fetch credited agent", err);
-      }
-    }
+  let creditedAgentId = input.creditedAgentId || null;
+  if (creditedAgentId && !(await getCreditableAgentsAction(actor.$id)).some(agent => agent.id === creditedAgentId)) {
+    throw new Error('Not authorized to credit this agent');
   }
+  if (input.leadId && !input.leadId.startsWith(MANUAL_FOLLOWUP_LEAD_ID_PREFIX)) {
+    if (!(await canActorAccessLead(actor, input.leadId))) throw new Error('Not authorized');
+    const lead = await databases.getDocument(DATABASE_ID, COLLECTIONS.LEADS, input.leadId);
+    creditedAgentId ||= lead.assignedToId || lead.ownerId || actor.$id;
+  }
+  creditedAgentId ||= actor.$id;
 
   const payload: Record<string, unknown> = {
-    leadId: input.leadId?.trim() || makeManualLeadId(),
+    leadId: input.leadId?.trim() || makeManualLeadId(input.category),
     company: normalizeCompany(input.company),
     candidateName: input.candidateName.trim(),
     amount: getStoredFollowupsPaymentAmount(input.amount),
     date: input.date,
     status: input.status === 'refunded' || Number(input.amount) < 0 ? 'refunded' : FOLLOWUPS_PAYMENT_STATUS,
     createdAt: new Date().toISOString(),
-    createdById: finalCreatedById,
-    createdByName: finalCreatedByName,
-    creditedAgentId: input.creditedAgentId || null,
+    createdById: actor.$id,
+    createdByName: actor.name,
+    creditedAgentId,
   };
 
   const paymentRemark = input.remark?.trim();
@@ -404,35 +410,28 @@ export async function updatePreviousFollowupsPaymentAction(input: {
   const existing = await databases.getDocument(DATABASE_ID, COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS, input.paymentId);
   if (input.status && input.status !== 'paid' && input.status !== 'refunded') throw new Error('Invalid payment status');
 
-  let finalCreatedById = existing.createdById;
-  let finalCreatedByName = existing.createdByName;
-
-  if (input.creditedAgentId && input.creditedAgentId !== existing.createdById) {
-    if (actor.role === "admin" || actor.role === "developer" || actor.role === "operations" || actor.role === "team_lead") {
-      try {
-        const agentDoc = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, input.creditedAgentId);
-        finalCreatedById = agentDoc.$id;
-        finalCreatedByName = agentDoc.name;
-      } catch (err) {
-        console.error("Failed to fetch credited agent", err);
-      }
-    }
+  if (input.creditedAgentId && input.creditedAgentId !== existing.creditedAgentId &&
+    !(await getCreditableAgentsAction(actor.$id)).some(agent => agent.id === input.creditedAgentId)) {
+    throw new Error('Not authorized to credit this agent');
   }
-
+  if (input.amount !== undefined && input.amount !== null && !Number.isFinite(input.amount)) throw new Error('Invalid amount');
+  if (input.date !== undefined && (!input.date || !/^\d{4}-\d{2}-\d{2}$/.test(input.date))) throw new Error('Invalid payment date');
+  if (followupsPaymentCategory(existing.leadId) === 'bgc' && input.leadId && input.leadId !== existing.leadId) {
+    throw new Error('BGC profiles must remain independent of leads');
+  }
   const payload: Record<string, unknown> = {
     updatedAt: new Date().toISOString(),
     updatedById: actor.$id,
     updatedByName: actor.name,
-    createdById: finalCreatedById,
-    createdByName: finalCreatedByName,
   };
 
-  if (input.leadId !== undefined) payload.leadId = input.leadId?.trim() || makeManualLeadId();
+  if (input.leadId !== undefined) payload.leadId = input.leadId?.trim() ||
+    (existing.leadId?.startsWith(MANUAL_FOLLOWUP_LEAD_ID_PREFIX) ? existing.leadId : makeManualLeadId());
   if (input.company !== undefined && input.company !== null) payload.company = normalizeCompany(input.company);
   if (input.candidateName !== undefined) payload.candidateName = (input.candidateName || '').trim();
   if (input.date !== undefined) payload.date = input.date;
   if (input.remark !== undefined) payload.paymentRemark = input.remark?.trim() || "";
-  if (input.creditedAgentId !== undefined) payload.creditedAgentId = input.creditedAgentId || null;
+  if (input.creditedAgentId !== undefined) payload.creditedAgentId = input.creditedAgentId || existing.creditedAgentId || null;
   payload.status = input.status ?? (
     Number(input.amount ?? existing.amount) < 0 || existing.status === 'refunded'
       ? 'refunded' : FOLLOWUPS_PAYMENT_STATUS
@@ -478,12 +477,12 @@ export async function listPreviousFollowupsPaymentsAction(input: {
   const queries: string[] = [Query.orderDesc("createdAt")];
 
   if (actor.role === "agent" || actor.role === "lead_generation") {
-    queries.push(Query.equal("createdById", actor.$id));
+    queries.push(Query.or([Query.equal("creditedAgentId", actor.$id), Query.equal("createdById", actor.$id)]));
   } else if (actor.role === "team_lead") {
     const { getAgentsByTeamLead } = await import("@/lib/services/user-service");
     const agents = await getAgentsByTeamLead(actor.$id, "sales");
     const teamIds = [actor.$id, ...agents.map((a) => a.$id)];
-    queries.push(Query.equal("createdById", teamIds));
+    queries.push(Query.or([Query.equal("creditedAgentId", teamIds), Query.equal("createdById", teamIds)]));
   }
 
   if (input.leadId) {
@@ -496,11 +495,6 @@ export async function listPreviousFollowupsPaymentsAction(input: {
 
   if (input.dateFrom) {
     queries.push(Query.greaterThanEqual("date", input.dateFrom));
-  } else {
-    // Default to 30 days ago to prevent full collection scans
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    queries.push(Query.greaterThanEqual("date", thirtyDaysAgo.toISOString().slice(0, 10)));
   }
 
   if (input.dateTo) {
@@ -518,9 +512,20 @@ export async function listPreviousFollowupsPaymentsAction(input: {
     queries,
     pageLimit: 100,
     maxPages: 500,
+    requireComplete: true,
   });
 
-  return docs.map(mapFollowupsDoc);
+  const creditedIds = [...new Set(docs.map(doc => doc.creditedAgentId).filter((id): id is string => typeof id === 'string' && Boolean(id)))];
+  const creditNames = new Map<string, string>();
+  for (let index = 0; index < creditedIds.length; index += 100) {
+    const users = await listAllDocuments<{ $id: string; name: string }>({
+      databases, databaseId: DATABASE_ID, collectionId: COLLECTIONS.USERS,
+      queries: [Query.equal('$id', creditedIds.slice(index, index + 100)), Query.select(['$id', 'name'])],
+      pageLimit: 100, maxPages: 1,
+    });
+    for (const user of users) creditNames.set(user.$id, user.name);
+  }
+  return docs.map(doc => ({ ...mapFollowupsDoc(doc), creditedAgentName: creditNames.get(doc.creditedAgentId) || null }));
 }
 
 export async function deletePreviousFollowupsPaymentAction(input: {

@@ -1,5 +1,6 @@
 import type { ClientPaymentFollowupUpdate, ClientPaymentRecord, ClientPaymentUpdate, PaymentStatus } from '@/lib/types';
 import { getFollowupsPaymentAmount } from '@/lib/utils/followups-payment-amount';
+import { reconcileFollowupPaymentUpdates } from '@/lib/utils/followup-payment-attribution';
 
 export function mapFollowupHistoryUpdate(row: Record<string, unknown>): ClientPaymentFollowupUpdate {
   const edited = Boolean(row.updatedAt);
@@ -10,6 +11,11 @@ export function mapFollowupHistoryUpdate(row: Record<string, unknown>): ClientPa
     note: typeof row.paymentRemark === 'string' ? row.paymentRemark : typeof row.remark === 'string' ? row.remark : null,
     actorId: String((edited && row.updatedById) || row.createdById || ''),
     actorName: String((edited && row.updatedByName) || row.createdByName || 'Unknown user'),
+    creditedAgentId: String(row.creditedAgentId || row.createdById || ''),
+    creditedAgentName: String(row.creditedAgentName ||
+      (!row.creditedAgentId || row.creditedAgentId === row.createdById ? row.createdByName : row.creditedAgentId) || ''),
+    recordedAt: String(row.createdAt || row.$createdAt || ''),
+    systemCreatedAt: typeof row.$createdAt === 'string' ? row.$createdAt : '',
     createdAt: String(row.updatedAt || row.createdAt || row.$createdAt || ''),
     paymentDate: typeof row.date === 'string' ? row.date : '',
   };
@@ -24,6 +30,7 @@ export interface ClientPaymentHistoryEntry {
   reportedAmount?: number;
   note?: string | null;
   actorName: string;
+  creditedAgentName?: string;
   createdAt: string;
   paymentDate?: string;
   cycle?: string;
@@ -39,19 +46,29 @@ export function buildClientPaymentHistory(record: ClientPaymentRecord): ClientPa
   const records = [record, ...(record.previousRecords ?? [])];
   const sourceUpdates = new Map<string, ClientPaymentUpdate[]>();
   const entries: ClientPaymentHistoryEntry[] = [];
+  const followups = [...new Map(records.flatMap(cycle => cycle.followupUpdates ?? []).map(source => [source.id, source])).values()];
+  const followupById = new Map(followups.map(source => [source.id, source]));
+  const reconciledUpdates = reconcileFollowupPaymentUpdates(records.flatMap(cycle => cycle.updates), followups);
+  let updateIndex = 0;
   for (const cycle of records) {
-    for (const update of cycle.updates) {
+    for (const _update of cycle.updates) {
+      const update = reconciledUpdates[updateIndex++]!;
+      const source = update.sourceFollowupId ? followupById.get(update.sourceFollowupId) : undefined;
       entries.push({ ...update, id: `payment:${cycle.$id}:${update.id}`, kind: 'payment',
-        title: `Status changed to ${statusLabel(update.status)}`, cycle: cycle.createdAt });
-      if (update.sourceFollowupId) {
-        const linked = sourceUpdates.get(update.sourceFollowupId) ?? [];
+        ...(source ? { creditedAgentName: source.creditedAgentName, paymentDate: source.paymentDate } : {}),
+        ...(update.followupEdit && update.amount === 0 ? { amount: null } : {}),
+        title: update.followupEdit ? update.amount === 0 ? 'Follow-up details updated' : 'Follow-up payment adjusted'
+          : `Status changed to ${statusLabel(update.status)}`, cycle: cycle.createdAt });
+      const sourceId = update.sourceFollowupId || source?.id;
+      if (sourceId) {
+        const linked = sourceUpdates.get(sourceId) ?? [];
         linked.push(update);
-        sourceUpdates.set(update.sourceFollowupId, linked);
+        sourceUpdates.set(sourceId, linked);
       }
     }
   }
   const seen = new Set<string>();
-  for (const followup of records.flatMap(cycle => cycle.followupUpdates ?? [])) {
+  for (const followup of followups) {
     if (seen.has(followup.id)) continue;
     seen.add(followup.id);
     const linked = sourceUpdates.get(followup.id) ?? [];

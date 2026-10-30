@@ -1,5 +1,7 @@
 "use server";
 
+import { followupPaymentRecipient, isIndependentFollowup } from '@/lib/utils/followup-payment-attribution';
+import { followupsPaymentCategory } from '@/lib/utils/followups-payment-category';
 import { getFollowupsPaymentAmount } from "@/lib/utils/followups-payment-amount";
 import { getTargetMonthBound } from "@/app/actions/target-month-bounds";
 
@@ -21,7 +23,7 @@ import { getTechnicalPaymentTotalsByUserAction } from "@/app/actions/technical-p
 import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import { computeAgentStatsForDate } from "@/lib/server/stats-aggregator";
 import { listTargetReportContributors } from '@/lib/server/target-report-contributors';
-import { targetPaymentRecipient, targetUpfrontAmounts } from '@/lib/utils/target-payment-attribution';
+import { targetUpfrontAmounts } from '@/lib/utils/target-payment-attribution';
 
 type LeadDoc = Record<string, unknown>;
 type UserDoc = Record<string, unknown>;
@@ -150,17 +152,17 @@ export async function getTargetReportAction(input: {
   } else if (actor.role === "team_lead") {
     // Sales-only — getAgentsByTeamLead with "sales" scope drops any
     // resume agent in the TL's team from the report.
-    const agents = await getAgentsByTeamLead(actor.$id, "sales");
+    const agents = await getAgentsByTeamLead(actor.$id, "sales", true);
     const target = targets.find(t => t.teamLeadId === actor.$id);
     const assignedIds = target ? (assignmentsByTargetId[target.$id]?.map(a => a.agentId) || []) : [];
     readableAgentIds = Array.from(new Set([actor.$id, ...agents.map((a) => a.$id), ...assignedIds]));
   } else {
     // Admin-like: scope to sales so the team table never surfaces
     // resume TLs / agents.
-    const all = await getAssignableUsers(actor.role, actor.branchIds ?? [], actor.$id, "sales", false);
+    const all = await getAssignableUsers(actor.role, actor.branchIds ?? [], actor.$id, "sales", true);
     const assignedIds = Object.values(assignmentsByTargetId).flatMap(list => list.map(a => a.agentId));
     readableAgentIds = Array.from(new Set([
-      ...all.filter((u) => u.role === "agent" || u.role === "lead_generation" || u.role === "team_lead").map((u) => u.$id),
+      ...all.map((u) => u.$id),
       ...contributors.map(user => user.$id),
       ...assignedIds
     ]));
@@ -250,17 +252,19 @@ export async function getTargetReportAction(input: {
   }
 
   // 4c. Followup payments in the month window.
+  let unassignedFollowupsAmount = 0;
   const followupsByAgentId: Record<string, number> = {};
+  const bgcByAgentId: Record<string, number> = {};
   const readableSet = new Set(readableAgentIds);
   
   const docs = await listAllDocuments<Record<string, unknown>>({
     databases,
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.PREVIOUS_FOLLOWUPS_PAYMENTS,
-    queries: [
-      Query.greaterThanEqual("date", monthFromIso),
-      Query.lessThanEqual("date", monthToIso),
-    ],
+    // Older financial mirrors can have an audit date in a different month.
+    // Read their sources across dates; apply the business window below.
+    queries: [Query.orderAsc("$id")],
+    requireComplete: true,
     maxPages: 100,
   });
 
@@ -289,30 +293,19 @@ export async function getTargetReportAction(input: {
   }
 
   for (const doc of docs) {
+    if (typeof doc.date !== 'string' || doc.date < leadsAndPaymentsFromIso || doc.date > leadsAndPaymentsToIso) continue;
     const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
     const amount = getFollowupsPaymentAmount(doc);
-    if (!leadId || amount === 0) continue;
+    if (amount === 0) continue;
 
-    let targetAgentId = "";
-
-    const creditedAgentId = typeof doc.creditedAgentId === "string" && doc.creditedAgentId.trim() !== "" ? doc.creditedAgentId : null;
-
-    if (leadId.startsWith("manual_followup:")) {
-      const createdById = typeof doc.createdById === "string" ? doc.createdById : "";
-      targetAgentId = creditedAgentId || createdById;
-    } else {
-      const lead = followupLeadById.get(leadId);
-      if (lead) {
-        const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : "";
-        const assignedToId = typeof lead.assignedToId === "string" ? lead.assignedToId : "";
-        targetAgentId = creditedAgentId || assignedToId || ownerId;
-      }
-    }
-    
-    targetAgentId = targetPaymentRecipient(doc.createdById, targetAgentId, contributorIds, creditedAgentId);
+    const targetAgentId = followupPaymentRecipient(doc, followupLeadById.get(leadId));
+    if (!targetAgentId && isIndependentFollowup(leadId)) { unassignedFollowupsAmount += amount; continue; }
     if (!targetAgentId || !readableSet.has(targetAgentId)) continue;
     
     followupsByAgentId[targetAgentId] = (followupsByAgentId[targetAgentId] ?? 0) + amount;
+    if (followupsPaymentCategory(leadId) === 'bgc') {
+      bgcByAgentId[targetAgentId] = (bgcByAgentId[targetAgentId] ?? 0) + amount;
+    }
   }
 
 
@@ -324,9 +317,9 @@ export async function getTargetReportAction(input: {
     databases,
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.CLIENT_PAYMENTS,
+    requireComplete: true,
     queries: [
-      Query.greaterThanEqual("updatedAt", leadsAndPaymentsStartIso),
-      Query.lessThanEqual("updatedAt", leadsAndPaymentsEndIso),
+      Query.orderAsc("$id"),
     ],
     pageLimit: 100,
     maxPages: 200,
@@ -351,13 +344,12 @@ export async function getTargetReportAction(input: {
 
   for (const cp of clientPayments) {
     const leadId = cp.leadId as string;
-    const lead = cpLeadById.get(leadId);
-    if (!lead) continue;
+    const lead = cpLeadById.get(leadId) ?? {};
 
     const agentTotals = targetUpfrontAmounts({ payment: cp, lead,
       from: leadsAndPaymentsStartIso, to: leadsAndPaymentsEndIso, contributorIds, followups: docs });
     for (const [agentId, amount] of agentTotals) {
-      if (amount > 0 && readableSet.has(agentId)) {
+      if (amount !== 0 && readableSet.has(agentId)) {
         agentStatsByUserId[agentId] ??= { achieved: 0, leadCount: 0, referralExcludedCount: 0, notInterestedCount: 0 };
         agentStatsByUserId[agentId].achieved += amount;
       }
@@ -430,6 +422,8 @@ export async function getTargetReportAction(input: {
     usersByAgentId,
     agentStatsByUserId,
     followupsByAgentId,
+    bgcByAgentId,
+    unassignedFollowupsAmount: ['admin', 'developer', 'monitor', 'operations'].includes(actor.role) ? unassignedFollowupsAmount : 0,
     technicalPaymentsByAgentId,
     branchMap,
   });

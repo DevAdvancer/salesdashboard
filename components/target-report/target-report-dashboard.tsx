@@ -5,7 +5,8 @@ import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
-import { getTargetReport } from "@/lib/services/target-report-service";
+import { getTargetReport, clearTargetReportCache } from "@/lib/services/target-report-service";
+import { getCurrentEasternMonthKey } from '@/lib/utils/eastern-date';
 import type { User } from "@/lib/types";
 import { MonthPicker } from "./month-picker";
 import { TargetReportTable } from "./target-report-table";
@@ -21,8 +22,7 @@ const currency = new Intl.NumberFormat("en-US", {
 });
 
 function currentMonthKey(): string {
-  const d = new Date();
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  return getCurrentEasternMonthKey();
 }
 
 interface TargetReportDashboardProps {
@@ -86,7 +86,7 @@ export function TargetReportDashboard({ user }: TargetReportDashboardProps) {
             type="button"
             size="sm"
             variant="outline"
-            onClick={() => void load()}
+            onClick={() => { clearTargetReportCache(); void load(); }}
             disabled={loading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh

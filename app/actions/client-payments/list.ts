@@ -1,4 +1,5 @@
 "use server";
+import { readReconciledPaymentDocuments } from '@/lib/server/client-payment-reconciliation';
 import crypto from "crypto";
 import { upsertPendingAmountAction } from "@/app/actions/pending-amounts";
 import { ID, Query } from "node-appwrite";
@@ -86,8 +87,9 @@ export async function listClientPaymentSummariesAction(input: {
 
     // Total collected across every payment cycle of the lead, as in
     // listLeadPaidAmountsAction, so the dashboard needs no second payments read.
+    const reconciledPayments = await readReconciledPaymentDocuments(databases, paymentDocuments);
     const paidByLead = new Map<string, number>();
-    for (const doc of paymentDocuments) {
+    for (const doc of reconciledPayments) {
     const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
     if (!leadId) continue;
     paidByLead.set(leadId, (paidByLead.get(leadId) ?? 0) + sumPaidUpdates(doc));
@@ -95,7 +97,7 @@ export async function listClientPaymentSummariesAction(input: {
 
     const results: Array<{ leadId: string; status: PaymentStatus; personalDetails: Record<string, unknown>; paymentPlan: ClientPaymentPlan; paidAmount: number }> = [];
     const seen = new Set<string>();
-    for (const doc of paymentDocuments) {
+    for (const doc of reconciledPayments) {
     const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
     if (!leadId || !allowedLeadIds.has(leadId)) continue;
     if (seen.has(leadId)) continue;
@@ -212,12 +214,13 @@ export async function listLeadPaidAmountsAction(input: {
     paymentDocuments.push(...response.documents);
     }
 
+    const reconciledPayments = await readReconciledPaymentDocuments(databases, paymentDocuments);
     const out: Record<string, number> = {};
-    for (const doc of paymentDocuments) {
+    for (const doc of reconciledPayments) {
     const leadId = typeof doc.leadId === "string" ? doc.leadId : "";
     if (!leadId || !allowedLeadIds.has(leadId)) continue;
     const paid = sumPaidUpdates(doc);
-    if (paid > 0) {
+    if (paid !== 0) {
       out[leadId] = (out[leadId] ?? 0) + paid;
     }
     }
@@ -228,7 +231,7 @@ export async function listLeadPaidAmountsAction(input: {
 function sumPaidUpdates(doc: { updates?: unknown; updatesJson?: unknown }): number {
     const updates = parseJsonOr<ClientPaymentUpdate[]>(doc.updates ?? doc.updatesJson, []);
     return updates.reduce((sum, u) => {
-      if (u && typeof u.amount === "number" && Number.isFinite(u.amount) && u.amount > 0) {
+      if (u && typeof u.amount === "number" && Number.isFinite(u.amount) ) {
         return sum + u.amount;
       }
       return sum;

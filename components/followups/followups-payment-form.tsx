@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,15 +17,17 @@ import {
   type FollowupsPaymentCompany,
   type PreviousFollowupsPayment,
 } from "@/lib/types";
+import { followupsPaymentCategory, type FollowupsPaymentCategory } from '@/lib/utils/followups-payment-category';
 import { useAuth } from "@/lib/contexts/auth-context";
-import { isVisibleClientLead } from "@/lib/utils/client-history";
 import { getClientPaymentRecordAction } from "@/app/actions/client-payments/record";
+import { listClientPaymentSummariesAction } from '@/app/actions/client-payments/list';
 import type { PaymentStatus } from "@/lib/types";
 import { listLeadsAction, getLeadAction } from "@/app/actions/lead/queries";
 import { getCreditableAgentsAction } from "@/app/actions/previous-followups-payments";
 
 export interface FollowupsPaymentFormValues {
   leadId?: string | null;
+  category?: FollowupsPaymentCategory;
   company: FollowupsPaymentCompany;
   candidateName: string;
   amount: number;
@@ -38,21 +40,23 @@ export interface FollowupsPaymentFormValues {
 
 interface FollowupsPaymentFormProps {
   payment?: PreviousFollowupsPayment | null;
+  isSaving?: boolean;
   onSave: (payment: FollowupsPaymentFormValues) => void;
   onCancel: () => void;
 }
 
 export function FollowupsPaymentForm({
   payment,
+  isSaving = false,
   onSave,
   onCancel,
 }: FollowupsPaymentFormProps) {
   const { user, isTeamLead, isAdmin, isOperations, serverSessionReady } = useAuth();
   
-  // Agents only have 'client' mode. Leadership has both.
+  // BGC is independent for every role that can create followup payments.
   const canUseManual = isTeamLead || isAdmin || isOperations;
-  const [mode, setMode] = useState<"manual" | "client">(
-    canUseManual && (!payment || payment.leadId?.startsWith("manual_followup:"))
+  const [mode, setMode] = useState<"manual" | "client" | "bgc">(
+    followupsPaymentCategory(payment?.leadId) === "bgc" ? "bgc" : payment?.leadId?.startsWith("manual_followup:") || (canUseManual && !payment)
       ? "manual"
       : "client"
   );
@@ -82,8 +86,19 @@ export function FollowupsPaymentForm({
   // Agent Selection State
   const [creditableAgents, setCreditableAgents] = useState<Array<{ id: string; name: string }>>([]);
   const [creditedAgentId, setCreditedAgentId] = useState<string>(
-    payment ? (payment.creditedAgentId || "none") : "none"
+    payment ? (payment.creditedAgentId || "none") : canUseManual ? user?.$id || "none" : "none"
   );
+
+  function changeMode(next: "manual" | "client" | "bgc") {
+    setMode(next);
+    setSelectedLeadId("");
+    setSearchQuery("");
+    setLeads([]);
+    setHasPaymentRecord(false);
+    setIsSearching(false);
+    setIsLoadingClientData(false);
+    setCreditedAgentId(next === 'client' ? 'none' : user?.$id || 'none');
+  }
 
   useEffect(() => {
     if (!user?.$id || !serverSessionReady || !canUseManual) return;
@@ -93,13 +108,7 @@ export function FollowupsPaymentForm({
         const agents = await getCreditableAgentsAction(user!.$id);
         if (!cancelled) {
           setCreditableAgents(agents);
-          if (!payment) {
-            if (agents.length > 0 && !agents.find(a => a.id === user?.$id)) {
-              setCreditedAgentId("none");
-            } else if (agents.find(a => a.id === user?.$id)) {
-              setCreditedAgentId(mode === "client" ? "none" : user!.$id);
-            }
-          } else {
+          if (payment) {
              const selected = payment.creditedAgentId;
              if (selected && !agents.find(a => a.id === selected)) {
                setCreditableAgents([{id: selected, name: "Unknown"}, ...agents]);
@@ -117,12 +126,13 @@ export function FollowupsPaymentForm({
   // Search effect
   useEffect(() => {
     if (mode !== "client" || !user?.$id || !serverSessionReady) return;
+    let cancelled = false;
     const timeoutId = setTimeout(async () => {
       setIsSearching(true);
       try {
         const result = await listLeadsAction(
           {
-            isClosed: true,
+            includeClosed: true,
             searchQuery: searchQuery || undefined,
           },
           user.$id,
@@ -130,7 +140,11 @@ export function FollowupsPaymentForm({
           undefined,
           { page: 1, pageSize: 50 }
         );
-        const mappedLeads = result.leads.filter(isVisibleClientLead).map((l) => {
+        const summaries = result.leads.length ? await listClientPaymentSummariesAction({
+          actorId: user.$id, leadIds: result.leads.map(lead => lead.$id),
+        }) : [];
+        const paymentLeadIds = new Set(summaries.map(summary => summary.leadId));
+        const mappedLeads = result.leads.filter(lead => lead.isClosed || paymentLeadIds.has(lead.$id)).map((l) => {
           let name = "Unknown";
           let company = "";
           try {
@@ -142,21 +156,21 @@ export function FollowupsPaymentForm({
           } catch {}
           return { id: l.$id, name, company };
         });
-        setLeads(mappedLeads);
+        if (!cancelled) setLeads(mappedLeads);
       } catch (err) {
         console.error("Failed to search leads", err);
       } finally {
-        setIsSearching(false);
+        if (!cancelled) setIsSearching(false);
       }
     }, 500);
 
-    return () => clearTimeout(timeoutId);
+    return () => { cancelled = true; clearTimeout(timeoutId); };
   }, [searchQuery, mode, user?.$id, serverSessionReady]);
 
   const [isLoadingClientData, setIsLoadingClientData] = useState(false);
 
   useEffect(() => {
-    if (!selectedLeadId || selectedLeadId.startsWith("manual_followup:") || !user || !serverSessionReady) {
+    if (mode !== "client" || !selectedLeadId || selectedLeadId.startsWith("manual_followup:") || !user || !serverSessionReady) {
       return;
     }
 
@@ -170,7 +184,7 @@ export function FollowupsPaymentForm({
         if (!cancelled) {
           if (record) {
             setHasPaymentRecord(true);
-            if (payment?.status !== 'refunded' && (payment?.amount ?? 0) >= 0) {
+            if (!payment) {
               setStatus(record.status || "not_paid");
               setIsRefund(record.status === 'refunded');
             }
@@ -193,7 +207,7 @@ export function FollowupsPaymentForm({
         if (!cancelled && lead && lead.data) {
           const data = JSON.parse(lead.data);
           const leadCompany = typeof data.company === "string" ? data.company.trim() : "";
-          if (leadCompany) {
+          if (leadCompany && !payment) {
             // Case-insensitive match against known companies
             const matched = FOLLOWUPS_PAYMENT_COMPANIES.find(
               (c) => c.toLowerCase() === leadCompany.toLowerCase()
@@ -217,47 +231,54 @@ export function FollowupsPaymentForm({
     return () => {
       cancelled = true;
     };
-  }, [selectedLeadId, user, serverSessionReady]);
+  }, [selectedLeadId, mode, user, serverSessionReady]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     onSave({
-      leadId: mode === "client" ? selectedLeadId : null,
+      leadId: mode === "client" ? selectedLeadId : payment?.leadId || null,
+      category: mode === "bgc" ? "bgc" : "followup",
       company,
       candidateName,
       amount: (parseFloat(amount) || 0) * (isRefund ? -1 : 1),
       date,
       remark: remark || null,
       status: isRefund ? 'refunded' : status,
-      hasPaymentRecord,
+      hasPaymentRecord: mode === "client" && hasPaymentRecord,
       creditedAgentId: creditedAgentId === "none" ? null : (creditedAgentId || null),
     });
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      {canUseManual && !payment && (
-        <div className="flex bg-muted p-1 rounded-md border w-max">
-          <button
+      {!payment && (
+        <div className="flex flex-wrap bg-muted p-1 rounded-md border">
+          {canUseManual && <button
             type="button"
-            onClick={() => setMode("manual")}
+            onClick={() => changeMode("manual")}
             className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
               mode === "manual" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Manual Entry (No Reports)
-          </button>
+            Manual Entry
+          </button>}
           <button
             type="button"
-            onClick={() => setMode("client")}
+            onClick={() => changeMode("client")}
             className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
               mode === "client" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             Client Entry (Tracked)
           </button>
+          <button type="button" onClick={() => changeMode("bgc")}
+            className={`px-4 py-1.5 text-sm font-medium rounded-md ${mode === "bgc" ? "bg-background shadow-sm" : "text-muted-foreground"}`}>
+            BGC
+          </button>
         </div>
       )}
+
+      {mode === "bgc" && <p className="text-sm text-muted-foreground">Independent BGC profile. Payments and refunds count toward the credited profile&apos;s target on the payment date.</p>}
 
       {mode === "client" && !payment && (
         <div className="space-y-3 p-4 bg-muted/50 border rounded-xl">
@@ -316,7 +337,7 @@ export function FollowupsPaymentForm({
               <span>
                 {creditedAgentId === "none"
                   ? mode === "client"
-                    ? "None (Lead Owner)"
+                    ? "Assigned profile (default)"
                     : "Select Agent"
                   : creditableAgents.find((a) => a.id === creditedAgentId)?.name ||
                     creditedAgentId ||
@@ -325,7 +346,7 @@ export function FollowupsPaymentForm({
             </SelectTrigger>
             <SelectContent className="max-h-60 overflow-y-auto">
               {mode === "client" && (
-                <SelectItem value="none">None (Lead Owner)</SelectItem>
+                <SelectItem value="none">Assigned profile (default)</SelectItem>
               )}
               {creditableAgents.map((a) => (
                 <SelectItem key={a.id} value={a.id}>
@@ -426,9 +447,11 @@ export function FollowupsPaymentForm({
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-semibold text-foreground">Date</label>
+          <label htmlFor="followup-payment-date" className="text-sm font-semibold text-foreground">Date</label>
           <Input
+            id="followup-payment-date"
             type="date"
+            className="bg-none pr-3 [&::-webkit-calendar-picker-indicator]:m-0 [&::-webkit-calendar-picker-indicator]:p-0 [&::-webkit-calendar-picker-indicator]:opacity-100"
             value={date}
             onChange={(e) => setDate(e.target.value)}
             required
@@ -452,10 +475,10 @@ export function FollowupsPaymentForm({
         </Button>
         <Button 
           type="submit" 
-          disabled={mode === "client" && !selectedLeadId && !payment}
+          disabled={isSaving || (mode === "client" && !selectedLeadId && !payment)}
           className="bg-blue-600 hover:bg-blue-700 px-6 shadow-md"
         >
-          {payment ? "Update Payment" : "Add Payment"}
+          {isSaving ? "Saving..." : payment ? "Update Payment" : "Add Payment"}
         </Button>
       </div>
     </form>

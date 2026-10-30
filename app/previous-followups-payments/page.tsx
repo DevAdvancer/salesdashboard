@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   Card,
@@ -15,7 +15,6 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { ProtectedRoute } from "@/components/protected-route";
-import { useCurrentMonthBounds } from "@/lib/hooks/use-current-month-bounds";
 import {
   createPreviousFollowupsPaymentAction,
   deletePreviousFollowupsPaymentAction,
@@ -26,6 +25,8 @@ import { addClientPaymentUpdateAction } from "@/app/actions/client-payments/reco
 import type { ComponentKey } from "@/lib/contexts/access-control-context";
 import type { PreviousFollowupsPayment, PaymentStatus } from "@/lib/types";
 import { getCurrentEasternMonthKey } from "@/lib/utils/eastern-date";
+import { clearClientReadCache } from '@/lib/utils/client-read-cache';
+import { clearDashboardDataCache } from '@/lib/services/dashboard-data-service';
 
 const FollowupsPaymentForm = dynamic(
   () =>
@@ -58,6 +59,7 @@ export default function PreviousFollowupsPaymentsPage() {
   const [editingPayment, setEditingPayment] =
     useState<PreviousFollowupsPayment | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const saveInFlight = useRef(false);
 
   const [agentFilter, setAgentFilter] = useState<string>("all");
   const [searchFilter, setSearchFilter] = useState("");
@@ -94,9 +96,9 @@ export default function PreviousFollowupsPaymentsPage() {
   const uniqueAgents = useMemo(() => {
     const map = new Map<string, string>();
     for (const p of payments) {
-      if (p.createdById && p.createdByName) {
-        map.set(p.createdById, p.createdByName);
-      }
+      const id = p.creditedAgentId || p.createdById;
+      const name = p.creditedAgentName || (id === p.createdById ? p.createdByName : id);
+      if (id && name) map.set(id, name);
     }
     return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
   }, [payments]);
@@ -104,7 +106,7 @@ export default function PreviousFollowupsPaymentsPage() {
   const filteredPayments = useMemo(() => {
     let result = payments;
     if (agentFilter !== "all") {
-      result = result.filter((p) => p.createdById === agentFilter);
+      result = result.filter((p) => (p.creditedAgentId || p.createdById) === agentFilter);
     }
     if (searchFilter.trim()) {
       const lower = searchFilter.toLowerCase().trim();
@@ -112,7 +114,8 @@ export default function PreviousFollowupsPaymentsPage() {
         (p) =>
           p.candidateName?.toLowerCase().includes(lower) ||
           p.company?.toLowerCase().includes(lower) ||
-          p.remark?.toLowerCase().includes(lower)
+          p.remark?.toLowerCase().includes(lower) ||
+          p.category?.toLowerCase().includes(lower)
       );
     }
     return result;
@@ -153,6 +156,7 @@ export default function PreviousFollowupsPaymentsPage() {
 
   async function handleSave(payment: {
     leadId?: string | null;
+    category?: PreviousFollowupsPayment["category"];
     company: PreviousFollowupsPayment["company"];
     candidateName: string;
     amount: number;
@@ -162,10 +166,11 @@ export default function PreviousFollowupsPaymentsPage() {
     hasPaymentRecord?: boolean;
     creditedAgentId?: string | null;
   }) {
-    if (!user || !canMutate) {
+    if (!user || !canMutate || saveInFlight.current) {
       return;
     }
 
+    saveInFlight.current = true;
     setIsSaving(true);
     try {
       let savedPayment: PreviousFollowupsPayment;
@@ -190,6 +195,7 @@ export default function PreviousFollowupsPaymentsPage() {
         savedPayment = await createPreviousFollowupsPaymentAction({
           actorId: user.$id,
           leadId: payment.leadId,
+          category: payment.category,
           company: payment.company,
           candidateName: payment.candidateName,
           amount: payment.amount,
@@ -201,7 +207,7 @@ export default function PreviousFollowupsPaymentsPage() {
         toast({
           title: "Payment added",
           description:
-            "The amount will be included in this month's followup payments.",
+            "The amount will be included on the selected payment date.",
         });
       }
 
@@ -226,6 +232,8 @@ export default function PreviousFollowupsPaymentsPage() {
       }
 
       closeDialog();
+      clearClientReadCache();
+      clearDashboardDataCache();
       await loadPayments();
     } catch (error) {
       console.error("Failed to save followup payment:", error);
@@ -236,6 +244,7 @@ export default function PreviousFollowupsPaymentsPage() {
         variant: "destructive",
       });
     } finally {
+      saveInFlight.current = false;
       setIsSaving(false);
     }
   }
@@ -255,6 +264,8 @@ export default function PreviousFollowupsPaymentsPage() {
         actorId: user.$id,
         paymentId: payment.$id,
       });
+      clearClientReadCache();
+      clearDashboardDataCache();
       toast({
         title: "Payment deleted",
         description: "The followup payment has been removed.",
@@ -282,7 +293,7 @@ export default function PreviousFollowupsPaymentsPage() {
                 Followup Payments
               </h1>
               <p className="text-muted-foreground text-sm">
-                Track manual and client-linked followup payments for your team
+                Track manual, client-linked, and independent BGC payments for your team
               </p>
             </div>
             {canMutate ? (
@@ -428,6 +439,7 @@ export default function PreviousFollowupsPaymentsPage() {
               <CardContent>
                 <FollowupsPaymentForm
                   payment={editingPayment}
+                  isSaving={isSaving}
                   onSave={handleSave}
                   onCancel={closeDialog}
                 />
