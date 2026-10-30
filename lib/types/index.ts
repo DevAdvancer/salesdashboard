@@ -684,6 +684,7 @@ export interface ClientPaymentFollowupUpdate {
   creditedAgentName?: string;
   /** Original entry timestamp, retained separately from a later edit. */
   recordedAt?: string;
+  recordedById?: string;
   systemCreatedAt?: string;
   createdAt: string;
   paymentDate: string;

@@ -241,4 +241,29 @@ describe('closure payment cycles', () => {
     expect(adjusted.updates.reduce((sum, update) => sum + (update.amount ?? 0), 0)).toBe(1700);
     expect((await listPaymentsReportAction({ actorId: 'admin' }))[0].totalPaid).toBe(1700);
   });
+
+  it('saving an older custom-note followup after changing $598 to $600 appends only $2', async () => {
+    const record = await upsertClientPaymentRecordAction(input);
+    jest.setSystemTime(new Date('2026-10-14T16:43:03.202Z'));
+    mockDocs.set(record.$id, { ...mockDocs.get(record.$id), status: 'fully_paid', updates: JSON.stringify([
+      { id: 'receipt', actorId: 'admin', actorName: 'Admin', status: 'fully_paid', amount: 598,
+        note: 'Fully Paid', createdAt: '2026-10-14T16:42:37.898Z' },
+      { id: 'initial', actorId: 'admin', actorName: 'Admin', status: 'partially_paid', amount: 1000,
+        note: 'Initialized', createdAt: '2026-09-21T20:59:47Z' },
+    ]) });
+    mockDocs.set('custom-source', { $id: 'custom-source', leadId: 'lead', amount: 600, status: 'paid',
+      date: '2026-10-14', paymentRemark: 'Fully Paid', createdById: 'admin', updatedById: 'admin',
+      createdAt: '2026-10-14T16:42:37.624Z', updatedAt: '2026-10-14T16:43:01.509Z' });
+    const update = { actorId: 'admin', leadId: 'lead', status: 'fully_paid' as const, amount: 600,
+      note: 'Fully Paid', sourceFollowupId: 'custom-source' };
+    const saved = await addClientPaymentUpdateAction(update);
+    expect(JSON.parse(mockDocs.get(record.$id).updates)[0].amount).toBe(2);
+    expect(saved.updates.reduce((sum, item) => sum + (item.amount ?? 0), 0)).toBe(1600);
+    const beforeRetry = mockUpdateDocument.mock.calls.length;
+    await addClientPaymentUpdateAction(update);
+    expect(mockUpdateDocument.mock.calls.length).toBe(beforeRetry);
+    expect((await listPaymentsReportAction({ actorId: 'admin' }))[0].totalPaid).toBe(1600);
+    expect((await listClientPaymentSummariesAction({ actorId: 'admin', leadIds: ['lead'] }))[0].paidAmount).toBe(1600);
+    expect((await getClientPaymentRecordAction('admin', 'lead'))?.updates.reduce((sum, item) => sum + (item.amount ?? 0), 0)).toBe(1600);
+  });
 });

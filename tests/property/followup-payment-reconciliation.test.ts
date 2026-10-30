@@ -4,14 +4,15 @@ import type { ClientPaymentUpdate } from '@/lib/types';
 
 test('legacy full-value edits conserve the final receipt balance, preserve actors, and remain idempotent', () => {
   fc.assert(fc.property(fc.integer({ min: 1, max: 100000 }), fc.integer({ min: 0, max: 100000 }), fc.boolean(),
-    (received, edited, refunded) => {
+    fc.constantFrom('Followup payment added', 'Fully Paid', 'Balance received'), (received, edited, refunded, note) => {
       const source = { $id: 'source', leadId: 'lead', amount: edited, status: refunded ? 'refunded' : 'paid',
-        date: '2026-09-30', createdAt: '2026-10-01T14:18:33Z', updatedAt: '2026-10-01T15:21:06Z' };
+        date: '2026-09-30', createdAt: '2026-10-01T14:18:33Z', updatedAt: '2026-10-01T15:21:06Z',
+        createdById: 'creator', updatedById: 'editor', paymentRemark: note };
       const raw = [
         { id: 'edit', actorId: 'editor', actorName: 'Editor', amount: edited, status: refunded ? 'refunded' : 'fully_paid',
-          note: 'Followup payment added', createdAt: '2026-10-01T15:21:07Z' },
+          note, createdAt: '2026-10-01T15:21:07Z' },
         { id: 'original', actorId: 'creator', actorName: 'Creator', amount: received, status: 'partially_paid',
-          note: 'Followup payment added', createdAt: '2026-10-01T14:18:34Z' },
+          note, createdAt: '2026-10-01T14:18:34Z' },
       ];
       const document = { $id: 'payment', leadId: 'lead', updates: JSON.stringify(raw) };
       const before = JSON.stringify({ source, document });

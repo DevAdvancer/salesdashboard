@@ -19,7 +19,8 @@ export type FollowupFinancialUpdate = { sourceFollowupId?: string; amount?: numb
   createdAt?: string; actorId?: string; note?: string | null; followupEdit?: boolean; recordedAmount?: number };
 type FollowupSource = { id?: string; $id?: unknown; amount?: unknown; status?: unknown;
   createdAt?: unknown; recordedAt?: unknown; updatedAt?: unknown; systemCreatedAt?: unknown; $createdAt?: unknown;
-  updatedById?: unknown; actorId?: unknown; note?: unknown; paymentRemark?: unknown; remark?: unknown; date?: unknown; paymentDate?: unknown };
+  createdById?: unknown; recordedById?: unknown; updatedById?: unknown; actorId?: unknown;
+  note?: unknown; paymentRemark?: unknown; remark?: unknown; date?: unknown; paymentDate?: unknown };
 
 function legacyMatchCandidates<T extends FollowupSource>(updates: FollowupFinancialUpdate[], followups: T[]) {
   return updates.map(update => {
@@ -41,10 +42,16 @@ function legacyMatchCandidates<T extends FollowupSource>(updates: FollowupFinanc
       const anchor = anchors.filter(candidate => Number.isFinite(candidate.at) && Math.abs(timestamp - candidate.at) < 60000)
         .sort((a, b) => Math.abs(timestamp - a.at) - Math.abs(timestamp - b.at))[0];
       if (!anchor) return [];
-      // For edits whose recorded snapshot changed, the creation history can
-      // still be matched by its original timestamp and automatic followup note.
+      // A creation receipt keeps its ORIGINAL amount even after an edit changes
+      // the source snapshot. Custom notes also need the recorded actor match;
+      // amount equality with the latest snapshot cannot identify that receipt.
+      const expectedActor = anchor.phase === 'created'
+        ? nonBlank(source.recordedById ?? source.createdById)
+        : nonBlank(source.updatedById ?? source.actorId);
+      const customNoteReceipt = note === sourceNote && Boolean(expectedActor) && update.actorId === expectedActor;
       if (amount !== getFollowupsPaymentAmount(source) &&
-        (note !== 'Followup payment added' || !anchors.some(candidate => candidate.phase === 'edited'))) return [];
+        (!(note === 'Followup payment added' || customNoteReceipt) ||
+          !anchors.some(candidate => candidate.phase === 'edited'))) return [];
       return [{ source, phase: anchor.phase }];
     });
   });

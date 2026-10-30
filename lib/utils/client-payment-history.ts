@@ -15,6 +15,7 @@ export function mapFollowupHistoryUpdate(row: Record<string, unknown>): ClientPa
     creditedAgentName: String(row.creditedAgentName ||
       (!row.creditedAgentId || row.creditedAgentId === row.createdById ? row.createdByName : row.creditedAgentId) || ''),
     recordedAt: String(row.createdAt || row.$createdAt || ''),
+    recordedById: String(row.createdById || ''),
     systemCreatedAt: typeof row.$createdAt === 'string' ? row.$createdAt : '',
     createdAt: String(row.updatedAt || row.createdAt || row.$createdAt || ''),
     paymentDate: typeof row.date === 'string' ? row.date : '',
