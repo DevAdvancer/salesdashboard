@@ -6,6 +6,7 @@ import { CrmAccessError, securityDatabase } from '@/lib/server/crm-access';
 import { verifiedBrowserActor } from '@/lib/server/crm-browser-data';
 import type { User } from '@/lib/types';
 import { createBriefReadCache } from '@/lib/utils/brief-read-cache';
+import { appwriteCacheKey } from '@/lib/server/appwrite-cache-key';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -45,8 +46,7 @@ async function changeFor(actor: User, collectionId: string) {
     }
   }
   if (bodyVisible) return readChange(collectionId, queries, true);
-  const key = createHash('sha256').update(JSON.stringify([process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT,
-    process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID, process.env.APPWRITE_API_KEY, DATABASE_ID, collectionId, queries])).digest('hex');
+  const key = appwriteCacheKey('change-markers', DATABASE_ID, collectionId, queries);
   return markers.read(key, () => readChange(collectionId, queries, false));
 }
 

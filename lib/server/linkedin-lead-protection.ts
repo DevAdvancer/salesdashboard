@@ -8,6 +8,7 @@ import type { LinkedinRequest } from '@/lib/types';
 import { isWithdrawnLinkedinRequest } from '@/lib/utils/linkedin-request-state';
 import { createBriefReadCache } from '@/lib/utils/brief-read-cache';
 import { indexedProfileCandidates, ProfileReadBudgetError } from '@/lib/server/lead-profile-index';
+import { appwriteCacheKey } from '@/lib/server/appwrite-cache-key';
 
 // Only UI previews share scans. Every mutation still performs a fresh lookup
 // under the distributed profile lock, including when a preview reported no match.
@@ -55,8 +56,7 @@ export async function findLeadsForLinkedinProfile(databases: Database, targetUrl
       Query.select(['$id', 'data', 'status', 'ownerId', 'assignedToId', '$updatedAt'])],
     pageLimit: 5000, maxPages: 1000, maxDocuments: 100000, requireComplete: true });
   };
-  const key = createHash('sha256').update(JSON.stringify([process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT,
-    process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID, process.env.APPWRITE_API_KEY, DATABASE_ID, COLLECTIONS.LEADS])).digest('hex');
+  const key = appwriteCacheKey('linkedin-preview', DATABASE_ID, COLLECTIONS.LEADS);
   const leads = await (options.preview ? previewScans.read(key, scan) : scan());
   if (leads.length >= 100000) throw new Error('The lead profile scan is incomplete. Ask an admin to review it.');
   return leads.filter(lead => leadProfileUrl(lead.data) === url);

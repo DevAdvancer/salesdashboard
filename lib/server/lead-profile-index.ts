@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { Query, type Databases, type Models } from 'node-appwrite';
 import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { leadProfileUrl } from '@/lib/utils/linkedin-lead-protection';
+import { appwriteCacheKey } from '@/lib/server/appwrite-cache-key';
 const MAX_PROFILE_CANDIDATES = 100;
 const cooldowns = new Map<string, number>();
 export class ProfileReadBudgetError extends Error {
@@ -19,8 +20,7 @@ export function leadProfileIndexKey(data: unknown) {
 /** Every change since the verified checkpoint is included, even from an older
  * deployment or a native SDK writer that does not maintain the derived key. */
 export async function indexedProfileCandidates(db: Pick<Databases, 'getDocument' | 'listDocuments'>, url: string): Promise<Models.Document[] | null> {
-  const scope = createHash('sha256').update(JSON.stringify([process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT,
-    process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID, process.env.APPWRITE_API_KEY, DATABASE_ID])).digest('hex');
+  const scope = appwriteCacheKey('profile-index-cooldown', DATABASE_ID);
   if ((cooldowns.get(scope) || 0) > Date.now()) throw new ProfileReadBudgetError();
   const boundedRead = async (collectionId: string, queries: string[]) => {
     // One overflow row detects a query that is too broad without retrieving its

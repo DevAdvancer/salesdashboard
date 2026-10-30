@@ -8,6 +8,7 @@ import { getTodayEst } from '@/lib/utils/est-date';
 import { readAccessCookie, readAccessPass, signAccessCookie, signAccessPass } from '@/lib/server/crm-access-pass';
 import { nativeMfaStatus } from '@/lib/utils/native-mfa-policy';
 import { createHash } from 'node:crypto';
+import { appwriteCacheKey } from '@/lib/server/appwrite-cache-key';
 import { cache } from 'react';
 import { createInFlightGroup } from '@/lib/utils/in-flight';
 import { bumpRequestCount } from '@/lib/server/appwrite-request-meter';
@@ -49,8 +50,7 @@ export function securityDatabase() {
     if (typeof method !== 'function') return method;
     if (property !== 'getDocument' && property !== 'listDocuments') return method.bind(target);
     return (...args: unknown[]) => {
-      const key = createHash('sha256').update(JSON.stringify([process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT,
-        process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID, process.env.APPWRITE_API_KEY, property, args])).digest('hex');
+      const key = appwriteCacheKey('security-database-read', property, args);
       // No settled cache: account activation changes are re-read immediately.
       return inFlightReads(key, () => { bumpRequestCount(); return method.apply(target, args); });
     };
