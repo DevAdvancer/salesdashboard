@@ -35,6 +35,7 @@ import { saveTechnicalPayment } from "@/app/actions/technical-payments";
 import { listLeads } from "@/lib/services/lead-action-service";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { isFutureSupportDateTime } from "@/lib/utils/support-schedule";
+import { getSupportTechnologyError } from "@/lib/utils/support-technology";
 
 // Components
 import { InterviewFiltersCard } from "@/components/interview-support/interview-filters-card";
@@ -302,6 +303,12 @@ function InterviewContent() {
     }
 
     if (!selectedLead) return;
+
+    const technologyError = getSupportTechnologyError(formData.technology);
+    if (technologyError) {
+      toast({ title: "Invalid technology", description: technologyError, variant: "destructive" });
+      return;
+    }
 
     const requiredFields = [
       { label: "Candidate Name", value: formData.candidateName.trim() },

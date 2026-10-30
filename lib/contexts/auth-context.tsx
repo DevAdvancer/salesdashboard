@@ -66,6 +66,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     catch { /* The in-memory cooldown still works when storage is unavailable. */ }
   }, []);
 
+  const clearServerSession = useCallback(async () => {
+    lastServerSessionSyncAt.current = 0;
+    writeStoredServerSessionSyncAt(0);
+    setServerSessionReady(false);
+    setInitialAccess(null);
+    await withClientTimeout(signal => fetch('/api/auth/appwrite-session', { method: 'DELETE', signal }),
+      6_000, 'Session cleanup timed out.').catch(() => {});
+  }, [writeStoredServerSessionSyncAt]);
+
   const syncServerSession = useCallback(async ({ force = false, bootstrap = false, signal: parentSignal }: { force?: boolean; bootstrap?: boolean; signal?: AbortSignal } = {}) => {
     const now = Date.now();
     const lastSyncedAt = Math.max(lastServerSessionSyncAt.current, readStoredServerSessionSyncAt());
@@ -94,19 +103,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       writeStoredServerSessionSyncAt(syncedAt);
       if (!bootstrap) return null;
       return data.user?.$id && data.status?.state ? data as SessionBootstrap : null;
-    }, 12_000, 'Session restoration timed out. Please retry.', parentSignal).finally(() => { serverSessionSyncPromise.current = null; });
+    }, 12_000, 'Session restoration timed out. Please retry.', parentSignal).catch(async error => {
+      const nativeError = error as { code?: number; type?: string };
+      if (nativeError?.type === 'user_more_factors_required') {
+        // Keep Appwrite's password session so native MFA can complete.
+        setUser(null); setNativeMfaPending(true); setSessionRestoreError('');
+        await clearServerSession();
+      } else if (nativeError?.code === 401) {
+        // A signed-out browser cannot mint account JWTs. Stop refreshing the
+        // stale CRM profile and bridge instead of logging an SDK exception.
+        setUser(null); setNativeMfaPending(false); setSessionRestoreError('');
+        databases.clearReadCache?.();
+        clearBrowserQueryClient();
+        await clearServerSession();
+        throw Object.assign(new Error('Your session has expired. Please sign in again.'), { code: 401 });
+      }
+      throw error;
+    }).finally(() => { serverSessionSyncPromise.current = null; });
 
     return serverSessionSyncPromise.current;
-  }, [readStoredServerSessionSyncAt, writeStoredServerSessionSyncAt]);
-
-  const clearServerSession = useCallback(async () => {
-    lastServerSessionSyncAt.current = 0;
-    writeStoredServerSessionSyncAt(0);
-    setServerSessionReady(false);
-    setInitialAccess(null);
-    await withClientTimeout(signal => fetch('/api/auth/appwrite-session', { method: 'DELETE', signal }),
-      6_000, 'Session cleanup timed out.').catch(() => {});
-  }, [writeStoredServerSessionSyncAt]);
+  }, [clearServerSession, readStoredServerSessionSyncAt, writeStoredServerSessionSyncAt]);
 
   const recoverServerSession = useCallback(async () => {
     // Force bypasses the cooldown after an idle tab's 15-minute cookie expires.
@@ -276,6 +292,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       syncServerSession().catch((error) => {
+        if ((error as { code?: number; type?: string })?.code === 401 ||
+          (error as { type?: string })?.type === 'user_more_factors_required') return;
         console.error('Failed to refresh server session:', error);
       });
     };
@@ -334,7 +352,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(null); setInitialAccess(null); setNativeMfaPending(true); setSessionRestoreError('');
         return null;
       }
-      console.error('Login error:', error);
+      const missingNativeSession = createdSession && (error as { code?: number })?.code === 401;
+      if (!missingNativeSession) console.error('Login error:', error);
       if (createdSession) {
         try { await account.deleteSession('current'); } catch { /* Session may already be gone. */ }
         await clearServerSession();
@@ -342,6 +361,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // On login failure we still un-gate (with a false user) so protected
       // pages can render the unauthenticated state without hanging.
       setServerSessionReady(true);
+      if (missingNativeSession) {
+        throw new Error('Your sign-in session could not be restored. Please sign in again.');
+      }
       throw error;
     }
   }, [clearServerSession, fetchUserDocument, syncServerSession]);

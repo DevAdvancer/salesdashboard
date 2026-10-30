@@ -28,6 +28,65 @@ it('carries the blocked state from the server without trusting stored user or ac
   expect(result.current.initialAccess?.status.state).toBe('mfa_required');
   localStorage.removeItem('crm.user');
 });
+
+it('clears the stale CRM profile on a guest JWT refresh without logging an Appwrite exception', async () => {
+  const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => bootstrap });
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.user?.$id).toBe(user.$id));
+    sessionStorage.setItem('crm.lastServerSessionSyncAt', '0');
+    (account.createJWT as jest.Mock).mockRejectedValue(Object.assign(
+      new Error('User (role: guests) missing scopes (["account"])'), { code: 401, type: 'general_unauthorized_scope' }));
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    await waitFor(() => expect(result.current.user).toBeNull());
+    expect(result.current.serverSessionReady).toBe(false);
+    expect(result.current.nativeMfaPending).toBe(false);
+    expect(result.current.sessionRestoreError).toBe('');
+    expect((fetch as jest.Mock).mock.calls.some(([, options]) => options?.method === 'DELETE')).toBe(true);
+    expect(consoleError).not.toHaveBeenCalled();
+    const attempts = (account.createJWT as jest.Mock).mock.calls.length;
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    expect(account.createJWT).toHaveBeenCalledTimes(attempts);
+  } finally { consoleError.mockRestore(); }
+});
+
+it('keeps a native MFA-required session pending when JWT refresh requires more factors', async () => {
+  global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => bootstrap });
+  const { result } = renderHook(() => useAuth(), { wrapper });
+  await waitFor(() => expect(result.current.user?.$id).toBe(user.$id));
+  sessionStorage.setItem('crm.lastServerSessionSyncAt', '0');
+  (account.createJWT as jest.Mock).mockRejectedValue(Object.assign(new Error('More factors'), { code: 401, type: 'user_more_factors_required' }));
+  await act(async () => { window.dispatchEvent(new Event('focus')); });
+  await waitFor(() => expect(result.current.nativeMfaPending).toBe(true));
+  expect(result.current.user).toBeNull();
+});
+
+it('does not discard the signed-in profile after a temporary JWT refresh network failure', async () => {
+  const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => bootstrap });
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.user?.$id).toBe(user.$id));
+    sessionStorage.setItem('crm.lastServerSessionSyncAt', '0');
+    (account.createJWT as jest.Mock).mockRejectedValue(new Error('Network unavailable'));
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    expect(result.current.user?.$id).toBe(user.$id);
+    expect(result.current.serverSessionReady).toBe(true);
+    expect((fetch as jest.Mock).mock.calls.some(([, options]) => options?.method === 'DELETE')).toBe(false);
+  } finally { consoleError.mockRestore(); }
+});
+
+it('a confirmed guest on initial restore settles at sign-in without minting a JWT', async () => {
+  global.fetch = jest.fn().mockResolvedValue({ status: 401, ok: false });
+  (account.get as jest.Mock).mockRejectedValue(Object.assign(new Error('User (role: guests) missing scopes (["account"])'),
+    { code: 401, type: 'general_unauthorized_scope' }));
+  const { result } = renderHook(() => useAuth(), { wrapper });
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  expect(result.current.user).toBeNull();
+  expect(result.current.sessionRestoreError).toBe('');
+  expect(account.createJWT).not.toHaveBeenCalled();
+});
 it('receives the new profile/access with JWT sync after login instead of another bootstrap/profile request', async () => {
   global.fetch = jest.fn(async (_url, options) => options?.method === 'POST'
     ? { ok: true, json: async () => bootstrap } as Response : { ok: true, json: async () => ({ active: false }) } as Response);

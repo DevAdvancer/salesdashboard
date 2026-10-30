@@ -24,6 +24,7 @@ import {
 import { listLeads } from "@/lib/services/lead-action-service";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { isFutureSupportDateTime } from "@/lib/utils/support-schedule";
+import { getSupportTechnologyError } from "@/lib/utils/support-technology";
 
 // Components
 import { MockFiltersCard } from "@/components/mock/mock-filters-card";
@@ -312,6 +313,12 @@ function MockContent() {
 
     if (!selectedLead) return;
 
+    const technologyError = getSupportTechnologyError(formData.role);
+    if (technologyError) {
+      toast({ title: "Invalid technology", description: technologyError, variant: "destructive" });
+      return;
+    }
+
     if (formData.schedule && !isFutureSupportDateTime(formData.schedule)) {
       toast({
         title: "Invalid mock interview time",
@@ -395,7 +402,7 @@ function MockContent() {
             <table cellpadding="5" cellspacing="0" border="0" style="width: 100%; max-width: 600px; margin-top: 20px; border-collapse: collapse;">
               <tr><td style="font-weight: bold; width: 150px; padding: 5px;">Candidate Name</td><td style="padding: 5px;">${formData.candidateName}</td></tr>
               <tr><td style="font-weight: bold; padding: 5px;">End Client</td><td style="padding: 5px;">${formData.endClient}</td></tr>
-              <tr><td style="font-weight: bold; padding: 5px;">Role</td><td style="padding: 5px;">${formData.role}</td></tr>
+              <tr><td style="font-weight: bold; padding: 5px;">Technology</td><td style="padding: 5px;">${formData.role}</td></tr>
               <tr><td style="font-weight: bold; padding: 5px;">Schedule</td><td style="padding: 5px;">${formattedSchedule}</td></tr>
               <tr><td style="font-weight: bold; padding: 5px;">Email ID</td><td style="padding: 5px;">${formData.emailId}</td></tr>
               <tr><td style="font-weight: bold; padding: 5px;">Contact Number</td><td style="padding: 5px;">${formData.contactNumber}</td></tr>

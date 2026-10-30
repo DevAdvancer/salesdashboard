@@ -1,6 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { SupportTechnologyField } from "@/components/support-technology-field";
+import { getSupportTechnologyError } from "@/lib/utils/support-technology";
 import {
   Dialog,
   DialogContent,
@@ -151,13 +153,11 @@ export function AssessmentDialog({
                   <RequiredText>Technology</RequiredText>
                 </div>
                 <div className="p-2 border-b">
-                  <Input
+                  <SupportTechnologyField
                     value={formData.technology}
-                    onChange={(e) =>
-                      setFormData({ ...formData, technology: e.target.value })
+                    onChange={(technology) =>
+                      setFormData({ ...formData, technology })
                     }
-                    placeholder="e.g. React, Python"
-                    className="h-8"
                   />
                 </div>
 
@@ -350,7 +350,7 @@ export function AssessmentDialog({
           <Button variant="outline" onClick={() => setIsModalOpen(false)}>
             Go Back
           </Button>
-          <Button onClick={sendEmail} disabled={isSending}>
+          <Button onClick={sendEmail} disabled={isSending || Boolean(getSupportTechnologyError(formData.technology))}>
             {isSending ? "Sending..." : "Send Assessment Request"}
           </Button>
         </DialogFooter>

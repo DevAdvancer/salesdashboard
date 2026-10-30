@@ -1,6 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { SupportTechnologyField } from "@/components/support-technology-field";
+import { getSupportTechnologyError } from "@/lib/utils/support-technology";
 import {
   Dialog,
   DialogContent,
@@ -157,14 +159,12 @@ export function MockDialog({
             </div>
 
             <div className="col-span-2 md:col-span-1">
-              <Label htmlFor="role">Role</Label>
-              <Input
-                id="role"
+              <Label><RequiredText>Technology</RequiredText></Label>
+              <SupportTechnologyField
                 value={formData.role}
-                onChange={(e) =>
-                  setFormData({ ...formData, role: e.target.value })
+                onChange={(role) =>
+                  setFormData({ ...formData, role })
                 }
-                placeholder="e.g. Data Analyst"
               />
             </div>
 
@@ -254,7 +254,7 @@ export function MockDialog({
           <Button variant="outline" onClick={() => setIsModalOpen(false)}>
             Go Back
           </Button>
-          <Button onClick={sendEmail} disabled={isSending}>
+          <Button onClick={sendEmail} disabled={isSending || Boolean(getSupportTechnologyError(formData.role))}>
             {isSending ? "Sending..." : "Create Mock"}
           </Button>
         </DialogFooter>

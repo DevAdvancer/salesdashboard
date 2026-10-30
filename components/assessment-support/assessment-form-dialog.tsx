@@ -1,6 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { SupportTechnologyField } from "@/components/support-technology-field";
+import { getSupportTechnologyError } from "@/lib/utils/support-technology";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -163,15 +165,11 @@ export function AssessmentFormDialog({
                   <RequiredText>Technology</RequiredText>
                 </div>
                 <div className="p-2 border-b">
-                  <Input
+                  <SupportTechnologyField
                     value={formData.technology}
-                    onChange={(e) =>
-                      onFormDataChange({ ...formData, technology: e.target.value })
+                    onChange={(technology) =>
+                      onFormDataChange({ ...formData, technology })
                     }
-                    placeholder="e.g. Full Stack Developer"
-                    className="h-8"
-                    required
-                    aria-required="true"
                   />
                 </div>
 
@@ -370,7 +368,7 @@ export function AssessmentFormDialog({
           <Button variant="outline" onClick={onClose}>
             Go Back
           </Button>
-          <Button onClick={onSend} disabled={isReadOnly || isSending}>
+          <Button onClick={onSend} disabled={isReadOnly || isSending || Boolean(getSupportTechnologyError(formData.technology))}>
             {isSending ? "Sending..." : "Send Request"}
           </Button>
         </DialogFooter>
