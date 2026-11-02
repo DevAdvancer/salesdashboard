@@ -5,9 +5,10 @@ import { listAllDocuments } from '@/lib/server/appwrite-pagination';
 import { leadProfileUrl } from '@/lib/utils/linkedin-lead-protection';
 import { LEAD_PROFILE_CHECKPOINT, LEAD_PROFILE_KEY, leadProfileIndexKey } from '@/lib/server/lead-profile-index';
 
-export async function profileIndexPlan(db: Databases) {
-  let previous: Models.Document | null = null;
-  if (typeof db.getDocument === 'function') {
+/** `marker` is the checkpoint document when the caller just read it (skips a re-read). */
+export async function profileIndexPlan(db: Databases, marker?: Models.Document) {
+  let previous: Models.Document | null = marker ?? null;
+  if (!marker && typeof db.getDocument === 'function') {
     try { previous = await db.getDocument(DATABASE_ID, COLLECTIONS.LINKEDIN_LEAD_REGISTRY, LEAD_PROFILE_CHECKPOINT); }
     catch (error) { if ((error as { code?: number }).code !== 404) throw error; }
   }

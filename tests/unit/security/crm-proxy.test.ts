@@ -1,4 +1,4 @@
-import { proxy } from '@/proxy';
+import { config, proxy } from '@/proxy';
 import { assertCrmAccessForProxy as assertCrmAccess, crmAccessEnabled, CrmAccessError } from '@/lib/server/crm-access';
 import type { NextRequest } from 'next/server';
 const mockCookies = { set: jest.fn(), delete: jest.fn() };
@@ -69,4 +69,13 @@ it('sets the signed access cookie after a full check and clears it when access i
   await proxy(request('/leads', 'GET'));
   await proxy(request('/api/leads/list', 'GET'));
   expect(mockCookies.delete).toHaveBeenCalledTimes(2);
+});
+describe('proxy matcher', () => {
+  // Matcher form is '/(<negative lookahead>.*)', which a plain anchored RegExp models exactly.
+  const runs = (path: string) => new RegExp(`^${config.matcher[0]}$`).test(path);
+  it.each(['/leads', '/dashboard', '/api/leads/list', '/api/public/other', '/share/clients', '/api/security/readiness'])(
+    'still gates %s', path => expect(runs(path)).toBe(true));
+  it.each(['/api/appwrite/v1/databases', '/api/cron/payment-reminders', '/api/security/changes', '/api/security/access',
+    '/api/auth/appwrite-session', '/share/client', '/api/public/client-card', '/downloads/x.zip', '/notification.mp3'])(
+    'skips self-authorizing or static path %s', path => expect(runs(path)).toBe(false));
 });

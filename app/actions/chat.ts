@@ -171,7 +171,7 @@ export async function sendChatMessageAction(input: {
       body: truncateNotificationBody(body),
       targetType: "chat",
       targetId: doc.$id,
-    });
+    }, new Map(usersResponse.documents.map((u) => [u.$id, u])));
 
     await logAuditAction(databases, {
       action: "CHAT_ANNOUNCEMENT_NOTIFY",

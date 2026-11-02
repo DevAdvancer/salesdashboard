@@ -38,5 +38,5 @@ function withoutAccessCookie(response: NextResponse) {
 // Skip paths bypassCrmGate always admits (each handler authorizes itself), public
 // downloads and static files: running the proxy there only adds an invocation.
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|downloads/|api/(?:appwrite|cron)/|api/security/(?:changes|access)$|api/auth/appwrite-session$|.*\\.(?:png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|css|js|map|mp3|zip|txt|xml|webmanifest)$).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|downloads/|share/client$|api/public/client-card$|api/(?:appwrite|cron)/|api/security/(?:changes|access)$|api/auth/appwrite-session$|.*\\.(?:png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|css|js|map|mp3|zip|txt|xml|webmanifest)$).*)'],
 };

@@ -62,10 +62,13 @@ export async function GET(request: NextRequest) {
       ]
     );
 
+    // Bounded parallel deletes: same rows and stop-on-error, a fraction of the run time.
+    const DELETE_CONCURRENCY = 10;
     let deleted = 0;
-    for (const doc of response.documents) {
-      await databases.deleteDocument(DATABASE_ID, COLLECTIONS.NOTIFICATIONS, doc.$id);
-      deleted++;
+    for (let i = 0; i < response.documents.length; i += DELETE_CONCURRENCY) {
+      await Promise.all(response.documents.slice(i, i + DELETE_CONCURRENCY).map((doc) =>
+        databases.deleteDocument(DATABASE_ID, COLLECTIONS.NOTIFICATIONS, doc.$id)));
+      deleted += Math.min(DELETE_CONCURRENCY, response.documents.length - i);
     }
 
     return NextResponse.json({

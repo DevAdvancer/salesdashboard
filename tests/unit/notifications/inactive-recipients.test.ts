@@ -37,6 +37,26 @@ describe('inactive notification recipients', () => {
     }));
   });
 
+  it('reads the recipient once and reuses a document the caller already has', async () => {
+    const databases = {
+      getDocument: jest.fn().mockResolvedValue({ isActive: true, notificationsEnabled: true }),
+      createDocument: jest.fn().mockResolvedValue({ $id: 'notification-id' }),
+    };
+    (createAdminClient as jest.Mock).mockResolvedValue({
+      databases,
+      users: { get: jest.fn().mockResolvedValue({ email: 'agent@example.com' }) },
+    });
+    const input = { recipientId: 'agent', type: 'TEST', title: 'Test', body: 'Test' };
+
+    await createNotificationRecord(databases as never, input);
+    expect(databases.getDocument).toHaveBeenCalledTimes(1);
+
+    databases.getDocument.mockClear();
+    await createNotificationRecord(databases as never, input, { isActive: true, notificationsEnabled: false });
+    expect(databases.getDocument).not.toHaveBeenCalled();
+    expect(databases.createDocument).toHaveBeenCalledTimes(2);
+  });
+
   it('does not create a notification for an inactive user', async () => {
     const databases = {
       getDocument: jest.fn().mockResolvedValue({ isActive: false }),

@@ -26,6 +26,8 @@ it('skips safely until the index is provisioned', async () => {
 it('runs the verified maintenance operation after authenticating the scheduler', async () => {
   const result = await GET(new NextRequest('http://localhost/api/cron/refresh-lead-profile-index', { headers: { authorization: 'Bearer test-secret' } }));
   expect(result.status).toBe(200); expect(mockApply).toHaveBeenCalledTimes(1);
+  // The checkpoint just read is reused instead of fetched again by the planner.
+  expect(mockPlan).toHaveBeenCalledWith(expect.anything(), { leadId: 'ready' });
 });
 it('does not reactivate an index that an administrator deliberately disabled', async () => {
   mockGet.mockResolvedValueOnce({ leadId: 'disabled' });

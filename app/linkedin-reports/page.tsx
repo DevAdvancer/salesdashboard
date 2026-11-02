@@ -32,7 +32,6 @@ import type { LinkedinAccount, User } from "@/lib/types";
 import { getErrorMessage } from "@/lib/utils";
 import { getTodayEst } from "@/lib/utils/est-date";
 import { exportLinkedinRequestsForAdminAction } from "@/app/actions/linkedin/requests";
-import * as XLSX from "xlsx";
 
 /**
  * Format a Date object as YYYY-MM-DD in America/New_York.
@@ -315,6 +314,8 @@ function LinkedinReportsContent() {
         });
       });
 
+      // Loaded on export only, so the spreadsheet library stays out of the page bundle.
+      const XLSX = await import("xlsx");
       // Create workbook
       const wb = XLSX.utils.book_new();
 

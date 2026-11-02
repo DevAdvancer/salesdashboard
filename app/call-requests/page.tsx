@@ -75,16 +75,13 @@ function CallsContent() {
     );
   }, [user]);
 
+  // Search, status changes and call-request events reload only the list; the
+  // resume-user options do not depend on call requests, so they load once.
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [list, opts] = await Promise.all([
-        listCallRequestsAction(appliedSearch),
-        getCallRequestOptionsAction(),
-      ]);
-      setRequests(list);
-      setOptions(opts);
+      setRequests(await listCallRequestsAction(appliedSearch));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load call requests.");
     } finally {
@@ -95,6 +92,16 @@ function CallsContent() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getCallRequestOptionsAction()
+      .then((opts) => { if (!cancelled) setOptions(opts); })
+      .catch((e: unknown) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load call requests.");
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   useRealtimeCollection(COLLECTIONS.CALL_REQUESTS, () => {
     void load();

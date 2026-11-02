@@ -322,7 +322,8 @@ export async function getCallRequestOptionsAction(): Promise<CallRequestUserOpti
     databases,
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.USERS,
-    queries: [],
+    // Only resume users are offered; legacy users without a department are sales.
+    queries: [Query.equal('department', 'resume')],
     pageLimit: 100,
     maxPages: 200,
   });

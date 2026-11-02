@@ -13,12 +13,17 @@ interface CreateNotificationInput {
   targetType?: string | null;
 }
 
+type RecipientDocument = { $id?: string; isActive?: unknown; notificationsEnabled?: unknown; notificationEmails?: string };
+
 export async function createNotificationRecord(
   databases: Databases,
-  input: CreateNotificationInput
+  input: CreateNotificationInput,
+  /** The recipient's user document when the caller just read it; skips a re-read. */
+  knownRecipient?: RecipientDocument
 ) {
   // Check the current user status before writing any in-app notification or email.
-  const recipient = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, input.recipientId);
+  const recipient: RecipientDocument = knownRecipient
+    ?? await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, input.recipientId);
   if (recipient.isActive === false) return null;
 
   const record = await databases.createDocument(
@@ -42,7 +47,8 @@ export async function createNotificationRecord(
     input.title, 
     input.body, 
     input.targetId, 
-    input.targetType
+    input.targetType,
+    recipient
   ).catch(console.error);
 
   return record;
@@ -67,14 +73,14 @@ async function sendEmailForNotification(
   title: string, 
   body: string, 
   targetId?: string | null, 
-  targetType?: string | null
+  targetType?: string | null,
+  // Read moments earlier by createNotificationRecord; no second user read.
+  dbUser: RecipientDocument = {}
 ) {
   const { users } = await createAdminClient();
   
   try {
     const authUser = await users.get(userId);
-    const { databases } = await createAdminClient();
-    const dbUser = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, userId);
     if (dbUser.isActive === false) return;
     
     if (authUser && authUser.email) {
@@ -137,7 +143,9 @@ async function sendEmailForNotification(
 export async function createNotificationsForRecipients(
   databases: Databases,
   recipientIds: Array<string | null | undefined>,
-  input: Omit<CreateNotificationInput, 'recipientId'>
+  input: Omit<CreateNotificationInput, 'recipientId'>,
+  /** User documents the caller already listed, keyed by ID; avoids one read each. */
+  knownRecipients?: ReadonlyMap<string, RecipientDocument>
 ) {
   const uniqueRecipientIds = Array.from(
     new Set(recipientIds.filter((recipientId): recipientId is string => Boolean(recipientId)))
@@ -148,7 +156,7 @@ export async function createNotificationsForRecipients(
       createNotificationRecord(databases, {
         ...input,
         recipientId,
-      }).catch((error) => {
+      }, knownRecipients?.get(recipientId)).catch((error) => {
         console.error('Failed to create notification for', recipientId, ':', error);
         return null;
       })
