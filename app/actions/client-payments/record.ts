@@ -1,4 +1,7 @@
 "use server";
+
+import { readReportingWindows } from '@/lib/server/reporting-calendar';
+import { reportingMonthForDate } from '@/lib/utils/reporting-period';
 import crypto from "crypto";
 import { upsertPendingAmountAction } from "@/app/actions/pending-amounts";
 import { ID, Query } from "node-appwrite";
@@ -234,8 +237,8 @@ export async function addClientPaymentUpdateAction(input: {
               ? Math.max(0, Math.floor(input.pendingAmount))
               : 0;
     if (pendingAmount >= 0) {
-    const monthKey = now.slice(0, 7); // YYYY-MM
     try {
+      const monthKey = reportingMonthForDate(now, await readReportingWindows());
       await upsertPendingAmountAction({
         actorId: input.actorId,
         leadId: input.leadId,

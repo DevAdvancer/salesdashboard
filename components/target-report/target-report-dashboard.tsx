@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 import { getTargetReport, clearTargetReportCache } from "@/lib/services/target-report-service";
-import { getCurrentEasternMonthKey } from '@/lib/utils/eastern-date';
+import { useCurrentMonthBounds } from '@/lib/hooks/use-current-month-bounds';
 import type { User } from "@/lib/types";
 import { MonthPicker } from "./month-picker";
 import { TargetReportTable } from "./target-report-table";
@@ -21,16 +21,15 @@ const currency = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
 
-function currentMonthKey(): string {
-  return getCurrentEasternMonthKey();
-}
-
 interface TargetReportDashboardProps {
   user: User;
 }
 
 export function TargetReportDashboard({ user }: TargetReportDashboardProps) {
-  const [monthKey, setMonthKey] = useState<string>(currentMonthKey());
+  const period = useCurrentMonthBounds();
+  const [selectedMonthKey, setMonthKey] = useState<string | null>(null);
+  const monthKey = selectedMonthKey || period.monthKey;
+  const loadGeneration = useRef(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [payload, setPayload] = useState<{
@@ -48,12 +47,16 @@ export function TargetReportDashboard({ user }: TargetReportDashboardProps) {
   const isAgent = user.role === "agent" || user.role === "lead_generation";
 
   const load = useCallback(async () => {
+    if (period.isLoading) return;
+    const generation = ++loadGeneration.current;
     try {
       setLoading(true);
       setError(null);
       const data = await getTargetReport({ actorId: user.$id, monthKey });
+      if (generation !== loadGeneration.current) return;
       setPayload(data);
     } catch (err) {
+      if (generation !== loadGeneration.current) return;
       console.error("Failed to load target report:", err);
       const message = err instanceof Error ? err.message : "Failed to load target report.";
       setError(message);
@@ -64,23 +67,23 @@ export function TargetReportDashboard({ user }: TargetReportDashboardProps) {
         description: message,
       });
     } finally {
-      setLoading(false);
+      if (generation === loadGeneration.current) setLoading(false);
     }
-  }, [user.$id, monthKey, toast]);
+  }, [user.$id, monthKey, toast, period.isLoading]);
 
   useEffect(() => {
     queueMicrotask(() => {
       void load();
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user.$id, monthKey]);
+  }, [user.$id, monthKey, period.isLoading]);
 
   return (
     <div className="space-y-6">
       <Card>
         <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-            <MonthPicker monthKey={monthKey} onChange={setMonthKey} />
+            {period.isLoading ? <span role="status" className="text-sm text-muted-foreground">Loading reporting month…</span> : <MonthPicker monthKey={monthKey} onChange={setMonthKey} />}
           </div>
           <Button
             type="button"
@@ -94,14 +97,14 @@ export function TargetReportDashboard({ user }: TargetReportDashboardProps) {
         </CardContent>
       </Card>
 
-      {isAdmin ? (
+      {isAdmin && !period.isLoading ? (
         <div className="space-y-4">
           <AdminTargetForm user={user} monthKey={monthKey} onSaved={() => void load()} />
           <AdminTargetBoundsForm monthKey={monthKey} onSaved={() => void load()} />
         </div>
       ) : null}
 
-      {isTl ? (
+      {isTl && !period.isLoading ? (
         <TlSplitForm user={user} monthKey={monthKey} onSaved={() => void load()} />
       ) : null}
 

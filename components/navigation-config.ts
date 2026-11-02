@@ -89,6 +89,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'leads', label: 'Leads', href: '/leads', icon: appIcons.leads },
   { key: 'lead-requests', label: 'Lead Requests', href: '/lead-requests', icon: appIcons.leadRequests },
   { key: 'history', label: 'Client', href: '/client', icon: appIcons.clients },
+  { key: 'client-progress', label: 'Client Progress', href: '/client-progress', icon: appIcons.workQueue },
   { key: 'request-calls', label: 'Request Calls', href: '/request-calls', icon: appIcons.requestCalls },
   { key: 'my-call-requests', label: 'My Call Requests', href: '/my-call-requests', icon: appIcons.requestCalls },
   { key: 'work-queue', label: 'Work Queue', href: '/work-queue', icon: appIcons.workQueue },

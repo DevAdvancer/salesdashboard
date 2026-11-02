@@ -16,7 +16,10 @@ jest.mock('@/app/actions/technical-payments', () => ({ getTechnicalPaymentTotals
 jest.mock('@/lib/server/stats-aggregator', () => ({ computeAgentStatsForDate: async () => [{
   dateKey: '2026-10-21', agentId: 'agent', leadsGenerated: 1,
 }] }));
-jest.mock('@/lib/utils/eastern-date', () => ({ getCurrentEasternIsoDate: () => '2026-10-21' }));
+jest.mock('@/lib/utils/eastern-date', () => {
+  const actual = jest.requireActual('@/lib/utils/eastern-date');
+  return { ...actual, getCurrentEasternIsoDate: (date?: Date) => date ? actual.getCurrentEasternIsoDate(date) : '2026-10-21' };
+});
 jest.mock('@/lib/server/weekly-lead-source-report', () => ({
   ...jest.requireActual('@/lib/server/weekly-lead-source-report'),
   loadWeeklyLeadSourceFacts: (...args: unknown[]) => mockFacts(...args),
@@ -40,7 +43,7 @@ beforeEach(() => {
 
 test('Weekly Report exposes historical LinkedIn totals and live not-interested counts without doubling saved today stats', async () => {
   const { getWeeklyReportAction } = await import('@/app/actions/weekly-report');
-  const result = await getWeeklyReportAction({ actorId: 'agent', from: '2026-07-01T00:00:00.000Z', to: '2026-10-21T23:59:59.999Z' });
+  const result = await getWeeklyReportAction({ actorId: 'agent', from: '2026-07-01T04:00:00.000Z', to: '2026-10-22T03:59:59.999Z' });
   expect(result.teams[0].totals).toMatchObject({ leads: 4, linkedinLeads: 2, linkedinNotInterested: 1, notInterested: 1 });
   expect(result.teams[0].members).toHaveLength(1);
   expect(mockFacts).toHaveBeenCalledWith(expect.objectContaining({ startDate: '2026-07-01', endDate: '2026-10-21' }));

@@ -1,3 +1,6 @@
+import { easternDayBounds } from '@/lib/utils/reporting-period';
+import { calendarMonthWindow, reportingMonthForDate } from '@/lib/utils/reporting-period';
+import { readReportingWindows } from '@/lib/server/reporting-calendar';
 import { Query, ID } from "node-appwrite";
 import { createAdminClient } from "./appwrite";
 import { DATABASE_ID, COLLECTIONS } from "../constants/appwrite";
@@ -23,8 +26,7 @@ export async function computeLinkedinStatsForDate(dateKey: string, accountsMap?:
     accountsMap = new Map(accounts.map((a) => [a.$id, a]));
   }
 
-  const startIso = `${dateKey}T00:00:00.000Z`;
-  const endIso = `${dateKey}T23:59:59.999Z`;
+  const { from: startIso, to: endIso } = easternDayBounds(dateKey, dateKey);
 
   // 1. Fetch all requests sent on this date
   const requests = await listAllDocuments<any>({
@@ -157,8 +159,11 @@ export async function aggregateLinkedinStatsForDates(dateKeys: string[]) {
 
 export async function computeAgentStatsForDate(dateKey: string) {
   const { databases } = await createAdminClient();
-  const startIso = `${dateKey}T00:00:00.000Z`;
-  const endIso = `${dateKey}T23:59:59.999Z`;
+  const { from: startIso, to: endIso } = easternDayBounds(dateKey, dateKey);
+  const windows = await readReportingWindows();
+  const monthKey = reportingMonthForDate(dateKey, windows);
+  const reportingWindow = windows.find(window => window.monthKey === monthKey) || calendarMonthWindow(monthKey);
+  const monthStartIso = easternDayBounds(reportingWindow.leadsFromIso, reportingWindow.leadsToIso).from;
 
   // 1. Leads Created on this date
   const createdLeads = await listAllDocuments<any>({
@@ -314,7 +319,6 @@ export async function computeAgentStatsForDate(dateKey: string) {
     if (!lead) return;
     
     const leadCreated = (lead.closedAt as string) || (lead.$createdAt as string) || (lead.createdAt as string);
-    const monthStartIso = `${dateKey.slice(0, 7)}-01T00:00:00.000Z`;
     if (leadCreated && leadCreated < monthStartIso) {
       return; // Payments for leads closed in previous months are followups, not upfront
     }

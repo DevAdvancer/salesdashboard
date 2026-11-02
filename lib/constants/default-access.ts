@@ -3,6 +3,7 @@ export type ComponentKey =
   | 'chat'
   | 'leads'
   | 'history'
+  | 'client-progress'
   | 'user-management'
   | 'field-management'
   | 'settings'
@@ -39,6 +40,8 @@ export interface AccessRule {
 }
 
 export const DEFAULT_ACCESS_RULES: AccessRule[] = [
+  ...(['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent', 'lead_generation', 'compliance'] as UserRole[])
+    .map(role => ({ componentKey: 'client-progress' as const, role, allowed: true })),
   // Admin rules — all allowed
   { componentKey: 'dashboard', role: 'admin', allowed: true },
   { componentKey: 'chat', role: 'admin', allowed: true },

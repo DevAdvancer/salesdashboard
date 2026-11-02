@@ -4,6 +4,8 @@ import { getFollowupsPaymentAmount } from "@/lib/utils/followups-payment-amount"
 import { readReconciledPaymentDocuments } from '@/lib/server/client-payment-reconciliation';
 import { paymentBusinessDate } from '@/lib/utils/target-payment-attribution';
 import crypto from "crypto";
+import { readReportingWindows } from '@/lib/server/reporting-calendar';
+import { reportingMonthForDate } from '@/lib/utils/reporting-period';
 import { upsertPendingAmountAction } from "@/app/actions/pending-amounts";
 import { ID, Query } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
@@ -27,6 +29,7 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
     throw new Error("Not authorized");
     }
 
+    const reportingWindows = await readReportingWindows();
     const { databases } = await createAdminClient();
     const paymentQueries: string[] = [];
     if (dateFrom) {
@@ -212,7 +215,7 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
     existing.total += amount;
     existing.count += 1;
     if (date.length >= 7) {
-      const monthKey = date.slice(0, 7);
+      const monthKey = reportingMonthForDate(date, reportingWindows);
       existing.monthlyAmounts[monthKey] = (existing.monthlyAmounts[monthKey] || 0) + amount;
     }
     followupsMap.set(fLeadId, existing);
@@ -257,7 +260,7 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
       const source = u.sourceFollowupId
         ? (followupsDetailsMap.get(leadId) || []).find(followup => followup.id === u.sourceFollowupId)
         : undefined;
-      const monthKey = paymentBusinessDate(source?.date || u.paymentDate || u.createdAt).slice(0, 7);
+      const monthKey = reportingMonthForDate(paymentBusinessDate(source?.date || u.paymentDate || u.createdAt), reportingWindows);
       const amount = u.amount ?? 0;
       if (amount !== 0) {
         paidMonthlyAmounts[monthKey] = (paidMonthlyAmounts[monthKey] || 0) + amount;
@@ -369,7 +372,7 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
       latestPendingMonth: null,
       paidMonthlyAmounts: {},
       followupsMonthlyAmounts: followup.date
-        ? { [followup.date.slice(0, 7)]: followup.amount }
+        ? { [reportingMonthForDate(followup.date, reportingWindows)]: followup.amount }
         : {},
       leadAmount: 0,
       followupsTotal: followup.amount,

@@ -31,6 +31,7 @@ export function attendanceExempt(role: string) {
 /** Public GET pages do not exempt server actions posted to the same URL. */
 export function bypassCrmGate(path: string, method: string, serverAction: boolean) {
   if (serverAction) return false;
+  if (path === '/api/public/client-card' && method === 'POST') return true; // Read-only, token-validated public card handler.
   if (path.startsWith('/api/cron/')) return true; // Each job checks CRON_SECRET itself.
   if (path === '/api/security/access' || path === '/api/auth/appwrite-session') return true;
   // This GET handler runs verifiedBrowserActor before every snapshot. Let it
@@ -40,7 +41,7 @@ export function bypassCrmGate(path: string, method: string, serverAction: boolea
   // This handler enforces the gate itself, with a narrow own-profile bootstrap exception.
   if (path.startsWith('/api/appwrite/')) return true;
   if (method === 'GET' || method === 'HEAD') {
-    return ['/login', '/referral', '/api/security/readiness'].includes(path);
+    return ['/login', '/referral', '/api/security/readiness', '/share/client'].includes(path);
   }
   return false;
 }

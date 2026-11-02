@@ -1,3 +1,4 @@
+import { easternDayBounds } from '@/lib/utils/reporting-period';
 import { ID, Permission, Query, Role } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
 import { assertAuthenticatedUserId, getAuthenticatedUserDoc } from "@/lib/server/current-user";
@@ -56,13 +57,13 @@ export function parseDateOnly(value: string) {
 export function toUtcDayStartIso(dateValue: string) {
     const parsed = parseDateOnly(dateValue);
     if (!parsed) throw new Error("Invalid date");
-    return new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day, 0, 0, 0, 0)).toISOString();
+    return easternDayBounds(dateValue, dateValue).from;
 }
 
 export function toUtcDayEndIso(dateValue: string) {
     const parsed = parseDateOnly(dateValue);
     if (!parsed) throw new Error("Invalid date");
-    return new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day, 23, 59, 59, 999)).toISOString();
+    return easternDayBounds(dateValue, dateValue).to;
 }
 
 export function daysBetweenUtc(startIso: string, endIso: string) {

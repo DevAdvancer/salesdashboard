@@ -1,5 +1,7 @@
 "use client";
 
+import { getCurrentEasternIsoDate } from '@/lib/utils/eastern-date';
+
 import { useMemo, useState } from "react";
 import {
   Card,
@@ -109,7 +111,7 @@ function toComparableIsoDate(value: string | null | undefined): string | null {
   // Handle ISO timestamps — extract the date portion
   const parsed = new Date(trimmed);
   if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toISOString().slice(0, 10);
+  return getCurrentEasternIsoDate(parsed);
 }
 
 function formatMonthYear(monthKey: string): string {

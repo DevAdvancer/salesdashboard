@@ -1,42 +1,28 @@
-import { useState, useEffect } from 'react';
-import { getTargetMonthBound } from '@/app/actions/target-month-bounds';
-import { getMonthStartEst, getMonthEndEst } from '@/lib/utils/est-date';
+'use client';
 
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/lib/contexts/auth-context';
+import { getReportingCalendarAction } from '@/app/actions/target-month-bounds';
+import { resolveReportingPeriod } from '@/lib/utils/reporting-period';
+import { useEffect, useState } from 'react';
+import { getCurrentEasternIsoDate, easternWallTimeToIso } from '@/lib/utils/eastern-date';
+
+export const REPORTING_CALENDAR_QUERY_KEY = ['reporting-calendar'] as const;
 export function useCurrentMonthBounds() {
-  const [bounds, setBounds] = useState<{ leadsFromIso: string; leadsToIso: string; isLoading: boolean }>({
-    leadsFromIso: getMonthStartEst(),
-    leadsToIso: getMonthEndEst(),
-    isLoading: true,
-  });
-
+  const { user } = useAuth();
+  const [today, setToday] = useState(getCurrentEasternIsoDate);
   useEffect(() => {
-    let cancelled = false;
-
-    const today = new Date();
-    const estParts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit" }).formatToParts(today);
-    const year = estParts.find(p => p.type === 'year')?.value;
-    const month = estParts.find(p => p.type === 'month')?.value;
-    const monthKey = `${year}-${month}`;
-
-    getTargetMonthBound(monthKey).then((res) => {
-      if (!cancelled) {
-        setBounds({
-          leadsFromIso: res?.leadsFromIso ?? getMonthStartEst(),
-          leadsToIso: res?.leadsToIso ?? getMonthEndEst(),
-          isLoading: false,
-        });
-      }
-    }).catch((err) => {
-      console.error("Error fetching current month bounds", err);
-      if (!cancelled) {
-        setBounds(prev => ({ ...prev, isLoading: false }));
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return bounds;
+    // One local midnight transition, not a poll or database request. Handles 23/25-hour days.
+    const end = easternWallTimeToIso(`${today}T23:59`).replace(':00.000Z', ':59.999Z');
+    const timer = setTimeout(() => setToday(getCurrentEasternIsoDate()), Math.max(1, Date.parse(end) - Date.now() + 25));
+    const visible = () => { if (document.visibilityState === 'visible') setToday(getCurrentEasternIsoDate()); };
+    document.addEventListener('visibilitychange', visible);
+    return () => { clearTimeout(timer); document.removeEventListener('visibilitychange', visible); };
+  }, [today]);
+  const query = useQuery({ queryKey: [...REPORTING_CALENDAR_QUERY_KEY, user?.$id], queryFn: getReportingCalendarAction,
+    enabled: !!user, staleTime: 5 * 60_000, refetchInterval: false, refetchOnWindowFocus: false,
+    refetchOnReconnect: false, refetchOnMount: true, retry: false });
+  const period = resolveReportingPeriod(query.data || []);
+  if (query.error) throw new Error('Could not load CRM reporting dates. Reload this page to try again.');
+  return { ...period, windows: query.data || [], isLoading: query.isPending, error: query.error };
 }

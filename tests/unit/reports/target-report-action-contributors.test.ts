@@ -4,6 +4,7 @@ const mockAssert = jest.fn();
 const mockListAll = jest.fn();
 let mockFinancialRows: any[] | null = null;
 let mockFollowupRows: any[] = [];
+let mockCustomBound: { leadsFromIso: string; leadsToIso: string } | null = null;
 const people = [
   { $id: 'admin', name: 'Admin', role: 'admin', department: 'sales', branchIds: ['ncr'] },
   { $id: 'monitor', name: 'Monitor', role: 'monitor', department: 'sales', branchIds: ['ncr'] },
@@ -26,7 +27,7 @@ jest.mock('@/app/actions/monthly-targets', () => ({ listMonthlyTargetsWithAssign
   targets: [{ $id: 't', teamLeadId: 'tl', teamLeadName: 'Team Lead', totalAmount: 1000 }],
   assignmentsByTargetId: { t: [{ agentId: 'agent', amount: 400 }] },
 }) }));
-jest.mock('@/app/actions/target-month-bounds', () => ({ getTargetMonthBound: async () => null }));
+jest.mock('@/app/actions/target-month-bounds', () => ({ getTargetMonthBound: async () => mockCustomBound }));
 jest.mock('@/app/actions/technical-payments', () => ({ getTechnicalPaymentTotalsByUserAction: async () => ({ admin: 25, monitor: 15 }) }));
 jest.mock('@/lib/server/stats-aggregator', () => ({ computeAgentStatsForDate: async () => [] }));
 
@@ -36,6 +37,7 @@ beforeEach(() => {
   mockActor.mockResolvedValue({ ...people[0], $id: 'viewer' });
   mockFinancialRows = null;
   mockFollowupRows = [];
+  mockCustomBound = null;
   mockListAll.mockImplementation(async ({ collectionId, queries }: any) => {
     const filters = queries.map((query: string) => JSON.parse(query));
     if (collectionId === COLLECTIONS.USERS) {
@@ -166,4 +168,17 @@ test('legacy manual payments without a credited profile are visible as unassigne
   const limited = await getTargetReportAction({ actorId: 'viewer', monthKey: '2026-10' });
   expect(limited.result.rows.some(row => row.teamLeadId === 'unassigned-followups')).toBe(false);
   await expect(getAgentPaymentDetailsAction({ actorId: 'viewer', agentId: 'unassigned-followups', monthKey: '2026-10' })).rejects.toThrow('Not authorized');
+});
+
+
+test('October includes November 2 until Eastern midnight, and its label uses the custom dates', async () => {
+  mockCustomBound = { leadsFromIso: '2026-10-02', leadsToIso: '2026-11-02' };
+  mockFinancialRows = [{ leadId: 'lead', paymentPlan: '{}', updates: JSON.stringify([
+    { actorId: 'agent', status: 'partially_paid', createdAt: '2026-11-03T04:59:59.999Z', amount: 100 },
+    { actorId: 'agent', status: 'partially_paid', createdAt: '2026-11-03T05:00:00Z', amount: 200 },
+  ]) }];
+  const { getTargetReportAction } = await import('@/app/actions/target-report');
+  const report = await getTargetReportAction({ actorId: 'viewer', monthKey: '2026-10' });
+  expect(report.monthLabel).toBe('2026-10 (2026-10-02 → 2026-11-02)');
+  expect(report.result.rows.flatMap(team => team.agents).find(agent => agent.userId === 'agent')).toMatchObject({ achieved: 100 });
 });

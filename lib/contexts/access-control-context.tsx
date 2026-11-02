@@ -12,6 +12,7 @@ export type ComponentKey =
   | 'chat'
   | 'leads'
   | 'history'
+  | 'client-progress'
   | 'user-management'
   | 'field-management'
   | 'settings'
@@ -115,7 +116,7 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
 
     // Explicit restriction for compliance role
     if (user.role === 'compliance') {
-      if (componentKey === 'compliance-dashboard' || componentKey === 'settings') {
+      if (componentKey === 'compliance-dashboard' || componentKey === 'settings' || componentKey === 'client-progress') {
         return true;
       }
       return false;

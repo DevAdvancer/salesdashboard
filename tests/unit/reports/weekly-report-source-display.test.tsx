@@ -16,10 +16,10 @@ test('defaults to the current week, retains custom dates and removes the July sh
   render(<WeeklyReportDashboard user={user} />);
   expect(await screen.findByText('LinkedIn Leads')).toBeInTheDocument();
   expect(screen.getByText('LinkedIn Not Interested')).toBeInTheDocument();
-  expect(mockReport).toHaveBeenLastCalledWith('agent', '2026-10-19T00:00:00.000Z', '2026-10-25T23:59:59.999Z');
+  expect(mockReport).toHaveBeenLastCalledWith('agent', '2026-10-19T04:00:00.000Z', '2026-10-26T03:59:59.999Z');
   expect(screen.queryByRole('button', { name: 'July 1 to Today' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Change report dates' }));
-  await waitFor(() => expect(mockReport).toHaveBeenLastCalledWith('agent', '2026-07-01T00:00:00.000Z', '2026-10-21T23:59:59.999Z'));
+  await waitFor(() => expect(mockReport).toHaveBeenLastCalledWith('agent', '2026-07-01T04:00:00.000Z', '2026-10-22T03:59:59.999Z'));
 });
 
 test('shows the new columns for each team member and the team total', async () => {

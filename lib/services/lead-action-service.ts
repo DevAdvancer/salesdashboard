@@ -10,6 +10,7 @@ import {
 import { invalidateAuditLogReferenceCache } from "@/lib/services/audit-log-reference-service";
 import { cacheClientRead, clearClientReadCache } from "@/lib/utils/client-read-cache";
 import { clearDashboardDataCache } from "@/lib/services/dashboard-data-service";
+import { getQueryClient } from "@/lib/queries/client";
 import { createLeadAction, reopenLeadAction, updateLeadAction } from "@/app/actions/lead/mutations";
 import { listLeadsAction } from "@/app/actions/lead/queries";
 import type { Lead, LeadListFilters, UserRole, CreateLeadInput, LeadData, User } from "@/lib/types";
@@ -29,6 +30,11 @@ export function clearLeadReadCache() {
   clearClientReadCache(LEAD_READ_SCOPE_PREFIX);
   clearDashboardDataCache();
   invalidateAuditLogReferenceCache();
+  if (typeof window !== 'undefined') {
+    // A close/reopen/backout/assignment must invalidate the recent tracking snapshot.
+    // Mark it stale locally; do not trigger background reads of cached filters/details.
+    void getQueryClient().invalidateQueries({ queryKey: ['client-progress'], refetchType: 'none' });
+  }
 }
 
 /**

@@ -1,3 +1,4 @@
+import { easternDayBounds } from '@/lib/utils/reporting-period';
 import { getFollowupsPaymentAmount } from "@/lib/utils/followups-payment-amount";
 import { NextResponse, type NextRequest } from "next/server";
 import { Query } from "node-appwrite";
@@ -47,8 +48,7 @@ export async function GET(request: NextRequest) {
   if (reportEmails.length === 0) {
     return NextResponse.json({ ok: true, skipped: true, reason: "No report recipients configured" });
   }
-  const startIso = `${todayKey}T00:00:00.000Z`;
-  const endIso = `${todayKey}T23:59:59.999Z`;
+  const { from: startIso, to: endIso } = easternDayBounds(todayKey, todayKey);
 
   // 2. Fetch leads generated today
   const createdLeads = await listAllDocuments<any>({

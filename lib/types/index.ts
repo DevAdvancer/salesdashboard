@@ -386,6 +386,7 @@ export interface FormConfig {
 
 // Access configuration types
 export type ComponentKey =
+  | 'client-progress'
   | 'dashboard'
   | 'chat'
   | 'leads'

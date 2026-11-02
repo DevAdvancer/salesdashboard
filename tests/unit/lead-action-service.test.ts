@@ -13,6 +13,8 @@ import {
   listLeads,
 } from "@/lib/services/lead-action-service";
 import { clearClientReadCache } from "@/lib/utils/client-read-cache";
+import { QueryObserver } from '@tanstack/react-query';
+import { getQueryClient } from '@/lib/queries/client';
 
 jest.mock("@/app/actions/lead/mutations", () => ({
   createLeadAction: jest.fn(),
@@ -155,5 +157,19 @@ describe("lead action service", () => {
     await listLeads({ isClosed: false }, "user-1", "admin", []);
 
     expect(listLeadsAction).toHaveBeenCalledTimes(2);
+  });
+
+  it('invalidates recent Client Progress results after lead changes without background fetches', () => {
+    const client = getQueryClient();
+    const key = ['client-progress', 'test-user', 'list'];
+    const fetcher = jest.fn().mockResolvedValue({ entries: [] });
+    client.setQueryData(key, { entries: [] });
+    const observer = new QueryObserver(client, { queryKey: key, queryFn: fetcher, staleTime: 60_000, refetchInterval: false });
+    const unsubscribe = observer.subscribe(() => {});
+    try {
+      clearLeadReadCache();
+      expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+      expect(fetcher).not.toHaveBeenCalled();
+    } finally { unsubscribe(); client.removeQueries({ queryKey: key }); }
   });
 });

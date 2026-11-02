@@ -46,6 +46,7 @@ function formatRoleLabel(role: string): string {
 // own roster without switching to the sales view; access control still
 // gates the page itself (only roles eligible for `user-management` see it).
 const RESUME_UNIVERSAL_ITEM_KEYS = new Set([
+  "client-progress",
   "resume-chat",
   "resume-hierarchy",
   "user-management",
@@ -96,7 +97,7 @@ export function Navigation({
     : NAV_ITEMS.filter((item) => canAccess(item.key as ComponentKey));
 
   // Define section grouping
-  const agentItemKeys = new Set(["dashboard", "leads", "calendar", "history", "work-queue"]);
+  const agentItemKeys = new Set(["dashboard", "leads", "calendar", "history", "client-progress", "work-queue"]);
   const attendanceItemKeys = new Set(["attendance", "attendance-report"]);
   const teamLeadItemKeys = new Set(["user-management", "reports", "assigned-report", "team-report"]);
   const adminItemKeys = new Set(["branch-management", "hierarchy", "lead-requests", "settings", "beta"]);
@@ -355,7 +356,8 @@ export function Navigation({
       );
     }
 
-    if (resumeProfilesItem || resumeCallsItem || resumeMarketingItem || complianceDashboardItem) {
+    const progressItem = itemsForUser.find(item => item.key === 'client-progress');
+    if (resumeProfilesItem || resumeCallsItem || resumeMarketingItem || complianceDashboardItem || progressItem) {
       renderedItems.push(
         <div key="section-resume-operations">
           {renderSectionHeader("Operations")}
@@ -363,6 +365,7 @@ export function Navigation({
           {resumeProfilesItem && renderNavButton(resumeProfilesItem)}
           {complianceDashboardItem && renderNavButton(complianceDashboardItem)}
           {resumeMarketingItem && renderNavButton(resumeMarketingItem)}
+          {progressItem && renderNavButton(progressItem)}
         </div>
       );
     }

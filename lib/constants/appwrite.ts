@@ -1,6 +1,11 @@
 export const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID || 'crm-database-1';
 
 export const COLLECTIONS = {
+  // Server-only indexed tracking and append-only feedback/audit events; no browser grants.
+  CLIENT_PROGRESS: process.env.APPWRITE_CLIENT_PROGRESS_COLLECTION_ID || 'client_progress',
+  CLIENT_PROGRESS_EVENTS: process.env.APPWRITE_CLIENT_PROGRESS_EVENTS_COLLECTION_ID || 'client_progress_events',
+  // Server-only bearer-link grants. Tokens are stored only as hashes; no native client permissions.
+  CLIENT_PROGRESS_SHARES: process.env.APPWRITE_CLIENT_PROGRESS_SHARES_COLLECTION_ID || 'client_progress_shares',
   USERS: process.env.NEXT_PUBLIC_APPWRITE_USERS_COLLECTION_ID || 'users',
   LEADS: process.env.NEXT_PUBLIC_APPWRITE_LEADS_COLLECTION_ID || 'leads',
   FORM_CONFIG: process.env.NEXT_PUBLIC_APPWRITE_FORM_CONFIG_COLLECTION_ID || 'form_config',

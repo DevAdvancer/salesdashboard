@@ -1,5 +1,7 @@
 'use server';
 
+import { easternDayBounds } from '@/lib/utils/reporting-period';
+
 import { createAdminClient } from '@/lib/server/appwrite';
 import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { getAuthenticatedUserDoc } from '@/lib/server/current-user';
@@ -87,8 +89,8 @@ export async function getResumeDashboardDataAction(
     queries
   });
 
-  const fromDate = dateRange.from ? new Date(`${dateRange.from}T00:00:00.000Z`) : new Date(0);
-  const toDate = dateRange.to ? new Date(`${dateRange.to}T23:59:59.999Z`) : new Date();
+  const fromDate = dateRange.from ? new Date(easternDayBounds(dateRange.from, dateRange.from).from) : new Date(0);
+  const toDate = dateRange.to ? new Date(easternDayBounds(dateRange.to, dateRange.to).to) : new Date();
 
   const isWithinRange = (dateString?: string | null) => {
     if (!dateString) return false;

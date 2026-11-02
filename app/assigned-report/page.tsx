@@ -23,7 +23,7 @@ export default function AssignedReportPage() {
 }
 
 import { useCurrentMonthBounds } from "@/lib/hooks/use-current-month-bounds";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 function AssignedReportContent() {
   const { user } = useAuth();
@@ -32,17 +32,22 @@ function AssignedReportContent() {
   const [dateFrom, setDateFrom] = useState<string | undefined>();
   const [dateTo, setDateTo] = useState<string | undefined>();
 
+  const previousDefaultRange = useRef<{ from: string; to: string } | null>(null);
   useEffect(() => {
-    if (!currentMonthBounds.isLoading && dateFrom === undefined && dateTo === undefined) {
-      setDateFrom(currentMonthBounds.leadsFromIso);
-      setDateTo(currentMonthBounds.leadsToIso);
+    if (currentMonthBounds.isLoading) return;
+    const previous = previousDefaultRange.current;
+    const next = { from: currentMonthBounds.leadsFromIso, to: currentMonthBounds.leadsToIso };
+    if (!previous || (dateFrom === previous.from && dateTo === previous.to)) {
+      if (dateFrom !== next.from) setDateFrom(next.from);
+      if (dateTo !== next.to) setDateTo(next.to);
     }
-  }, [currentMonthBounds, dateFrom, dateTo]);
+    previousDefaultRange.current = next;
+  }, [currentMonthBounds.isLoading, currentMonthBounds.leadsFromIso, currentMonthBounds.leadsToIso, dateFrom, dateTo]);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['assigned-report', dateFrom, dateTo],
     queryFn: () => getAssignedReportData(user!.$id, dateFrom, dateTo),
-    enabled: !!user,
+    enabled: !!user && !currentMonthBounds.isLoading && dateFrom !== undefined && dateTo !== undefined,
   });
 
   if (isLoading) {

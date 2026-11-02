@@ -13,17 +13,17 @@ describe("expandIsoDateToStart", () => {
     expect(expandIsoDateToStart(iso)).toBe(iso);
   });
 
-  it("expands a YYYY-MM-DD date to UTC midnight as an ISO string", () => {
+  it("expands a YYYY-MM-DD date to Eastern midnight as an ISO string", () => {
     const result = expandIsoDateToStart("2026-06-22");
     expect(result).not.toBe("2026-06-22");
-    // The helper builds the boundary with Date.UTC, so the result is the
+    // The helper builds the Eastern boundary using America/New_York, so the result is the
     // same string on every machine regardless of the local timezone. That
     // matters because these helpers run inside server actions, where the
     // host timezone is not something the app controls.
-    expect(result).toBe("2026-06-22T00:00:00.000Z");
+    expect(result).toBe("2026-06-22T04:00:00.000Z");
     const resultDate = new Date(result);
     expect(Number.isNaN(resultDate.getTime())).toBe(false);
-    expect(resultDate.getUTCHours()).toBe(0);
+    expect(resultDate.getUTCHours()).toBe(4);
     expect(resultDate.getUTCMinutes()).toBe(0);
     expect(resultDate.getUTCSeconds()).toBe(0);
     expect(resultDate.getUTCMilliseconds()).toBe(0);
@@ -44,14 +44,14 @@ describe("expandIsoDateToEnd", () => {
     expect(expandIsoDateToEnd(iso)).toBe(iso);
   });
 
-  it("expands a YYYY-MM-DD date to UTC 23:59:59.999 as an ISO string", () => {
+  it("expands a YYYY-MM-DD date to Eastern 23:59:59.999 as an ISO string", () => {
     const result = expandIsoDateToEnd("2026-06-22");
-    // Inclusive end of the UTC day, so a lessThanEqual filter keeps every
+    // Inclusive end of the Eastern day, so a lessThanEqual filter keeps every
     // timestamp recorded on that date.
-    expect(result).toBe("2026-06-22T23:59:59.999Z");
+    expect(result).toBe("2026-06-23T03:59:59.999Z");
     const resultDate = new Date(result);
     expect(Number.isNaN(resultDate.getTime())).toBe(false);
-    expect(resultDate.getUTCHours()).toBe(23);
+    expect(resultDate.getUTCHours()).toBe(3);
     expect(resultDate.getUTCMinutes()).toBe(59);
     expect(resultDate.getUTCSeconds()).toBe(59);
     expect(resultDate.getUTCMilliseconds()).toBe(999);

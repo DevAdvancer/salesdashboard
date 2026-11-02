@@ -47,7 +47,7 @@ import type { PaymentInsightRecord } from "@/app/actions/client-payments/shared"
 import { getCachedBranchesAction } from '@/app/actions/branch-cache';
 import { listTechnicalPaymentsAction } from "@/app/actions/technical-payments";
 import type { TeamLeadAssignmentSummary } from "@/lib/utils/dashboard-insights";
-import { getTodayEst, getMonthStartEst, getMonthEndEst } from "@/lib/utils/est-date";
+import { getTodayEst } from "@/lib/utils/est-date";
 import type { HolidayCalendarEntry } from "@/lib/types";
 import { startLoaderSimulation, finishLoaderSimulation } from "@/utils/loader";
 
@@ -171,6 +171,13 @@ function MainDashboard({
     }
   }, [currentMonthBounds.isLoading, currentMonthBounds.leadsFromIso, dateRange]);
 
+  useEffect(() => {
+    if (currentMonthBounds.isLoading || !dateFilterType || dateFilterType === 'custom') return;
+    const from = dateFilterType === 'month' ? currentMonthBounds.leadsFromIso : currentMonthBounds.today;
+    const to = currentMonthBounds.today;
+    setDateRange(previous => previous?.from === from && previous?.to === to ? previous : { from, to });
+  }, [currentMonthBounds.isLoading, currentMonthBounds.leadsFromIso, currentMonthBounds.today, dateFilterType]);
+
   const handleDateRangeChange = (newRange: DateRange) => {
     setDateRange(newRange);
     
@@ -202,8 +209,8 @@ function MainDashboard({
   const [holidayLoading, setHolidayLoading] = useState(true);
 
   // Referral split uses the date range filter
-  const monthStartKey = dateRange?.from ?? getMonthStartEst(new Date());
-  const monthEndKey = dateRange?.to ?? getMonthEndEst(new Date());
+  const monthStartKey = dateRange?.from ?? currentMonthBounds.leadsFromIso;
+  const monthEndKey = dateRange?.to ?? currentMonthBounds.leadsToIso;
 
 
   // Payment insights (admin-like only)
@@ -340,7 +347,7 @@ function MainDashboard({
     (async () => {
       try {
         const linkedinDateRange = dateFilterType === 'month'
-          ? { from: getMonthStartEst(new Date()), to: getTodayEst() }
+          ? { from: currentMonthBounds.leadsFromIso, to: getTodayEst() }
           : dateRange;
 
         const rows = await loadLinkedinConnectionKpiProgress({
@@ -365,7 +372,7 @@ function MainDashboard({
     return () => {
       cancelled = true;
     };
-  }, [user, dateRange]);
+  }, [user, dateRange, dateFilterType, currentMonthBounds.leadsFromIso]);
 
   // ── Fetch holiday calendar (all dashboard viewers use this to disable
   // holiday selection and to exclude weekday holidays from KPI targets) ──
@@ -862,6 +869,7 @@ function MainDashboard({
 
 function LeadGenerationDashboardContent() {
   const { user } = useAuth();
+  const reportingPeriod = useCurrentMonthBounds();
   const router = useRouter();
   const [stats, setStats] = useState<{
     total: number;
@@ -878,13 +886,13 @@ function LeadGenerationDashboardContent() {
 
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || reportingPeriod.isLoading) return;
 
     let cancelled = false;
 
     (async () => {
       try {
-        const startOfMonthIso = getMonthStartEst();
+        const startOfMonthIso = reportingPeriod.leadsFromIso;
         const leads = await listLeads(
           { includeClosed: true, dateFrom: startOfMonthIso, limit: 500 },
           user.$id,
@@ -968,7 +976,7 @@ function LeadGenerationDashboardContent() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, reportingPeriod.isLoading, reportingPeriod.leadsFromIso]);
 
   if (!user) {
     return (

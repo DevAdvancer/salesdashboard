@@ -1,5 +1,7 @@
 "use server";
 
+import { easternDayBounds } from '@/lib/utils/reporting-period';
+
 import { followupPaymentRecipient, isIndependentFollowup } from '@/lib/utils/followup-payment-attribution';
 import { followupsPaymentCategory } from '@/lib/utils/followups-payment-category';
 import { getFollowupsPaymentAmount } from "@/lib/utils/followups-payment-amount";
@@ -170,8 +172,7 @@ export async function getTargetReportAction(input: {
 
   // 2. Fetch daily stats for the agents (only for leads/referrals/NI counts)
   const { from: monthFromIso, to: monthToIso } = monthBounds(input.monthKey);
-  const monthStartIso = `${monthFromIso}T00:00:00.000Z`;
-  const monthEndIso = `${monthToIso}T23:59:59.999Z`;
+  const { from: monthStartIso, to: monthEndIso } = easternDayBounds(monthFromIso, monthToIso);
 
   let leadsAndPaymentsFromIso = monthFromIso;
   let leadsAndPaymentsToIso = monthToIso;
@@ -182,8 +183,7 @@ export async function getTargetReportAction(input: {
     leadsAndPaymentsToIso = customBounds.leadsToIso;
   }
 
-  const leadsAndPaymentsStartIso = `${leadsAndPaymentsFromIso}T00:00:00.000Z`;
-  const leadsAndPaymentsEndIso = `${leadsAndPaymentsToIso}T23:59:59.999Z`;
+  const { from: leadsAndPaymentsStartIso, to: leadsAndPaymentsEndIso } = easternDayBounds(leadsAndPaymentsFromIso, leadsAndPaymentsToIso);
 
   const todayIso = getCurrentEasternIsoDate();
 
@@ -347,7 +347,7 @@ export async function getTargetReportAction(input: {
     const lead = cpLeadById.get(leadId) ?? {};
 
     const agentTotals = targetUpfrontAmounts({ payment: cp, lead,
-      from: leadsAndPaymentsStartIso, to: leadsAndPaymentsEndIso, contributorIds, followups: docs });
+      from: leadsAndPaymentsFromIso, to: leadsAndPaymentsToIso, contributorIds, followups: docs });
     for (const [agentId, amount] of agentTotals) {
       if (amount !== 0 && readableSet.has(agentId)) {
         agentStatsByUserId[agentId] ??= { achieved: 0, leadCount: 0, referralExcludedCount: 0, notInterestedCount: 0 };
@@ -428,7 +428,7 @@ export async function getTargetReportAction(input: {
     branchMap,
   });
 
-  const { from, to } = monthBounds(input.monthKey);
+  const from = leadsAndPaymentsFromIso, to = leadsAndPaymentsToIso;
   return {
     result,
     monthLabel: `${input.monthKey} (${from} → ${to})`,

@@ -24,7 +24,7 @@ import {
 import { addClientPaymentUpdateAction } from "@/app/actions/client-payments/record";
 import type { ComponentKey } from "@/lib/contexts/access-control-context";
 import type { PreviousFollowupsPayment, PaymentStatus } from "@/lib/types";
-import { getCurrentEasternMonthKey } from "@/lib/utils/eastern-date";
+import { useCurrentMonthBounds } from "@/lib/hooks/use-current-month-bounds";
 import { clearClientReadCache } from '@/lib/utils/client-read-cache';
 import { clearDashboardDataCache } from '@/lib/services/dashboard-data-service';
 
@@ -50,6 +50,7 @@ export default function PreviousFollowupsPaymentsPage() {
   const { user, isAdmin, isTeamLead, isOperations, serverSessionReady } =
     useAuth();
   const { toast } = useToast();
+  const reportingPeriod = useCurrentMonthBounds();
   const isAgentOrLeadGen = user?.role === "agent" || user?.role === "lead_generation";
   const canMutate = isAdmin || isTeamLead || isAgentOrLeadGen;
 
@@ -121,10 +122,10 @@ export default function PreviousFollowupsPaymentsPage() {
     return result;
   }, [payments, agentFilter, searchFilter]);
 
-  const thisMonthKey = getCurrentEasternMonthKey();
+
   const thisMonthPayments = useMemo(
-    () => filteredPayments.filter((payment) => payment.date.startsWith(thisMonthKey)),
-    [filteredPayments, thisMonthKey],
+    () => filteredPayments.filter((payment) => payment.date >= reportingPeriod.leadsFromIso && payment.date <= reportingPeriod.leadsToIso),
+    [filteredPayments, reportingPeriod.leadsFromIso, reportingPeriod.leadsToIso],
   );
 
   const closeDialog = () => {

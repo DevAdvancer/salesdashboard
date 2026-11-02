@@ -1,5 +1,7 @@
 "use server";
 
+import { easternDayBounds } from '@/lib/utils/reporting-period';
+
 import { followupPaymentRecipient, isIndependentFollowup, UNASSIGNED_FOLLOWUP_PROFILE_ID } from '@/lib/utils/followup-payment-attribution';
 import { followupsPaymentCategory } from '@/lib/utils/followups-payment-category';
 import { getFollowupsPaymentAmount } from "@/lib/utils/followups-payment-amount";
@@ -164,8 +166,7 @@ export async function getAgentPaymentDetailsAction(input: {
   const agentName = input.agentId === UNASSIGNED_FOLLOWUP_PROFILE_ID ? "Unassigned manual follow-ups" : agentDoc?.name ?? input.agentId;
 
   const { from: monthFromIso, to: monthToIso } = monthBounds(input.monthKey);
-  const monthStartIso = `${monthFromIso}T00:00:00.000Z`;
-  const monthEndIso = `${monthToIso}T23:59:59.999Z`;
+  const { from: monthStartIso, to: monthEndIso } = easternDayBounds(monthFromIso, monthToIso);
 
   let leadsAndPaymentsFromIso = monthFromIso;
   let leadsAndPaymentsToIso = monthToIso;
@@ -176,8 +177,7 @@ export async function getAgentPaymentDetailsAction(input: {
     leadsAndPaymentsToIso = customBounds.leadsToIso;
   }
 
-  const leadsAndPaymentsStartIso = `${leadsAndPaymentsFromIso}T00:00:00.000Z`;
-  const leadsAndPaymentsEndIso = `${leadsAndPaymentsToIso}T23:59:59.999Z`;
+  const { from: leadsAndPaymentsStartIso, to: leadsAndPaymentsEndIso } = easternDayBounds(leadsAndPaymentsFromIso, leadsAndPaymentsToIso);
 
 
   // ── 3.  Followup payments ─────────────────────────────────────────────
@@ -281,7 +281,7 @@ export async function getAgentPaymentDetailsAction(input: {
     const lead = cpLeadById.get(leadId) ?? {};
 
     const totalForLead = targetUpfrontAmounts({ payment: cp, lead,
-      from: leadsAndPaymentsStartIso, to: leadsAndPaymentsEndIso, contributorIds,
+      from: leadsAndPaymentsFromIso, to: leadsAndPaymentsToIso, contributorIds,
       followups: followupDocs }).get(input.agentId) ?? 0;
     if (totalForLead !== 0) {
       upfrontDetails.push({ candidateName: parseLeadName(lead), amount: totalForLead, leadId, category: 'upfront' });

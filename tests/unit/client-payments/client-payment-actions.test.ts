@@ -1,3 +1,4 @@
+jest.mock('@/lib/server/reporting-calendar', () => ({ readReportingWindows: jest.fn(async () => []) }));
 export {};
 jest.mock('@/lib/server/client-payment-reconciliation', () => ({
   readReconciledPaymentDocuments: async (_databases: unknown, documents: unknown[]) => documents,

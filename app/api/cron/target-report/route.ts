@@ -1,7 +1,8 @@
+import { easternDayBounds } from '@/lib/utils/reporting-period';
 import { followupPaymentRecipient, isIndependentFollowup } from '@/lib/utils/followup-payment-attribution';
 import { followupsPaymentCategory } from '@/lib/utils/followups-payment-category';
 import { getFollowupsPaymentAmount } from "@/lib/utils/followups-payment-amount";
-import { getTargetMonthBound } from "@/app/actions/target-month-bounds";
+import { readTargetMonthBound as getTargetMonthBound, readCurrentReportingPeriod } from "@/lib/server/reporting-calendar";
 import { NextResponse, type NextRequest } from "next/server";
 import { targetUpfrontAmounts } from "@/lib/utils/target-payment-attribution";
 import { getPaymentCycleAttribution } from '@/lib/utils/lead-payment-cycle';
@@ -54,12 +55,11 @@ export async function GET(request: NextRequest) {
   }
 
   const todayIso = getCurrentEasternIsoDate(); // e.g. "2026-09-01T15:00:00.000Z"
-  // Compute eastern date
-  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
 
   const { databases } = await createAdminClient();
-  const todayKey = now.toISOString().slice(0, 10);
-  const monthKey = todayKey.slice(0, 7); // e.g. "2026-09"
+  const todayKey = getCurrentEasternIsoDate();
+  const reportingPeriod = await readCurrentReportingPeriod();
+  const monthKey = reportingPeriod.monthKey;
 
   const reportEmails = await getReportEmails(databases);
   if (reportEmails.length === 0) {
@@ -116,8 +116,7 @@ export async function GET(request: NextRequest) {
   const readableAgentIds = allUsers.map((u) => u.$id);
 
   const { from: monthFromIso, to: monthToIso } = monthBounds(monthKey);
-  const monthStartIso = `${monthFromIso}T00:00:00.000Z`;
-  const monthEndIso = `${monthToIso}T23:59:59.999Z`;
+  const { from: monthStartIso, to: monthEndIso } = easternDayBounds(monthFromIso, monthToIso);
 
   let leadsAndPaymentsFromIso = monthFromIso;
   let leadsAndPaymentsToIso = monthToIso;
@@ -128,8 +127,7 @@ export async function GET(request: NextRequest) {
     leadsAndPaymentsToIso = customBounds.leadsToIso;
   }
 
-  const leadsAndPaymentsStartIso = `${leadsAndPaymentsFromIso}T00:00:00.000Z`;
-  const leadsAndPaymentsEndIso = `${leadsAndPaymentsToIso}T23:59:59.999Z`;
+  const { from: leadsAndPaymentsStartIso, to: leadsAndPaymentsEndIso } = easternDayBounds(leadsAndPaymentsFromIso, leadsAndPaymentsToIso);
 
 
   const agentStatsByUserId: Record<string, any> = {};
@@ -267,7 +265,7 @@ export async function GET(request: NextRequest) {
     const lead = cpLeadById.get(leadId) ?? {};
 
     const agentTotals = targetUpfrontAmounts({ payment: cp, lead,
-      from: leadsAndPaymentsStartIso, to: leadsAndPaymentsEndIso, contributorIds, followups: followupsDocs });
+      from: leadsAndPaymentsFromIso, to: leadsAndPaymentsToIso, contributorIds, followups: followupsDocs });
     for (const [agentId, amount] of agentTotals) {
       if (amount !== 0 && readableSet.has(agentId)) {
         agentStatsByUserId[agentId] ??= { achieved: 0, leadCount: 0, referralExcludedCount: 0, notInterestedCount: 0 };
@@ -316,7 +314,7 @@ export async function GET(request: NextRequest) {
     branchMap,
   });
 
-  const isMonthOver = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() === now.getDate();
+  const isMonthOver = todayKey >= reportingPeriod.leadsToIso;
   let html = `<h2>Target Report - ${monthKey}</h2>`;
   html += `<table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%; max-width: 800px;">
     <tr style="background-color: #f9fafb;">

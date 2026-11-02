@@ -3,6 +3,7 @@ import type { ComponentKey, UserRole } from '@/lib/types';
 type RoleAccessMap = Record<ComponentKey, readonly UserRole[]>;
 
 export const COMPONENT_ACCESS: RoleAccessMap = {
+  'client-progress': ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent', 'lead_generation', 'compliance'],
   dashboard: ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent', 'lead_generation'],
   chat: ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent', 'lead_generation'],
   leads: ['admin', 'developer', 'monitor', 'operations', 'senior_tl', 'team_lead', 'agent', 'lead_generation'],

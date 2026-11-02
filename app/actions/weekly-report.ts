@@ -1,5 +1,7 @@
 "use server";
 
+import { paymentBusinessDate } from '@/lib/utils/target-payment-attribution';
+
 import { getFollowupsPaymentAmount } from "@/lib/utils/followups-payment-amount";
 import { getPaymentCycleAttribution } from '@/lib/utils/lead-payment-cycle';
 
@@ -516,8 +518,8 @@ export async function getWeeklyReportAction(input: {
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.AGENT_DAILY_STATS,
     queries: [
-      Query.greaterThanEqual("dateKey", range.from.slice(0, 10)),
-      Query.lessThanEqual("dateKey", range.to.slice(0, 10)),
+      Query.greaterThanEqual("dateKey", paymentBusinessDate(range.from)),
+      Query.lessThanEqual("dateKey", paymentBusinessDate(range.to)),
       Query.orderAsc("$id"),
     ],
     pageLimit: 100,
@@ -525,8 +527,8 @@ export async function getWeeklyReportAction(input: {
   });
 
   const todayIso = getCurrentEasternIsoDate();
-  const fromIso = range.from.slice(0, 10);
-  const toIso = range.to.slice(0, 10);
+  const fromIso = paymentBusinessDate(range.from);
+  const toIso = paymentBusinessDate(range.to);
   if (fromIso <= todayIso && toIso >= todayIso) {
     const todayStats = await computeAgentStatsForDate(todayIso);
     for (let index = stats.length - 1; index >= 0; index--) {

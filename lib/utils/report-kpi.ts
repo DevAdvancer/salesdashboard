@@ -1,3 +1,4 @@
+import { getCurrentEasternIsoDate } from '@/lib/utils/eastern-date';
 export interface WorkingDayRange {
   from: string;
   to: string;
@@ -11,7 +12,9 @@ export interface WorkingDayKpi {
 }
 
 function parseLocalDate(value: string): Date | null {
-  const datePart = value.includes("T") ? value.split("T")[0] : value;
+  const parsedInstant = value.includes("T") ? new Date(value) : null;
+  if (parsedInstant && Number.isNaN(parsedInstant.getTime())) return null;
+  const datePart = parsedInstant ? getCurrentEasternIsoDate(parsedInstant) : value;
   if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
     const [year, month, day] = datePart.split("-").map(Number);
     return new Date(year, month - 1, day);

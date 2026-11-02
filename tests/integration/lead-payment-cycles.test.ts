@@ -1,3 +1,4 @@
+jest.mock('@/lib/server/reporting-calendar', () => ({ readReportingWindows: jest.fn(async () => []) }));
 import { COLLECTIONS } from '@/lib/constants/appwrite';
 import type { Lead } from '@/lib/types';
 import { getPaymentCycleAttribution, recordLeadLifecycleEvent } from '@/lib/utils/lead-payment-cycle';

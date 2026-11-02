@@ -9,6 +9,7 @@ import {
 import { bumpRequestCount } from "@/lib/server/appwrite-request-meter";
 import { withLeadHistory, type HistoryActor } from '@/lib/server/lead-history';
 import { withServerOwnedPermissions } from '@/lib/server/server-owned-permissions';
+import { syncClientProgress } from '@/lib/server/client-progress-sync';
 
 const adminDatabaseCacheStores = createAppwriteReadCacheStores();
 const sessionDatabaseCacheStores = createAppwriteReadCacheStores();
@@ -121,7 +122,7 @@ export async function createAdminClient(options?: { systemActor?: HistoryActor; 
           return effectiveCrmAuditActor({ id: actor.$id, name: actor.name });
         }
         return { id: 'system', name: 'System' };
-      }, options?.deactivationHandoff)), {
+      }, options?.deactivationHandoff, (before, after) => syncClientProgress(new Databases(client), before, after))), {
         namespace: "admin",
         stores: adminDatabaseCacheStores,
       });

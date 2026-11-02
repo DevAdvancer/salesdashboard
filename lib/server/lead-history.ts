@@ -51,7 +51,8 @@ export async function appendLeadHistory(databases: Databases, entry: {
 
 /** All active CRM lead actions use this shared admin client; lead pages/data need no changes. */
 export function withLeadHistory(databases: Databases, actor: () => Promise<HistoryActor>,
-  handoff?: { fromUserId: string; toUserId: string; actorId: string; leadId: string; updatedAt: string }): Databases {
+  handoff?: { fromUserId: string; toUserId: string; actorId: string; leadId: string; updatedAt: string },
+  onLeadSaved?: (before: Models.Document | null, after: Models.Document | null) => Promise<void>): Databases {
   return new Proxy(databases, {
     get(target, property, receiver) {
       const method = Reflect.get(target, property, receiver);
@@ -152,6 +153,7 @@ export function withLeadHistory(databases: Databases, actor: () => Promise<Histo
           if (isLead) invalidateLinkedinLeadPreviews();
           if (isLead && !deleting) await saveLeadProfileRegistry(target,saved);
           await appendLeadHistory(target,{ ...event,eventType:operation,payload:{ intentId, changes, documentUpdatedAt:saved?.$updatedAt || null } });
+          if (isLead && onLeadSaved) await onLeadSaved(before, deleting ? null : saved);
           return saved;
         };
         return profileUrl ? withLinkedinProfileLock(target,profileUrl,id,run) : run();

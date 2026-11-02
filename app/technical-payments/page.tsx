@@ -1,5 +1,7 @@
 "use client";
 
+import { getCurrentEasternIsoDate } from '@/lib/utils/eastern-date';
+
 import { useEffect, useState, useMemo, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -190,8 +192,9 @@ function TechnicalPaymentsPage() {
   const filtered = useMemo(() => {
     const result = payments.filter((p) => {
       if (typeFilter !== "all" && p.type !== typeFilter) return false;
-      if (dateFrom && p.createdAt < dateFrom) return false;
-      if (dateTo && p.createdAt > dateTo + "T23:59:59") return false;
+      const businessDate = getCurrentEasternIsoDate(new Date(p.createdAt));
+      if (dateFrom && businessDate < dateFrom) return false;
+      if (dateTo && businessDate > dateTo) return false;
       if (searchAgent && !p.userName.toLowerCase().includes(searchAgent.toLowerCase())) return false;
       if (companySearch && !p.leadName.toLowerCase().includes(companySearch.toLowerCase())) return false;
       return true;
@@ -229,6 +232,17 @@ function TechnicalPaymentsPage() {
   }, [filtered]);
 
   const currentMonthBounds = useCurrentMonthBounds();
+  const previousDefaultRange = useRef<{ from: string; to: string } | null>(null);
+  useEffect(() => {
+    if (currentMonthBounds.isLoading) return;
+    const previous = previousDefaultRange.current;
+    const next = { from: currentMonthBounds.leadsFromIso, to: currentMonthBounds.today };
+    if (!previous || (dateFrom === previous.from && dateTo === previous.to)) {
+      if (dateFrom !== next.from) setDateFrom(next.from);
+      if (dateTo !== next.to) setDateTo(next.to);
+    }
+    previousDefaultRange.current = next;
+  }, [currentMonthBounds.isLoading, currentMonthBounds.leadsFromIso, currentMonthBounds.today, dateFrom, dateTo]);
   const presets = dateRangePresets(currentMonthBounds.leadsFromIso);
 
   const handleSort = (field: SortField) => {
@@ -241,7 +255,7 @@ function TechnicalPaymentsPage() {
   };
 
   const clearFilters = () => {
-    setDateFrom(getMonthStartEst());
+    setDateFrom(currentMonthBounds.leadsFromIso);
     setDateTo(getTodayEst());
     setTypeFilter("all");
     setSearchAgent("");

@@ -2,13 +2,14 @@
 
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Button } from "@/components/ui/button";
 import { DashboardDateRange } from "@/components/dashboard/dashboard-date-range";
 import { NotificationBell } from "@/components/notification-bell";
-import { getTodayEst, getMonthStartEst } from "@/lib/utils/est-date";
+import { useCurrentMonthBounds } from '@/lib/hooks/use-current-month-bounds';
+import { reportingPeriodThroughToday } from '@/lib/utils/reporting-period';
 import type { DateRange } from "@/lib/utils/dashboard-kpi";
 import { getResumeDashboardDataAction, type ResumeDashboardData } from "@/app/actions/resume-dashboard";
 import { ResumeTopMetrics } from "@/components/resume-dashboard/resume-top-metrics";
@@ -19,26 +20,23 @@ import { ResumeRecentActivity } from "@/components/resume-dashboard/resume-recen
 function ResumeDashboardContent() {
   const { user, isAdmin, isMonitor, isOperations, activeDashboard } = useAuth();
   const router = useRouter();
+  const reportingPeriod = useCurrentMonthBounds();
+  const [customRange, setCustomRange] = useState<DateRange | null>(null);
 
   // Guard
   const canBeOnResumeView = isAdmin || isMonitor || isOperations || activeDashboard === "resume";
 
   // State
-  const [dateRange, setDateRange] = useState<DateRange>(() => {
-    if (typeof window === "undefined") return { from: getTodayEst(), to: getTodayEst() };
-    const savedFilter = window.localStorage.getItem('resume_dashboard_date_filter');
-    const today = getTodayEst();
-    if (savedFilter === 'month') {
-      return { from: getMonthStartEst(new Date()), to: today };
-    }
-    return { from: today, to: today };
-  });
-
+  const [rangeMode, setRangeMode] = useState(() => typeof window !== 'undefined' && window.localStorage.getItem('resume_dashboard_date_filter') === 'month' ? 'month' : 'today');
+  const dateRange = useMemo(() => customRange || (rangeMode === 'month' ? reportingPeriodThroughToday(reportingPeriod, reportingPeriod.today) : { from: reportingPeriod.today, to: reportingPeriod.today }), [customRange, rangeMode, reportingPeriod.leadsFromIso, reportingPeriod.leadsToIso, reportingPeriod.today]);
   const [dashboardData, setDashboardData] = useState<ResumeDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
   const handleDateRangeChange = (newRange: DateRange) => {
-    setDateRange(newRange);
+    const month = reportingPeriodThroughToday(reportingPeriod, reportingPeriod.today);
+    const mode = newRange.from === month.from && newRange.to === month.to ? 'month' : newRange.from === reportingPeriod.today && newRange.to === reportingPeriod.today ? 'today' : 'custom';
+    setRangeMode(mode);
+    setCustomRange(mode === 'custom' ? newRange : null);
     if (newRange.from && newRange.to && newRange.from === newRange.to) {
       localStorage.setItem('resume_dashboard_date_filter', 'today');
     } else {
@@ -47,7 +45,7 @@ function ResumeDashboardContent() {
   };
 
   useEffect(() => {
-    if (user && canBeOnResumeView && dateRange) {
+    if (user && canBeOnResumeView && !reportingPeriod.isLoading && dateRange) {
       let cancelled = false;
       setLoading(true);
       
@@ -67,7 +65,7 @@ function ResumeDashboardContent() {
         cancelled = true;
       };
     }
-  }, [user, canBeOnResumeView, dateRange]);
+  }, [user, canBeOnResumeView, dateRange, reportingPeriod.isLoading]);
 
   if (user && !canBeOnResumeView) {
     return (
@@ -75,7 +73,7 @@ function ResumeDashboardContent() {
         <CardHeader>
           <CardTitle>Access denied</CardTitle>
           <CardDescription>
-            You don't have access to this dashboard. Returning you to the sales dashboard...
+            You don&apos;t have access to this dashboard. Returning you to the sales dashboard...
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -102,6 +100,8 @@ function ResumeDashboardContent() {
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <NotificationBell />
           <DashboardDateRange
+            customMonthStart={reportingPeriod.leadsFromIso}
+            customMonthEnd={reportingPeriod.leadsToIso}
             value={dateRange}
             onChange={handleDateRangeChange}
           />
