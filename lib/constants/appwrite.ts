@@ -73,7 +73,6 @@ export const COLLECTIONS = {
   // Daily pre-aggregated caches to prevent massive listAllDocuments reads
   LINKEDIN_DAILY_STATS: process.env.NEXT_PUBLIC_APPWRITE_LINKEDIN_DAILY_STATS_COLLECTION_ID || 'linkedin_daily_stats',
   AGENT_DAILY_STATS: process.env.NEXT_PUBLIC_APPWRITE_AGENT_DAILY_STATS_COLLECTION_ID || 'agent_daily_stats',
-  CALENDAR_EVENTS: process.env.NEXT_PUBLIC_APPWRITE_CALENDAR_EVENTS_COLLECTION_ID || 'calendar_events',
   TEAM_REPORTS: process.env.NEXT_PUBLIC_APPWRITE_TEAM_REPORTS_COLLECTION_ID || 'team_reports',
   TARGET_MONTH_BOUNDS: process.env.NEXT_PUBLIC_APPWRITE_TARGET_MONTH_BOUNDS_COLLECTION_ID || 'target_month_bounds',
   // Single server-managed document containing the recipients for scheduled report emails.

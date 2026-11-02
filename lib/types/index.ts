@@ -421,7 +421,6 @@ export type ComponentKey =
   | 'request-calls'
   | 'call-requests'
   | 'assigned-report'
-  | 'calendar'
   | 'team-report'
   | 'compliance-dashboard'
   | 'resume-reports'
@@ -865,19 +864,4 @@ export interface HolidayCalendarEntry {
   name: string;
   createdAt: string;
   createdByName?: string | null;
-}
-
-export interface CalendarEvent {
-  $id: string;
-  userId: string;
-  type: string;
-  title?: string | null;
-  priority?: string | null;
-  candidateName?: string | null;
-  notes?: string | null;
-  date: string; // ISO string
-  reminderEnabled?: boolean | null;
-  reminderSent?: boolean | null;
-  createdAt: string;
-  updatedAt?: string | null;
 }

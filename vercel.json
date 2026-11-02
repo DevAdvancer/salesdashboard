@@ -35,16 +35,12 @@
       "schedule": "0 0 * * *"
     },
     {
-      "path": "/api/cron/calendar-reminders",
-      "schedule": "*/5 * * * *"
-    },
-    {
       "path": "/api/cron/daily-report-summary",
       "schedule": "0 21 * * 1-5"
     },
     {
       "path": "/api/cron/target-report",
-      "schedule": "0 22 * * 5"
+      "schedule": "0 22 * * *"
     },
     {
       "path": "/api/cron/aggregate-linkedin-stats",

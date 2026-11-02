@@ -26,7 +26,6 @@ import {
   Users,
   Video,
   Wallet,
-  AlarmClock,
 } from 'lucide-react';
 
 export type AppIcon = ComponentType<{ className?: string; size?: number }>;
@@ -76,7 +75,6 @@ export const appIcons = {
   resumeProfiles: FileText,
   resumeMarketing: TrendingUp,
   assignedReport: ClipboardCheck,
-  calendar: AlarmClock,
 } satisfies Record<string, AppIcon>;
 
 export const NAV_ITEMS: NavItem[] = [
@@ -118,5 +116,4 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'settings', label: 'Settings', href: '/settings', icon: appIcons.settings },
   { key: 'beta', label: 'Beta', href: '/beta', icon: appIcons.beta },
   { key: 'assigned-report', label: 'Assigned Report', href: '/assigned-report', icon: appIcons.assignedReport },
-  { key: 'calendar', label: 'Reminders', href: '/reminders', icon: appIcons.calendar },
 ];

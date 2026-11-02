@@ -12,6 +12,8 @@
     "test:coverage": "jest --coverage",
     "setup:appwrite": "tsx scripts/sync-appwrite-schema.ts",
     "setup:appwrite:dry": "tsx scripts/sync-appwrite-schema.ts --dry-run",
+    "retire:reminders:dry": "tsx scripts/retire-reminders.ts",
+    "retire:reminders:apply": "tsx scripts/retire-reminders.ts --apply",
     "setup:crm-access:dry": "tsx scripts/setup-crm-access.ts",
     "audit:native-mfa": "tsx scripts/audit-native-mfa.ts",
     "enable:native-mfa:dry": "tsx scripts/enable-native-mfa.ts",

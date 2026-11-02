@@ -43,7 +43,6 @@ export type ComponentKey =
   | 'request-calls'
   | 'call-requests'
   | 'assigned-report'
-  | 'calendar'
   | 'team-report'
   | 'compliance-dashboard'
   | 'resume-reports'
@@ -81,7 +80,6 @@ const SALES_ONLY_COMPONENTS = new Set<ComponentKey>([
   'request-calls',
   'my-call-requests',
   'assigned-report',
-  'calendar',
 ]);
 
 function canCrossDashboards(role: NonNullable<ReturnType<typeof useAuth>['user']>['role']) {

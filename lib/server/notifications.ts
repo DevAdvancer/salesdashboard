@@ -63,7 +63,6 @@ function getNotificationLink(targetId?: string | null, targetType?: string | nul
   if (type === 'interview') return `${CRM_PUBLIC_URL}/resume/${targetId}`; // Or another appropriate route if interview has its own
   if (type === 'mock') return `${CRM_PUBLIC_URL}/resume/${targetId}`; // Same here
   if (type === 'user') return `${CRM_PUBLIC_URL}/profile/${targetId}`;
-  if (type === 'calendar') return `${CRM_PUBLIC_URL}/reminders`;
   if (type === 'linkedin_requests') return `${CRM_PUBLIC_URL}/linkedin-requests`;
   return null;
 }

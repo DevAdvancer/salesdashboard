@@ -459,26 +459,6 @@ const collectionSchemas: Record<string, { attributes: SchemaAttr[]; indexes: Sch
         { key: 'compliance_status_idx', type: 'key', attributes: ['complianceStatus'] },
     ],
   },
-  [COLLECTIONS.CALENDAR_EVENTS]: {
-    attributes: [
-      { key: 'userId', type: 'string', required: true, size: 255 },
-      { key: 'type', type: 'string', required: true, size: 255 },
-      { key: 'title', type: 'string', required: false, size: 500 },
-      { key: 'priority', type: 'string', required: false, size: 50 },
-      { key: 'candidateName', type: 'string', required: true, size: 255 },
-      { key: 'notes', type: 'string', required: false, size: 5000 },
-      { key: 'date', type: 'datetime', required: true },
-      { key: 'reminderEnabled', type: 'boolean', required: false, default: false },
-      { key: 'reminderSent', type: 'boolean', required: false, default: false },
-      { key: 'createdAt', type: 'datetime', required: true },
-      { key: 'updatedAt', type: 'datetime', required: false },
-    ],
-    indexes: [
-      { key: 'user_idx', type: 'key', attributes: ['userId'] },
-      { key: 'date_idx', type: 'key', attributes: ['date'] },
-      { key: 'reminder_idx', type: 'key', attributes: ['reminderEnabled', 'reminderSent'] },
-    ],
-  },
   [COLLECTIONS.TEAM_REPORTS]: {
     attributes: [
       { key: 'companyName', type: 'string', required: true, size: 255 },

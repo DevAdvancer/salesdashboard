@@ -2,10 +2,9 @@ import { easternDayBounds } from '@/lib/utils/reporting-period';
 import { followupPaymentRecipient, isIndependentFollowup } from '@/lib/utils/followup-payment-attribution';
 import { followupsPaymentCategory } from '@/lib/utils/followups-payment-category';
 import { getFollowupsPaymentAmount } from "@/lib/utils/followups-payment-amount";
-import { readTargetMonthBound as getTargetMonthBound, readCurrentReportingPeriod } from "@/lib/server/reporting-calendar";
+import { readCurrentReportingPeriod } from "@/lib/server/reporting-calendar";
 import { NextResponse, type NextRequest } from "next/server";
 import { targetUpfrontAmounts } from "@/lib/utils/target-payment-attribution";
-import { getPaymentCycleAttribution } from '@/lib/utils/lead-payment-cycle';
 import { Query } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
@@ -15,6 +14,7 @@ import { getReportEmails } from "@/lib/server/report-email-settings";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import { buildTargetReport } from "@/lib/utils/monthly-target-report";
 import { computeAgentStatsForDate } from "@/lib/server/stats-aggregator";
+import { targetReportEmailDates, targetReportEmailSchedule, targetReportEmailSubject } from '@/lib/utils/target-report-email';
 
 function getAuthorizationToken(request: NextRequest) {
   const header = request.headers.get("authorization");
@@ -30,18 +30,6 @@ function isAuthorized(request: NextRequest) {
   return Boolean(provided) && provided === expected;
 }
 
-function monthBounds(monthKey: string) {
-  const [yearStr, monthStr] = monthKey.split("-");
-  const year = Number(yearStr);
-  const month = Number(monthStr);
-  const start = new Date(Date.UTC(year, month - 1, 1));
-  const end = new Date(Date.UTC(year, month, 0));
-  return {
-    from: start.toISOString().slice(0, 10),
-    to: end.toISOString().slice(0, 10),
-  };
-}
-
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -54,12 +42,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const todayIso = getCurrentEasternIsoDate(); // e.g. "2026-09-01T15:00:00.000Z"
+  const now = new Date();
+  const todayIso = getCurrentEasternIsoDate(now);
 
   const { databases } = await createAdminClient();
-  const todayKey = getCurrentEasternIsoDate();
-  const reportingPeriod = await readCurrentReportingPeriod();
+  const reportingPeriod = await readCurrentReportingPeriod(now);
   const monthKey = reportingPeriod.monthKey;
+  const { shouldSend, isFinal } = targetReportEmailSchedule(reportingPeriod, now);
+  if (!shouldSend) {
+    return NextResponse.json({ ok: true, skipped: true, reason: 'Not a weekly or final report date' });
+  }
 
   const reportEmails = await getReportEmails(databases);
   if (reportEmails.length === 0) {
@@ -115,17 +107,8 @@ export async function GET(request: NextRequest) {
   allUsers.forEach((u) => usersByAgentId.set(u.$id, u));
   const readableAgentIds = allUsers.map((u) => u.$id);
 
-  const { from: monthFromIso, to: monthToIso } = monthBounds(monthKey);
-  const { from: monthStartIso, to: monthEndIso } = easternDayBounds(monthFromIso, monthToIso);
-
-  let leadsAndPaymentsFromIso = monthFromIso;
-  let leadsAndPaymentsToIso = monthToIso;
-  const monthKeyToUse = monthKey;
-  const customBounds = await getTargetMonthBound(monthKeyToUse);
-  if (customBounds) {
-    leadsAndPaymentsFromIso = customBounds.leadsFromIso;
-    leadsAndPaymentsToIso = customBounds.leadsToIso;
-  }
+  const leadsAndPaymentsFromIso = reportingPeriod.leadsFromIso;
+  const leadsAndPaymentsToIso = reportingPeriod.leadsToIso;
 
   const { from: leadsAndPaymentsStartIso, to: leadsAndPaymentsEndIso } = easternDayBounds(leadsAndPaymentsFromIso, leadsAndPaymentsToIso);
 
@@ -314,8 +297,9 @@ export async function GET(request: NextRequest) {
     branchMap,
   });
 
-  const isMonthOver = todayKey >= reportingPeriod.leadsToIso;
-  let html = `<h2>Target Report - ${monthKey}</h2>`;
+  const isMonthOver = isFinal;
+  let html = `<h2>${isFinal ? 'Final' : 'Weekly'} Target Report - ${monthKey}</h2>`;
+  html += `<p>${targetReportEmailDates(reportingPeriod)}</p>`;
   html += `<table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%; max-width: 800px;">
     <tr style="background-color: #f9fafb;">
       <th style="text-align: left;">TL / Agent</th>
@@ -367,7 +351,7 @@ export async function GET(request: NextRequest) {
   html += `<br><p style="font-size: 12px; color: #6b7280;">You are receiving this because of a new notification in the CRM. This email and any attachments are confidential and intended solely for the addressee.<br />This is sent from crm.silverspaceinc.tech. Please don't reply to this mail.</p>`;
 
   const toEmails = reportEmails.join(",");
-  const subject = `Target Report - ${monthKey}`;
+  const subject = targetReportEmailSubject(monthKey);
   await sendNotificationEmail({ to: toEmails, subject, html, allowAllRecipients: true });
 
   return NextResponse.json({ ok: true, sentTo: reportEmails.length });

@@ -9,6 +9,7 @@ import { isRoleEligibleForComponent } from "@/lib/constants/component-access";
 import type { MonthlyTarget, MonthlyTargetAssignment, User } from "@/lib/types";
 import { getAgentsByTeamLead, getUserByIdOrNull } from "@/lib/services/user-service";
 import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
+import { sendTargetAssignmentEmail } from '@/lib/server/target-assignment-email';
 
 /**
  * Server actions for the monthly-target feature.
@@ -393,6 +394,10 @@ export async function upsertMonthlyTeamTargetAction(input: {
         payload,
       );
 
+  if (!existing || Number(existing.totalAmount) !== amount) {
+    await sendTargetAssignmentEmail({ email: tl.email, name: tl.name,
+      monthKey: input.monthKey, amount, scope: 'team' });
+  }
   return mapTarget(doc);
 }
 
@@ -431,7 +436,7 @@ export async function replaceMonthlyTargetAssignmentsAction(input: {
   const validAgentIds = new Set<string>(teamAgents.map((a) => a.$id));
   
   // Allow assigning to the TL themselves (if they are a valid TL)
-  const targetTlUser = await getActor(targetTeamLeadId).catch(() => null);
+  const targetTlUser = await getUserByIdOrNull(targetTeamLeadId);
   if (targetTlUser && targetTlUser.role === "team_lead") {
     validAgentIds.add(targetTeamLeadId);
     if (!teamAgents.some(a => a.$id === targetTeamLeadId)) {
@@ -518,6 +523,13 @@ export async function replaceMonthlyTargetAssignmentsAction(input: {
     }
   }
 
+  for (const next of cleaned) {
+    const existing = existingByAgent.get(next.agentId);
+    if (existing && Number(existing.amount) === next.amount) continue;
+    const agent = teamAgents.find(user => user.$id === next.agentId);
+    if (agent) await sendTargetAssignmentEmail({ email: agent.email, name: agent.name,
+      monthKey: String(target.monthKey), amount: next.amount, scope: 'personal' });
+  }
   return results;
 }
 

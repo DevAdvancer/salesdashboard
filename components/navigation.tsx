@@ -549,9 +549,9 @@ export function Navigation({
                 <h1
                   style={{
                     fontFamily: "var(--font-bebas), 'Arial Narrow', Arial, sans-serif",
-                    fontSize: "1.2rem",
-                    fontWeight: 700,
-                    letterSpacing: "0.04em",
+                    fontSize: "1.3rem",
+                    fontWeight: 500,
+                    letterSpacing: "0.1em",
                     color: "var(--foreground)",
                     lineHeight: 1.2,
                     margin: 0,

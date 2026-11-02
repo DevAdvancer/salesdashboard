@@ -25,7 +25,6 @@ export type ComponentKey =
   | 'target-report'
   | 'followups-payments'
   | 'payments-report'
-  | 'calendar'
   | 'team-report'
   | 'compliance-dashboard'
   | 'resume-reports'
@@ -243,13 +242,4 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'followups-payments', role: 'team_lead', allowed: true },
   { componentKey: 'followups-payments', role: 'agent', allowed: false },
   { componentKey: 'followups-payments', role: 'lead_generation', allowed: false },
-  // Calendar rules - sales only, open to all sales roles
-  { componentKey: 'calendar', role: 'admin', allowed: true },
-  { componentKey: 'calendar', role: 'developer', allowed: true },
-  { componentKey: 'calendar', role: 'monitor', allowed: true },
-  { componentKey: 'calendar', role: 'operations', allowed: true },
-  { componentKey: 'calendar', role: 'senior_tl', allowed: true },
-  { componentKey: 'calendar', role: 'team_lead', allowed: true },
-  { componentKey: 'calendar', role: 'agent', allowed: true },
-  { componentKey: 'calendar', role: 'lead_generation', allowed: true },
 ];
