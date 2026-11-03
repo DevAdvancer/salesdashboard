@@ -3,6 +3,7 @@ import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { sendNotificationEmail } from './email-service';
 import { createAdminClient } from './appwrite';
 import { CRM_PUBLIC_URL } from './crm-url';
+import { queuePushToUser } from './web-push';
 
 interface CreateNotificationInput {
   recipientId: string;
@@ -41,6 +42,10 @@ export async function createNotificationRecord(
       createdAt: new Date().toISOString(),
     }
   );
+
+  // Desktop/phone pop-up even when no CRM tab is visible. Sent after the response.
+  queuePushToUser(input.recipientId, { title: input.title, body: input.body, tag: record.$id,
+    url: getNotificationLink(input.targetId, input.targetType)?.replace(CRM_PUBLIC_URL, '') || '/notifications' });
 
   await sendEmailForNotification(
     input.recipientId, 

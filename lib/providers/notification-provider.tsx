@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { client } from "@/lib/appwrite";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { useToast } from "@/components/ui/use-toast";
+import { enableWebPush } from "@/lib/utils/web-push-client";
 
 function playChime() {
   try {
@@ -64,16 +65,31 @@ export function NotificationProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const { user } = useAuth();
+  const { user, serverSessionReady } = useAuth();
   const { toast } = useToast();
   const isVisible = useIsVisible();
+  // While Web Push is active the service worker shows the desktop pop-up for
+  // notifications (also when this tab is hidden or closed); the page only toasts.
+  const pushActive = useRef(false);
+  const userId = user?.$id;
+  const impersonating = Boolean(user?.impersonatorUserId);
 
-  // Request browser notification permissions once on mount
+  // Ask for permission once, then subscribe this browser for the signed-in user.
   useEffect(() => {
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
+    pushActive.current = false;
+    if (!("Notification" in window)) return;
+    if (!userId || !serverSessionReady || impersonating) {
+      if (Notification.permission === "default") void Notification.requestPermission();
+      return;
     }
-  }, []);
+    let cancelled = false;
+    const permission = Notification.permission === "default" ? Notification.requestPermission() : Promise.resolve(Notification.permission);
+    void permission
+      .then(result => (result === "granted" ? enableWebPush(userId) : false))
+      .then(active => { if (!cancelled) pushActive.current = active; })
+      .catch(() => { /* Browser push unavailable; in-page notifications still work. */ });
+    return () => { cancelled = true; };
+  }, [userId, serverSessionReady, impersonating]);
 
   useEffect(() => {
     if (!user || !isVisible) return;
@@ -99,7 +115,7 @@ export function NotificationProvider({
               description: payload.body,
             });
             // Trigger a browser notification for standard system notifications
-            showBrowserNotification(payload.title || "New Notification", payload.body, "/notifications");
+            if (!pushActive.current) showBrowserNotification(payload.title || "New Notification", payload.body, "/notifications");
           }
         }
         

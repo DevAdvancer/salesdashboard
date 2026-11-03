@@ -6,6 +6,7 @@ import { User, UserRole, Department, AuthContext as AuthContextType } from '@/li
 import { deleteAppwritePresence } from '@/lib/utils/appwrite-presences';
 import { clearBrowserQueryClient } from '@/lib/queries/client';
 import { withClientTimeout } from '@/lib/utils/client-timeout';
+import { disableWebPush } from '@/lib/utils/web-push-client';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const SERVER_SESSION_SYNC_COOLDOWN_MS = 5 * 60 * 1000;
@@ -376,6 +377,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (user?.$id) {
         await deleteAppwritePresence({ presenceId: user.$id }).catch(() => {});
       }
+      // Before the session ends: the next person on this browser must not get these pushes.
+      await disableWebPush().catch(() => {});
       await account.deleteSession('current').catch(() => {});
     } catch (error) {
       console.error('Logout error:', error);
