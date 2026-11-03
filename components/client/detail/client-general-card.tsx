@@ -3,6 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { FormField, LeadData } from "@/lib/types";
+import { getLinkedinProfileValue, isLinkedinProfileField } from "@/lib/utils/lead-linkedin-field";
 
 interface ClientGeneralCardProps {
   formFields: FormField[];
@@ -14,7 +15,9 @@ export function ClientGeneralCard({
   leadData,
 }: ClientGeneralCardProps) {
   const renderField = (field: FormField) => {
-    const rawValue = leadData[field.key];
+    const rawValue = isLinkedinProfileField(field)
+      ? getLinkedinProfileValue(leadData, [field])
+      : leadData[field.key];
     const value =
       rawValue === null || rawValue === undefined
         ? ""

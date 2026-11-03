@@ -51,9 +51,11 @@ export function getLinkedinProfileValue(
   }
 
   // Fall back to the canonical LinkedIn keys, then to the legacy alias.
-  const fallback =
-    data.linkedinProfileUrl ?? data.linkedinProfile ?? data.field_16;
-  return typeof fallback === "string" ? fallback.trim() : "";
+  for (const key of ["linkedinProfileUrl", "linkedinProfile", "field_16"]) {
+    const value = data[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
 }
 
 export function getLinkedinProfileDefaultValues(

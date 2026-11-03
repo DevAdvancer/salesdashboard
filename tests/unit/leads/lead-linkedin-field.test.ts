@@ -71,6 +71,12 @@ describe("lead linkedin field helpers", () => {
     ).toBe("https://linkedin.com/in/legacy-fallback");
   });
 
+  it("skips empty canonical values when a legacy alias has the saved URL", () => {
+    expect(getLinkedinProfileValue({ linkedinProfileUrl: ' ', linkedinProfile: '',
+      field_16: 'https://linkedin.com/in/legacy' }, [linkedinProfileUrlField]))
+      .toBe('https://linkedin.com/in/legacy');
+  });
+
   it("does not write back to the legacy field_16 key (read-only alias)", () => {
     expect(
       getLinkedinProfileDefaultValues(
