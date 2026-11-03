@@ -356,6 +356,8 @@ export interface LeadListFilters {
   /** When true, restrict to leads owned by OR assigned to the requesting user. */
   mine?: boolean;
   excludeClientStatuses?: boolean;
+  /** Primary descending order; Client History uses the actual closure time. */
+  sortBy?: 'closedAt' | 'updatedAt';
 }
 
 // Form configuration types

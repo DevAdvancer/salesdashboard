@@ -70,6 +70,12 @@ export function useLeadsQuery({
       return response.json();
     },
     enabled: Boolean(userId),
+    // History must include closures made in another tab or server instance.
+    ...(filters.isClosed === true && filters.sortBy === 'closedAt' ? {
+      staleTime: 0,
+      refetchOnMount: 'always' as const,
+      refetchOnWindowFocus: true,
+    } : {}),
     placeholderData: keepPreviousData,
   });
 }

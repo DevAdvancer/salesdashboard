@@ -103,7 +103,9 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
     await assertAuthenticatedUserId(userId);
     const { databases } = await createAdminClient();
     // Another instance may have written the change, so this one's cache can be stale.
-    if (options?.fresh) databases.clearReadCacheForCollection(COLLECTIONS.LEADS);
+    if (options?.fresh || (filters.isClosed === true && filters.sortBy === 'closedAt')) {
+      databases.clearReadCacheForCollection(COLLECTIONS.LEADS);
+    }
     const queries: string[] = [];
 
     // Role-based filtering
@@ -272,8 +274,8 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
       queries.push(Query.lessThanEqual('closedAt', to));
     }
 
-    // Order by last updated date (newest first)
-    queries.push(Query.orderDesc('$updatedAt'));
+    // Sort before pagination so every Client History page follows closure time.
+    queries.push(Query.orderDesc(filters.sortBy === 'closedAt' ? 'closedAt' : '$updatedAt'));
     queries.push(Query.orderDesc('$id')); // Tie-breaker for cursor pagination
 
     // Pagination: clamp pageSize to a max of 100 to prevent abuse.

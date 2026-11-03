@@ -256,10 +256,12 @@ const mockListDocuments = jest.fn(async (_db: string, collection: string, querie
   const source = collection.includes('user') ? USERS : LEADS;
   return evaluate(source, queries);
 });
+const mockClearReadCacheForCollection = jest.fn();
 
 jest.mock('@/lib/server/appwrite', () => ({
   createAdminClient: async () => ({
-    databases: { getDocument: mockGetDocument, listDocuments: mockListDocuments },
+    databases: { getDocument: mockGetDocument, listDocuments: mockListDocuments,
+      clearReadCacheForCollection: mockClearReadCacheForCollection },
   }),
   createSessionClient: jest.fn(),
 }));
@@ -272,6 +274,34 @@ async function visibleIdsFor(userId: string) {
   const res = await listLeadsAction({}, userId, user.role, [], { forExport: true });
   return res.leads.map((l: any) => l.$id).sort();
 }
+
+describe('Client History closure ordering', () => {
+  const rows = [
+    { $id: 'old-edited', closedAt: '2026-10-01T18:00:00.000Z', $updatedAt: '2026-11-04T18:00:00.000Z' },
+    { $id: 'latest', closedAt: '2026-11-03T18:00:00.000Z', $updatedAt: '2026-11-03T18:00:00.000Z' },
+    { $id: 'previous', closedAt: '2026-11-02T18:00:00.000Z', $updatedAt: '2026-11-02T18:00:00.000Z' },
+  ].map(row => ({ ...row, ownerId: AGENT_A1, assignedToId: AGENT_A1,
+    isClosed: true, status: 'Won', $createdAt: '2026-01-01T18:00:00.000Z' }));
+
+  it('sorts by closure before paginating even when an older client was edited later', async () => {
+    mockListDocuments.mockImplementationOnce(async (_db, _collection, queries) => evaluate(rows, queries));
+    const first = await listLeadsAction({ isClosed: true, sortBy: 'closedAt' }, AGENT_A1, 'agent', [], { page: 1, pageSize: 2 });
+    expect(first.leads.map((row: any) => row.$id)).toEqual(['latest', 'previous']);
+    expect(mockListDocuments).toHaveBeenLastCalledWith(expect.any(String), expect.any(String),
+      expect.arrayContaining([{ t: 'orderDesc', k: 'closedAt' }, { t: 'orderDesc', k: '$id' }]));
+    mockListDocuments.mockImplementationOnce(async (_db, _collection, queries) => evaluate(rows, queries));
+    const second = await listLeadsAction({ isClosed: true, sortBy: 'closedAt' }, AGENT_A1, 'agent', [], { page: 2, pageSize: 2 });
+    expect(second.leads.map((row: any) => row.$id)).toEqual(['old-edited']);
+    expect(mockClearReadCacheForCollection).toHaveBeenCalledWith('test-leads-collection');
+  });
+
+  it('filters by the Eastern closure day while retaining leads created earlier', async () => {
+    mockListDocuments.mockImplementationOnce(async (_db, _collection, queries) => evaluate(rows, queries));
+    const result = await listLeadsAction({ isClosed: true, sortBy: 'closedAt',
+      closedAtFrom: '2026-11-03', closedAtTo: '2026-11-03' }, AGENT_A1, 'agent', [], { page: 1, pageSize: 10 });
+    expect(result.leads.map((row: any) => row.$id)).toEqual(['latest']);
+  });
+});
 
 // ---------------------------------------------------------------------------
 
