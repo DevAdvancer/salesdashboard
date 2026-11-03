@@ -10,7 +10,8 @@ import { removePushSubscriptionAction, savePushSubscriptionAction } from '@/app/
 import { pushSubscriptionDocumentId } from '@/lib/server/web-push';
 
 const endpoint = 'https://fcm.googleapis.com/fcm/send/abc';
-const subscription = { endpoint, keys: { p256dh: 'BNcRdreALRFX', auth: 'tBHItJI5svbpez7KI4CCXg' } };
+// Deliberately synthetic base64url-compatible values; no real browser subscription.
+const subscription = { endpoint, keys: { p256dh: 'test-public-key', auth: 'test-auth-key' } };
 beforeEach(() => { jest.clearAllMocks(); mockImpersonating = false; });
 
 it('creates one server-only record per browser, or moves it to the signed-in user', async () => {
@@ -19,7 +20,7 @@ it('creates one server-only record per browser, or moves it to the signed-in use
   const id = pushSubscriptionDocumentId(endpoint);
   expect(id).toHaveLength(32);
   expect(mockDb.createDocument).toHaveBeenCalledWith(expect.any(String), expect.any(String), id,
-    { userId: 'me', endpoint, p256dh: 'BNcRdreALRFX', auth: 'tBHItJI5svbpez7KI4CCXg' }, []);
+    { userId: 'me', endpoint, p256dh: 'test-public-key', auth: 'test-auth-key' }, []);
   mockDb.updateDocument.mockResolvedValueOnce({});
   await savePushSubscriptionAction(subscription);
   expect(mockDb.updateDocument).toHaveBeenLastCalledWith(expect.any(String), expect.any(String), id, expect.objectContaining({ userId: 'me' }));

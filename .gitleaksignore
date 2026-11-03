@@ -17,3 +17,8 @@ f6399b0411c7bd70f08f2acf21cbe42c704773f3:app/leads/new/page.tsx:linkedin-client-
 
 # The dashboard's `dateFilterType === 'month'` comparison was misidentified as a LinkedIn client ID.
 c42fb25a7cff14cce2befb1ebc1fdcd67879284f:app/dashboard/page.tsx:linkedin-client-id:340
+
+# Mock-only PushSubscription auth fixture in a Jest test (no live push endpoint).
+# The current fixture uses explicit test values; retain only these historical exceptions.
+59aae21a6b48c86eb9315d4554befe43186a3ce0:tests/unit/push/push-actions.test.ts:generic-api-key:13
+59aae21a6b48c86eb9315d4554befe43186a3ce0:tests/unit/push/push-actions.test.ts:generic-api-key:22
