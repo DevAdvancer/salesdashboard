@@ -18,6 +18,7 @@ import { invalidateUsersCache } from '@/lib/services/user-service';
 import { databases } from '@/lib/appwrite';
 import { COLLECTIONS } from '@/lib/constants/appwrite';
 import { useQueryClient } from '@tanstack/react-query';
+import { ImpersonationStart } from '@/components/impersonation-control';
 
 export default function UserManagementPage() {
   return (
@@ -58,6 +59,7 @@ function UserManagementContent() {
 
   return (
     <div className="container mx-auto">
+      <ImpersonationStart />
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
