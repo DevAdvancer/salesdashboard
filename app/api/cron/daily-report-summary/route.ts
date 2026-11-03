@@ -37,6 +37,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Vercel schedules are UTC: 5 PM Eastern is 21:00 in EDT and 22:00 in EST.
+  // Both hours invoke this route; skip the inactive hour before any data reads.
+  const easternHour = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date());
+  if (easternHour !== "17") {
+    return NextResponse.json({ ok: true, skipped: true, reason: "Not 5 PM Eastern" });
+  }
+
   const { databases } = await createAdminClient();
   const todayKey = getTodayEst();
   const holidays = await listHolidayDateKeys({ databases, from: todayKey, to: todayKey });

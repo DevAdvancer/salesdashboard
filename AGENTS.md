@@ -272,7 +272,7 @@ Handlers live under [app/api/cron/](app/api/cron/) and authenticate via `CRON_SE
 | `partial-paid-reminders` | Follow up on partially paid client payments | Yes, `0 5 * * 1-5` |
 | `cleanup-notifications` | Clean up old notifications | Yes, `0 0 * * *` |
 | `calendar-reminders` | Send upcoming calendar event reminders | Yes, `*/5 * * * *` |
-| `daily-report-summary` | Send daily summary report email | Yes, `0 21 * * 1-5` |
+| `daily-report-summary` | Send daily summary report email at 5 PM Eastern (EST/EDT); handler skips the inactive UTC hour | Yes, `0 21,22 * * 1-5` |
 | `target-report` | Send weekly target report email | Yes, `0 22 * * 5` |
 | `aggregate-linkedin-stats` | Pre-aggregate daily LinkedIn stats | Yes, `0 4 * * *` |
 | `aggregate-agent-stats` | Pre-aggregate daily agent stats | Yes, `0 4 * * *` |
