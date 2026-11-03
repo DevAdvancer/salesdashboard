@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,7 +80,7 @@ export function ClientIntakeCard({
 
     if (field.type === "dropdown") {
       return (
-        <select
+        <CrmSelect
           id={field.key}
           className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           value={value}
@@ -92,7 +94,7 @@ export function ClientIntakeCard({
               {option}
             </option>
           ))}
-        </select>
+        </CrmSelect>
       );
     }
 

@@ -1,3 +1,4 @@
+import { CrmSelect } from '@/components/ui/crm-select';
 import { User, Branch, Department } from "@/lib/types";
 import {
   Card,
@@ -206,7 +207,7 @@ export function CreateUserDialog({
                 <div>
                   <Label htmlFor="create-team-lead">Assign Team Lead</Label>
                   <div className="mt-1">
-                    <select
+                    <CrmSelect
                       id="create-team-lead"
                       className="w-full h-10 pl-3 pr-8 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       value={selectedTeamLeadId || ""}
@@ -221,7 +222,7 @@ export function CreateUserDialog({
                           {tl.name}
                         </option>
                       ))}
-                    </select>
+                    </CrmSelect>
                   </div>
                 </div>
               )}
@@ -262,7 +263,7 @@ export function CreateUserDialog({
                 {selectedBranchIds.length > 1 && (
                   <div className="pt-2">
                     <Label htmlFor="create-primary-branch">Primary Branch</Label>
-                    <select
+                    <CrmSelect
                       id="create-primary-branch"
                       value={selectedPrimaryBranchId || ''}
                       onChange={(e) => setSelectedPrimaryBranchId(e.target.value || null)}
@@ -274,7 +275,7 @@ export function CreateUserDialog({
                           {branch.name}
                         </option>
                       ))}
-                    </select>
+                    </CrmSelect>
                   </div>
                 )}
               </div>

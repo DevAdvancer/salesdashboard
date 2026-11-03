@@ -1,3 +1,5 @@
+import { targetReportBranchOwners } from '@/lib/server/target-report-branch-owners';
+import { targetReportBranchSplits } from '@/lib/utils/target-report-branch-splits';
 import { easternDayBounds } from '@/lib/utils/reporting-period';
 import { followupPaymentRecipient, isIndependentFollowup } from '@/lib/utils/followup-payment-attribution';
 import { followupsPaymentCategory } from '@/lib/utils/followups-payment-category';
@@ -282,7 +284,9 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const branchMap = new Map<string, string>();
+  const branchDocs = await listAllDocuments<any>({ databases, databaseId: DATABASE_ID, collectionId: COLLECTIONS.BRANCHES,
+    queries: [Query.select(['$id', 'name'])], requireComplete: true });
+  const branchMap = new Map<string, string>(branchDocs.map(branch => [branch.$id, branch.name]));
 
   const result = buildTargetReport({
     monthKey,
@@ -297,6 +301,11 @@ export async function GET(request: NextRequest) {
     branchMap,
   });
 
+  const branchLeads = new Map([...followupLeadById, ...cpLeadById]);
+  const branchOwners = await targetReportBranchOwners(databases, usersByAgentId, branchLeads, clientPayments);
+  result.branchSplits = targetReportBranchSplits({ result, users: branchOwners, branches: branchMap,
+    payments: clientPayments, leads: branchLeads, followups: followupsDocs,
+    contributorIds, from: leadsAndPaymentsFromIso, to: leadsAndPaymentsToIso });
   const isMonthOver = isFinal;
   let html = `<h2>${isFinal ? 'Final' : 'Weekly'} Target Report - ${monthKey}</h2>`;
   html += `<p>${targetReportEmailDates(reportingPeriod)}</p>`;
@@ -346,6 +355,9 @@ export async function GET(request: NextRequest) {
     ${isMonthOver ? `<td></td>` : ''}
   </tr>`;
 
+  for (const split of result.branchSplits) {
+    html += `<tr><td>${split.branchName.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!)} Split</td><td></td><td style="text-align: right;">${currencyFormatter.format(split.amount)}</td><td></td>${isMonthOver ? '<td></td>' : ''}</tr>`;
+  }
   html += `</table>`;
 
   html += `<br><p style="font-size: 12px; color: #6b7280;">You are receiving this because of a new notification in the CRM. This email and any attachments are confidential and intended solely for the addressee.<br />This is sent from crm.silverspaceinc.tech. Please don't reply to this mail.</p>`;

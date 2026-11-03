@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentEasternIsoDate } from '@/lib/utils/eastern-date';
 import { attendanceGateApplies } from '@/lib/utils/crm-access-policy';
@@ -567,7 +569,7 @@ function AttendanceContent() {
                                     Mark Present
                                   </label>
                                 )}
-                                <select
+                                <CrmSelect
                                   className="w-full h-10 pl-3 pr-8 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                   value={assignedValue}
                                   onChange={(e) =>
@@ -592,7 +594,7 @@ function AttendanceContent() {
                                         {d.userName}
                                       </option>
                                     ))}
-                                </select>
+                                </CrmSelect>
                               </div>
                             </td>
                           </tr>
@@ -615,7 +617,7 @@ function AttendanceContent() {
           {isAdminLikeAttendance && teamLeadDelegateOptions.length > 0 && (
             <div className="mb-4 max-w-sm">
               <Label htmlFor="team-lead-select">Select Team</Label>
-              <select
+              <CrmSelect
                 id="team-lead-select"
                 className="mt-1 w-full h-10 pl-3 pr-8 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 value={selectedTeamLeadId}
@@ -625,7 +627,7 @@ function AttendanceContent() {
                     {tl.userName}
                   </option>
                 ))}
-              </select>
+              </CrmSelect>
             </div>
           )}
           {!teamLoading && !error && flagSummary && (
@@ -706,7 +708,7 @@ function AttendanceContent() {
                                 Mark Present
                               </label>
                             )}
-                            <select
+                            <CrmSelect
                               className="w-full h-10 pl-3 pr-8 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                               value={assignedValue}
                               onChange={(e) =>
@@ -729,7 +731,7 @@ function AttendanceContent() {
                                     {d.userName}
                                   </option>
                                 ))}
-                            </select>
+                            </CrmSelect>
                           </div>
                         </td>
                         <td className="p-3 text-muted-foreground">

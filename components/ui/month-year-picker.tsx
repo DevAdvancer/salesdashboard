@@ -1,5 +1,7 @@
 'use client';
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import * as React from 'react';
 import { getCurrentEasternIsoDate } from '@/lib/utils/eastern-date';
 
@@ -63,7 +65,7 @@ export function MonthYearPicker({ value, onChange, className, disabled }: MonthY
 
   return (
     <div className={`flex gap-1.5 ${className || ''}`}>
-      <select
+      <CrmSelect
         value={month}
         onChange={handleMonthChange}
         disabled={disabled}
@@ -75,8 +77,8 @@ export function MonthYearPicker({ value, onChange, className, disabled }: MonthY
             {m.label}
           </option>
         ))}
-      </select>
-      <select
+      </CrmSelect>
+      <CrmSelect
         value={year}
         onChange={handleYearChange}
         disabled={disabled}
@@ -88,7 +90,7 @@ export function MonthYearPicker({ value, onChange, className, disabled }: MonthY
             {y}
           </option>
         ))}
-      </select>
+      </CrmSelect>
     </div>
   );
 }

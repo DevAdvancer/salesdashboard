@@ -1,3 +1,4 @@
+import { CrmSelect } from '@/components/ui/crm-select';
 import { User, Branch, Department, UserRole } from "@/lib/types";
 import {
   Card,
@@ -92,7 +93,7 @@ export function EditUserDialog({
             {isAdmin && (
               <div>
                 <Label>Role</Label>
-                  <select
+                  <CrmSelect
                     id="edit-role"
                     value={editRole || ""}
                     onChange={(e) => setEditRole(e.target.value as any)}
@@ -109,7 +110,7 @@ export function EditUserDialog({
                     {editDepartment !== "resume" && (
                       <option value="lead_generation">Lead Generation</option>
                     )}
-                  </select>
+                  </CrmSelect>
               </div>
             )}
 
@@ -137,7 +138,7 @@ export function EditUserDialog({
               editRole !== "operations" && (
                 <div>
                   <Label htmlFor="edit-department">Department</Label>
-                  <select
+                  <CrmSelect
                     id="edit-department"
                     className="mt-1 w-full h-10 pl-3 pr-8 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     value={editDepartment}
@@ -146,7 +147,7 @@ export function EditUserDialog({
                     }>
                     <option value="sales">Sales</option>
                     <option value="resume">Resume</option>
-                  </select>
+                  </CrmSelect>
                   <p className="text-xs text-muted-foreground mt-1">
                     Sales users land on the main dashboard; Resume users
                     land on the Resume team dashboard.
@@ -162,7 +163,7 @@ export function EditUserDialog({
                 <div>
                   <Label htmlFor="edit-team-lead">Assign Team Lead</Label>
                   <div className="mt-1">
-                    <select
+                    <CrmSelect
                       id="edit-team-lead"
                       className="w-full h-10 pl-3 pr-8 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       value={selectedTeamLeadId || ""}
@@ -177,7 +178,7 @@ export function EditUserDialog({
                           {tl.name}
                         </option>
                       ))}
-                    </select>
+                    </CrmSelect>
                   </div>
                 </div>
               )}
@@ -217,7 +218,7 @@ export function EditUserDialog({
             {selectedBranchIds.length > 1 && (
               <div className="space-y-2">
                 <Label htmlFor="edit-primary-branch">Primary Branch</Label>
-                <select
+                <CrmSelect
                   id="edit-primary-branch"
                   value={selectedPrimaryBranchId || ''}
                   onChange={(e) => setSelectedPrimaryBranchId(e.target.value || null)}
@@ -229,7 +230,7 @@ export function EditUserDialog({
                       {branch.name}
                     </option>
                   ))}
-                </select>
+                </CrmSelect>
               </div>
             )}
 

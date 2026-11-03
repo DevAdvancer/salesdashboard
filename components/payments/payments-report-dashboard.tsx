@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw, Search } from "lucide-react";
@@ -193,7 +195,7 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
                   ))}
                 </div>
                 <div className="w-full sm:w-48">
-                  <select
+                  <CrmSelect
                     className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     value={agentFilter}
                     onChange={(e) => setAgentFilter(e.target.value)}
@@ -203,7 +205,7 @@ export function PaymentsReportDashboard({ user }: { user: User }) {
                     {uniqueAgents.map(([id, name]) => (
                       <option key={id} value={id}>{name}</option>
                     ))}
-                  </select>
+                  </CrmSelect>
                 </div>
                 <div className="relative min-w-[180px]">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />

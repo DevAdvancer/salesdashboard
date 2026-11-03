@@ -141,6 +141,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       )) as Record<string, unknown> & { $id: string; $createdAt: string; $updatedAt: string };
 
       const userData = {
+        ...(typeof userDoc.impersonatorUserId === 'string' ? { impersonatorUserId: userDoc.impersonatorUserId,
+          impersonatorName: typeof userDoc.impersonatorName === 'string' ? userDoc.impersonatorName : 'Operator' } : {}),
         $id: userDoc.$id,
         name: userDoc.name as string,
         email: userDoc.email as string,

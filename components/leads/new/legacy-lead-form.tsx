@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -469,7 +471,7 @@ export function LegacyNewLeadContent() {
           {isAdmin && branches.length > 0 && (
             <div className="mb-6 pb-6 border-b">
               <Label htmlFor="branch">Branch</Label>
-              <select
+              <CrmSelect
                 id="branch"
                 className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 mt-2"
                 value={selectedBranch}
@@ -480,7 +482,7 @@ export function LegacyNewLeadContent() {
                     {branch.name}
                   </option>
                 ))}
-              </select>
+              </CrmSelect>
             </div>
           )}
 

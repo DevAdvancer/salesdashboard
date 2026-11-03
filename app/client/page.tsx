@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/auth-context";
@@ -399,7 +401,7 @@ function HistoryContent() {
           </div>
           <div>
             <Label htmlFor="clientPaymentFilter">Payment</Label>
-            <select
+            <CrmSelect
               id="clientPaymentFilter"
               className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground"
               value={paymentFilter}
@@ -417,7 +419,7 @@ function HistoryContent() {
               <option value="non_upfront">Non-Upfront</option>
               <option value="fully_paid">Fully Paid</option>
               <option value="refunded">Refunded</option>
-            </select>
+            </CrmSelect>
           </div>
           <div className="sm:col-span-2">
             <Label htmlFor="clientDateRange">Date Range</Label>
@@ -451,7 +453,7 @@ function HistoryContent() {
           {canFilterByAgent && agents.length > 0 && (
             <div>
               <Label htmlFor="clientAgentFilter">Agent</Label>
-              <select
+              <CrmSelect
                 id="clientAgentFilter"
                 className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground"
                 value={filters.agentId ?? ""}
@@ -468,13 +470,13 @@ function HistoryContent() {
                     {agent.name}
                   </option>
                 ))}
-              </select>
+              </CrmSelect>
             </div>
           )}
           {canFilterByAgent && agents.length > 0 && (
             <div>
               <Label htmlFor="clientTeamFilter">Team</Label>
-              <select
+              <CrmSelect
                 id="clientTeamFilter"
                 className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground"
                 value={teamLeadId ?? ""}
@@ -488,13 +490,13 @@ function HistoryContent() {
                     Team of {tl.name}
                   </option>
                 ))}
-              </select>
+              </CrmSelect>
             </div>
           )}
           {canFilterByBranch && (
             <div>
               <Label htmlFor="clientBranchFilter">Branch</Label>
-              <select
+              <CrmSelect
                 id="clientBranchFilter"
                 className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground"
                 value={filters.branchId ?? ""}
@@ -511,7 +513,7 @@ function HistoryContent() {
                     {branch.name}
                   </option>
                 ))}
-              </select>
+              </CrmSelect>
             </div>
           )}
           <div className="sm:col-span-2 md:col-span-4 flex justify-end gap-2 mt-4">

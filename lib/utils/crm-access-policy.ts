@@ -33,7 +33,7 @@ export function bypassCrmGate(path: string, method: string, serverAction: boolea
   if (serverAction) return false;
   if (path === '/api/public/client-card' && method === 'POST') return true; // Read-only, token-validated public card handler.
   if (path.startsWith('/api/cron/')) return true; // Each job checks CRON_SECRET itself.
-  if (path === '/api/security/access' || path === '/api/auth/appwrite-session') return true;
+  if (path === '/api/security/access' || path === '/api/security/impersonation' || path === '/api/auth/appwrite-session') return true;
   // This GET handler runs verifiedBrowserActor before every snapshot. Let it
   // authorize once instead of validating the native session in proxy and handler.
   if (path === '/api/security/changes' && method === 'GET') return true;

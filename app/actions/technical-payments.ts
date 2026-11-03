@@ -1,5 +1,7 @@
 'use server';
 
+import { getPrimaryBranchId } from '@/lib/utils/user-branches';
+
 import { ID, Query } from 'node-appwrite';
 import { createAdminClient } from '@/lib/server/appwrite';
 import { assertAuthenticatedUserId } from '@/lib/server/current-user';
@@ -209,6 +211,7 @@ export async function getTechnicalPaymentTotalsByUserAction(input: {
 }
 
 export interface TechnicalPaymentSummary {
+  company?: string;
   $id: string;
   leadId: string;
   userId: string;
@@ -277,14 +280,15 @@ export async function listTechnicalPaymentsAction(
         })
       : [];
 
-  const leadDataMap = new Map<string, { name: string; email: string; branchId: string | null }>();
+  const leadDataMap = new Map<string, { name: string; email: string; branchId: string | null; company?: string }>();
   for (const lead of leadDocs) {
     try {
       const data = JSON.parse(lead.data ?? '{}') as Record<string, unknown>;
       const firstName = typeof data.firstName === 'string' ? data.firstName.trim() : '';
       const lastName = typeof data.lastName === 'string' ? data.lastName.trim() : '';
       const name = [firstName, lastName].filter(Boolean).join(' ') || data.email as string || 'Unknown';
-      leadDataMap.set(lead.$id, { name, email: (data.email as string) || '', branchId: typeof lead.branchId === 'string' ? lead.branchId : null });
+      leadDataMap.set(lead.$id, { name, email: (data.email as string) || '', branchId: typeof lead.branchId === 'string' ? lead.branchId : null,
+        company: typeof data.company === 'string' ? data.company : '' });
     } catch {
       leadDataMap.set(lead.$id, { name: 'Unknown', email: '', branchId: typeof lead.branchId === 'string' ? lead.branchId : null });
     }
@@ -310,7 +314,7 @@ export async function listTechnicalPaymentsAction(
         });
 
   const userPrimaryBranchMap = new Map<string, string | null>(
-    userDocs.map((u: any) => [u.$id, typeof u.primaryBranchId === "string" ? u.primaryBranchId : null])
+    userDocs.map((u: any) => [u.$id, getPrimaryBranchId(u)])
   );
 
   const userNameMap = new Map<string, string>(
@@ -332,7 +336,8 @@ export async function listTechnicalPaymentsAction(
       createdAt: doc.createdAt as string,
       leadName: leadMeta.name,
       leadEmail: leadMeta.email,
-      branchId: leadMeta.branchId,
+      branchId: userPrimaryBranchMap.get(userId) ?? null,
+      company: leadMeta.company || '',
     });
   }
 

@@ -8,7 +8,8 @@ jest.mock('node-appwrite', () => ({
 }));
 let mockPassHeader: string | null = null;
 const mockReadAccessPass = jest.fn((): unknown => null);
-jest.mock('next/headers', () => ({ cookies: async () => ({ get: (name: string) => ({ value: name === 'crm_appwrite_jwt' ? 'jwt' : 'proof' }) }),
+jest.mock('next/headers', () => ({ cookies: async () => ({ get: (name: string) => name === 'crm_appwrite_jwt' ? { value: 'jwt' }
+  : name === 'crm_email_verified' ? { value: 'proof' } : undefined }),
   headers: async () => ({ get: (name: string) => name === 'x-crm-access-pass' ? mockPassHeader : null }) }));
 jest.mock('@/lib/server/crm-access-pass', () => ({ readAccessPass: (...args: unknown[]) => (mockReadAccessPass as (...a: unknown[]) => unknown)(...args), signAccessPass: () => 'pass' }));
 jest.mock('@/lib/server/appwrite', () => ({ createAdminClient: async () => ({ databases: { clearReadCacheForCollection: jest.fn() } }) }));

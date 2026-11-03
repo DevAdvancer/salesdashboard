@@ -1,5 +1,8 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+import { useConfirmDialog } from '@/lib/hooks/use-confirm-dialog';
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
@@ -50,6 +53,7 @@ export default function PreviousFollowupsPaymentsPage() {
   const { user, isAdmin, isTeamLead, isOperations, serverSessionReady } =
     useAuth();
   const { toast } = useToast();
+  const { confirm, ConfirmDialog } = useConfirmDialog();
   const reportingPeriod = useCurrentMonthBounds();
   const isAgentOrLeadGen = user?.role === "agent" || user?.role === "lead_generation";
   const canMutate = isAdmin || isTeamLead || isAgentOrLeadGen;
@@ -255,9 +259,9 @@ export default function PreviousFollowupsPaymentsPage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      `Delete payment for ${payment.candidateName}?`,
-    );
+    const confirmed = await confirm({ title: 'Delete follow-up payment?',
+      description: `Remove the payment for ${payment.candidateName}? This will update the payment totals.`,
+      confirmText: 'Delete payment', destructive: true });
     if (!confirmed) return;
 
     try {
@@ -285,6 +289,7 @@ export default function PreviousFollowupsPaymentsPage() {
 
   return (
     <ProtectedRoute componentKey={COMPONENT_KEY}>
+      <ConfirmDialog />
       <div className="min-h-screen bg-background">
         <div className="container mx-auto py-10 px-4 md:px-8">
           
@@ -312,7 +317,7 @@ export default function PreviousFollowupsPaymentsPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center w-full">
               <div className="w-full sm:w-48">
-                <select
+                <CrmSelect
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                   value={agentFilter}
                   onChange={(e) => setAgentFilter(e.target.value)}
@@ -322,7 +327,7 @@ export default function PreviousFollowupsPaymentsPage() {
                   {uniqueAgents.map(([id, name]) => (
                     <option key={id} value={id}>{name}</option>
                   ))}
-                </select>
+                </CrmSelect>
               </div>
               <div className="w-full sm:w-64">
                 <input

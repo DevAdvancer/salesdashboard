@@ -1,3 +1,4 @@
+import { selectCrmOption } from '@/tests/helpers/custom-controls';
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom";
@@ -64,7 +65,7 @@ describe("LeadFollowUpCard", () => {
       <LeadFollowUpCard lead={lead} user={user} onUpdated={onUpdated} />,
     );
 
-    await userEvent.selectOptions(
+    await selectCrmOption(
       screen.getByRole("combobox", { name: /Next Action/ }),
       "Email",
     );

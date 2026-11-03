@@ -10,6 +10,8 @@ import { bumpRequestCount } from "@/lib/server/appwrite-request-meter";
 import { withLeadHistory, type HistoryActor } from '@/lib/server/lead-history';
 import { withServerOwnedPermissions } from '@/lib/server/server-owned-permissions';
 import { syncClientProgress } from '@/lib/server/client-progress-sync';
+import { CRM_IMPERSONATION_COOKIE } from '@/lib/utils/crm-impersonation';
+import { withImpersonationAudit } from '@/lib/server/impersonation-audit';
 
 const adminDatabaseCacheStores = createAppwriteReadCacheStores();
 const sessionDatabaseCacheStores = createAppwriteReadCacheStores();
@@ -21,6 +23,12 @@ function namespaceForSecret(prefix: string, value: string) {
 
 export async function createSessionClient() {
   const cookieStore = await cookies();
+  if (cookieStore.get(CRM_IMPERSONATION_COOKIE)?.value) {
+    const { resolveSecurityIdentity } = await import('@/lib/server/crm-access');
+    const identity = await resolveSecurityIdentity();
+    return { account: { get: async () => identity.account } as Account,
+      get databases(): Databases { throw new Error('Use scoped CRM actions while impersonating.'); } };
+  }
   const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!;
   const appJwt = cookieStore.get("crm_appwrite_jwt");
 
@@ -109,7 +117,7 @@ export async function createAdminClient(options?: { systemActor?: HistoryActor; 
       return new Account(client);
     },
     get databases() {
-      return createReadThroughDatabases(withServerOwnedPermissions(withLeadHistory(new Databases(client), async () => {
+      const database = withServerOwnedPermissions(withLeadHistory(new Databases(client), async () => {
         // Explicit internal jobs provide an actor only after validating their own secret.
         if (options?.systemActor) return options.systemActor;
         const { getAuthenticatedAccount } = await import('@/lib/server/current-user');
@@ -122,7 +130,8 @@ export async function createAdminClient(options?: { systemActor?: HistoryActor; 
           return effectiveCrmAuditActor({ id: actor.$id, name: actor.name });
         }
         return { id: 'system', name: 'System' };
-      }, options?.deactivationHandoff, (before, after) => syncClientProgress(new Databases(client), before, after))), {
+      }, options?.deactivationHandoff, (before, after) => syncClientProgress(new Databases(client), before, after)));
+      return createReadThroughDatabases(options?.systemActor ? database : withImpersonationAudit(database, new Databases(client)), {
         namespace: "admin",
         stores: adminDatabaseCacheStores,
       });

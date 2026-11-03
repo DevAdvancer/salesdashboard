@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { useCallback, useEffect, useState, useMemo } from "react";
 import { PhoneCall, CheckCircle2, TrendingUp, Clock, AlertCircle, Search } from "lucide-react";
 import { ProtectedRoute } from "@/components/protected-route";
@@ -106,7 +108,7 @@ function MyCallRequestsContent() {
           </div>
           <div className="flex items-center gap-2 w-full md:w-auto">
             <span className="text-sm font-semibold text-muted-foreground whitespace-nowrap">Filter Status:</span>
-            <select
+            <CrmSelect
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as CallRequestStatus | "all")}
               className="rounded-md border border-input bg-background pl-3 pr-8 py-1.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary"
@@ -116,7 +118,7 @@ function MyCallRequestsContent() {
               <option value="pending_documents">Pending Documents</option>
               <option value="call_done">Call Done</option>
               <option value="moved_to_marketing">Moved to Marketing</option>
-            </select>
+            </CrmSelect>
           </div>
         </div>
         <div className="text-sm font-medium text-muted-foreground bg-muted/50 px-3 py-1.5 rounded-md border border-border/50 whitespace-nowrap">

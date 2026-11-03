@@ -1,5 +1,7 @@
 'use client';
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { Plus, Trash2, GraduationCap, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MonthYearPicker } from '@/components/ui/month-year-picker';
@@ -88,7 +90,7 @@ export function EducationFields({ entries, onChange, legacyText }: EducationFiel
                   <label className="block text-[11px] font-medium text-muted-foreground mb-1">
                     Degree Type
                   </label>
-                  <select
+                  <CrmSelect
                     value={row.type}
                     onChange={(e) => updateRow(index, { type: e.target.value })}
                     className={inputClass}
@@ -99,7 +101,7 @@ export function EducationFields({ entries, onChange, legacyText }: EducationFiel
                         {opt}
                       </option>
                     ))}
-                  </select>
+                  </CrmSelect>
                 </div>
                 {row.type === 'Other' && (
                   <div className="flex-1">

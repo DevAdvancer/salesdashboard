@@ -1,5 +1,8 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+import { dashboardBranchRevenue, dashboardPaymentAmounts } from '@/lib/utils/dashboard-branch-revenue';
+
 import { getCurrentEasternIsoDate } from '@/lib/utils/eastern-date';
 
 import { useMemo, useState } from "react";
@@ -87,7 +90,7 @@ interface PaymentsSectionProps {
     to?: string;
   };
   /** Total from assessment + interview technical payments for the selected period. */
-  technicalPayments?: { amount: number; branchId: string | null }[];
+  technicalPayments?: { amount: number; branchId: string | null; company?: string }[];
   branches?: Branch[];
 }
 
@@ -139,26 +142,8 @@ export function PaymentsSection({
   );
   const [companyFilter, setCompanyFilter] = useState<CompanyFilter>("all");
 
-  const technicalPaymentsTotal = technicalPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-
-  const branchTotals = useMemo(() => {
-    const totals: Record<string, number> = {};
-    branches.forEach(b => totals[b.$id] = 0);
-
-    records.forEach(r => {
-      if (r.branchId && totals[r.branchId] !== undefined) {
-        totals[r.branchId] += (r.totalPaid || 0) + (r.pendingTotal || 0);
-      }
-    });
-
-    technicalPayments.forEach(t => {
-      if (t.branchId && totals[t.branchId] !== undefined) {
-        totals[t.branchId] += Number(t.amount) || 0;
-      }
-    });
-
-    return totals;
-  }, [records, technicalPayments, branches]);
+  const companyTechnicalPayments = useMemo(() => technicalPayments.filter(payment => matchesCompany(payment.company || '', companyFilter)), [technicalPayments, companyFilter]);
+  const technicalPaymentsTotal = companyTechnicalPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
   // Filter records by company first, then status.
   const companyFiltered = useMemo(
@@ -172,8 +157,8 @@ export function PaymentsSection({
     // Apply date range filter if provided
     if (dateFilter?.from || dateFilter?.to) {
       recordsToFilter = recordsToFilter.filter((r) => {
-        const recordDate =
-          toComparableIsoDate(r.closedAt) || toComparableIsoDate(r.createdAt);
+        const recordDate = r.isReceiptOnly ? r.receiptDate : r.isFollowupOnly ? r.followupsPayments?.[0]?.date || toComparableIsoDate(r.createdAt)
+          : toComparableIsoDate(r.closedAt) || toComparableIsoDate(r.createdAt);
         if (dateFilter.from) {
           if (recordDate && recordDate < dateFilter.from) return false;
         }
@@ -187,6 +172,8 @@ export function PaymentsSection({
     if (statusFilter === "all") return recordsToFilter;
     return recordsToFilter.filter((r) => r.status === statusFilter);
   }, [companyFiltered, statusFilter, dateFilter]);
+  const branchRevenue = useMemo(() => dashboardBranchRevenue(filteredRecords, companyTechnicalPayments, branches.map(branch => branch.$id)),
+    [filteredRecords, companyTechnicalPayments, branches]);
 
 
 
@@ -206,11 +193,17 @@ export function PaymentsSection({
         remaining: 0,
         count: 0,
       };
-      const followupsCollected = Math.max(0, r.followupsTotal ?? 0);
+      const amounts = dashboardPaymentAmounts(r);
+      const followupsCollected = amounts.followups;
 
       ex.pending += followupsCollected;
 
       if (r.isFollowupOnly) {
+        map.set(key, ex);
+        continue;
+      }
+      if (r.isReceiptOnly) {
+        ex.upfront += amounts.upfront;
         map.set(key, ex);
         continue;
       }
@@ -230,8 +223,8 @@ export function PaymentsSection({
       // aggregate off a clean total and show a spurious ".99". Round each
       // amount to the nearest dollar as it is summed so one fractional record
       // can't corrupt the company total.
-      const leadAmount = Math.round(r.leadAmount ?? 0);
-      const upfront = Math.round(r.upfrontAmount ?? 0);
+      const leadAmount = amounts.total;
+      const upfront = amounts.upfront;
       // Remaining = contract total - upfront - followup collections.
       const remaining = Math.max(0, leadAmount - upfront - followupsCollected);
       ex.total += leadAmount;
@@ -284,7 +277,7 @@ export function PaymentsSection({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {/* Company dropdown */}
-            <select
+            <CrmSelect
               value={companyFilter}
               onChange={(e) =>
                 setCompanyFilter(e.target.value as CompanyFilter)
@@ -297,7 +290,7 @@ export function PaymentsSection({
                   {c}
                 </option>
               ))}
-            </select>
+            </CrmSelect>
             {/* Status filter chips */}
             <div className="flex flex-wrap items-center gap-1 rounded-full border border-[var(--hairline)] bg-[var(--soft-cloud)] p-1">
               {STATUS_FILTERS.map((filter) => {
@@ -441,13 +434,17 @@ export function PaymentsSection({
 
                       <td colSpan={3} className="py-2 pl-4 text-right tabular-nums">
 
-                        {currencyFormatter.format(branchTotals[b.$id] || 0)}
+                        {currencyFormatter.format(branchRevenue.totals[b.$id] || 0)}
 
                       </td>
 
                     </tr>
 
                   ))}
+                  {branchRevenue.unassigned !== 0 && <tr className="border-t border-[var(--hairline-soft)] text-sm font-semibold text-amber-700">
+                    <td colSpan={3} className="py-2 pr-4 text-right">Unassigned branch:</td>
+                    <td colSpan={3} className="py-2 pl-4 text-right tabular-nums">{currencyFormatter.format(branchRevenue.unassigned)}</td>
+                  </tr>}
 
                 </tfoot>
               </table>

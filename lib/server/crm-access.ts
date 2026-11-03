@@ -14,6 +14,7 @@ import { createInFlightGroup } from '@/lib/utils/in-flight';
 import { bumpRequestCount } from '@/lib/server/appwrite-request-meter';
 import { memoizeCrmRequest } from '@/lib/server/crm-request-context';
 import { readCachedIdentity, storeCachedIdentity } from '@/lib/server/crm-identity-cache';
+import { APPWRITE_IMPERSONATION_HEADER, CRM_IMPERSONATION_COOKIE, hasImpersonationCapability, validImpersonationId } from '@/lib/utils/crm-impersonation';
 export { clearCrmIdentityCache } from '@/lib/server/crm-identity-cache';
 
 const inFlightIdentity = createInFlightGroup();
@@ -21,7 +22,9 @@ const inFlightReads = createInFlightGroup();
 
 export function crmAccessEnabled() { return process.env.CRM_ACCESS_ENFORCEMENT === 'true'; }
 type CookieReader = { get: (name: string) => { value: string } | undefined };
-export type SecurityIdentity = { account: Models.User<Models.Preferences>; session: Models.Session; user: User;
+type NativeAccount = Models.User<Models.Preferences> & { impersonator?: boolean; impersonatorUserId?: string };
+export type SecurityIdentity = { account: NativeAccount; session: Models.Session; user: User;
+  operator?: { account: NativeAccount; user: User };
   /** Access decision the proxy made for this same request (see CRM_ACCESS_PASS_HEADER). */
   preverified?: CrmAccessStatus };
 /** Internal request header proxy.ts forwards to the handler of the same request. */
@@ -66,19 +69,39 @@ async function checkedUser(account: Models.User<Models.Preferences>, passUser?: 
   }
   return user;
 }
-async function readSecurityIdentity(jar: CookieReader, passToken?: string | null): Promise<SecurityIdentity> {
+async function readSecurityIdentity(jar: CookieReader, passToken?: string | null, impersonation?: { targetId?: string }): Promise<SecurityIdentity> {
   const jwt = jar.get('crm_appwrite_jwt')?.value;
   const project = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!;
   const credentials = jwt ? [{ jwt }] : [`a_session_${project}`, `a_session_${project}_legacy`, project]
     .map(name => ({ session: jar.get(name)?.value })).filter(item => item.session);
   for (const credential of credentials) {
     const client = sessionClient();
+    if (impersonation) client.addHeader('X-Appwrite-Response-Format', '1.9.0');
     if ('jwt' in credential) client.setJWT(credential.jwt!);
     else client.setSession(credential.session!);
     const accountApi = new Account(client);
     let account; let session;
     try { bumpRequestCount(); bumpRequestCount(); [account, session] = await Promise.all([accountApi.get(), accountApi.getSession('current')]); }
     catch { continue; }
+    if (impersonation) {
+      // Always validate the real operator's native MFA and live activation first.
+      const operatorUser = await checkedUser(account);
+      if (nativeMfaStatus(account, session).state !== 'allowed') {
+        throw new CrmAccessError(403, 'Verify your sign-in code before impersonating a user.', 'mfa_required');
+      }
+      if (!impersonation.targetId) return { account, session, user: operatorUser };
+      if (!validImpersonationId(impersonation.targetId) || !hasImpersonationCapability(account as NativeAccount)) {
+        throw new CrmAccessError(403, 'Your Appwrite account does not have impersonation capability.', 'IMPERSONATION_DENIED');
+      }
+      client.addHeader(APPWRITE_IMPERSONATION_HEADER, impersonation.targetId);
+      bumpRequestCount();
+      const effective = await accountApi.get() as NativeAccount;
+      // Appwrite itself must confirm both identities; an ignored header never grants access.
+      if (effective.$id !== impersonation.targetId || effective.impersonatorUserId !== account.$id) {
+        throw new CrmAccessError(403, 'Appwrite could not authorize this impersonation.', 'IMPERSONATION_DENIED');
+      }
+      return { account: effective, session, user: await checkedUser(effective), operator: { account, user: operatorUser } };
+    }
     // The native session above is validated live. Only the user record and access
     // decision the proxy just read for this same request are reused, and only when
     // the signed pass is bound to this exact account and session.
@@ -106,6 +129,7 @@ function verifiedCookie(reader: CookieReader) {
 }
 /** Cookie recording a completed native MFA check for these exact credentials. */
 export function accessCookieFor(identity: SecurityIdentity, reader: CookieReader): AccessCookieWrite | null {
+  if (identity.operator || reader.get(CRM_IMPERSONATION_COOKIE)?.value) return null;
   if (nativeMfaStatus(identity.account, identity.session).state !== 'allowed') return null;
   const { account, session } = identity;
   try {
@@ -124,6 +148,10 @@ const requestIdentity = cache(async () => resolveSecurityIdentity(await cookies(
 const identityRequestKey = Symbol('crm-identity');
 export async function resolveSecurityIdentity(reader?: CookieReader, passToken?: string | null): Promise<SecurityIdentity> {
   if (!reader) return memoizeCrmRequest(identityRequestKey, requestIdentity);
+  const targetId = reader.get(CRM_IMPERSONATION_COOKIE)?.value;
+  // No settled identity cache, signed access cookie or proxy pass may stand in
+  // for the live capability check while impersonating.
+  if (targetId) return readSecurityIdentity(reader, null, { targetId });
   const settledKey = credentialKey(reader);
   const settled = readCachedIdentity<SecurityIdentity>(settledKey);
   if (settled) return settled;
@@ -144,7 +172,7 @@ export async function resolveSecurityIdentity(reader?: CookieReader, passToken?:
 }
 export async function evaluateCrmAccess(identity: SecurityIdentity): Promise<CrmAccessStatus> {
   return memoizeCrmRequest(identity, async () => ({ dateKey: getTodayEst(),
-    ...nativeMfaStatus(identity.account, identity.session),
+    ...nativeMfaStatus(identity.operator?.account || identity.account, identity.session),
   }));
 }
 /**
@@ -153,11 +181,12 @@ export async function evaluateCrmAccess(identity: SecurityIdentity): Promise<Crm
  * return a signed pass for this same request's handler, and a fresh access cookie.
  */
 export async function assertCrmAccessForProxy(reader: CookieReader): Promise<{ pass: string | null; cookie: AccessCookieWrite | null }> {
-  if (verifiedCookie(reader)) return { pass: null, cookie: null };
+  if (!reader.get(CRM_IMPERSONATION_COOKIE)?.value && verifiedCookie(reader)) return { pass: null, cookie: null };
   const identity = await resolveSecurityIdentity(reader);
   const status = await evaluateCrmAccess(identity);
   if (status.state !== 'allowed') throw new CrmAccessError(403,
     status.state === 'mfa_setup_required' ? 'Enable native Appwrite MFA to access CRM.' : 'Verify your sign-in code to access CRM.', status.state);
+  if (identity.operator) return { pass: null, cookie: null };
   let pass: string | null = null;
   try {
     const user = JSON.stringify(identity.user).length <= ACCESS_PASS_MAX_USER_CHARS ? identity.user : undefined;
@@ -176,8 +205,16 @@ export async function assertCrmAccess(reader?: CookieReader, existingIdentity?: 
 }
 /** Audit the authenticated account itself; attendance never changes the actor. */
 export async function effectiveCrmAuditActor(actor: { id: string; name: string }, existingIdentity?: SecurityIdentity) {
-  if (!crmAccessEnabled()) return actor;
+  if (!crmAccessEnabled() && !(await cookies())?.get(CRM_IMPERSONATION_COOKIE)?.value) return actor;
   const identity = existingIdentity || await resolveSecurityIdentity();
   if ((await evaluateCrmAccess(identity)).state !== 'allowed') throw new CrmAccessError(403, 'Verify your sign-in code to access CRM.');
+  if (identity.operator) return { id: identity.operator.user.$id,
+    name: `${identity.operator.user.name} (as ${identity.user.name})`,
+    impersonatedUserId: identity.user.$id, impersonatedUserName: identity.user.name };
   return { id: identity.user.$id, name: identity.user.name };
+}
+
+/** Management tooling always reads the original native account, ignoring the target cookie. */
+export async function resolveImpersonationOperator(reader: CookieReader) {
+  return readSecurityIdentity(reader, null, {});
 }

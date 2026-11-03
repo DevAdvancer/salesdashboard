@@ -15,7 +15,7 @@ export async function getActor(userId: string): Promise<User> {
     const { databases } = await createAdminClient();
     const doc = await (async () => {
             try {
-              return await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, userId);
+              return await (databases.uncachedReads ?? databases).getDocument(DATABASE_ID, COLLECTIONS.USERS, userId);
             } catch (error) {
               throw new Error(getAppwriteErrorMessage(error));
             }
@@ -27,6 +27,7 @@ export async function getActor(userId: string): Promise<User> {
     role: doc.role,
     teamLeadId: doc.teamLeadId || null,
     branchIds: doc.branchIds || [],
+    primaryBranchId: doc.primaryBranchId || null,
     branchId: doc.branchId || null,
     department: doc.department === "resume" ? "resume" : "sales",
     isActive: doc.isActive ?? true,
@@ -62,7 +63,7 @@ export function parseJsonOr<T>(value: unknown, fallback: T): T {
 
 export async function canActorAccessLead(actor: User, leadId: string): Promise<boolean> {
     const { databases } = await createAdminClient();
-    const lead = (await databases.getDocument(DATABASE_ID, COLLECTIONS.LEADS, leadId)) as any;
+    const lead = (await (databases.uncachedReads ?? databases).getDocument(DATABASE_ID, COLLECTIONS.LEADS, leadId)) as any;
     if (isAdminLikeReadRole(actor.role)) return true;
     const branchId = typeof lead.branchId === "string" ? lead.branchId : null;
     const ownerId = typeof lead.ownerId === "string" ? lead.ownerId : null;
@@ -178,6 +179,12 @@ export function toComparableIsoDate(value: string | null | undefined): string | 
 }
 
 export interface PaymentInsightRecord {
+    /** Recorded non-followup receipts in the selected business-date range. Never a plan estimate. */
+    upfrontReceived?: number;
+    isReceiptOnly?: boolean;
+    receiptDate?: string;
+    /** Source receipt branches, retained across reopened closure cycles. Empty key means unknown. */
+    followupsBranchAmounts?: Record<string, number>;
     leadId: string;
     company: string;
     source: string;

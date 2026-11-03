@@ -1,3 +1,4 @@
+import { selectCrmOption } from '@/tests/helpers/custom-controls';
 import { useState } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -40,13 +41,15 @@ describe.each(dialogs)("$name technology selection", ({ Component, initial, fiel
     const onSend = jest.fn();
     render(<Harness onSend={onSend} />);
     const select = screen.getByRole("combobox", { name: "Technology" });
-    expect(Array.from(select.querySelectorAll("option")).map((option) => option.textContent))
+    await user.click(select);
+    expect(screen.getAllByRole("option").map(option => option.textContent?.trim()))
       .toEqual(["Select technology", "Data Analyst", "Software Developer", "DevOPs", "AIML", "Other"]);
+    await user.keyboard("{Escape}");
     const send = screen.getByRole("button", { name: /^(Send (Assessment )?Request|Create Mock)$/ });
     expect(send).toBeDisabled();
 
     for (const technology of ["Data Analyst", "Software Developer", "DevOPs", "AIML"]) {
-      await user.selectOptions(select, technology);
+      await selectCrmOption(select, technology);
       await user.click(send);
       expect(onSend).toHaveBeenLastCalledWith(technology);
     }
@@ -59,7 +62,7 @@ describe.each(dialogs)("$name technology selection", ({ Component, initial, fiel
     render(<Harness onSend={onSend} />);
     const select = screen.getByRole("combobox", { name: "Technology" });
     const send = screen.getByRole("button", { name: /^(Send (Assessment )?Request|Create Mock)$/ });
-    await user.selectOptions(select, "Other");
+    await selectCrmOption(select, "Other");
     const input = screen.getByRole("textbox", { name: "Other technologies" });
     expect(send).toBeDisabled();
 
@@ -78,11 +81,11 @@ describe.each(dialogs)("$name technology selection", ({ Component, initial, fiel
     fireEvent.change(input, { target: { value: "Java, Python" } });
     expect(send).toBeEnabled();
 
-    await user.selectOptions(select, "AIML");
+    await selectCrmOption(select, "AIML");
     expect(screen.queryByRole("textbox", { name: "Other technologies" })).not.toBeInTheDocument();
     await user.click(send);
     expect(onSend).toHaveBeenLastCalledWith("AIML");
-    await user.selectOptions(select, "Other");
+    await selectCrmOption(select, "Other");
     expect(screen.getByRole("textbox", { name: "Other technologies" })).toHaveValue("");
     expect(send).toBeDisabled();
   });

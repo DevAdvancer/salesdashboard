@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import type { Dispatch, SetStateAction } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -87,7 +89,7 @@ export function LeadFiltersCard({
 
           <div>
             <Label htmlFor="status">Status</Label>
-            <select
+            <CrmSelect
               id="status"
               className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               value={statusDraft}
@@ -100,13 +102,13 @@ export function LeadFiltersCard({
                   {status}
                 </option>
               ))}
-            </select>
+            </CrmSelect>
           </div>
 
           {LEADERSHIP_ROLES.has(userRole) && (
             <div>
               <Label htmlFor="teamFilter">Team</Label>
-              <select
+              <CrmSelect
                 id="teamFilter"
                 className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 value={teamDraft}
@@ -121,13 +123,13 @@ export function LeadFiltersCard({
                     {tl.name}
                   </option>
                 ))}
-              </select>
+              </CrmSelect>
             </div>
           )}
 
           <div>
             <Label htmlFor="ownerFilter">Owner</Label>
-            <select
+            <CrmSelect
               id="ownerFilter"
               className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               value={ownerDraft}
@@ -140,12 +142,12 @@ export function LeadFiltersCard({
                   {agent.name}
                 </option>
               ))}
-            </select>
+            </CrmSelect>
           </div>
 
           <div>
             <Label htmlFor="assignedTo">Assigned To</Label>
-            <select
+            <CrmSelect
               id="assignedTo"
               className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               value={assignedToDraft}
@@ -158,12 +160,12 @@ export function LeadFiltersCard({
                   {agent.name}
                 </option>
               ))}
-            </select>
+            </CrmSelect>
           </div>
 
           <div>
             <Label htmlFor="branchFilter">Branch</Label>
-            <select
+            <CrmSelect
               id="branchFilter"
               className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               value={branchDraft}
@@ -176,7 +178,7 @@ export function LeadFiltersCard({
                   {branch.name}
                 </option>
               ))}
-            </select>
+            </CrmSelect>
           </div>
 
           <div>

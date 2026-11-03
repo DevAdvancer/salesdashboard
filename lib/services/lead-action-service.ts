@@ -171,7 +171,8 @@ export function closeLead(
   closedStatus: string,
   actorId: string,
   actorName: string,
-  actorRole?: UserRole
+  actorRole?: UserRole,
+  closingBranchId?: string,
 ): Promise<{ success: boolean; lead: Lead }> {
-  return closeLeadAction(leadId, closedStatus, actorId, actorName, actorRole).finally(clearLeadReadCache);
+  return closeLeadAction(leadId, closedStatus, actorId, actorName, actorRole, closingBranchId).finally(clearLeadReadCache);
 }

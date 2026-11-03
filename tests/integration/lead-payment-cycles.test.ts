@@ -67,6 +67,54 @@ describe('closure payment cycles', () => {
   });
   afterEach(() => jest.useRealTimers());
 
+  it('returns the selected 1200 NCR receipt and sends inherited 5000 to owner primary AHM', async () => {
+    mockDocs.set('admin', { ...mockDocs.get('admin'), branchIds: ['ahm', 'ncr'], primaryBranchId: 'ahm' });
+    for (const [id, amount, branchSource] of [['selected', 1200, 'selected'], ['legacy', 5000, undefined]] as const) {
+      mockDocs.set(id, { $id: id, ownerId: 'admin', assignedToId: 'admin', branchId: 'ncr', isClosed: true, status: 'Won', closedAt: '2026-11-02T12:00:00Z', data: JSON.stringify({ company: id, leadAmount: amount }) });
+      mockDocs.set(`payment-${id}`, { $id: `payment-${id}`, leadId: id, status: 'fully_paid', createdAt: '2026-11-02T12:00:00Z', paymentPlan: JSON.stringify({ upfrontAmount: amount, closure: { ownerId: 'admin', branchId: 'ncr', branchSource, closedAt: '2026-11-02T12:00:00Z' } }), updates: JSON.stringify([{ status: 'fully_paid', amount, createdAt: '2026-11-02T12:00:00Z' }]) });
+    }
+    const rows = await listAllPaymentInsightsAction('admin');
+    expect(rows.find(row => row.leadId === 'selected')).toMatchObject({ branchId: 'ncr', upfrontReceived: 1200 });
+    expect(rows.find(row => row.leadId === 'legacy')).toMatchObject({ branchId: 'ahm', upfrontReceived: 5000 });
+  });
+
+  it('attributes standalone follow-up receipts even when there are no client payment records', async () => {
+    mockDocs.set('agent', { $id: 'agent', name: 'Agent', role: 'agent', branchIds: ['ncr', 'ahm'], primaryBranchId: 'ahm' });
+    mockDocs.set('followup', { $id: 'followup', leadId: 'manual_followup:example', amount: 250,
+      creditedAgentId: 'agent', createdById: 'agent', company: 'Vizva INC', date: '2026-11-02', createdAt: '2026-11-02T12:00:00Z' });
+    const rows = await listAllPaymentInsightsAction('admin');
+    expect(rows).toEqual([expect.objectContaining({ isFollowupOnly: true, branchId: 'ahm', followupsTotal: 250 })]);
+    expect(mockCreateDocument).not.toHaveBeenCalled();
+    expect(mockUpdateDocument).not.toHaveBeenCalled();
+  });
+
+  it('keeps a follow-up receipt on its original cycle branch after the lead closes under another branch', async () => {
+    mockDocs.set('lead', { ...mockDocs.get('lead'), branchId: 'ahm', isClosed: true, status: 'Won' });
+    const closure = { closedAt: '2026-10-01T12:00:00Z', ownerId: 'admin', assignedToId: 'admin', branchId: 'ncr', branchSource: 'selected', leadAmount: 3000 };
+    mockDocs.set('old-payment', { $id: 'old-payment', leadId: 'lead', createdAt: '2026-10-01T12:00:00Z',
+      paymentPlan: JSON.stringify({ percent: 10, months: 3, upfrontAmount: 1000, closure }),
+      updates: JSON.stringify([{ id: 'receipt', sourceFollowupId: 'followup', amount: 250, status: 'partially_paid', createdAt: '2026-11-02T12:00:00Z' }]) });
+    mockDocs.set('new-payment', { $id: 'new-payment', leadId: 'lead', createdAt: '2026-11-01T12:00:00Z',
+      paymentPlan: JSON.stringify({ percent: 10, months: 3, upfrontAmount: 2000, closure: { ...closure, branchId: 'ahm', closedAt: '2026-11-01T12:00:00Z' } }), updates: '[]' });
+    mockDocs.set('followup', { $id: 'followup', leadId: 'lead', amount: 250, creditedAgentId: 'admin', createdById: 'admin',
+      company: 'Vizva INC', date: '2026-11-02', createdAt: '2026-11-02T12:00:00Z' });
+    const rows = await listAllPaymentInsightsAction('admin');
+    expect(rows.find(row => row.upfrontAmount === 2000)?.followupsBranchAmounts).toEqual({ ncr: 250 });
+  });
+
+  it('freezes the chosen closure branch in the payment cycle and refuses later branch rewrites', async () => {
+    mockDocs.set('agent', { $id: 'agent', name: 'Agent', role: 'agent', branchIds: ['ncr', 'ahm'] });
+    mockDocs.set('ncr', { $id: 'ncr', name: 'NCR', isActive: true });
+    mockDocs.set('ahm', { $id: 'ahm', name: 'AHM', isActive: true });
+    mockDocs.set('lead', { ...mockDocs.get('lead'), ownerId: 'agent', assignedToId: 'agent', branchId: 'ncr' });
+    const selected = { ...input, actorId: 'agent', closingBranchId: 'ahm' };
+    const payment = await upsertClientPaymentRecordAction(selected);
+    expect(JSON.parse(mockDocs.get(payment.$id).paymentPlan).closure.branchId).toBe('ahm');
+    mockDocs.set('lead', { ...mockDocs.get('lead'), branchId: 'ahm', isClosed: true });
+    await expect(upsertClientPaymentRecordAction({ ...selected, closingBranchId: 'ncr' })).rejects.toThrow('locked after');
+    expect(JSON.parse(mockDocs.get(payment.$id).paymentPlan).closure.branchId).toBe('ahm');
+  });
+
   async function reopen() {
     const lead = mockDocs.get('lead') as Lead;
     const data = recordLeadLifecycleEvent(lead, 'reopened', 'admin', 'Admin', 'Reopened', new Date().toISOString(), 'cycle-two');

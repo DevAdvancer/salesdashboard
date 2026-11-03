@@ -218,7 +218,7 @@ function MainDashboard({
     [],
   );
   const [paymentLoading, setPaymentLoading] = useState(isAdminLike);
-  const [technicalPayments, setTechnicalPayments] = useState<{ amount: number; branchId: string | null }[]>([]);
+  const [technicalPayments, setTechnicalPayments] = useState<{ amount: number; branchId: string | null; company?: string }[]>([]);
   const [branches, setBranches] = useState<import("@/lib/types").Branch[]>([]);
   const [referralData, setReferralData] = useState<ReferralSplit | null>(null);
   const [referralLoading, setReferralLoading] = useState(isAdminLike);

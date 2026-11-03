@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { useEffect, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { getAssignableUsers, getUserById } from "@/lib/services/user-service";
@@ -104,7 +106,7 @@ export function LeadAssignmentDropdown({
   return (
     <div className="space-y-2">
       <Label htmlFor="assignedToId">Assigned To</Label>
-      <select
+      <CrmSelect
         id="assignedToId"
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value || null)}
@@ -122,7 +124,7 @@ export function LeadAssignmentDropdown({
             {user.name} ({formatRole(user.role)})
           </option>
         ))}
-      </select>
+      </CrmSelect>
       {loading && (
         <p className="text-sm text-muted-foreground">Loading users...</p>
       )}

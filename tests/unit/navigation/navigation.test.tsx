@@ -34,6 +34,22 @@ describe("Navigation Component", () => {
     mockUsePathname.mockReturnValue("/dashboard");
   });
 
+  it.each(['sales', 'resume'])('hides Client Progress from the Resume dashboard for %s accounts', department => {
+    mockUseAuth.mockReturnValue({ user: { $id: 'admin', name: 'Admin', role: 'admin', department },
+      isResumeTeam: department === 'resume', activeDashboard: 'resume', logout: mockLogout } as any);
+    mockUseAccess.mockReturnValue({ canAccess: () => true, isLoading: false } as any);
+    render(<Navigation />);
+    expect(screen.queryByText('Client Progress')).not.toBeInTheDocument();
+  });
+
+  it('keeps Client Progress in the Sales dashboard', () => {
+    mockUseAuth.mockReturnValue({ user: { $id: 'admin', name: 'Admin', role: 'admin', department: 'sales' },
+      isResumeTeam: false, activeDashboard: 'sales', logout: mockLogout } as any);
+    mockUseAccess.mockReturnValue({ canAccess: () => true, isLoading: false } as any);
+    render(<Navigation />);
+    expect(screen.getByText('Client Progress')).toBeInTheDocument();
+  });
+
   describe("Agent sees only permitted components", () => {
     it("should show only dashboard and leads for agent with limited access", () => {
       mockUseAuth.mockReturnValue({

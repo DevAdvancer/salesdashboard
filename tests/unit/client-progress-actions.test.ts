@@ -55,6 +55,17 @@ test('list requests are limited to ten with actor-owned scope and exclusion pred
   expect(db.createDocument).not.toHaveBeenCalled(); expect(db.updateDocument).not.toHaveBeenCalled();
 });
 
+test('all Resume roles are rejected before any Client Progress database access', async () => {
+  await fc.assert(fc.asyncProperty(fc.constantFrom(...PROGRESS_ROLES), async role => {
+    jest.clearAllMocks();
+    (getAuthenticatedUserDoc as jest.Mock).mockResolvedValue({ ...actor, role, department: 'resume' });
+    await expect(listClientProgressAction()).rejects.toThrow('only available to the Sales department');
+    await expect(getClientProgressAction('entry')).rejects.toThrow('only available to the Sales department');
+    await expect(updateClientProgressAction({ id: 'entry', version: 'v1', patch: { notes: 'Denied' } })).rejects.toThrow('only available to the Sales department');
+    expect(createAdminClient).not.toHaveBeenCalled();
+  }));
+});
+
 test('legacy statuses display and filter under the new labels without migration writes', async () => {
   db.listDocuments.mockResolvedValueOnce({ documents: [{ ...baseline, progressStatus: 'On Hold' }], total: 1 });
   const result = await listClientProgressAction({ filters: { status: 'Hold' } });

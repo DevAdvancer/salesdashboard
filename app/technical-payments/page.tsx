@@ -442,14 +442,14 @@ function TechnicalPaymentsPage() {
 
           {/* Custom date inputs */}
           <div className="flex items-center gap-2 ml-1">
-            <input
+            <Input
               type="date"
               value={dateFrom || ""}
               onChange={(e) => setDateFrom(e.target.value)}
               className="h-8 rounded-lg border border-[var(--hairline)] bg-background px-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--ink)]/20"
             />
             <span className="text-xs text-muted-foreground">→</span>
-            <input
+            <Input
               type="date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}

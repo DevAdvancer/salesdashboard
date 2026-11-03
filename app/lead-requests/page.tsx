@@ -1,5 +1,7 @@
 'use client';
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Check, ExternalLink, RefreshCw, X } from 'lucide-react';
@@ -223,7 +225,7 @@ function LeadRequestsContent() {
                         <span className="text-xs text-[var(--muted-foreground)]">View only</span>
                       ) : (
                         <div className="grid gap-2">
-                          <select
+                          <CrmSelect
                             className="h-9 rounded-md border border-[var(--border)] bg-[var(--background)] px-2 text-sm"
                             value={assignments[request.$id]?.assignedToId ?? ''}
                             onChange={(event) => updateAssignment(request.$id, 'assignedToId', event.target.value)}
@@ -235,8 +237,8 @@ function LeadRequestsContent() {
                                 {user.name} - {user.role}
                               </option>
                             ))}
-                          </select>
-                          <select
+                          </CrmSelect>
+                          <CrmSelect
                             className="h-9 rounded-md border border-[var(--border)] bg-[var(--background)] px-2 text-sm"
                             value={assignments[request.$id]?.branchId ?? ''}
                             onChange={(event) => updateAssignment(request.$id, 'branchId', event.target.value)}
@@ -248,7 +250,7 @@ function LeadRequestsContent() {
                                 {branch.name}
                               </option>
                             ))}
-                          </select>
+                          </CrmSelect>
                         </div>
                       )}
                     </Td>

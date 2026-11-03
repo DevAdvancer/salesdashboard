@@ -1,5 +1,8 @@
 'use client';
 
+import { CrmSelect } from '@/components/ui/crm-select';
+import { useToast } from '@/components/ui/use-toast';
+
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -58,6 +61,7 @@ export function ResumeProfilesClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
+  const { toast } = useToast();
   
   const [profiles, setProfiles] = useState<(ResumeProfile & { $id: string })[]>(initialData.documents);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -107,7 +111,7 @@ export function ResumeProfilesClient({
         prev.map((p) => (p.$id === profileId ? { ...p, ...updated } : p))
       );
     } catch (err: any) {
-      alert(err?.message || 'Failed to update stage');
+      toast({ title: 'Failed to update stage', description: err?.message || 'Please try again.', variant: 'destructive' });
     } finally {
       setBusyId(null);
     }
@@ -180,7 +184,7 @@ export function ResumeProfilesClient({
               <Filter className="h-3.5 w-3.5" />
               Stage:
             </div>
-            <select
+            <CrmSelect
               value={stageFilter}
               onChange={(e) => updateSearchParam('stage', e.target.value)}
               className="rounded-md border border-input bg-background pl-3 pr-8 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary"
@@ -191,7 +195,7 @@ export function ResumeProfilesClient({
                   {formatStageLabel(st)}
                 </option>
               ))}
-            </select>
+            </CrmSelect>
 
             {user?.role !== 'agent' && (
               <>
@@ -199,7 +203,7 @@ export function ResumeProfilesClient({
                   <UserCheck className="h-3.5 w-3.5" />
                   Assigned:
                 </div>
-                <select
+                <CrmSelect
                   value={assignedFilter}
                   onChange={(e) => updateSearchParam('assignedToId', e.target.value)}
                   className="rounded-md border border-input bg-background pl-3 pr-8 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary"
@@ -210,7 +214,7 @@ export function ResumeProfilesClient({
                       {u.name}
                     </option>
                   ))}
-                </select>
+                </CrmSelect>
               </>
             )}
           </div>

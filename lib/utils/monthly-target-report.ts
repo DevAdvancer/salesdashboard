@@ -60,6 +60,7 @@ export interface TargetReportTotals {
 }
 
 export interface TargetReportResult {
+  branchSplits?: { branchId: string; branchName: string; amount: number }[];
   rows: TargetReportTlRow[];
   totals: TargetReportTotals;
   unresolvedAgentIds: string[];

@@ -1,5 +1,7 @@
 'use client';
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { useEffect, useState } from 'react';
 import { previewUserDeactivationAction, setAgentActiveAction } from '@/app/actions/user';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -68,12 +70,12 @@ export function DeactivateUserDialog({ target, actorId, onClose, onComplete }: {
       {preview && <div className="space-y-4">
         {preview.recipients.length > 0 && <div className="space-y-2">
           <Label htmlFor="handoff-recipient">Hand all leads to</Label>
-          <select id="handoff-recipient" className="w-full rounded-md border bg-background p-2 text-sm"
+          <CrmSelect id="handoff-recipient" className="w-full rounded-md border bg-background p-2 text-sm"
             value={preview.recipientId} disabled={saving || loading} onChange={event => setRecipientId(event.target.value)}>
             {preview.recipients.map(recipient => <option key={recipient.$id} value={recipient.$id}>
               {recipient.name}{recipient.$id === actorId ? ' (myself)' : ''} · {recipient.role.replaceAll('_', ' ')}
             </option>)}
-          </select>
+          </CrmSelect>
         </div>}
         <ul className="list-disc space-y-1 pl-5 text-sm">
           <li>{preview.openLeads} open leads and {preview.closedLeads} closed leads: owner and assigned user will both change.</li>

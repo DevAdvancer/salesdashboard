@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { createAdminClient } from '@/lib/server/appwrite';
 import { getAuthenticatedUserDoc } from '@/lib/server/current-user';
 import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
-import { PROGRESS_PAGE_SIZE, PROGRESS_STATUSES, PROGRESS_ROLES, DEFAULT_PROGRESS_STATUS, normalizeProgressStatus, progressStatusFilterValues, canManageProgress, canManageMarketingTl, canReadAllProgress, canEditProgress, canSeeProgress, canSaveFinalFeedback, type ProgressEntry, type ProgressEvent, type ProgressSummary } from '@/lib/client-progress';
+import { PROGRESS_PAGE_SIZE, PROGRESS_STATUSES, DEFAULT_PROGRESS_STATUS, normalizeProgressStatus, progressStatusFilterValues, canManageProgress, canManageMarketingTl, canReadAllProgress, canEditProgress, canSeeProgress, canSaveFinalFeedback, type ProgressEntry, type ProgressEvent, type ProgressSummary } from '@/lib/client-progress';
 import { closedClient } from '@/lib/server/client-progress-sync';
 import { withProgressLock, progressAudit, type StoredProgress } from '@/lib/server/client-progress-store';
 import { resolveProgressVisibleIds } from '@/lib/server/client-progress-scope';
@@ -17,6 +17,7 @@ import { clientCardShareId, newCardToken, clientCardSubject } from '@/lib/server
 import { eligibleCardLead, type StoredCardShare } from '@/lib/server/public-client-card';
 import type { ClientCardShareStatus } from '@/lib/client-progress-share';
 import { PROGRESS_SALESPERSON_ROLES } from '@/lib/client-progress';
+import { canAccessProgress } from '@/lib/client-progress';
 
 const idSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,35}$/);
 const filtersSchema = z.object({
@@ -29,7 +30,7 @@ const summarySelect = ['$id', '$updatedAt', 'leadId', 'source', 'candidateName',
 async function context(adminOnly = false) {
   const actor = await getAuthenticatedUserDoc();
   if (actor.isActive === false) throw new Error('Your account is inactive.');
-  if (!PROGRESS_ROLES.includes(actor.role)) throw new Error('Access denied.');
+  if (!canAccessProgress(actor)) throw new Error('Client Progress is only available to the Sales department.');
   if (adminOnly && !canShareProgress(actor)) throw new Error('Only Admin can manage public cards.');
   const { databases } = await createAdminClient();
   // Do not use a cross-request data cache for authorization, ownership or exclusions.
@@ -58,7 +59,8 @@ async function listClientProgress(input: { filters?: unknown } = {}) {
   const ctx = await context();
   const queries = [Query.equal('eligible', true), Query.notEqual('progressStatus', 'Backout'), Query.notEqual('progressStatus', 'Backed Out'), Query.notEqual('progressStatus', 'Not Interested'),
     Query.orderDesc('enteredAt'), Query.orderDesc('$id'), Query.limit(PROGRESS_PAGE_SIZE), Query.select(summarySelect)];
-  if (!canReadAllProgress(ctx.actor)) queries.push(Query.equal('department', ctx.actor.department || 'sales'), Query.equal('salespersonId', ctx.visibleIds));
+  queries.push(Query.equal('department', 'sales'));
+  if (!canReadAllProgress(ctx.actor)) queries.push(Query.equal('salespersonId', ctx.visibleIds));
   if (filters.search) queries.push(Query.contains('candidateName', filters.search));
   if (filters.status) queries.push(Query.equal('progressStatus', progressStatusFilterValues(filters.status)));
   if (filters.salesperson) queries.push(Query.contains('salespersonName', filters.salesperson));

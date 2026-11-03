@@ -26,6 +26,17 @@ import {
   LEAD_STATUS_SIGNED_CLOSURE,
 } from '@/lib/utils/lead-status-workflow';
 import { COLLECTIONS } from '@/lib/constants/appwrite';
+jest.mock('node-appwrite', () => jest.requireActual('appwrite'));
+jest.mock('@/lib/server/current-user', () => ({ assertAuthenticatedUserId: jest.fn() }));
+jest.mock('@/lib/server/notifications', () => ({ createNotificationsForRecipients: jest.fn() }));
+jest.mock('@/lib/server/lead-request-release', () => ({ withdrawLeadRequests: jest.fn() }));
+jest.mock('@/lib/actions/lead/visibility', () => ({ assertLeadAccessAllowed: jest.fn(), getHierarchyPermissionsServer: async () => [] }));
+jest.mock('@/lib/server/appwrite', () => ({ createAdminClient: async () => ({ databases: {
+  getDocument: async (db: string, collection: string, id: string) => collection === COLLECTIONS.BRANCHES
+    ? { $id: id, isActive: true } : databases.getDocument(db, collection, id),
+  updateDocument: (...args: unknown[]) => (databases.updateDocument as jest.Mock)(...args),
+  createDocument: async () => ({}),
+} }) }));
 
 jest.mock('@/lib/appwrite', () => ({
   account: {

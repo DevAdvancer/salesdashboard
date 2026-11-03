@@ -1,21 +1,25 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+
 import type { Dispatch, SetStateAction } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { FormField, LeadData, PaymentStatus } from "@/lib/types";
+import type { Branch, FormField, LeadData } from "@/lib/types";
 import {
   isBackoutStatus,
   isLinkedinRequestLead,
 } from "./lead-detail-utils";
-import {
-  isPaymentDetailsMissing,
-  getMissingPaymentFields,
-} from "@/lib/utils/lead-close-gate";
 
 interface LeadCloseDialogProps {
+  closeBranches: Branch[];
+  closingBranchId: string;
+  setClosingBranchId: Dispatch<SetStateAction<string>>;
+  requiresBranchChoice: boolean;
+  branchOptionsReady?: boolean;
+  branchError?: string;
   leadData: LeadData;
   leadId: string;
   userId: string;
@@ -47,6 +51,8 @@ interface LeadCloseDialogProps {
 }
 
 export function LeadCloseDialog({
+  closeBranches, closingBranchId, setClosingBranchId, requiresBranchChoice,
+  branchOptionsReady = true, branchError,
   leadData,
   closeStep,
   setCloseStep,
@@ -68,15 +74,17 @@ export function LeadCloseDialog({
   renderCloseField,
 }: LeadCloseDialogProps) {
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50">
-      <Card className="w-full sm:max-w-2xl sm:mx-4 rounded-b-none sm:rounded-b-lg">
+    <Dialog open onOpenChange={open => { if (!open && !isSaving) onClose(); }}>
+    <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto p-0" onPointerDownOutside={event => { if (isSaving) event.preventDefault(); }} onEscapeKeyDown={event => { if (isSaving) event.preventDefault(); }}>
+      <Card className="w-full border-0">
         <CardHeader>
-          <CardTitle className="flex items-center justify-between gap-3">
+          <DialogTitle className="flex items-center justify-between gap-3 pr-6">
             <span>Close Lead</span>
             <span className="text-sm text-muted-foreground">
               Step {closeStep} of 3
             </span>
-          </CardTitle>
+          </DialogTitle>
+          <DialogDescription>Review the closure, reporting branch and payment details.</DialogDescription>
         </CardHeader>
         <CardContent>
           {leadData.paymentCycleId && (
@@ -150,6 +158,15 @@ export function LeadCloseDialog({
 
           {closeStep === 3 && (
             <div className="space-y-4">
+              {!branchOptionsReady && <p role={branchError ? 'alert' : 'status'} className="text-sm text-muted-foreground">{branchError || 'Loading the lead owner’s branches…'}</p>}
+              {branchOptionsReady && requiresBranchChoice && <div className="space-y-2">
+                <Label htmlFor="closing-branch">Reporting branch{requiresBranchChoice ? ' *' : ''}</Label>
+                <CrmSelect id="closing-branch" value={closingBranchId} onChange={event => setClosingBranchId(event.target.value)} disabled={isSaving} required={requiresBranchChoice}>
+                  <option value="">Choose the branch to credit</option>
+                  {closeBranches.map(branch => <option key={branch.$id} value={branch.$id}>{branch.name}</option>)}
+                </CrmSelect>
+                <p className="text-xs text-muted-foreground">This branch receives the lead and payment attribution for this closure.</p>
+              </div>}
               <div>
                 <p className="text-sm text-muted-foreground">
                   Final Status & Confirmation
@@ -158,7 +175,7 @@ export function LeadCloseDialog({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="closeStatus">Final Status</Label>
-                  <select
+                  <CrmSelect
                     id="closeStatus"
                     className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     value={closeStatus}
@@ -176,13 +193,13 @@ export function LeadCloseDialog({
                         <option value="Rejected">Rejected</option>
                       </>
                     )}
-                  </select>
+                  </CrmSelect>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="initialPaymentStatus">
                     Initial Payment Status
                   </Label>
-                  <select
+                  <CrmSelect
                     id="initialPaymentStatus"
                     className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     value={
@@ -197,7 +214,7 @@ export function LeadCloseDialog({
                     <option value="not_paid">Not Paid</option>
                     <option value="partially_paid">Partially Paid</option>
                     <option value="fully_paid">Fully Paid</option>
-                  </select>
+                  </CrmSelect>
                 </div>
               </div>
             </div>
@@ -207,6 +224,7 @@ export function LeadCloseDialog({
             <Button
               variant="outline"
               onClick={onClose}
+              disabled={isSaving}
               className="w-full sm:w-auto">
               Cancel
             </Button>
@@ -215,6 +233,7 @@ export function LeadCloseDialog({
                 <Button
                   variant="outline"
                   onClick={() => setCloseStep((s) => Math.max(1, s - 1))}
+                  disabled={isSaving}
                   className="w-full sm:w-auto">
                   Back
                 </Button>
@@ -230,6 +249,8 @@ export function LeadCloseDialog({
                   onClick={onConfirmClose}
                   disabled={
                     isSaving ||
+                    !branchOptionsReady ||
+                    (requiresBranchChoice && !closingBranchId) ||
                     (!isBackoutStatus(closeStatus) &&
                       isCloseRequiredFieldsMissingFlag)
                   }
@@ -250,6 +271,6 @@ export function LeadCloseDialog({
           </div>
         </CardContent>
       </Card>
-    </div>
+    </DialogContent></Dialog>
   );
 }

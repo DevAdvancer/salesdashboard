@@ -1,4 +1,8 @@
 "use client";
+
+import { CrmSelect } from '@/components/ui/crm-select';
+import { getLeadClosingBranchesAction } from '@/app/actions/lead-closing-branches';
+import type { Branch } from '@/lib/types';
 import { logger } from '@/lib/utils/logger';
 
 import {
@@ -105,12 +109,28 @@ function LeadDetailContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  // Tracks when the assignment <select> is mid-flight so rapid changes don't
+  // Tracks when the assignment <CrmSelect> is mid-flight so rapid changes don't
   // fire multiple assignLead() calls before the lead data has been reloaded.
   const [isAssigning, setIsAssigning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | null>>({});
   const [showCloseDialog, setShowCloseDialog] = useState(false);
+  const [closingBranchId, setClosingBranchId] = useState('');
+  const [closeBranches, setCloseBranches] = useState<Branch[]>([]);
+  const [closingOwnerBranchCount, setClosingOwnerBranchCount] = useState(0);
+  const [closingBranchesReady, setClosingBranchesReady] = useState(false);
+  const [closingBranchError, setClosingBranchError] = useState('');
+  useEffect(() => {
+    if (!showCloseDialog) return;
+    let cancelled = false;
+    setClosingBranchesReady(false); setClosingBranchError(''); setClosingBranchId('');
+    void getLeadClosingBranchesAction(leadId).then(result => {
+      if (cancelled) return;
+      setCloseBranches(result.branches); setClosingOwnerBranchCount(result.branchCount);
+      setClosingBranchesReady(true);
+    }).catch(() => { if (!cancelled) setClosingBranchError('Could not load the lead owner’s branches. Reopen this dialog to retry.'); });
+    return () => { cancelled = true; };
+  }, [showCloseDialog, leadId, lead?.ownerId]);
   const [closeStep, setCloseStep] = useState(1);
   const [closeStatus, setCloseStatus] = useState("Won");
   const [initialPaymentStatus, setInitialPaymentStatus] = useState<string>("");
@@ -444,6 +464,7 @@ function LeadDetailContent() {
 
   const handleCloseLead = async () => {
     if (!lead || !user) return;
+    if (!closingBranchesReady || (closingOwnerBranchCount > 1 && !closingBranchId)) return;
     if (user.role === "operations") return;
 
     // Safety net: don't allow closing (except for Backout) when any of
@@ -547,16 +568,19 @@ function LeadDetailContent() {
         return;
       }
 
+      // Validate before writing a payment so an omitted/forged branch cannot
+      // leave a new payment record behind when closure is rejected.
       await upsertClientPaymentRecord({
         actorId: user.$id,
         leadId,
         personalDetails: closureValues,
         paymentPlan: { percent, months, upfrontAmount },
+        closingBranchId,
         initialStatus: (initialPaymentStatus ||
           (upfrontAmount > 0 ? "partially_paid" : "not_paid")) as PaymentStatus,
       });
 
-      await closeLead(leadId, closeStatus, user.$id, user.name, user.role);
+      await closeLead(leadId, closeStatus, user.$id, user.name, user.role, closingBranchId);
       clearLeadReadCache();
       try {
         const firstName =
@@ -721,7 +745,7 @@ function LeadDetailContent() {
           ? Array.from(new Set([...(field.options ?? []), "H1B Agreement"]))
           : (field.options ?? []);
         return (
-          <select
+          <CrmSelect
             id={field.key}
             className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             value={value}
@@ -742,7 +766,7 @@ function LeadDetailContent() {
                 {option}
               </option>
             ))}
-          </select>
+          </CrmSelect>
         );
       }
 
@@ -1048,6 +1072,12 @@ function LeadDetailContent() {
       {/* Close Lead Dialog */}
       {showCloseDialog && (
         <LeadCloseDialog
+          closeBranches={closeBranches}
+          closingBranchId={closingBranchId}
+          setClosingBranchId={setClosingBranchId}
+          requiresBranchChoice={closingOwnerBranchCount > 1}
+          branchOptionsReady={closingBranchesReady}
+          branchError={closingBranchError}
           leadData={leadData}
           leadId={leadId}
           userId={user.$id}

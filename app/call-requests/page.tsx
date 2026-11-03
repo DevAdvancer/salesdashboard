@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
@@ -217,7 +219,7 @@ function CallsContent() {
                               </span>
                             ) : (
                               <>
-                                <select
+                                <CrmSelect
                                   className="flex h-9 w-full rounded-2xl border border-transparent bg-[var(--input)] px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ink)]"
                                   value={r.status}
                                   disabled={rowBusy}
@@ -230,7 +232,7 @@ function CallsContent() {
                                       {STATUS_LABELS[s]}
                                     </option>
                                   ))}
-                                </select>
+                                </CrmSelect>
                                 <span
                                   className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] ${STATUS_BADGE[r.status]}`}
                                 >
@@ -241,7 +243,7 @@ function CallsContent() {
                           </td>
                           <td className="p-3">
                             {canAssign ? (
-                              <select
+                              <CrmSelect
                                 className="flex h-9 w-full rounded-2xl border border-transparent bg-[var(--input)] px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ink)]"
                                 value={r.assignedToId ?? ""}
                                 disabled={rowBusy}
@@ -252,7 +254,7 @@ function CallsContent() {
                                     {o.name}
                                   </option>
                                 ))}
-                              </select>
+                              </CrmSelect>
                             ) : (
                               <span className="text-sm text-muted-foreground">
                                 {r.assignedToName ?? "Unassigned"}

@@ -11,6 +11,7 @@ import { getUnassignedOwnerId, resolveBranchIdForEvent, getLeadDisplayName } fro
 import { logger } from '@/lib/utils/logger';
 import { withdrawLeadRequests } from '@/lib/server/lead-request-release';
 import { recordLeadLifecycleEvent } from '@/lib/utils/lead-payment-cycle';
+import { checkedLeadClosingBranch } from '@/lib/server/lead-closing-branch';
 
 type AdminDatabases = Awaited<ReturnType<typeof createAdminClient>>['databases'];
 
@@ -354,20 +355,21 @@ export async function closeLeadAction(
     closedStatus: string,
     actorId: string,
     actorName: string,
-    actorRole?: import('@/lib/types').UserRole
+    actorRole?: import('@/lib/types').UserRole,
+    closingBranchId?: string,
 ) {
     await assertAuthenticatedUserId(actorId);
     const { databases } = await createAdminClient();
 
     try {
-        const currentLead = await databases.getDocument(
+        const currentLead = await (databases.uncachedReads ?? databases).getDocument(
             DATABASE_ID,
             COLLECTIONS.LEADS,
             leadId
         ) as unknown as Lead;
 
         const actorDoc = actorId
-            ? await databases.getDocument(
+            ? await (databases.uncachedReads ?? databases).getDocument(
                 DATABASE_ID,
                 COLLECTIONS.USERS,
                 actorId
@@ -384,9 +386,17 @@ export async function closeLeadAction(
             }
         }
 
+        if (!actorDoc || actorDoc.isActive === false) throw new Error('Permission denied');
+        if (actorDoc.role === 'agent' && currentLead.ownerId !== actorId && currentLead.assignedToId !== actorId) {
+            throw new Error('Permission denied');
+        }
+        if (actorDoc.role !== 'monitor') await assertLeadAccessAllowed(actorDoc, currentLead, databases);
+        if (currentLead.isClosed) return { success: true, lead: currentLead };
+        const branchId = await checkedLeadClosingBranch(databases, actorDoc, currentLead, closingBranchId);
+
 
         const shouldAssignClosingAgent =
-            actorRole === 'agent' && Boolean(actorId) && !currentLead.assignedToId;
+            actorDoc.role === 'agent' && Boolean(actorId) && !currentLead.assignedToId;
         const nextAssignedToId = shouldAssignClosingAgent ? actorId : currentLead.assignedToId;
 
         const permissions: string[] = [
@@ -429,6 +439,7 @@ export async function closeLeadAction(
                 isClosed: true,
                 closedAt,
                 status: closedStatus,
+                branchId,
                 data: updatedDataJson,
                 ...(shouldAssignClosingAgent ? { assignedToId: actorId } : {}),
             },
@@ -454,7 +465,7 @@ export async function closeLeadAction(
                             leadName: getLeadDisplayName(currentLead),
                             ownerId: currentLead.ownerId,
                             assignedToId: currentLead.assignedToId,
-                            branchId: currentLead.branchId ?? null,
+                            branchId,
                             closedAt: lead.closedAt,
                             changes: {
                                 status: { from: currentLead.status, to: closedStatus },

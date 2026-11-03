@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,7 +38,7 @@ export function MockFiltersCard({
             <Label htmlFor="filter" className="sr-only">
               Filter
             </Label>
-            <select
+            <CrmSelect
               id="filter"
               className="w-full"
               value={filter}
@@ -45,7 +47,7 @@ export function MockFiltersCard({
               <option value="closed">Closed Clients</option>
               <option value="mock_created">Mock Created</option>
               <option value="mock_not_created">Mock Not Created</option>
-            </select>
+            </CrmSelect>
           </div>
         </div>
       </CardContent>

@@ -7,7 +7,7 @@ import { parseLeadHistory, type LeadHistorySnapshotEvent } from '@/lib/utils/lea
 import { canReceiveDeactivationHandoff, type HandoffUser } from '@/lib/utils/user-deactivation';
 
 type Row = Record<string, unknown>;
-export type HistoryActor = { id: string; name: string };
+export type HistoryActor = { id: string; name: string; impersonatedUserId?: string; impersonatedUserName?: string };
 export type LeadHistoryEntry = Models.Document & {
   leadId: string; requestId: string; profileUrl: string; profileKey: string; eventType: string;
   occurredAt: string; actorId: string; actorName: string; payload: string;
@@ -39,7 +39,9 @@ export async function appendLeadHistory(databases: Databases, entry: {
   leadId?: string; requestId?: string; profileUrl?: string; eventType: string;
   actor?: HistoryActor; occurredAt?: string; payload: Row; id?: string;
 }) {
-  const payload = JSON.stringify(entry.payload);
+  const payload = JSON.stringify({ ...entry.payload, ...(entry.actor?.impersonatedUserId ? {
+    impersonation: { operatorId: entry.actor.id, targetUserId: entry.actor.impersonatedUserId, targetUserName: entry.actor.impersonatedUserName },
+  } : {}) });
   if (payload.length > 60000) throw new Error('History event is too large to store safely.');
   return databases.createDocument(DATABASE_ID, COLLECTIONS.LEAD_HISTORY, entry.id || ID.unique(), {
     leadId: entry.leadId || '', requestId: entry.requestId || '', profileUrl: entry.profileUrl || '',

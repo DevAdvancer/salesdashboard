@@ -34,14 +34,17 @@ export type ProgressEvent = { $id: string; $createdAt: string; entryId: string; 
 export type ProgressFilters = { search?: string; status?: string; salesperson?: string; marketingTl?: string; recruiter?: string; from?: string; to?: string };
 export type ProgressActor = { $id: string; role: UserRole; department?: string; isActive?: boolean };
 
-export function canManageProgress(actor: ProgressActor) { return actor.role === 'admin'; }
-export function canShareProgress(actor: ProgressActor) { return actor.role === 'admin' && actor.isActive !== false; }
+export function canAccessProgress(actor: ProgressActor) {
+  return actor.isActive !== false && (actor.department || 'sales') === 'sales' && PROGRESS_ROLES.includes(actor.role);
+}
+export function canManageProgress(actor: ProgressActor) { return canAccessProgress(actor) && actor.role === 'admin'; }
+export function canShareProgress(actor: ProgressActor) { return canManageProgress(actor); }
 export function canManageMarketingTl(actor: ProgressActor) { return canManageProgress(actor) && (actor.department || 'sales') === 'sales'; }
-export function canReadAllProgress(actor: ProgressActor) { return ['admin', 'developer', 'monitor', 'operations'].includes(actor.role); }
-export function canEditProgress(actor: ProgressActor) { return !['operations', 'monitor', 'compliance'].includes(actor.role); }
+export function canReadAllProgress(actor: ProgressActor) { return canAccessProgress(actor) && ['admin', 'developer', 'monitor', 'operations'].includes(actor.role); }
+export function canEditProgress(actor: ProgressActor) { return canAccessProgress(actor) && !['operations', 'monitor', 'compliance'].includes(actor.role); }
 export function isProgressEligible(status: string) { return !isClientExcludedStatus(status); }
 export function canSeeProgress(actor: ProgressActor, entry: Pick<ProgressEntry, 'department' | 'salespersonId' | 'eligible' | 'progressStatus'>, visibleIds: readonly string[]) {
-  return actor.isActive !== false && entry.eligible && isProgressEligible(entry.progressStatus) &&
+  return canAccessProgress(actor) && entry.department === 'sales' && entry.eligible && isProgressEligible(entry.progressStatus) &&
     (canReadAllProgress(actor) || ((actor.department || 'sales') === entry.department && visibleIds.includes(entry.salespersonId)));
 }
 export function canSaveFinalFeedback(actor: ProgressActor, saved: boolean) { return canManageProgress(actor) || (!saved && canEditProgress(actor)); }

@@ -1,5 +1,7 @@
 'use client';
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { useEffect, useState } from 'react';
 import { Info, Lock, Moon, ShieldCheck, Sun, UserRound } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -387,11 +389,11 @@ function SettingsContent() {
           <CardContent className="space-y-5">
             <div className="space-y-2">
               <Label htmlFor="display-time-zone">Display time zone</Label>
-              <select id="display-time-zone" value={displayTimeZone}
+              <CrmSelect id="display-time-zone" value={displayTimeZone}
                 onChange={(event) => updateDisplayTimeZone(event.target.value)}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground">
                 {DISPLAY_TIME_ZONES.map((zone) => <option key={zone.value} value={zone.value}>{zone.label}</option>)}
-              </select>
+              </CrmSelect>
               <p className="text-xs text-muted-foreground">
                 LinkedIn activity times use this zone. Daily request limits and dates follow Eastern Time (EST/EDT).
               </p>

@@ -1,10 +1,14 @@
+"use client"
+
 import * as React from "react"
 import { cn } from "@/lib/utils"
+import { CrmDateInput } from '@/components/ui/crm-date-input'
 
 export type InputProps = React.InputHTMLAttributes<HTMLInputElement>
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, type, ...props }, ref) => {
+    if (type === 'date') return <CrmDateInput {...props} type={type} className={className} ref={ref} />;
     return (
       <input
         type={type}

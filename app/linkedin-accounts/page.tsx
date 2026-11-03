@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -297,7 +299,7 @@ function LinkedinAccountsContent() {
             {canReadLikeAdmin && (
               <div className="space-y-2">
                 <Label>Team Lead</Label>
-                <select
+                <CrmSelect
                   value={teamLeadId}
                   onChange={(e) => setTeamLeadId(e.target.value)}
                   className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
@@ -307,7 +309,7 @@ function LinkedinAccountsContent() {
                       {tl.name}
                     </option>
                   ))}
-                </select>
+                </CrmSelect>
               </div>
             )}
 
@@ -316,7 +318,7 @@ function LinkedinAccountsContent() {
                 <Label>
                   User <RequiredMark />
                 </Label>
-                <select
+                <CrmSelect
                   value={assignedUserId}
                   onChange={(e) => setAssignedUserId(e.target.value)}
                   className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
@@ -325,14 +327,14 @@ function LinkedinAccountsContent() {
                       {a.name}
                     </option>
                   ))}
-                </select>
+                </CrmSelect>
               </div>
 
               <div className="space-y-2">
                 <Label>
                   Account Type <RequiredMark />
                 </Label>
-                <select
+                <CrmSelect
                   value={accountType}
                   onChange={(e) =>
                     setAccountType(e.target.value as LinkedinAccountType)
@@ -340,14 +342,14 @@ function LinkedinAccountsContent() {
                   className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
                   <option value="main">Main</option>
                   <option value="sudo">Sudo</option>
-                </select>
+                </CrmSelect>
               </div>
 
               <div className="space-y-2">
                 <Label>
                   Company <RequiredMark />
                 </Label>
-                <select
+                <CrmSelect
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
                   className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
@@ -358,7 +360,7 @@ function LinkedinAccountsContent() {
                       {value}
                     </option>
                   ))}
-                </select>
+                </CrmSelect>
               </div>
 
               <div className="space-y-2">
@@ -376,7 +378,7 @@ function LinkedinAccountsContent() {
                 <Label>
                   License Type <RequiredMark />
                 </Label>
-                <select
+                <CrmSelect
                   value={licenseType}
                   onChange={(e) => setLicenseType(e.target.value)}
                   className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
@@ -387,7 +389,7 @@ function LinkedinAccountsContent() {
                       {value}
                     </option>
                   ))}
-                </select>
+                </CrmSelect>
               </div>
 
               <div className="space-y-2">
@@ -408,7 +410,7 @@ function LinkedinAccountsContent() {
                   <Label>
                     Main ID <RequiredMark />
                   </Label>
-                  <select
+                  <CrmSelect
                     value={mainAccountId}
                     onChange={(e) => setMainAccountId(e.target.value)}
                     className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
@@ -418,7 +420,7 @@ function LinkedinAccountsContent() {
                         {a.idName} - {a.company}
                       </option>
                     ))}
-                  </select>
+                  </CrmSelect>
                 </div>
               )}
             </div>

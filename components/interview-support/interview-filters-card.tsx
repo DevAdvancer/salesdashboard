@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,7 +38,7 @@ export function InterviewFiltersCard({
             <Label htmlFor="filter" className="sr-only">
               Filter
             </Label>
-            <select
+            <CrmSelect
               id="filter"
               className="w-full border rounded px-2"
               value={filter}
@@ -45,7 +47,7 @@ export function InterviewFiltersCard({
               <option value="closed">Closed Clients</option>
               <option value="interview_created">Interview Support Sent</option>
               <option value="interview_not_created">Not Sent</option>
-            </select>
+            </CrmSelect>
           </div>
         </div>
       </CardContent>

@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -521,7 +523,7 @@ export function LeadGenerationNewLeadContent() {
             <Label htmlFor="visaStatus">
               Visa Status {!isLinkedinRequestLead && <span className="text-red-500">*</span>}
             </Label>
-            <select
+            <CrmSelect
               id="visaStatus"
               aria-invalid={Boolean(fieldErrors.visaStatus)}
               className={`flex h-10 w-full rounded-md border ${
@@ -540,7 +542,7 @@ export function LeadGenerationNewLeadContent() {
               <option value="CPT">CPT</option>
               <option value="Day 1 CPT">Day 1 CPT</option>
               <option value="Other">Other</option>
-            </select>
+            </CrmSelect>
             {visaStatus === "Other" && (
               <input
                 id="otherVisaStatus"

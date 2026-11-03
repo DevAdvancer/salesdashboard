@@ -1,5 +1,7 @@
 'use client';
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -134,7 +136,7 @@ export function ResumeMarketingClient({ initialProfiles }: ResumeMarketingClient
                   <UserCheck className="h-3.5 w-3.5" />
                   Assigned:
                 </div>
-                <select
+                <CrmSelect
                   value={assignedFilter}
                   onChange={(e) => setAssignedFilter(e.target.value)}
                   className="rounded-md border border-input bg-background pl-3 pr-8 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary"
@@ -145,7 +147,7 @@ export function ResumeMarketingClient({ initialProfiles }: ResumeMarketingClient
                       {u.name}
                     </option>
                   ))}
-                </select>
+                </CrmSelect>
               </>
             )}
           </div>

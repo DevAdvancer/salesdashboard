@@ -7,6 +7,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import { checkAndNotifyAdminAttendanceEscalationsAction } from '@/app/actions/attendance/notifications';
 import { LoaderOverlay } from '@/components/loader/LoaderOverlay';
+import { ImpersonationControl } from '@/components/impersonation-control';
 
 const PUBLIC_ROUTES = ['/login', '/referral'];
 const ADMIN_ATTENDANCE_PING_COOLDOWN_MS = 30 * 60 * 1000;
@@ -106,6 +107,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         style={{ minWidth: 0 }}
       >
         <LoaderOverlay />
+        <ImpersonationControl />
         {children}
         <SecurityNotice />
       </main>

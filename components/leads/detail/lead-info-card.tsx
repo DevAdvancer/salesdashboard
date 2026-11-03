@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import type { Dispatch, SetStateAction } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -152,7 +154,7 @@ export function LeadInfoCard({
 
           return (
             <>
-              <select
+              <CrmSelect
                 id={field.key}
                 aria-invalid={Boolean(fieldError)}
                 className={`flex h-10 w-full rounded-2xl border ${
@@ -174,7 +176,7 @@ export function LeadInfoCard({
                     {option}
                   </option>
                 ))}
-              </select>
+              </CrmSelect>
               {fieldError && (
                 <p className="text-sm text-red-500 mt-1">{fieldError}</p>
               )}
@@ -189,7 +191,7 @@ export function LeadInfoCard({
 
         return (
           <>
-            <select
+            <CrmSelect
               id={field.key}
               aria-invalid={Boolean(fieldError)}
               className={`flex h-10 w-full rounded-2xl border ${
@@ -207,7 +209,7 @@ export function LeadInfoCard({
                   {option}
                 </option>
               ))}
-            </select>
+            </CrmSelect>
             {showOtherInput && (
               <Input
                 id={`${field.key}-other`}

@@ -1,3 +1,5 @@
+import { selectCrmOption } from '@/tests/helpers/custom-controls';
+import userEvent from '@testing-library/user-event';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { DeactivateUserDialog } from '@/components/users/deactivate-user-dialog';
 import { previewUserDeactivationAction, setAgentActiveAction } from '@/app/actions/user';
@@ -20,8 +22,9 @@ it('previews open and closed leads, permits self-handoff and confirms only the s
   render(<DeactivateUserDialog target={target} actorId="tl" onClose={close} onComplete={complete} />);
   expect(setAgentActiveAction).not.toHaveBeenCalled();
   expect(await screen.findByText(/5 open leads and 2 closed leads/)).toBeInTheDocument();
+  await userEvent.click(screen.getByLabelText('Hand all leads to'));
   expect(screen.getByRole('option', { name: /myself/ })).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText('Hand all leads to'), { target: { value: 'new' } });
+  await selectCrmOption(screen.getByLabelText('Hand all leads to'), 'new');
   await waitFor(() => expect(screen.getByLabelText('Hand all leads to')).toHaveValue('new'));
   fireEvent.click(screen.getByRole('button', { name: 'Confirm handoff and inactivate' }));
   await waitFor(() => expect(setAgentActiveAction).toHaveBeenCalledWith({ userId: 'agent', currentUserId: 'tl',

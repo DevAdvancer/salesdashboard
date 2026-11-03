@@ -1,5 +1,7 @@
 'use client';
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { useState } from 'react';
 import { CalendarClock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -97,7 +99,7 @@ export function LeadFollowUpCard({ lead, user, disabled = false, onUpdated }: Le
           </div>
           <div>
             <Label htmlFor="nextAction">Next Action</Label>
-            <select
+            <CrmSelect
               id="nextAction"
               className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground"
               value={nextAction}
@@ -110,14 +112,14 @@ export function LeadFollowUpCard({ lead, user, disabled = false, onUpdated }: Le
               <option value="Meeting">Meeting</option>
               <option value="Documents Pending">Documents Pending</option>
               <option value="Follow up">Follow up</option>
-            </select>
+            </CrmSelect>
           </div>
           <div>
             <Label htmlFor="followUpStatus">
               Follow-Up Status
               <span className="text-red-500 ml-1">*</span>
             </Label>
-            <select
+            <CrmSelect
               id="followUpStatus"
               className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm text-foreground"
               value={followUpStatus}
@@ -127,7 +129,7 @@ export function LeadFollowUpCard({ lead, user, disabled = false, onUpdated }: Le
               <option value="pending">Pending</option>
               <option value="completed">Completed</option>
               <option value="overdue">Overdue</option>
-            </select>
+            </CrmSelect>
           </div>
           <div>
             <Label htmlFor="lastContactedAt">Last Contacted</Label>

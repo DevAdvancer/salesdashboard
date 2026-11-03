@@ -116,7 +116,8 @@ describe("client payment action authorization", () => {
       createdByName: 'Agent', createdAt: '2026-10-21T14:00:00Z', date: '2026-10-21' }] }));
     mockCreateAdminClient.mockResolvedValue({ databases: {
       getDocument: mockGetDocument, listDocuments: mockListDocuments,
-      uncachedReads: { listDocuments: freshList, getDocument: jest.fn().mockResolvedValue({ data: '{}' }) },
+      uncachedReads: { listDocuments: freshList, getDocument: jest.fn(async (_db, collection, id) => collection === 'users'
+        ? { $id: id, name: 'Admin', role: 'admin' } : { $id: id, data: '{}' }) },
     } });
     const { getClientPaymentRecordAction } = await import('@/app/actions/client-payments/record');
     const history = await getClientPaymentRecordAction('admin', 'lead-1');

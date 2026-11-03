@@ -2,6 +2,8 @@ import React from 'react';
 import { renderHook } from '@testing-library/react';
 import { AccessControlProvider, useAccess } from '@/lib/contexts/access-control-context';
 import { useAuth } from '@/lib/contexts/auth-context';
+import fc from 'fast-check';
+import { PROGRESS_ROLES } from '@/lib/client-progress';
 
 // Mock dependencies
 jest.mock('@/lib/contexts/auth-context', () => ({
@@ -17,6 +19,15 @@ describe('Access Control Context', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('enforces Sales-only Client Progress access for every role before leadership overrides', () => {
+    fc.assert(fc.property(fc.constantFrom(...PROGRESS_ROLES), fc.constantFrom('sales', 'resume'), (role, department) => {
+      mockUseAuth.mockReturnValue({ user: { $id: 'user', role, department, isActive: true }, isAdmin: role === 'admin' });
+      const { result, unmount } = renderHook(() => useAccess(), { wrapper });
+      expect(result.current.canAccess('client-progress')).toBe(department === 'sales');
+      unmount();
+    }));
   });
 
   describe('Static Rules Apply Correctly', () => {

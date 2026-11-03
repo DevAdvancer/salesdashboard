@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { useAuth } from './auth-context';
+import { canAccessProgress } from '@/lib/client-progress';
 import {
   getDefaultComponentAccess,
   isRoleEligibleForComponent,
@@ -56,6 +57,7 @@ interface AccessControlContextType {
 
 const AccessControlContext = createContext<AccessControlContextType | undefined>(undefined);
 const SALES_ONLY_COMPONENTS = new Set<ComponentKey>([
+  'client-progress',
   'dashboard',
   'chat',
   'leads',
@@ -103,6 +105,8 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
     if (!user) {
       return false;
     }
+    // Client Progress is strictly Sales-only, including leadership accounts.
+    if (componentKey === 'client-progress') return canAccessProgress(user);
 
     if (
       user.department === 'resume' &&
@@ -114,7 +118,7 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
 
     // Explicit restriction for compliance role
     if (user.role === 'compliance') {
-      if (componentKey === 'compliance-dashboard' || componentKey === 'settings' || componentKey === 'client-progress') {
+      if (componentKey === 'compliance-dashboard' || componentKey === 'settings') {
         return true;
       }
       return false;

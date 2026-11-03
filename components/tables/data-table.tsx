@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import * as React from "react";
 import {
   type ColumnDef,
@@ -262,7 +264,7 @@ function DataTablePagination<T>({
 
       <div className="flex items-center gap-2">
         {!manualPagination && (
-          <select
+          <CrmSelect
             value={pageSize}
             onChange={(e) => table.setPageSize(Number(e.target.value))}
             className="h-8 rounded-md border border-input bg-background px-2 text-sm">
@@ -271,7 +273,7 @@ function DataTablePagination<T>({
                 {opt} / page
               </option>
             ))}
-          </select>
+          </CrmSelect>
         )}
 
         <Button

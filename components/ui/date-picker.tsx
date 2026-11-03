@@ -1,5 +1,7 @@
 "use client"
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import * as React from "react"
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -180,6 +182,7 @@ function CalendarMonth({
                 !disabled && !active && "hover:bg-[var(--accent)]",
               )}
               aria-pressed={active}
+              aria-label={formatDisplayDate(day.value)}
             >
               {day.date.getDate()}
             </button>
@@ -193,28 +196,6 @@ function CalendarMonth({
 function usePopover() {
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef<HTMLDivElement>(null)
-
-  React.useEffect(() => {
-    if (!open) return
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!ref.current?.contains(event.target as Node)) {
-        setOpen(false)
-      }
-    }
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false)
-    }
-
-    document.addEventListener("pointerdown", handlePointerDown)
-    document.addEventListener("keydown", handleKeyDown)
-
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown)
-      document.removeEventListener("keydown", handleKeyDown)
-    }
-  }, [open])
-
   return { open, setOpen, ref }
 }
 
@@ -227,6 +208,7 @@ export function DatePicker({
   className,
   disabled,
   placeholder = "Select date",
+  buttonProps,
 }: {
   id?: string
   value: string
@@ -236,52 +218,23 @@ export function DatePicker({
   className?: string
   disabled?: boolean
   placeholder?: string
+  buttonProps?: React.ButtonHTMLAttributes<HTMLButtonElement>
 }) {
   const { open, setOpen, ref } = usePopover()
   const [visibleMonth, setVisibleMonth] = React.useState(() => getMonthStart(value))
-  const [popperPosition, setPopperPosition] = React.useState<'right' | 'left'>('right')
-  const [verticalPosition, setVerticalPosition] = React.useState<'bottom' | 'top'>('bottom')
-
-  React.useEffect(() => {
-    if (open) {
-      setVisibleMonth(getMonthStart(value))
-
-      // Check if the calendar would go off-screen
-      if (typeof document !== 'undefined' && ref.current) {
-        const buttonRect = ref.current.getBoundingClientRect()
-        const calendarWidth = 18 // Approximate width in rem
-        const spaceLeft = buttonRect.left
-        const spaceRight = window.innerWidth - buttonRect.right
-        const spaceBelow = window.innerHeight - buttonRect.bottom
-
-        // If less space on the right, position left
-        if (spaceRight < calendarWidth * 16 && spaceLeft > calendarWidth * 16) {
-          setPopperPosition('left')
-        } else {
-          setPopperPosition('right')
-        }
-
-        // If less space below, position top
-        if (spaceBelow < 380 && buttonRect.top > 380) {
-          setVerticalPosition('top')
-        } else {
-          setVerticalPosition('bottom')
-        }
-      }
-    }
-  }, [open, value, ref])
+  React.useEffect(() => { if (open) setVisibleMonth(getMonthStart(value)) }, [open, value])
 
   const label = value ? formatDisplayDate(value) : placeholder
 
   return (
+    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
     <div ref={ref} className={cn("relative", className)}>
+      <PopoverPrimitive.Trigger asChild>
       <button
+        {...buttonProps}
         id={id}
         type="button"
-        onClick={() => {
-          if (disabled) return
-          setOpen((current) => !current)
-        }}
+        disabled={disabled}
         className={cn(
           "flex h-10 w-full items-center justify-between gap-3 rounded-[1.5rem]",
           "bg-[var(--input)] px-3 py-2 text-left text-sm text-foreground",
@@ -292,13 +245,12 @@ export function DatePicker({
         <span className={cn(!value && "text-muted-foreground")}>{label}</span>
         <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />
       </button>
+      </PopoverPrimitive.Trigger>
 
       {open && (
-        <div className={cn(
-          "absolute z-50 w-[18rem] rounded-2xl border border-border bg-popover p-4 text-popover-foreground shadow-xl",
-          popperPosition === 'right' ? 'right-0' : 'left-0',
-          verticalPosition === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
-        )}>
+        <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Content aria-label="Choose date" align="start" sideOffset={8} collisionPadding={8}
+          className="z-[100] max-h-[var(--radix-popover-content-available-height)] w-[min(18rem,calc(100vw-1rem))] overflow-y-auto rounded-2xl border border-border bg-popover p-4 text-popover-foreground shadow-xl">
           <div className="mb-3 flex items-center justify-between gap-2">
             <button
               type="button"
@@ -336,7 +288,11 @@ export function DatePicker({
             }}
           />
 
-          <div className="mt-4 flex items-center justify-end">
+          <div className="mt-4 flex items-center justify-between gap-2">
+            <button type="button" disabled={!value} onClick={() => { onChange(''); setOpen(false) }}
+              className="rounded-full px-3 py-2 text-sm text-muted-foreground hover:bg-accent disabled:opacity-40">
+              Clear date
+            </button>
             <button
               type="button"
               onClick={() => setOpen(false)}
@@ -345,9 +301,11 @@ export function DatePicker({
               Done
             </button>
           </div>
-        </div>
+        </PopoverPrimitive.Content>
+        </PopoverPrimitive.Portal>
       )}
     </div>
+    </PopoverPrimitive.Root>
   )
 }
 
@@ -546,15 +504,13 @@ export function DateTimePicker({
         className,
       )}
     >
-      <input
-        type="date"
+      <DatePicker
         value={parts.date}
-        min={minParts.date}
+        minDate={minParts.date}
         disabled={disabled}
-        required={required}
-        aria-label="Date"
-        onChange={(event) =>
-          onChange(event.target.value ? applyMinimum(joinDateTime(event.target.value, parts.hour, parts.minute)) : "")
+        buttonProps={{ 'aria-label': 'Date', 'aria-required': required }}
+        onChange={(date) =>
+          onChange(date ? applyMinimum(joinDateTime(date, parts.hour, parts.minute)) : "")
         }
         className={cn(
           "min-w-0 bg-transparent px-2 text-sm font-medium outline-none",
@@ -562,7 +518,7 @@ export function DateTimePicker({
           !parts.date && "text-muted-foreground",
         )}
       />
-      <select
+      <CrmSelect
         value={hourFormat === "24" ? parts.hour : toDisplayHour(parts.hour)}
         disabled={disabled}
         onChange={(event) =>
@@ -584,9 +540,9 @@ export function DateTimePicker({
             {hour}
           </option>
         ))}
-      </select>
+      </CrmSelect>
       <span className="px-0.5 text-muted-foreground">:</span>
-      <select
+      <CrmSelect
         value={parts.minute}
         disabled={disabled}
         onChange={(event) =>
@@ -610,9 +566,9 @@ export function DateTimePicker({
             {minute}
           </option>
         ))}
-      </select>
+      </CrmSelect>
       {hourFormat === "12" && (
-        <select
+        <CrmSelect
           value={toPeriod(parts.hour)}
           disabled={disabled}
           onChange={(event) =>
@@ -623,7 +579,7 @@ export function DateTimePicker({
         >
           <option value="AM" disabled={isTimeBeforeMin(toDisplayHour(parts.hour), parts.minute, "AM")}>AM</option>
           <option value="PM" disabled={isTimeBeforeMin(toDisplayHour(parts.hour), parts.minute, "PM")}>PM</option>
-        </select>
+        </CrmSelect>
       )}
     </div>
   )

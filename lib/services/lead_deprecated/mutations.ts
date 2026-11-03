@@ -246,95 +246,13 @@ export async function deleteLead(leadId: string, actorId?: string, actorName?: s
 }
 
 export async function closeLead(
-    leadId: string,
-    closedStatus: string,
-    actorId?: string,
-    actorName?: string,
-    actorRole?: import('@/lib/types').UserRole
+    leadId: string, closedStatus: string, actorId?: string, actorName?: string,
+    actorRole?: import('@/lib/types').UserRole, closingBranchId?: string,
 ): Promise<Lead> {
-  try {
-    if (actorRole === 'monitor' || actorRole === 'operations') {
-      throw new Error('Permission denied');
-    }
-
-    const currentLead = await getLead(leadId);
-    let leadData: LeadData = {};
-
-    try {
-      leadData = JSON.parse(currentLead.data) as LeadData;
-    } catch {
-      leadData = {};
-    }
-
-    const shouldAssignClosingAgent =
-      actorRole === 'agent' && Boolean(actorId) && !currentLead.assignedToId;
-    const nextAssignedToId = shouldAssignClosingAgent ? actorId! : currentLead.assignedToId;
-
-    const permissions: string[] = [
-      Permission.read(Role.user(currentLead.ownerId)),
-      Permission.update(Role.user(currentLead.ownerId)),
-      Permission.delete(Role.user(currentLead.ownerId)),
-    ];
-
-    if (nextAssignedToId) {
-      permissions.push(Permission.read(Role.user(nextAssignedToId)));
-    }
-
-    if (actorId && actorId !== currentLead.ownerId && actorId !== nextAssignedToId) {
-      permissions.push(Permission.read(Role.user(actorId)));
-    }
-
-    const closedAt = new Date().toISOString();
-    const closureData = recordLeadLifecycleEvent(currentLead, 'closed', actorId || currentLead.ownerId,
-      actorName || 'System', closedStatus, closedAt, crypto.randomUUID());
-    const lead = await databases.updateDocument(
-      DATABASE_ID,
-      COLLECTIONS.LEADS,
-      leadId,
-      {
-        isClosed: true,
-        closedAt,
-        data: JSON.stringify(closureData),
-        status: closedStatus,
-        ...(shouldAssignClosingAgent ? { assignedToId: actorId } : {}),
-      },
-      permissions
-    );
-
-    if (actorId && actorName) {
-         await logAction({
-            action: 'LEAD_UPDATE',
-            actorId: actorId,
-            actorName: actorName,
-            targetId: leadId,
-            targetType: 'LEAD',
-            metadata: {
-              isClosed: true,
-              status: closedStatus,
-              leadId,
-              leadName: getLeadAuditName(leadData),
-              candidateName: `${leadData.firstName || ''} ${leadData.lastName || ''}`.trim() || leadData.legalName || '',
-              email: leadData.email || '',
-              phone: leadData.phone || '',
-              company: leadData.company || '',
-              source: leadData.sourceName || leadData.source || '',
-              ownerId: currentLead.ownerId,
-              assignedToId: currentLead.assignedToId,
-              branchId: currentLead.branchId ?? null,
-              closedAt: lead.closedAt,
-              changes: {
-                status: { from: currentLead.status, to: closedStatus },
-                isClosed: { from: false, to: true },
-              },
-            }
-        });
-    }
-
-    return lead as unknown as Lead;
-  } catch (error: unknown) {
-    console.error('Error closing lead:', error);
-    throw new Error(getErrorMessage(error, 'Failed to close lead'));
-  }
+  if (!actorId) throw new Error('Unauthorized');
+  const { closeLeadAction } = await import('@/lib/actions/lead/status');
+  const result = await closeLeadAction(leadId, closedStatus, actorId, actorName || '', actorRole, closingBranchId);
+  return result.lead;
 }
 
 export async function reopenLead(

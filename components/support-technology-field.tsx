@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { useId, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { getSupportTechnologyError, SUPPORT_TECHNOLOGIES } from "@/lib/utils/support-technology";
@@ -18,7 +20,7 @@ export function SupportTechnologyField({ value, onChange }: SupportTechnologyFie
 
   return (
     <div className="space-y-2 min-w-0">
-      <select
+      <CrmSelect
         aria-label="Technology"
         aria-required="true"
         required
@@ -35,7 +37,7 @@ export function SupportTechnologyField({ value, onChange }: SupportTechnologyFie
           <option key={technology} value={technology}>{technology}</option>
         ))}
         <option value="Other">Other</option>
-      </select>
+      </CrmSelect>
       {isOther && (
         <>
           <Input

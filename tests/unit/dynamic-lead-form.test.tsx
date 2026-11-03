@@ -1,3 +1,5 @@
+import userEvent from '@testing-library/user-event';
+import { selectCrmOption } from '@/tests/helpers/custom-controls';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { DynamicLeadForm } from '@/components/dynamic-lead-form';
 import { FormField } from '@/lib/types';
@@ -231,7 +233,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
       fireEvent.change(firstNameInput, { target: { value: 'John' } });
       fireEvent.change(lastNameInput, { target: { value: 'Doe' } });
       fireEvent.change(emailInput, { target: { value: 'invalid-email' } });
-      fireEvent.change(statusSelect, { target: { value: 'New' } });
+      await selectCrmOption(statusSelect, 'New');
 
       // Submit form
       const submitButton = screen.getByRole('button', { name: /submit/i });
@@ -305,7 +307,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
       fireEvent.change(lastNameInput, { target: { value: 'Doe' } });
       fireEvent.change(emailInput, { target: { value: 'john@example.com' } });
       fireEvent.change(phoneInput, { target: { value: '+1234567890' } });
-      fireEvent.change(statusSelect, { target: { value: 'New' } });
+      await selectCrmOption(statusSelect, 'New');
 
       // Submit form
       const submitButton = screen.getByRole('button', { name: /submit/i });
@@ -350,7 +352,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
       fireEvent.change(firstNameInput, { target: { value: 'John' } });
       fireEvent.change(lastNameInput, { target: { value: 'Doe' } });
       fireEvent.change(emailInput, { target: { value: 'john@example.com' } });
-      fireEvent.change(statusSelect, { target: { value: 'New' } });
+      await selectCrmOption(statusSelect, 'New');
 
       // Submit form
       const submitButton = screen.getByRole('button', { name: /submit/i });
@@ -497,7 +499,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
       expect(textarea.tagName).toBe('TEXTAREA');
     });
 
-    it('should render select dropdown for dropdown field type', () => {
+    it('should render select dropdown for dropdown field type', async () => {
       mockUseAuth.mockReturnValue({
         user: { $id: '1', name: 'TeamLead', email: 'teamLead@test.com', role: 'team_lead', teamLeadId: null },
         isManager: true,
@@ -524,15 +526,16 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
       render(<DynamicLeadForm formConfig={dropdownFieldConfig} onSubmit={mockOnSubmit} />);
 
       const select = screen.getByLabelText(/Status/i);
-      expect(select.tagName).toBe('SELECT');
+      expect(select).toHaveAttribute('role', 'combobox');
+      await userEvent.click(select);
       
       // Check options are rendered
-      expect(screen.getByText('New')).toBeInTheDocument();
-      expect(screen.getByText('Contacted')).toBeInTheDocument();
-      expect(screen.getByText('Qualified')).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'New', exact: true })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'Contacted', exact: true })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'Qualified', exact: true })).toBeInTheDocument();
     });
 
-    it('shows reserved LinkedIn source options only to monitors', () => {
+    it('shows reserved LinkedIn source options only to monitors', async () => {
       const sourceFieldConfig: FormField[] = [
         {
           id: 'source',
@@ -558,12 +561,13 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
       });
 
       render(<DynamicLeadForm formConfig={sourceFieldConfig} onSubmit={mockOnSubmit} />);
+      await userEvent.click(screen.getByLabelText(/Source/i));
 
-      expect(screen.getByText('LinkedIN/Lead')).toBeInTheDocument();
-      expect(screen.getByText('Cold Calls')).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'LinkedIN/Lead', exact: true })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'Cold Calls', exact: true })).toBeInTheDocument();
     });
 
-    it('hides reserved LinkedIn source options from non-monitor users', () => {
+    it('hides reserved LinkedIn source options from non-monitor users', async () => {
       const sourceFieldConfig: FormField[] = [
         {
           id: 'source',
@@ -589,10 +593,11 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
       });
 
       render(<DynamicLeadForm formConfig={sourceFieldConfig} onSubmit={mockOnSubmit} />);
+      await userEvent.click(screen.getByLabelText(/Source/i));
 
-      expect(screen.queryByText('LinkedIN/Lead')).not.toBeInTheDocument();
-      expect(screen.queryByText('Cold Calls')).not.toBeInTheDocument();
-      expect(screen.getByText('Website')).toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: 'LinkedIN/Lead', exact: true })).not.toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: 'Cold Calls', exact: true })).not.toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'Website', exact: true })).toBeInTheDocument();
     });
 
     it('should render checkboxes for checklist field type', () => {

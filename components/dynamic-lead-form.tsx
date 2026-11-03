@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -337,7 +339,7 @@ export function DynamicLeadForm({
                 <span className="text-red-500 ml-1">*</span>
               )}
             </Label>
-            <select
+            <CrmSelect
               id={field.key}
               {...register(field.key, {
                 onChange: (e) => {
@@ -356,7 +358,7 @@ export function DynamicLeadForm({
                   {option}
                 </option>
               ))}
-            </select>
+            </CrmSelect>
             {errorMessage && (
               <p className="text-sm text-red-500">{errorMessage}</p>
             )}

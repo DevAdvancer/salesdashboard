@@ -5,6 +5,7 @@ import { LeadCloseDialog } from '@/components/leads/detail/lead-close-dialog';
 
 it('shows new payment confirmation when closing a reopened lead', () => {
   const props: ComponentProps<typeof LeadCloseDialog> = {
+    closeBranches: [], closingBranchId: '', setClosingBranchId: jest.fn(), requiresBranchChoice: false,
     leadData: { paymentCycleId: 'second', firstName: 'Client' }, leadId: 'lead', userId: 'agent',
     userName: 'Agent', userRole: 'agent', userDepartment: 'sales', closeStep: 3, setCloseStep: jest.fn(),
     closeStatus: 'Won', setCloseStatus: jest.fn(), initialPaymentStatus: '', setInitialPaymentStatus: jest.fn(),

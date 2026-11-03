@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CardContent } from "@/components/ui/card";
@@ -31,7 +33,7 @@ export function LeadsSearchFilter({
         </div>
         <div className="w-full sm:w-[200px]">
           <Label htmlFor="filter" className="sr-only">Filter</Label>
-          <select
+          <CrmSelect
             id="filter"
             className="w-full"
             value={filter}
@@ -39,7 +41,7 @@ export function LeadsSearchFilter({
             <option value="all">All Leads</option>
             <option value="interview_created">Interview Created</option>
             <option value="interview_not_created">Interview Not Created</option>
-          </select>
+          </CrmSelect>
         </div>
       </div>
     </CardContent>

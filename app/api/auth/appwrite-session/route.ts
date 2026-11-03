@@ -5,6 +5,7 @@ import { accessCookieFor, CRM_ACCESS_COOKIE, crmAccessEnabled, evaluateCrmAccess
 import { clearCrmIdentityCache } from '@/lib/server/crm-identity-cache';
 import { publicUser } from '@/lib/server/crm-browser-data';
 import { getTodayEst } from '@/lib/utils/est-date';
+import { CRM_IMPERSONATION_COOKIE } from '@/lib/utils/crm-impersonation';
 
 const APPWRITE_JWT_COOKIE = "crm_appwrite_jwt";
 
@@ -44,7 +45,8 @@ export async function POST(request: NextRequest) {
 
   const accessCookie = identity && crmAccessEnabled() ? accessCookieFor(identity, reader) : null;
   if (accessCookie) cookieStore.set(accessCookie.name, accessCookie.value, accessCookie.options);
-  if (identity) return NextResponse.json({ success: true, user: publicUser(identity.user as unknown as Record<string, unknown>, true),
+  if (identity) return NextResponse.json({ success: true, user: { ...publicUser(identity.user as unknown as Record<string, unknown>, true),
+    ...(identity.operator ? { impersonatorUserId: identity.operator.user.$id, impersonatorName: identity.operator.user.name } : {}) },
     status: crmAccessEnabled() ? await evaluateCrmAccess(identity) : { state: 'disabled', dateKey: getTodayEst() } }, { headers: { 'Cache-Control': 'no-store' } });
   return NextResponse.json({ success: true });
 }
@@ -53,6 +55,7 @@ export async function DELETE() {
   const cookieStore = await cookies();
   cookieStore.delete(APPWRITE_JWT_COOKIE);
   cookieStore.delete(CRM_ACCESS_COOKIE);
+  cookieStore.delete(CRM_IMPERSONATION_COOKIE);
   // Remove a legacy cookie during migration; it is never read or accepted.
   cookieStore.delete('crm_email_verified');
   clearCrmIdentityCache();

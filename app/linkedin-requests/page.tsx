@@ -1,5 +1,8 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+import { usePromptDialog } from '@/lib/hooks/use-prompt-dialog';
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ProtectedRoute } from "@/components/protected-route";
 import { LinkedinExtensionSection } from "@/components/linkedin-extension-guide";
@@ -81,6 +84,7 @@ function RequiredMark() {
 function LinkedinRequestsContent() {
   const { user, serverSessionReady } = useAuth();
   const { toast } = useToast();
+  const { prompt, promptDialog } = usePromptDialog();
   const router = useRouter();
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [helperDetected, setHelperDetected] = useState(false);
@@ -403,16 +407,9 @@ function LinkedinRequestsContent() {
     if (!user) return;
     if (withdrawingId) return;
     if (isCoolingDown(`withdraw-${request.$id}`)) return;
-    const reason =
-      window.prompt("Enter withdraw reason for audit")?.trim() ?? "";
-    if (!reason) {
-      toast({
-        title: "Withdraw reason required",
-        description: "Please enter a reason before withdrawing this request.",
-        variant: "destructive",
-      });
-      return;
-    }
+    const reason = await prompt({ title: 'Withdraw LinkedIn request?', label: 'Reason for withdrawal',
+      description: 'The reason will be retained in the request history.', confirmText: 'Withdraw request' });
+    if (reason === null) return;
 
     try {
       setWithdrawingId(request.$id);
@@ -463,6 +460,7 @@ function LinkedinRequestsContent() {
 
   return (
     <div className="container mx-auto space-y-6">
+      {promptDialog}
       {!helperDetected && <LinkedinExtensionSection onDetection={setHelperDetected} />}
       <LinkedinDailyExport />
       <Card>
@@ -487,7 +485,7 @@ function LinkedinRequestsContent() {
                 <Label>
                   Linkedin Account <RequiredMark />
                 </Label>
-                <select
+                <CrmSelect
                   value={selectedAccountId}
                   onChange={(e) => {
                     setSelectedAccountId(e.target.value);
@@ -500,7 +498,7 @@ function LinkedinRequestsContent() {
                       {a.accountType.toUpperCase()} · {a.idName} · {a.company}
                     </option>
                   ))}
-                </select>
+                </CrmSelect>
               </div>
 
               <div className="space-y-2">
@@ -651,7 +649,7 @@ function LinkedinRequestsContent() {
             </div>
             <div className="space-y-2">
               <Label>Status</Label>
-              <select
+              <CrmSelect
                 value={filterStatus}
                 onChange={(e) =>
                   setFilterStatus(
@@ -663,7 +661,7 @@ function LinkedinRequestsContent() {
                 <option value="sent">Not Accepted</option>
                 <option value="accepted">Accepted</option>
                 <option value="withdrawn">Withdrawn</option>
-              </select>
+              </CrmSelect>
             </div>
             <div className="space-y-2">
               <Label>URL or Company</Label>

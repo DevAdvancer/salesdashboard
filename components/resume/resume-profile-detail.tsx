@@ -1,5 +1,9 @@
 'use client';
 
+import { Input } from '@/components/ui/input';
+
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -407,7 +411,7 @@ export function ResumeProfileDetail({
                   try {
                     await updateComplianceStatusAction(profile.$id, 'approved');
                     router.refresh();
-                  } catch (e: any) { alert(e.message); }
+                  } catch (e: any) { toast({ title: 'Approval failed', description: e.message || 'Please try again.', variant: 'destructive' }); }
                 }}
               >
                 Approve Profile
@@ -455,7 +459,7 @@ export function ResumeProfileDetail({
           {!isComplianceMode && (
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-muted-foreground">Stage:</span>
-              <select
+              <CrmSelect
                 value={stage}
                 disabled={!isEditing || profile.complianceStatus !== 'approved'}
                 onChange={(e) => setStage(e.target.value as ResumeProfileStage)}
@@ -473,14 +477,14 @@ export function ResumeProfileDetail({
                     );
                   }).filter(Boolean);
                 })()}
-              </select>
+              </CrmSelect>
             </div>
           )}
 
           {!isComplianceMode && (
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-muted-foreground">Assigned:</span>
-              <select
+              <CrmSelect
                 value={assignedToId}
                 disabled={!canAssign || saving || !isEditing}
                 onChange={(e) => setAssignedToId(e.target.value)}
@@ -492,7 +496,7 @@ export function ResumeProfileDetail({
                     {u.name}
                   </option>
                 ))}
-              </select>
+              </CrmSelect>
             </div>
           )}
 
@@ -619,7 +623,7 @@ export function ResumeProfileDetail({
                   <label className="block text-xs font-medium text-muted-foreground mb-1">
                     Visa Status
                   </label>
-                  <select
+                  <CrmSelect
                     value={visaStatus}
                     onChange={(e) => setVisaStatus(e.target.value)}
                     className="w-full rounded-2xl border border-transparent bg-[var(--input)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
@@ -633,7 +637,7 @@ export function ResumeProfileDetail({
                     <option value="Green Card">Green Card</option>
                     <option value="US Citizen">US Citizen</option>
                     <option value="Asylum">Asylum</option>
-                  </select>
+                  </CrmSelect>
                 </div>
               </div>
 
@@ -657,7 +661,7 @@ export function ResumeProfileDetail({
                       <label className="block text-xs font-medium text-muted-foreground mb-1">
                         GC EAD Start Date
                       </label>
-                      <input
+                      <Input
                         type="date"
                         value={gcEadStartDate}
                         onChange={(e) => setGcEadStartDate(e.target.value)}
@@ -668,7 +672,7 @@ export function ResumeProfileDetail({
                       <label className="block text-xs font-medium text-muted-foreground mb-1">
                         GC EAD End Date
                       </label>
-                      <input
+                      <Input
                         type="date"
                         value={gcEadEndDate}
                         onChange={(e) => setGcEadEndDate(e.target.value)}
@@ -699,7 +703,7 @@ export function ResumeProfileDetail({
                       <label className="block text-xs font-medium text-muted-foreground mb-1">
                         Green Card Start Date
                       </label>
-                      <input
+                      <Input
                         type="date"
                         value={greenCardStartDate}
                         onChange={(e) => setGreenCardStartDate(e.target.value)}
@@ -710,7 +714,7 @@ export function ResumeProfileDetail({
                       <label className="block text-xs font-medium text-muted-foreground mb-1">
                         Green Card End Date
                       </label>
-                      <input
+                      <Input
                         type="date"
                         value={greenCardEndDate}
                         onChange={(e) => setGreenCardEndDate(e.target.value)}
@@ -766,14 +770,14 @@ export function ResumeProfileDetail({
                     <span className="text-xs font-bold text-foreground">CPT (Curricular Practical Training)</span>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-muted-foreground">Status:</span>
-                      <select
+                      <CrmSelect
                         value={cpt}
                         onChange={(e) => setCpt(e.target.value)}
                         className="rounded-2xl border border-transparent bg-[var(--input)] pl-2.5 pr-8 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
                       >
                         <option value="NO">NO</option>
                         <option value="YES">YES</option>
-                      </select>
+                      </CrmSelect>
                     </div>
                   </div>
                   {cpt === 'YES' && (
@@ -793,14 +797,14 @@ export function ResumeProfileDetail({
                     <span className="text-xs font-bold text-foreground">OPT (Optional Practical Training)</span>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-muted-foreground">Status:</span>
-                      <select
+                      <CrmSelect
                         value={opt}
                         onChange={(e) => setOpt(e.target.value)}
                         className="rounded-2xl border border-transparent bg-[var(--input)] pl-2.5 pr-8 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
                       >
                         <option value="NO">NO</option>
                         <option value="YES">YES</option>
-                      </select>
+                      </CrmSelect>
                     </div>
                   </div>
                   {opt === 'YES' && (
@@ -820,14 +824,14 @@ export function ResumeProfileDetail({
                     <span className="text-xs font-bold text-foreground">STEM OPT Extension</span>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-muted-foreground">Status:</span>
-                      <select
+                      <CrmSelect
                         value={stemOpt}
                         onChange={(e) => setStemOpt(e.target.value)}
                         className="rounded-2xl border border-transparent bg-[var(--input)] pl-2.5 pr-8 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
                       >
                         <option value="NO">NO</option>
                         <option value="YES">YES</option>
-                      </select>
+                      </CrmSelect>
                     </div>
                   </div>
                   {stemOpt === 'YES' && (

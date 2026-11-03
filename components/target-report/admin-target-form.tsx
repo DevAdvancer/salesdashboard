@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -139,7 +141,7 @@ export function AdminTargetForm({ user, monthKey, onSaved }: AdminTargetFormProp
             <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Team lead
             </label>
-            <select
+            <CrmSelect
               className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               value={teamLeadId}
               onChange={(e) => handleSelect(e.target.value)}>
@@ -155,7 +157,7 @@ export function AdminTargetForm({ user, monthKey, onSaved }: AdminTargetFormProp
                   </option>
                 ))
               )}
-            </select>
+            </CrmSelect>
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">

@@ -21,6 +21,7 @@ import { mapFollowupHistoryUpdate } from '@/lib/utils/client-payment-history';
 import { followupPaymentRecipient } from '@/lib/utils/followup-payment-attribution';
 import { getFollowupsPaymentAmount } from '@/lib/utils/followups-payment-amount';
 import { reconcilePaymentDocuments } from '@/lib/utils/client-payment-reconciliation';
+import { checkedLeadClosingBranch } from '@/lib/server/lead-closing-branch';
 
 
 export async function getClientPaymentRecordAction(actorId: string, leadId: string): Promise<ClientPaymentRecord | null> {
@@ -76,6 +77,7 @@ export async function upsertClientPaymentRecordAction(input: {
       personalDetails: Record<string, unknown>;
       paymentPlan: ClientPaymentPlan;
       initialStatus?: PaymentStatus;
+      closingBranchId?: string;
     }): Promise<ClientPaymentRecord> {
     const actor = await getActor(input.actorId);
     ensureComponentAccess(actor.role, "leads");
@@ -87,7 +89,10 @@ export async function upsertClientPaymentRecordAction(input: {
     const { databases } = await createAdminClient();
     const now = new Date().toISOString();
     const latest = await findRecordByLeadId(input.leadId);
-    const lead = await databases.getDocument(DATABASE_ID, COLLECTIONS.LEADS, input.leadId) as unknown as Lead;
+    const lead = await (databases.uncachedReads ?? databases).getDocument(DATABASE_ID, COLLECTIONS.LEADS, input.leadId) as unknown as Lead;
+    if (input.closingBranchId !== undefined && lead.isClosed) throw new Error('The reporting branch is locked after the lead is closed.');
+    const branchId = input.closingBranchId !== undefined
+      ? await checkedLeadClosingBranch(databases, actor, lead, input.closingBranchId) : lead.branchId;
     const leadData = JSON.parse(lead.data || '{}') as LeadData;
     const cycleId = getPaymentCycleId(leadData);
     const latestPlan = parseJsonOr<ClientPaymentPlan>(latest?.paymentPlan ?? latest?.paymentPlanJson, { percent: 0, months: 0, upfrontAmount: 0 });
@@ -119,13 +124,16 @@ export async function upsertClientPaymentRecordAction(input: {
                 } satisfies ClientPaymentUpdate,
               ]
             : updates;
+    const snapshot = snapshotPaymentPlan(input.paymentPlan, { ...lead, branchId }, leadData, lead.isClosed ? (lead.closedAt || now) : now);
+    const closure = existing && latestPlan.closure ? { ...latestPlan.closure } : snapshot.closure!;
+    if (input.closingBranchId !== undefined) {
+      closure.branchId = branchId ?? null;
+      closure.branchSource = input.closingBranchId.trim() ? 'selected' : 'primary';
+    }
     const payload = {
             leadId: input.leadId,
             personalDetails: JSON.stringify(personalDetails),
-            paymentPlan: JSON.stringify({
-              ...snapshotPaymentPlan(input.paymentPlan, lead, leadData, lead.isClosed ? (lead.closedAt || now) : now),
-              ...(existing && latestPlan.closure ? { closure: latestPlan.closure } : {}),
-            }),
+            paymentPlan: JSON.stringify({ ...snapshot, closure }),
             status,
             updates: JSON.stringify(nextUpdates),
             createdAt: existing?.createdAt ?? now,

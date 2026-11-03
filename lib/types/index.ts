@@ -19,6 +19,9 @@ export function isValidDepartment(value: string): value is Department {
 }
 
 export interface User {
+  /** Server-issued UI attribution during native Appwrite impersonation; never stored. */
+  impersonatorUserId?: string;
+  impersonatorName?: string;
   $id: string;
   name: string;
   email: string;
@@ -630,6 +633,7 @@ export interface ClientPaymentPlan {
     ownerId: string;
     assignedToId: string | null;
     branchId: string | null;
+    branchSource?: 'selected' | 'primary';
     leadAmount: number;
   };
 }

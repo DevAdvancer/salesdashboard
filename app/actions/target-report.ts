@@ -25,6 +25,8 @@ import { getTechnicalPaymentTotalsByUserAction } from "@/app/actions/technical-p
 import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import { computeAgentStatsForDate } from "@/lib/server/stats-aggregator";
 import { listTargetReportContributors } from '@/lib/server/target-report-contributors';
+import { targetReportBranchOwners } from '@/lib/server/target-report-branch-owners';
+import { targetReportBranchSplits } from '@/lib/utils/target-report-branch-splits';
 import { targetUpfrontAmounts } from '@/lib/utils/target-payment-attribution';
 
 type LeadDoc = Record<string, unknown>;
@@ -427,6 +429,12 @@ export async function getTargetReportAction(input: {
     technicalPaymentsByAgentId,
     branchMap,
   });
+
+  const branchLeads = new Map([...followupLeadById, ...cpLeadById]);
+  const branchOwners = await targetReportBranchOwners(databases, usersByAgentId, branchLeads, clientPayments);
+  result.branchSplits = targetReportBranchSplits({ result, users: branchOwners, branches: branchMap,
+    payments: clientPayments, leads: branchLeads, followups: docs,
+    contributorIds, from: leadsAndPaymentsFromIso, to: leadsAndPaymentsToIso });
 
   const from = leadsAndPaymentsFromIso, to = leadsAndPaymentsToIso;
   return {

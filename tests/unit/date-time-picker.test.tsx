@@ -1,3 +1,4 @@
+import { selectCrmDate, selectCrmOption } from '@/tests/helpers/custom-controls';
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import userEvent from "@testing-library/user-event";
@@ -35,16 +36,16 @@ describe("DateTimePicker", () => {
       </div>,
     );
 
-    await user.type(screen.getByLabelText("Date"), "2026-05-15");
-    await user.selectOptions(screen.getByLabelText("Hour"), "03");
-    await user.selectOptions(screen.getByLabelText("Minute"), "30");
-    await user.selectOptions(screen.getByLabelText("AM/PM"), "PM");
+    await selectCrmDate(screen.getByLabelText("Date"), "2026-05-15");
+    await selectCrmOption(screen.getByLabelText("Hour"), "03");
+    await selectCrmOption(screen.getByLabelText("Minute"), "30");
+    await selectCrmOption(screen.getByLabelText("AM/PM"), "PM");
 
     expect(screen.queryByRole("dialog", { name: /date and time picker/i })).not.toBeInTheDocument();
     expect(handleChange).toHaveBeenLastCalledWith("2026-05-15T15:30");
   });
 
-  it("does not retain a past time when a minimum is supplied", () => {
+  it("does not retain a past time when a minimum is supplied", async () => {
     const handleChange = jest.fn();
     const ControlledPicker = () => {
       const [value, setValue] = useState("");
@@ -62,14 +63,17 @@ describe("DateTimePicker", () => {
 
     render(<ControlledPicker />);
 
-    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-09-12" } });
+    await selectCrmDate(screen.getByLabelText("Date"), "2026-09-12");
     expect(handleChange).toHaveBeenLastCalledWith("2026-09-12T12:01");
 
-    expect(screen.getByRole("option", { name: "AM" })).toBeDisabled();
-    fireEvent.change(screen.getByLabelText("AM/PM"), { target: { value: "AM" } });
+    await userEvent.click(screen.getByLabelText("AM/PM"));
+    expect(screen.getByRole("option", { name: "AM", exact: true })).toHaveAttribute("aria-disabled", "true");
+    await userEvent.keyboard("{Escape}");
     expect(handleChange).toHaveBeenLastCalledWith("2026-09-12T12:01");
 
-    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-09-11" } });
+    await userEvent.click(screen.getByLabelText("Date"));
+    expect(screen.getByRole("button", { name: "Sep 11, 2026" })).toBeDisabled();
+    await userEvent.keyboard("{Escape}");
     expect(handleChange).toHaveBeenLastCalledWith("2026-09-12T12:01");
   });
 
@@ -94,11 +98,13 @@ describe("DateTimePicker", () => {
     render(<ControlledPicker />);
 
     expect(screen.getByLabelText("Hour")).toHaveValue("13");
-    expect(within(screen.getByLabelText("Hour")).getByRole("option", { name: "00" })).toBeDisabled();
+    await user.click(screen.getByLabelText("Hour"));
+    expect(screen.getByRole("option", { name: "00", exact: true })).toHaveAttribute("aria-disabled", "true");
+    await user.keyboard("{Escape}");
     expect(screen.queryByLabelText("AM/PM")).not.toBeInTheDocument();
 
-    await user.selectOptions(screen.getByLabelText("Hour"), "22");
-    await user.selectOptions(screen.getByLabelText("Minute"), "30");
+    await selectCrmOption(screen.getByLabelText("Hour"), "22");
+    await selectCrmOption(screen.getByLabelText("Minute"), "30");
     expect(handleChange).toHaveBeenLastCalledWith("2026-09-12T22:30");
   });
 });

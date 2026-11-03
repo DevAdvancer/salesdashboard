@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { ProtectedRoute } from "@/components/protected-route";
@@ -169,7 +171,7 @@ function AttendanceReportContent() {
             {isAdminLike && teamLeadOptions.length > 0 && (
               <div className="max-w-xs">
                 <Label htmlFor="report-team-lead">Filter by Team</Label>
-                <select
+                <CrmSelect
                   id="report-team-lead"
                   className="mt-1 w-full h-10 pl-3 pr-8 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   value={selectedTeamLeadId}
@@ -181,7 +183,7 @@ function AttendanceReportContent() {
                       {tl.userName}
                     </option>
                   ))}
-                </select>
+                </CrmSelect>
               </div>
             )}
           </div>

@@ -17,6 +17,11 @@ import { getAppwriteErrorMessage } from "@/lib/server/appwrite-errors";
 import type { ClientPaymentPlan, ClientPaymentRecord, ClientPaymentUpdate, Lead, PaymentStatus, User } from "@/lib/types";
 import { getActor, ensureComponentAccess, isAdminLikeReadRole, assertCanMutateClientPayments, parseJsonOr, canActorAccessLead, mapRecord, findRecordByLeadId, mapLeadDocumentToLead, buildSyntheticLead, toComparableIsoDate, PaymentInsightRecord, AdminClientHistoryRow, PaymentsReportRow } from "./shared";
 import { latestPaymentIdsByLead } from '@/lib/utils/lead-payment-cycle';
+import { followupPaymentRecipient, isIndependentFollowup } from '@/lib/utils/followup-payment-attribution';
+import { getPrimaryBranchId } from '@/lib/utils/user-branches';
+import { getCurrentEasternIsoDate } from '@/lib/utils/eastern-date';
+import { paymentReportingBranch } from '@/lib/utils/lead-closing-branch';
+import { dashboardUpfrontReceipts } from '@/lib/utils/dashboard-branch-revenue';
 
 
 /**
@@ -46,7 +51,6 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
             pageLimit: 100,
             maxPages: 500,
           }));
-    if (paymentDocs.length === 0) return [];
     const leadIds = Array.from(
             new Set(
               paymentDocs
@@ -69,6 +73,7 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
     const leadDataMap = new Map<
             string,
             {
+              ownerId: string;
               company: string;
               source: string;
               leadStatus: string;
@@ -109,6 +114,7 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
       // ignore parse errors
     }
     leadDataMap.set(lead.$id, {
+      ownerId: String(lead.ownerId || ""),
       company: company || "Unknown",
       source,
       leadStatus: typeof lead.status === "string" ? lead.status : "",
@@ -156,8 +162,54 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
             pageLimit: 100,
             maxPages: 500,
           });
+    const followupLeads = new Map<string, any>(leadDocs.map(lead => [lead.$id, lead]));
+    const missingFollowupLeadIds = [...new Set(followupsDocs.map(doc => String(doc.leadId || ''))
+      .filter(id => !isIndependentFollowup(id) && !followupLeads.has(id)))];
+    for (let start = 0; start < missingFollowupLeadIds.length; start += 100) {
+      const docs = await listAllDocuments<any>({ databases, databaseId: DATABASE_ID, collectionId: COLLECTIONS.LEADS,
+        queries: [Query.equal('$id', missingFollowupLeadIds.slice(start, start + 100)), Query.select(['$id', 'branchId', 'ownerId', 'assignedToId'])],
+        pageLimit: 100, maxPages: 100, requireComplete: true });
+      docs.forEach(doc => followupLeads.set(doc.$id, doc));
+    }
+    const receiptBranches = new Map<string, string>();
+    const latestCycleBranches = new Map<string, string>();
+    const linkedReceiptLeadIds = [...new Set(followupsDocs.map(doc => String(doc.leadId || '')).filter(id => !isIndependentFollowup(id)))];
+    const branchPaymentDocs = new Map(paymentDocs.map(doc => [doc.$id, doc]));
+    // A receipt can belong to an older closure whose payment document was not
+    // updated during the dashboard range. Read its immutable cycle metadata too.
+    for (let start = 0; start < linkedReceiptLeadIds.length; start += 100) {
+      const docs = await listAllDocuments<any>({ databases, databaseId: DATABASE_ID, collectionId: COLLECTIONS.CLIENT_PAYMENTS,
+        queries: [Query.equal('leadId', linkedReceiptLeadIds.slice(start, start + 100))], pageLimit: 100, maxPages: 100, requireComplete: true });
+      docs.forEach(doc => branchPaymentDocs.set(doc.$id, doc));
+    }
+    const creditIds = [...new Set([...followupsDocs.map(doc => followupPaymentRecipient(doc, followupLeads.get(String(doc.leadId || '')))), ...[...followupLeads.values()].map(lead => lead.ownerId), ...[...branchPaymentDocs.values()].map(doc => parseJsonOr<ClientPaymentPlan>(doc.paymentPlan ?? doc.paymentPlanJson, { percent: 0, months: 0, upfrontAmount: 0 }).closure?.ownerId)].filter(Boolean))] as string[];
+    const primaryBranches = new Map<string, string | null>();
+    for (let start = 0; start < creditIds.length; start += 100) {
+      const users = await listAllDocuments<any>({ databases, databaseId: DATABASE_ID, collectionId: COLLECTIONS.USERS,
+        queries: [Query.equal('$id', creditIds.slice(start, start + 100)), Query.select(['$id', 'branchIds', 'branchId', 'primaryBranchId'])],
+        pageLimit: 100, maxPages: 100, requireComplete: true });
+      users.forEach(user => primaryBranches.set(user.$id, getPrimaryBranchId(user)));
+    }
+    const receiptCycles = new Map<string, Array<{ date: string; branchId: string }>>();
+    const latestIdsForBranch = latestPaymentIdsByLead([...branchPaymentDocs.values()]);
+    for (const doc of branchPaymentDocs.values()) {
+      const plan = parseJsonOr<ClientPaymentPlan>(doc.paymentPlan ?? doc.paymentPlanJson, { percent: 0, months: 0, upfrontAmount: 0 });
+      const branch = paymentReportingBranch(plan.closure, primaryBranches.get(plan.closure?.ownerId || followupLeads.get(doc.leadId)?.ownerId));
+      if (!branch) continue;
+      if (latestIdsForBranch.get(doc.leadId) === doc.$id) latestCycleBranches.set(doc.leadId, branch);
+      const date = plan.closure?.closedAt || doc.createdAt;
+      if (date && Number.isFinite(Date.parse(date))) {
+        const cycles = receiptCycles.get(doc.leadId) || [];
+        cycles.push({ date: getCurrentEasternIsoDate(new Date(date)), branchId: branch });
+        receiptCycles.set(doc.leadId, cycles.sort((a, b) => a.date.localeCompare(b.date)));
+      }
+      for (const update of parseJsonOr<ClientPaymentUpdate[]>(doc.updates ?? doc.updatesJson, [])) {
+        if (update.sourceFollowupId) receiptBranches.set(update.sourceFollowupId, branch);
+      }
+    }
     const followupsMap = new Map<string, { total: number; count: number; monthlyAmounts: Record<string, number> }>();
     const followupsDetailsMap = new Map<string, Array<{
+            branchId: string | null;
             id: string;
             company: string;
             candidateName: string;
@@ -167,6 +219,7 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
             status: string;
           }>>();
     const standaloneFollowups: Array<{
+        branchId: string | null;
         leadId: string;
         company: string;
         candidateName: string;
@@ -184,7 +237,12 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
         : "Unknown";
     const amount = getFollowupsPaymentAmount(fDoc);
     const date = typeof fDoc.date === "string" ? fDoc.date : "";
+    const followupLead = followupLeads.get(fLeadId);
+    const historicalBranch = [...(receiptCycles.get(fLeadId) || [])].reverse().find(cycle => cycle.date <= date)?.branchId;
+    const branchId = receiptBranches.get(String(fDoc.$id)) || historicalBranch || latestCycleBranches.get(fLeadId)
+      || primaryBranches.get(followupLead?.ownerId || followupPaymentRecipient(fDoc, followupLead)) || null;
     const detail = {
+      branchId,
       id: String(fDoc.$id),
       company,
       candidateName: fDoc.candidateName,
@@ -196,6 +254,7 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
 
     if (!fLeadId || !leadDataMap.has(fLeadId)) {
       standaloneFollowups.push({
+        branchId,
         leadId: fLeadId || `manual-followup-${fDoc.$id}`,
         company,
         candidateName: fDoc.candidateName,
@@ -242,6 +301,8 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
 
     // Check if the record ever had a partially_paid status in its update history
     const updates = parseJsonOr<ClientPaymentUpdate[]>(doc.updates ?? doc.updatesJson, []);
+    const received = dashboardUpfrontReceipts(updates, dateFrom, dateTo);
+    let isReceiptOnly = false;
     const wasPartiallyPaid =
       status === "fully_paid" &&
       updates.some((u) => u.status === "partially_paid");
@@ -299,6 +360,7 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
           if (normalizedTo && f.date && f.date > normalizedTo) continue;
 
           standaloneFollowups.push({
+            branchId: f.branchId,
             leadId,
             company: f.company || leadMeta?.company || "Unknown",
             candidateName: f.candidateName,
@@ -311,7 +373,8 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
               : (typeof doc.$createdAt === "string" ? doc.$createdAt : new Date().toISOString()),
           });
         }
-        continue;
+        if (received.amount === 0) continue;
+        isReceiptOnly = true;
       }
     }
 
@@ -320,11 +383,14 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
       company: leadMeta?.company ?? "Unknown",
       source: leadMeta?.source ?? "",
       leadStatus: leadMeta?.leadStatus ?? "",
-      branchId: paymentPlan.closure?.branchId ?? leadMeta?.branchId ?? null,
+      branchId: paymentReportingBranch(paymentPlan.closure, primaryBranches.get(paymentPlan.closure?.ownerId || leadMeta?.ownerId || "")),
       isFollowupOnly: false,
       isClosed: leadMeta?.isClosed === true,
       closedAt: cycleClosedAt,
       upfrontAmount: paymentPlan.upfrontAmount,
+      upfrontReceived: received.amount,
+      isReceiptOnly,
+      receiptDate: received.date,
       months: paymentPlan.months,
       percent: paymentPlan.percent,
       status,
@@ -337,7 +403,10 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
       paidMonthlyAmounts,
       followupsMonthlyAmounts: isLatest ? (followupsMap.get(leadId)?.monthlyAmounts ?? {}) : {},
       leadAmount: paymentPlan.closure?.leadAmount ?? leadMeta?.leadAmount ?? 0,
-      followupsTotal: isLatest ? (followupsMap.get(leadId)?.total ?? 0) : 0,
+      followupsTotal: isLatest && !isReceiptOnly ? (followupsMap.get(leadId)?.total ?? 0) : 0,
+      followupsBranchAmounts: isLatest && !isReceiptOnly ? Object.fromEntries((followupsDetailsMap.get(leadId) || []).reduce((totals, receipt) => {
+        const key = receipt.branchId || ''; totals.set(key, (totals.get(key) || 0) + receipt.amount); return totals;
+      }, new Map<string, number>())) : {},
       followupsCount: isLatest ? (followupsMap.get(leadId)?.count ?? 0) : 0,
       followupsPayments: isLatest ? (followupsDetailsMap.get(leadId) || []) : [],
     });
@@ -356,11 +425,12 @@ export async function listAllPaymentInsightsAction(actorId: string, dateFrom?: s
       company: followup.company,
       source: "Followup payment",
       leadStatus: "followup_payment",
-      branchId: null,
+      branchId: followup.branchId,
       isFollowupOnly: true,
       isClosed: false,
       closedAt: null,
       upfrontAmount: 0,
+      upfrontReceived: 0,
       months: 0,
       percent: 0,
       status: followup.amount < 0 ? "refunded" : "fully_paid",

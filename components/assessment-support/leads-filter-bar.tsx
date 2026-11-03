@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -33,7 +35,7 @@ export function LeadsFilterBar({
         <Label htmlFor="filter" className="sr-only">
           Filter
         </Label>
-        <select
+        <CrmSelect
           id="filter"
           className="w-full"
           value={filter}
@@ -41,7 +43,7 @@ export function LeadsFilterBar({
           <option value="all">All Leads</option>
           <option value="assessment_created">Assessment Created</option>
           <option value="assessment_not_created">Assessment Not Created</option>
-        </select>
+        </CrmSelect>
       </div>
     </div>
   );

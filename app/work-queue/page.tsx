@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { useEffect, useState } from "react";
 import { FollowUpQueueCard } from "@/components/dashboard/follow-up-queue";
 import { RoleWorkDashboard } from "@/components/dashboard/role-work-dashboard";
@@ -122,7 +124,7 @@ function WorkQueueContent() {
         {canReadLikeAdmin && (
           <div className="w-full max-w-xs space-y-2">
             <Label htmlFor="workQueueTeam">Team</Label>
-            <select
+            <CrmSelect
               id="workQueueTeam"
               value={selectedTeamLeadId}
               onChange={(event) => setSelectedTeamLeadId(event.target.value)}
@@ -138,7 +140,7 @@ function WorkQueueContent() {
                   </option>
                 ))
               )}
-            </select>
+            </CrmSelect>
             {selectedTeamLeadName ? (
               <p className="text-xs text-muted-foreground">
                 Viewing {selectedTeamLeadName}&apos;s team queue

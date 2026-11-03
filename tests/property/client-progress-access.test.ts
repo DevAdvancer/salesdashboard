@@ -1,5 +1,5 @@
 import fc from 'fast-check';
-import { canSeeProgress, canManageProgress, canManageMarketingTl, canSaveFinalFeedback, progressHierarchyIds, PROGRESS_ROLES } from '@/lib/client-progress';
+import { canAccessProgress, canShareProgress, canReadAllProgress, canEditProgress, canSeeProgress, canManageProgress, canManageMarketingTl, canSaveFinalFeedback, progressHierarchyIds, PROGRESS_ROLES } from '@/lib/client-progress';
 import { COMPONENT_ACCESS } from '@/lib/constants/component-access';
 import { DEFAULT_ACCESS_RULES } from '@/lib/constants/default-access';
 
@@ -8,7 +8,7 @@ const entry = (salespersonId: string, department = 'sales') => ({ salespersonId,
 
 test('agents never inherit access from a name, other owner or another department', () => {
   fc.assert(fc.property(fc.uuid(), fc.uuid(), fc.constantFrom('sales', 'resume'), (viewer, owner, department) => {
-    expect(canSeeProgress(actor(viewer, 'agent', department), entry(owner, department), [viewer])).toBe(viewer === owner);
+    expect(canSeeProgress(actor(viewer, 'agent', department), entry(owner, department), [viewer])).toBe(department === 'sales' && viewer === owner);
     expect(canSeeProgress(actor(viewer, 'agent', department), entry(viewer, department === 'sales' ? 'resume' : 'sales'), [viewer])).toBe(false);
   }));
 });
@@ -24,9 +24,21 @@ test('every role excludes backed-out and not-interested entries, inactive accoun
 test('only Admin can manage assignments/recruiters and amend already-saved final feedback', () => {
   fc.assert(fc.property(fc.constantFrom(...PROGRESS_ROLES), fc.constantFrom('sales', 'resume'), (role, department) => {
     const viewer = actor('user', role, department);
-    expect(canManageProgress(viewer)).toBe(role === 'admin');
+    expect(canManageProgress(viewer)).toBe(role === 'admin' && department === 'sales');
     expect(canManageMarketingTl(viewer)).toBe(role === 'admin' && department === 'sales');
-    expect(canSaveFinalFeedback(viewer, true)).toBe(role === 'admin');
+    expect(canSaveFinalFeedback(viewer, true)).toBe(role === 'admin' && department === 'sales');
+  }));
+});
+
+test('Resume accounts cannot access, edit or share Client Progress regardless of role or ownership', () => {
+  fc.assert(fc.property(fc.constantFrom(...PROGRESS_ROLES), fc.uuid(), (role, id) => {
+    const viewer = actor(id, role, 'resume');
+    for (const permission of [canAccessProgress, canManageProgress, canShareProgress, canReadAllProgress, canEditProgress]) {
+      expect(permission(viewer)).toBe(false);
+    }
+    expect(canSeeProgress(viewer, entry(id), [id])).toBe(false);
+    expect(canSeeProgress(viewer, entry(id, 'resume'), [id])).toBe(false);
+    expect(canSeeProgress(actor(id, role), entry(id, 'resume'), [id])).toBe(false);
   }));
 });
 

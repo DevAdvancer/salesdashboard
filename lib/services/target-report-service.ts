@@ -33,7 +33,7 @@ export function getTargetReport(input: {
   monthKey: string;
 }): Promise<TargetReportPayload> {
   return cacheClientRead(
-    `${TARGET_REPORT_SCOPE_PREFIX}getTargetReport`,
+    `${TARGET_REPORT_SCOPE_PREFIX}getTargetReport:branch-splits-v2`,
     [input.actorId, input.monthKey],
     () => getTargetReportAction(input),
     TARGET_REPORT_TTL_MS,

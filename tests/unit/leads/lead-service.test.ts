@@ -1,3 +1,5 @@
+import { closeLeadAction } from '@/lib/actions/lead/status';
+jest.mock('@/lib/actions/lead/status', () => ({ closeLeadAction: jest.fn() }));
 import {
   createLead,
   updateLead,
@@ -452,117 +454,20 @@ describe('Lead Service', () => {
   });
 
   describe('closeLead', () => {
-    it('should close a lead and set correct fields', async () => {
-      const leadId = 'lead-123';
-      const currentLead: Lead = {
-        $id: leadId,
-        data: JSON.stringify(mockLeadData),
-        status: 'Qualified',
-        ownerId: mockManagerId,
-        assignedToId: mockAgentId,
-        isClosed: false,
-        closedAt: null,
-        branchId: null,
-      };
-
-      const closedLead: Lead = {
-        ...currentLead,
-        isClosed: true,
-        closedAt: '2024-01-15T10:00:00.000Z',
-        status: 'Won',
-      };
-
-      (databases.getDocument as jest.Mock).mockResolvedValue(currentLead);
-      (databases.updateDocument as jest.Mock).mockResolvedValue(closedLead);
-
-      const result = await closeLead(leadId, 'Won', mockManagerId, 'TeamLead', 'team_lead');
-
-      expect(result.isClosed).toBe(true);
-      expect(result.closedAt).toBeTruthy();
-      expect(result.status).toBe('Won');
-      expect(databases.updateDocument).toHaveBeenCalledWith(
-        'test-database',
-        'test-leads-collection',
-        leadId,
-        expect.objectContaining({
-          isClosed: true,
-          status: 'Won',
-        }),
-        expect.arrayContaining([
-          Permission.read(Role.user(mockManagerId)),
-          Permission.update(Role.user(mockManagerId)),
-          Permission.delete(Role.user(mockManagerId)),
-          Permission.read(Role.user(mockAgentId)),
-        ])
-      );
+    it('delegates closing and the selected branch to the authenticated server action', async () => {
+      const lead = { $id: 'lead-123', isClosed: true, status: 'Won' };
+      (closeLeadAction as jest.Mock).mockResolvedValue({ success: true, lead });
+      expect(await closeLead('lead-123', 'Won', mockAgentId, 'Agent', 'agent', 'ahm')).toEqual(lead);
+      expect(closeLeadAction).toHaveBeenCalledWith('lead-123', 'Won', mockAgentId, 'Agent', 'agent', 'ahm');
+      expect(databases.updateDocument).not.toHaveBeenCalled();
     });
-
-    it('should set agent permissions to read-only when closing', async () => {
-      const leadId = 'lead-123';
-      const currentLead: Lead = {
-        $id: leadId,
-        data: JSON.stringify(mockLeadData),
-        status: 'Qualified',
-        ownerId: mockManagerId,
-        assignedToId: mockAgentId,
-        isClosed: false,
-        closedAt: null,
-        branchId: null,
-      };
-
-      (databases.getDocument as jest.Mock).mockResolvedValue(currentLead);
-      (databases.updateDocument as jest.Mock).mockResolvedValue({
-        ...currentLead,
-        isClosed: true,
-      });
-
-      await closeLead(leadId, 'Closed', mockManagerId, 'TeamLead', 'team_lead');
-
-      const callArgs = (databases.updateDocument as jest.Mock).mock.calls[0];
-      const permissions = callArgs[4];
-
-      // Agent should only have read permission
-      const agentReadPermission = permissions.find((p: string) =>
-        p.includes(mockAgentId) && p.includes('read')
-      );
-      const agentUpdatePermission = permissions.find((p: string) =>
-        p.includes(mockAgentId) && p.includes('update')
-      );
-
-      expect(agentReadPermission).toBeDefined();
-      expect(agentUpdatePermission).toBeUndefined();
+    it('requires an authenticated actor instead of attempting a browser write', async () => {
+      await expect(closeLead('lead-123', 'Won')).rejects.toThrow('Unauthorized');
+      expect(databases.updateDocument).not.toHaveBeenCalled();
     });
-
-    it('should handle closing lead without assigned agent', async () => {
-      const leadId = 'lead-123';
-      const currentLead: Lead = {
-        $id: leadId,
-        data: JSON.stringify(mockLeadData),
-        status: 'New',
-        ownerId: mockManagerId,
-        assignedToId: null,
-        isClosed: false,
-        closedAt: null,
-        branchId: null,
-      };
-
-      (databases.getDocument as jest.Mock).mockResolvedValue(currentLead);
-      (databases.updateDocument as jest.Mock).mockResolvedValue({
-        ...currentLead,
-        isClosed: true,
-      });
-
-      await closeLead(leadId, 'Closed', mockAgentId, 'Agent', 'agent');
-
-      expect(databases.updateDocument).toHaveBeenCalled();
-    });
-
-    it('should throw error when closing fails', async () => {
-      (databases.getDocument as jest.Mock).mockRejectedValue({
-        message: 'Lead not found',
-      });
-
-      await expect(closeLead('invalid-id', 'Closed', mockManagerId, 'TeamLead', 'team_lead')).rejects.toThrow('Lead not found');
+    it('preserves server validation failures', async () => {
+      (closeLeadAction as jest.Mock).mockRejectedValue(new Error('Choose an assigned branch'));
+      await expect(closeLead('lead-123', 'Won', mockAgentId, 'Agent', 'agent', 'foreign')).rejects.toThrow('Choose an assigned branch');
     });
   });
 

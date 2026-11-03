@@ -28,6 +28,7 @@ export function upsertClientPaymentRecord(input: {
   personalDetails: Record<string, unknown>;
   paymentPlan: ClientPaymentPlan;
   initialStatus?: PaymentStatus;
+  closingBranchId?: string;
 }): Promise<ClientPaymentRecord> {
   return upsertClientPaymentRecordAction(input).finally(() => {
     clearClientReadCache();
@@ -82,7 +83,7 @@ export function listPaymentsReport(input: {
 
 export function listAllPaymentInsights(actorId: string): Promise<PaymentInsightRecord[]> {
   return cacheClientRead(
-    "clientPayments:listAllInsights",
+    "clientPayments:listAllInsights:receipts-owner-branch-v3",
     [actorId],
     () => listAllPaymentInsightsAction(actorId),
   );

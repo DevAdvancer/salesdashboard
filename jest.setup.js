@@ -5,6 +5,16 @@ import { TextEncoder, TextDecoder } from 'util';
 global.TextEncoder = TextEncoder;
 global.TextDecoder = TextDecoder;
 
+// jsdom lacks the pointer/layout APIs used by the CRM's Radix dropdowns.
+if (typeof Element !== 'undefined') {
+  Element.prototype.hasPointerCapture ??= () => false;
+  Element.prototype.setPointerCapture ??= () => {};
+  Element.prototype.releasePointerCapture ??= () => {};
+  Element.prototype.scrollIntoView ??= () => {};
+}
+if (typeof window !== 'undefined') window.PointerEvent ??= MouseEvent;
+global.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };
+
 // Request / Response / Headers are deliberately NOT installed. This file used
 // to copy them off globalThis, which was a silent no-op because jsdom does not
 // define them either. Installing undici's versions instead is not an option:

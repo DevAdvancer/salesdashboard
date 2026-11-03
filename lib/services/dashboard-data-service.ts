@@ -190,7 +190,7 @@ export async function loadDashboardPaymentInsights(
   dateRange: DateRange,
 ): Promise<PaymentInsightRecord[]> {
   return cacheClientRead(
-    `${DASHBOARD_DATA_SCOPE}:paymentInsights`,
+    `${DASHBOARD_DATA_SCOPE}:paymentInsights:receipts-owner-branch-v3`,
     [actorId, dateRange.from ?? "", dateRange.to ?? ""],
     () => listAllPaymentInsightsAction(actorId, dateRange.from, dateRange.to),
     DASHBOARD_DATA_TTL_MS,

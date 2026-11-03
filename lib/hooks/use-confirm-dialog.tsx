@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -52,6 +52,7 @@ export function useConfirmDialog(): UseConfirmDialogReturn {
   const [cancelText, setCancelText] = useState('Cancel');
   const [destructive, setDestructive] = useState(false);
   const resolverRef = useRef<((value: boolean) => void) | null>(null);
+  useEffect(() => () => resolverRef.current?.(false), []);
 
   const close = (value: boolean) => {
     const resolver = resolverRef.current;
@@ -61,6 +62,7 @@ export function useConfirmDialog(): UseConfirmDialogReturn {
   };
 
   const confirm = (options: ConfirmOptions) => {
+    resolverRef.current?.(false);
     setTitle(options.title);
     setDescription(options.description ?? null);
     setConfirmText(options.confirmText ?? 'Confirm');

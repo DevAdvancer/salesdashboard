@@ -159,7 +159,7 @@ export function TargetReportTable({ result, isAgent, monthKey, actorId }: Target
             </p>
           </CardContent>
         </Card>
-        {!isAgent && (
+      {!isAgent && (
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -174,6 +174,20 @@ export function TargetReportTable({ result, isAgent, monthKey, actorId }: Target
           </Card>
         )}
       </div>
+
+      {!!result.branchSplits?.length && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Branch split</CardTitle></CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader><TableRow><TableHead>Branch</TableHead><TableHead className="text-right">Achieved</TableHead></TableRow></TableHeader>
+              <TableBody>{result.branchSplits.map(split => (
+                <TableRow key={split.branchId}><TableCell>{split.branchName} Split</TableCell><TableCell className="text-right tabular-nums">{currency.format(split.amount)}</TableCell></TableRow>
+              ))}</TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       {!isAgent && (
         <Card>

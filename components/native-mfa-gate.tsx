@@ -5,7 +5,7 @@ import { AuthenticationFactor } from 'appwrite';
 import { account } from '@/lib/appwrite';
 import { withClientTimeout } from '@/lib/utils/client-timeout';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { OtpCodeInput } from '@/components/ui/otp-code-input';
 import { Label } from '@/components/ui/label';
 
 type Props = { onVerified: () => void | Promise<void>; onSignOut: () => void | Promise<void> };
@@ -109,9 +109,8 @@ export function NativeMfaGate({ onVerified, onSignOut }: Props) {
         <p>Enter the six-digit code sent by Appwrite to your registered email. You only need a code once per sign-in.</p>
         <form onSubmit={event => { event.preventDefault(); void verify(); }} className="space-y-3">
           <Label htmlFor="native-mfa-code">Email verification code</Label>
-          <Input id="native-mfa-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} pattern="[0-9]{6}" required
-            value={code} onChange={event => setCode(event.target.value.replace(/\D/g, ''))} disabled={busy || !challenge} />
-          <Button type="submit" disabled={busy || !challenge || code.length !== 6}>{busy ? 'Verifying…' : 'Verify and continue'}</Button>
+          <OtpCodeInput id="native-mfa-code" value={code} onChange={setCode} disabled={busy || !challenge} />
+          <Button type="submit" disabled={busy || !challenge || !/^\d{6}$/.test(code)}>{busy ? 'Verifying…' : 'Verify and continue'}</Button>
         </form>
         <Button variant="outline" disabled={busy || (Boolean(challenge) && now - sentAt < 60_000)} onClick={() => void run(sendCode)}>
           {challenge ? 'Resend code' : 'Send verification code'}

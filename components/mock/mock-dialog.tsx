@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import type { ReactNode } from "react";
 import { SupportTechnologyField } from "@/components/support-technology-field";
 import { getSupportTechnologyError } from "@/lib/utils/support-technology";
@@ -183,7 +185,7 @@ export function MockDialog({
 
             <div className="col-span-2 md:col-span-1">
               <Label htmlFor="company">Company (Signature)</Label>
-              <select
+              <CrmSelect
                 id="company"
                 className="flex h-9 w-full rounded-md border border-input bg-transparent pl-3 pr-8 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 value={formData.company}
@@ -195,7 +197,7 @@ export function MockDialog({
                 }>
                 <option value="Silverspace Inc.">Silverspace Inc.</option>
                 <option value="Vizva Consultancy">Vizva Consultancy</option>
-              </select>
+              </CrmSelect>
             </div>
 
             <div className="col-span-2">

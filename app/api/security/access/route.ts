@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { accessCookieFor, crmAccessEnabled, CrmAccessError, evaluateCrmAccess, resolveSecurityIdentity, type SecurityIdentity } from '@/lib/server/crm-access';
 import { publicUser } from '@/lib/server/crm-browser-data';
 import { getTodayEst } from '@/lib/utils/est-date';
+import { CRM_IMPERSONATION_COOKIE } from '@/lib/utils/crm-impersonation';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -22,13 +23,17 @@ export async function GET(request: NextRequest) {
   try {
     const identity = await resolveSecurityIdentity();
     if (view === 'bootstrap') {
-      return withAccessCookie(request, json({ user: publicUser(identity.user as unknown as Record<string, unknown>, true),
+      return withAccessCookie(request, json({ user: { ...publicUser(identity.user as unknown as Record<string, unknown>, true),
+        ...(identity.operator ? { impersonatorUserId: identity.operator.user.$id, impersonatorName: identity.operator.user.name } : {}) },
         status: crmAccessEnabled() ? await evaluateCrmAccess(identity) : { state: 'disabled', dateKey: getTodayEst() } }), identity);
     }
     return withAccessCookie(request, json(await evaluateCrmAccess(identity)), identity);
   } catch (error) {
-    if (error instanceof CrmAccessError) return json({ error: error.message, code: error.code }, error.status);
-    return json({ error: 'CRM access verification is temporarily unavailable. Please retry.' }, 503);
+    const response = error instanceof CrmAccessError ? json({ error: error.message, code: error.code }, error.status)
+      : json({ error: 'CRM access verification is temporarily unavailable. Please retry.' }, 503);
+    // Recover the operator's own login if a target is removed or capability is revoked.
+    if (request.cookies.get(CRM_IMPERSONATION_COOKIE)?.value) response.cookies.delete(CRM_IMPERSONATION_COOKIE);
+    return response;
   }
 }
 

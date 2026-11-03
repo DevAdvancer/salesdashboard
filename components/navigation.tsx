@@ -1,5 +1,7 @@
 "use client";
 
+import { CrmSelect } from '@/components/ui/crm-select';
+
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useAccess, ComponentKey } from "@/lib/contexts/access-control-context";
 import Link from "next/link";
@@ -46,7 +48,6 @@ function formatRoleLabel(role: string): string {
 // own roster without switching to the sales view; access control still
 // gates the page itself (only roles eligible for `user-management` see it).
 const RESUME_UNIVERSAL_ITEM_KEYS = new Set([
-  "client-progress",
   "resume-chat",
   "resume-hierarchy",
   "user-management",
@@ -356,8 +357,7 @@ export function Navigation({
       );
     }
 
-    const progressItem = itemsForUser.find(item => item.key === 'client-progress');
-    if (resumeProfilesItem || resumeCallsItem || resumeMarketingItem || complianceDashboardItem || progressItem) {
+    if (resumeProfilesItem || resumeCallsItem || resumeMarketingItem || complianceDashboardItem) {
       renderedItems.push(
         <div key="section-resume-operations">
           {renderSectionHeader("Operations")}
@@ -365,7 +365,6 @@ export function Navigation({
           {resumeProfilesItem && renderNavButton(resumeProfilesItem)}
           {complianceDashboardItem && renderNavButton(complianceDashboardItem)}
           {resumeMarketingItem && renderNavButton(resumeMarketingItem)}
-          {progressItem && renderNavButton(progressItem)}
         </div>
       );
     }
@@ -586,7 +585,7 @@ export function Navigation({
         {/* View-as switcher — visible only to leadership roles
             (admin/developer/monitor/operations) who can preview both
             dashboards from a single login. Segmented toggle, not a
-            <select>, so the active state is obvious at a glance. */}
+            <CrmSelect>, so the active state is obvious at a glance. */}
         {canSwitchDashboard && (
           <div
             style={{
