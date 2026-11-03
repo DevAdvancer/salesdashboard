@@ -131,12 +131,12 @@ function LinkedinRequestsContent() {
     enabled: !!user && serverSessionReady,
     // This page's own actions refresh usage immediately (invalidateQueries).
     // Returning from LinkedIn always refreshes sends recorded by Helper.
-    // The timer catches sends made from
+    // The 5-minute timer catches sends made from
     // elsewhere while this tab stays focused. The server re-counts before every
     // send, so the shown quota never decides whether a send is allowed.
     staleTime: 30 * 1000,
     refetchOnWindowFocus: 'always',
-    refetchInterval: 2 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
   });
   const accounts: LinkedinAccount[] = accountUsageQuery.data?.accounts ?? [];
   const sentByAccountId = accountUsageQuery.data?.sentByAccountId;

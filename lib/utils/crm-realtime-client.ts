@@ -3,8 +3,12 @@ import { withClientTimeout } from '@/lib/utils/client-timeout';
 type Change = { channels: string[]; events: string[]; timestamp: string; payload: Record<string, unknown>; version: string };
 const subscriptions = new Map<number, { channels: string[]; callback: (event: Change) => void }>();
 const versions = new Map<string, string>();
-const POLL_MS = 60_000;
-const MAX_RETRY_MS = 240_000;
+// Every poll is a Vercel invocation per open tab. Returning to the tab (visibility)
+// polls at once, and focusing a still-visible window polls after FOCUS_REFRESH_MS.
+const POLL_MS = 180_000;
+const MAX_RETRY_MS = 600_000;
+const FOCUS_REFRESH_MS = 30_000;
+let lastPollAt = 0;
 let sequence = 0;
 let controller: AbortController | null = null;
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -43,6 +47,7 @@ function deliver(event: Change) {
 async function poll(key: string) {
   const current = new AbortController();
   controller = current;
+  lastPollAt = Date.now();
   try {
     const response = await withClientTimeout(async signal => {
       const result = await fetch(`/api/security/changes?${new URLSearchParams({ channels: key, mode: 'poll' })}`, {
@@ -98,12 +103,19 @@ function resume() {
   reconnect();
 }
 
+function refreshOnFocus() {
+  if (blocked || !activeChannels || controller || Date.now() - lastPollAt < FOCUS_REFRESH_MS) return;
+  clearTimeout(timer); timer = undefined;
+  void poll(activeChannels);
+}
+
 export function subscribeCrmChanges(channels: string | string[], callback: (event: Change) => void) {
   const id = ++sequence;
   subscriptions.set(id, { channels: Array.isArray(channels) ? channels : [channels], callback });
   if (!watchingVisibility && typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', resume);
     window.addEventListener('crm-session-restored', resume);
+    window.addEventListener('focus', refreshOnFocus);
     watchingVisibility = true;
   }
   scheduleReconnect();
@@ -114,6 +126,7 @@ export function subscribeCrmChanges(channels: string | string[], callback: (even
       versions.clear(); blocked = false; failures = 0;
       if (watchingVisibility) document.removeEventListener('visibilitychange', resume);
       if (watchingVisibility) window.removeEventListener('crm-session-restored', resume);
+      if (watchingVisibility) window.removeEventListener('focus', refreshOnFocus);
       watchingVisibility = false;
     } else scheduleReconnect();
   };

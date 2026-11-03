@@ -24,3 +24,11 @@ it('preserves explicit self-signed transport configuration', () => {
   const client = new ServerAppwriteClient(); client.config.selfSigned = true;
   expect(client.prepareRequest('GET', new URL('https://appwrite.example/v1/account')).options).toHaveProperty('dispatcher');
 });
+
+it('replaces an SDK default header instead of sending a second, differently cased copy', () => {
+  const client = new ServerAppwriteClient();
+  client.headers = { 'X-Appwrite-Response-Format': '1.6.0', 'x-sdk-name': 'Node.js' };
+  client.addHeader('X-Appwrite-Response-Format', '1.9.0').addHeader('X-Appwrite-Impersonate-User-Id', 'target');
+  expect(client.prepareRequest('GET', new URL('https://appwrite.example/v1/account')).options.headers).toEqual({
+    'X-Appwrite-Response-Format': '1.9.0', 'x-sdk-name': 'Node.js', 'X-Appwrite-Impersonate-User-Id': 'target' });
+});

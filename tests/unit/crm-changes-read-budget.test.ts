@@ -9,7 +9,8 @@ jest.mock('@/lib/server/crm-access', () => ({
   CrmAccessError: class extends Error { constructor(public status: number, message: string) { super(message); } },
   securityDatabase: () => ({ listDocuments: mockList }),
 }));
-jest.mock('@/app/actions/lead/visibility', () => ({ getLeadVisibilityUserIds: async (_db: unknown, id: string) => [id] }));
+const mockVisibility = jest.fn(async (_db: unknown, id: string) => [id]);
+jest.mock('@/app/actions/lead/visibility', () => ({ getLeadVisibilityUserIds: (...args: [unknown, string]) => mockVisibility(...args) }));
 
 describe('authorized change snapshot budget', () => {
   let GET: typeof import('@/app/api/security/changes/route').GET;
@@ -62,6 +63,19 @@ describe('authorized change snapshot budget', () => {
     const queries = mockList.mock.calls.map(call => JSON.stringify(call[2]));
     expect(queries[0]).toContain('one');
     expect(queries[1]).toContain('two');
+  });
+
+  it('reuses a lead scope for five minutes per actor and role, then re-lists it', async () => {
+    mockVisibility.mockClear();
+    mockActor.mockResolvedValue({ $id: 'lead', role: 'team_lead', department: 'sales' });
+    await read(); await jest.advanceTimersByTimeAsync(180_000); await read();
+    expect(mockVisibility).toHaveBeenCalledTimes(1);
+    mockActor.mockResolvedValue({ $id: 'lead', role: 'agent', department: 'sales' });
+    await read();
+    expect(mockVisibility).toHaveBeenCalledTimes(2);
+    mockActor.mockResolvedValue({ $id: 'lead', role: 'team_lead', department: 'sales' });
+    await jest.advanceTimersByTimeAsync(120_001); await read();
+    expect(mockVisibility).toHaveBeenCalledTimes(3);
   });
 
   it('never caches chat or notification bodies and scopes recipients', async () => {

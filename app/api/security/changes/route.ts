@@ -16,6 +16,9 @@ const secretCollections = new Set([COLLECTIONS.SECURITY_CHALLENGES, COLLECTIONS.
 // Share only empty-payload change markers, after fresh authorization and scope
 // resolution. Chat/notification bodies and access decisions are never cached here.
 const markers = createBriefReadCache<Awaited<ReturnType<typeof readChange>>>(60_000, 512);
+// Which owners' leads to watch only picks the change marker; leads are authorized
+// again when loaded. Reuse it briefly so each poll does not re-list users.
+const leadScopes = createBriefReadCache<string[]>(5 * 60_000, 512);
 const carriesMessageBody = (collectionId: string) =>
   [COLLECTIONS.NOTIFICATIONS, COLLECTIONS.CHAT_MESSAGES, COLLECTIONS.RESUME_CHAT_MESSAGES].includes(collectionId);
 
@@ -40,7 +43,8 @@ async function changeFor(actor: User, collectionId: string) {
     if ((actor.department || 'sales') !== 'sales' && !['admin', 'developer', 'monitor', 'operations'].includes(actor.role)) return null;
     if (!['admin', 'developer', 'monitor', 'operations'].includes(actor.role)) {
       const { getLeadVisibilityUserIds } = await import('@/app/actions/lead/visibility');
-      const ids = await getLeadVisibilityUserIds(securityDatabase(), actor.$id, actor.role);
+      const ids = await leadScopes.read(appwriteCacheKey('lead-visibility', actor.$id, actor.role),
+        () => getLeadVisibilityUserIds(securityDatabase(), actor.$id, actor.role));
       if (!ids.length) return null;
       queries.push(Query.or([Query.equal('ownerId', ids), Query.equal('assignedToId', ids)]));
     }

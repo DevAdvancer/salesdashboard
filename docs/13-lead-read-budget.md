@@ -77,9 +77,12 @@ in a save. No browser-provided "already checked" flag is trusted.
 
 ## Live changes
 
-- Lead and other empty-payload change markers are checked every 30 seconds,
-  rather than every 10 seconds. Connection establishment still checks immediately.
-- Identical marker reads share a 30-second bounded cache on a warm server.
+- Lead and other empty-payload change markers are checked every 3 minutes while
+  the tab is visible. Returning to the tab checks immediately, and focusing a
+  visible window checks once the last check is 30 seconds old.
+- Identical marker reads share a 60-second bounded cache on a warm server. The
+  list of owners whose leads a non-leadership user watches is reused for 5 minutes;
+  leads are still authorized when loaded.
   Exact visibility queries are part of the key, after fresh authorization and
   hierarchy resolution. No access decision is cached.
 - Browser subscriptions with identical channels reuse one EventSource, and

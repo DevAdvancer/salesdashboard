@@ -1,17 +1,18 @@
 /**
- * Process-local reuse of a validated native session for a few seconds. Every proxy,
+ * Process-local reuse of a validated native session for a few minutes. Every proxy,
  * page, action and API call otherwise waits on 2-3 Appwrite round trips, and Fluid
  * compute bills provisioned memory for all of that waiting. MFA expiry is still
  * evaluated on every request from the cached session fields; revocation and
- * deactivation reach other instances within this window. CRM_IDENTITY_CACHE_MS=0
- * restores a live check on every request.
+ * deactivation reach other instances within this window. The default outlasts the
+ * 3-minute change poll so an idle tab's poll needs no user read. CRM_IDENTITY_CACHE_MS=0
+ * restores a live check on every request; values are capped at 5 minutes.
  */
 const MAX_ENTRIES = 1_000;
 const entries = new Map<string, { expiresAt: number; value: unknown }>();
 
 export function identityCacheMs() {
-  const value = Number(process.env.CRM_IDENTITY_CACHE_MS ?? 30_000);
-  return Number.isFinite(value) ? Math.min(Math.max(value, 0), 60_000) : 0;
+  const value = Number(process.env.CRM_IDENTITY_CACHE_MS ?? 240_000);
+  return Number.isFinite(value) ? Math.min(Math.max(value, 0), 300_000) : 0;
 }
 export function readCachedIdentity<T>(key: string, now = Date.now()): T | undefined {
   if (identityCacheMs() <= 0) return undefined;

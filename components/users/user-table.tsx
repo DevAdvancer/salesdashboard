@@ -5,6 +5,9 @@ import { Label } from "@/components/ui/label";
 import { getVisibleUserBranches } from "@/lib/utils/branch-visibility";
 import { getPrimaryBranchId } from '@/lib/utils/user-branches';
 import { canDeactivateUser } from '@/lib/utils/user-deactivation';
+import { canSetUserPassword } from '@/lib/utils/password-reset-policy';
+import { SetPasswordDialog } from '@/components/users/set-password-dialog';
+import { useState } from 'react';
 
 interface UserTableProps {
   filteredUsers: User[];
@@ -63,6 +66,7 @@ export function UserTable({
   setStatusFilter,
   USERS_PAGE_SIZE,
 }: UserTableProps) {
+  const [passwordTarget, setPasswordTarget] = useState<User | null>(null);
   const formatRole = (role: string) => {
     switch (role) {
       case "admin": return "Admin";
@@ -226,6 +230,11 @@ export function UserTable({
                                   ['agent', 'lead_generation', 'monitor', 'operations'].includes(u.role) && (
                                   <Button variant="outline" size="sm" onClick={() => handleSetAgentActive(u, false)}>Complete handoff</Button>
                                 )}
+                                {user && canSetUserPassword(user, u) && (
+                                  <Button variant="outline" size="sm" onClick={() => setPasswordTarget(u)}>
+                                    Set password
+                                  </Button>
+                                )}
                                 {(isAdmin || isDeveloper) && (
                                   <Button
                                     variant="outline"
@@ -273,6 +282,7 @@ export function UserTable({
           </Button>
         </div>
       )}
+      <SetPasswordDialog target={passwordTarget} onClose={() => setPasswordTarget(null)} />
     </>
   );
 }

@@ -2,7 +2,7 @@
 
 import { ID, Permission, Query, Role } from 'node-appwrite';
 import { createAdminClient, createSessionClient } from '@/lib/server/appwrite';
-import { assertAuthenticatedUserId, getAuthenticatedAccount } from '@/lib/server/current-user';
+import { assertAuthenticatedUserId, getAuthenticatedAccount, getAuthenticatedUserDoc } from '@/lib/server/current-user';
 import { invalidateDepartmentScopedUserIds } from '@/lib/server/department-user-cache';
 import logger from '@/lib/logger';
 import { CreateTeamLeadInput, CreateAgentInput, Department, UserRole, isValidDepartment } from '@/lib/types';
@@ -16,6 +16,10 @@ import { planUserDeactivation, handoffDeactivatedUserLeads } from '@/lib/server/
 import { canDeactivateUser, type HandoffUser } from '@/lib/utils/user-deactivation';
 import { withLinkedinProfileLock } from '@/lib/server/linkedin-lead-protection';
 import { clearCrmIdentityCache } from '@/lib/server/crm-identity-cache';
+import { cookies } from 'next/headers';
+import { canSetUserPassword, MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from '@/lib/utils/password-reset-policy';
+import { CRM_IMPERSONATION_COOKIE } from '@/lib/utils/crm-impersonation';
+import { appendLeadHistory } from '@/lib/server/lead-history';
 
 // Constants
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
@@ -900,4 +904,43 @@ export async function getUsersNamesAction(ids: string[]): Promise<Record<string,
         console.error("Failed to fetch user names:", error);
         return {};
     }
+}
+
+/**
+ * Set another user's password directly. Admins may do this for agents and team
+ * leads; the CRM owner for everyone. Every session of the target is ended, and
+ * the change (never the password) is recorded in history.
+ */
+export async function setUserPasswordAction(input: { userId: string; password: string }) {
+    const userId = typeof input?.userId === 'string' ? input.userId : '';
+    const password = typeof input?.password === 'string' ? input.password : '';
+    if (!userId || userId.length > 36) throw new Error('Choose a user.');
+    if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
+        throw new Error(`Password must be ${MIN_PASSWORD_LENGTH}-${MAX_PASSWORD_LENGTH} characters.`);
+    }
+    if ((await cookies()).get(CRM_IMPERSONATION_COOKIE)?.value) {
+        throw new Error('Stop impersonating before changing a password.');
+    }
+    const [account, actor] = await Promise.all([getAuthenticatedAccount(), getAuthenticatedUserDoc()]);
+    if (actor.$id !== account.$id) throw new Error('Unauthorized');
+
+    const { users, databases } = await createAdminClient();
+    databases.clearReadCacheForCollection?.(COLLECTIONS.USERS);
+    const target = await getUserDoc(userId);
+    if (!target) throw new Error('User not found.');
+    // The owner check uses the native sign-in email as well as the CRM profile.
+    const actorForPolicy = { $id: actor.$id, role: actor.role, isActive: actor.isActive,
+        email: account.email?.trim().toLowerCase() === actor.email?.trim().toLowerCase() ? actor.email : '' };
+    if (!canSetUserPassword(actorForPolicy, { $id: target.$id, role: target.role, email: target.email })) {
+        throw new Error("Permission denied: You cannot change this user's password.");
+    }
+
+    await users.updatePassword(userId, password);
+    // Old sessions must not outlive a password an admin replaced.
+    await users.deleteSessions(userId).catch(error => logger.warn({ userId, error }, 'Password set but sessions could not be ended'));
+    clearCrmIdentityCache();
+    await appendLeadHistory(databases, { eventType: 'USER_PASSWORD_SET', actor: { id: actor.$id, name: actor.name },
+        payload: { targetUserId: target.$id, targetName: target.name, targetRole: target.role } })
+        .catch(error => logger.warn({ userId, error }, 'Password set but history could not be recorded'));
+    return { success: true };
 }
