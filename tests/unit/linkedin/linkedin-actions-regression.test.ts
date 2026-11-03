@@ -36,6 +36,7 @@ jest.mock('node-appwrite', () => ({
     contains: jest.fn((key, value) => `contains:${key}:${JSON.stringify(value)}`),
     or: jest.fn((queries) => `or:${JSON.stringify(queries)}`),
     greaterThanEqual: jest.fn((key, value) => `gte:${key}:${value}`),
+    lessThan: jest.fn((key, value) => `lt:${key}:${value}`),
     lessThanEqual: jest.fn((key, value) => `lte:${key}:${value}`),
     limit: jest.fn((limit) => `limit(${limit})`),
     select: jest.fn((fields) => `select(${fields.join(',')})`),
@@ -400,7 +401,7 @@ describe('LinkedIn Server Actions Regression', () => {
       expect(result.mode).toBe('resent');
       expect(mockUpdateDocument).toHaveBeenCalledWith('database', 'linkedin_requests', 'withdrawn-request',
         expect.objectContaining({ agentId: 'agent-2', status: 'sent', isActive: true, leadId: null,
-          targetUrl: 'https://www.linkedin.com/in/person' }), expect.any(Array));
+          targetUrl: 'https://www.linkedin.com/in/person', dateSent: '2026-10-13T00:00:00.000Z' }), expect.any(Array));
     });
 
     it('does not save a legacy slash variant when a canonical active row already exists', async () => {

@@ -6,6 +6,7 @@ import { createAdminClient } from "./appwrite";
 import { DATABASE_ID, COLLECTIONS } from "../constants/appwrite";
 import { listAllDocuments } from "./appwrite-pagination";
 import { toDateKey } from "../utils/report-kpi";
+import { linkedinRequestDateBounds } from '@/lib/utils/linkedin-request-dates';
 
 // --------------------------------------------------------
 // LINKEDIN STATS AGGREGATION
@@ -26,7 +27,7 @@ export async function computeLinkedinStatsForDate(dateKey: string, accountsMap?:
     accountsMap = new Map(accounts.map((a) => [a.$id, a]));
   }
 
-  const { from: startIso, to: endIso } = easternDayBounds(dateKey, dateKey);
+  const { start: startIso, endExclusive: endIso } = linkedinRequestDateBounds(dateKey);
 
   // 1. Fetch all requests sent on this date
   const requests = await listAllDocuments<any>({
@@ -35,7 +36,7 @@ export async function computeLinkedinStatsForDate(dateKey: string, accountsMap?:
     collectionId: COLLECTIONS.LINKEDIN_REQUESTS,
     queries: [
       Query.greaterThanEqual("dateSent", startIso),
-      Query.lessThanEqual("dateSent", endIso)
+      Query.lessThan("dateSent", endIso)
     ],
     pageLimit: 100,
     maxPages: 100,

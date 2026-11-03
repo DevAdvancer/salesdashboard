@@ -1,6 +1,8 @@
 jest.mock("node-appwrite", () => ({
   Query: {
     equal: (attribute: string, value: unknown) => JSON.stringify({ attribute, value }),
+    greaterThanEqual: (attribute: string, value: unknown) => JSON.stringify({ gte: attribute, value }),
+    lessThan: (attribute: string, value: unknown) => JSON.stringify({ lt: attribute, value }),
     contains: (attribute: string, value: unknown) => JSON.stringify({ contains: attribute, value }),
     select: (fields: string[]) => JSON.stringify({ select: fields }),
     limit: (value: number) => JSON.stringify({ limit: value }),
@@ -159,6 +161,16 @@ it("offers resend when an inactive accepted row has a recorded withdrawal", asyn
   expect(checked).toMatchObject({ state: "resend_available", canRecord: true,
     previousRequest: { status: "withdrawn" } });
   expect(checked.history[0].status).toBe("withdrawn");
+});
+
+it('does not double-count a same-day resend originally saved at Eastern midnight', async () => {
+  records = [{ $id: 'old', accountId: account.$id, agentId: 'agent-1', targetUrl: input.targetUrl,
+    status: 'withdrawn', dateSent: '2026-10-05T04:00:00.000Z' }];
+  used = [records[0]];
+  (createLinkedinRequestAction as jest.Mock).mockResolvedValue({ mode: 'resent' });
+  const checked = await checkLinkedinExtension(input);
+  const saved = await recordLinkedinExtension({ ...input, revision: checked.revision, confirmResend: true });
+  expect(saved).toMatchObject({ mode: 'resent', used: 1, remaining: 2 });
 });
 it("rejects changed ownership/history between check and save", async () => {
   const checked = await checkLinkedinExtension(input);

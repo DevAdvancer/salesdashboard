@@ -16,6 +16,7 @@ import { parseIsoDateLocal, daysInMonthLocal } from "../lead/sync-helpers";
 import { listLinkedinRequestsForProfile } from "./shared";
 import { normalizeProfileUrl } from "@/lib/utils/linkedin-extension-url";
 import { isWithdrawnLinkedinRequest } from "@/lib/utils/linkedin-request-state";
+import { linkedinRequestDateBounds } from "@/lib/utils/linkedin-request-dates";
 import { listLinkedinReportRequests } from "@/lib/server/linkedin-report-requests";
 import { runLinkedinWithdrawalSweep, sendLinkedinWithdrawalReport } from "@/lib/server/linkedin-auto-withdraw";
 import { assertLinkedinProfileAvailable, findProtectedLinkedinLead, requestBlocksLinkedinProfile } from '@/lib/server/linkedin-lead-protection';
@@ -82,7 +83,7 @@ export async function createLinkedinRequestAction(input: {
     throw new Error("URL is required");
     }
 
-    const dateSent = toUtcDayStartIso(input.dateSent);
+    const dateSent = linkedinRequestDateBounds(input.dateSent).start;
     const coldCall = Boolean(input.coldCall);
     const coldCallPhone = coldCall && typeof input.coldCallPhone === "string" && input.coldCallPhone.trim()
               ? input.coldCallPhone.trim()
@@ -578,7 +579,8 @@ export async function listMyLinkedinRequestsAction(input: {
     ];
 
     if (input.dateSent) {
-      queries.push(Query.equal("dateSent", assertDateIso(input.dateSent)));
+      const { start, endExclusive } = linkedinRequestDateBounds(input.dateSent);
+      queries.push(Query.greaterThanEqual("dateSent", start), Query.lessThan("dateSent", endExclusive));
     }
 
     const searchText = input.searchQuery?.trim();
@@ -777,11 +779,11 @@ export async function listLinkedinRequestsForAdminAction(input: {
 
     const effectiveTeamLeadId = resolveLinkedinReportTeamLeadId(user, input.teamLeadId);
     assertLinkedinReportTeamScope(user, effectiveTeamLeadId);
-    const start = toUtcDayStartIso(input.startDate);
-    const end = toUtcDayEndIso(input.endDate);
+    const start = linkedinRequestDateBounds(input.startDate).start;
+    const end = linkedinRequestDateBounds(input.endDate).endExclusive;
     const queries = [
             Query.greaterThanEqual("dateSent", start),
-            Query.lessThanEqual("dateSent", end),
+            Query.lessThan("dateSent", end),
             Query.orderDesc("dateSent"),
             Query.orderDesc("$createdAt"),
           ];

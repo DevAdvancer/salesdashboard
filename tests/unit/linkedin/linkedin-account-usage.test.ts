@@ -2,6 +2,22 @@ import { getLinkedinAccountUsage, getLinkedinAccountUsageByAccount } from "@/lib
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 
 describe("LinkedIn account daily usage", () => {
+  it.each(['2026-10-14T00:00:00.000Z', '2026-10-14T04:00:00.000Z'])(
+    'counts UTC and Eastern midnight sends together for %s, excluding adjacent days', async dateSent => {
+      const rows = ['2026-10-13T23:59:59.999Z', '2026-10-14T00:00:00.000Z',
+        '2026-10-14T04:00:00.000Z', '2026-10-14T05:00:00.000Z', '2026-10-15T00:00:00.000Z'];
+      const databases = {
+        clearReadCacheForCollection: jest.fn(),
+        listDocuments: jest.fn(async (_db, _collection, queries: string[]) => {
+          const filters = queries.map(query => JSON.parse(query)).filter(q => q.attribute === 'dateSent');
+          const matches = rows.filter(row => filters.every(q =>
+            q.method === 'greaterThanEqual' ? row >= q.value : q.method === 'lessThan' ? row < q.value : row === q.value));
+          return { total: matches.length, documents: [] };
+        }),
+      };
+      expect(await getLinkedinAccountUsage(databases as never, 'account', dateSent)).toBe(3);
+    });
+
   it("uses Appwrite's full total after clearing stale reads", async () => {
     const databases = {
       clearReadCacheForCollection: jest.fn(),
@@ -42,6 +58,8 @@ describe("LinkedIn account daily usage", () => {
 });
 jest.mock("node-appwrite", () => ({ Query: {
   equal: (attribute: string, value: string) => JSON.stringify({ attribute, value }),
+  greaterThanEqual: (attribute: string, value: string) => JSON.stringify({ method: 'greaterThanEqual', attribute, value }),
+  lessThan: (attribute: string, value: string) => JSON.stringify({ method: 'lessThan', attribute, value }),
   select: (fields: string[]) => JSON.stringify({ select: fields }),
   limit: (value: number) => JSON.stringify({ limit: value }),
   cursorAfter: (value: string) => JSON.stringify({ cursorAfter: value }),

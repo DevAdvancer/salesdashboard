@@ -1,6 +1,7 @@
 import { Query } from "node-appwrite";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
+import { linkedinRequestDateBounds } from "@/lib/utils/linkedin-request-dates";
 
 type Databases = Awaited<ReturnType<typeof createAdminClient>>["databases"];
 
@@ -10,12 +11,14 @@ export async function getLinkedinAccountUsage(
   accountId: string,
   dateSent: string,
 ): Promise<number> {
+  const { start, endExclusive } = linkedinRequestDateBounds(dateSent);
   // Requests can be written by another server instance or the extension. A cached
   // quota can otherwise let the account exceed its daily limit for up to two hours.
   databases.clearReadCacheForCollection(COLLECTIONS.LINKEDIN_REQUESTS);
   const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LINKEDIN_REQUESTS, [
     Query.equal("accountId", accountId),
-    Query.equal("dateSent", dateSent),
+    Query.greaterThanEqual("dateSent", start),
+    Query.lessThan("dateSent", endExclusive),
     Query.select(["$id"]),
     Query.limit(1),
   ]);

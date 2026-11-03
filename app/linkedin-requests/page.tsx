@@ -130,12 +130,12 @@ function LinkedinRequestsContent() {
     queryFn: () => listMyLinkedinAccountsWithUsageAction({ currentUserId: user!.$id }),
     enabled: !!user && serverSessionReady,
     // This page's own actions refresh usage immediately (invalidateQueries).
-    // Returning to the tab refreshes it unless it was read in the last 30s, so
-    // quick tab switches cost nothing. The timer only catches sends made from
+    // Returning from LinkedIn always refreshes sends recorded by Helper.
+    // The timer catches sends made from
     // elsewhere while this tab stays focused. The server re-counts before every
     // send, so the shown quota never decides whether a send is allowed.
     staleTime: 30 * 1000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: 'always',
     refetchInterval: 2 * 60 * 1000,
   });
   const accounts: LinkedinAccount[] = accountUsageQuery.data?.accounts ?? [];

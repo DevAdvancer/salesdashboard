@@ -11,6 +11,7 @@ import { logAuditAction, assertAccessibleLinkedinAccount, sameLinkedinCompany } 
 import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import { normalizeProfileUrl, sameProfile } from "@/lib/utils/linkedin-extension-url";
 import { isWithdrawnLinkedinRequest } from "@/lib/utils/linkedin-request-state";
+import { getLinkedinRequestDateFilterValue } from "@/lib/utils/linkedin-request-dates";
 import { canUseLinkedinExtension, LinkedinExtensionError, projectExtensionHistory } from "./linkedin-extension-policy";
 import type { LinkedinAccount, LinkedinRequest } from "@/lib/types";
 import type { ExtensionBootstrap, ExtensionCheck, ExtensionRecord, ExtensionState } from "@/lib/types/linkedin-extension";
@@ -150,7 +151,7 @@ export async function recordLinkedinExtension(input: {
     mode = "created";
   }
   // The completed write is authoritative. Avoid repeating every scan just to construct its response.
-  const wasCountedToday = current.latest?.dateSent === `${current.today}T00:00:00.000Z` &&
+  const wasCountedToday = getLinkedinRequestDateFilterValue(current.latest?.dateSent ?? '') === current.today &&
     current.latest.accountId === current.account.$id;
   const used = checked.used + (wasCountedToday ? 0 : 1);
   return { ...checked, mode, state: "active_request", canRecord: false, history: [],

@@ -1,5 +1,15 @@
 import { getCurrentEasternIsoDate } from '@/lib/utils/eastern-date';
 
+/** dateSent is a calendar label. Include both legacy Eastern midnight and UTC midnight. */
+export function linkedinRequestDateBounds(value: string) {
+  const day = getLinkedinRequestDateFilterValue(value);
+  if (!day) throw new Error('Invalid date');
+  const start = `${day}T00:00:00.000Z`;
+  const next = new Date(start);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return { start, endExclusive: next.toISOString() };
+}
+
 export function getLinkedinRequestDateFilterValue(dateSent: string) {
   const parsed = new Date(dateSent);
   if (Number.isNaN(parsed.getTime())) return "";

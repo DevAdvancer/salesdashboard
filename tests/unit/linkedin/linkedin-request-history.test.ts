@@ -25,6 +25,8 @@ jest.mock("node-appwrite", () => ({
   },
   Query: {
     equal: jest.fn((key, value) => `equal:${key}:${JSON.stringify(value)}`),
+    greaterThanEqual: jest.fn((key, value) => `gte:${key}:${value}`),
+    lessThan: jest.fn((key, value) => `lt:${key}:${value}`),
     contains: jest.fn((key, value) => `contains:${key}:${JSON.stringify(value)}`),
     or: jest.fn((queries) => `or:${JSON.stringify(queries)}`),
     limit: jest.fn((limit) => `limit:${limit}`),
@@ -51,6 +53,14 @@ describe("Linkedin request history", () => {
         listDocuments: mockListDocuments,
       },
     });
+  });
+
+  it("includes Helper and manual requests in the selected calendar date", async () => {
+    mockListDocuments.mockResolvedValue({ documents: [], total: 0 });
+    const { listMyLinkedinRequestsAction } = await import("@/app/actions/linkedin/requests");
+    await listMyLinkedinRequestsAction({ currentUserId: "agent-1", dateSent: "2026-11-03" });
+    expect(mockListDocuments).toHaveBeenLastCalledWith(expect.any(String), expect.any(String),
+      expect.arrayContaining(['gte:dateSent:2026-11-03T00:00:00.000Z', 'lt:dateSent:2026-11-04T00:00:00.000Z']));
   });
 
   it("loads the agent's request history without requiring a selected active account", async () => {
