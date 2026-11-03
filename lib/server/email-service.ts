@@ -12,6 +12,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { createAdminClient } from '@/lib/server/appwrite';
 import { excludeInactiveUserEmails } from '@/lib/server/active-email-recipients';
+import { renderCrmEmail } from '@/lib/utils/crm-email-template';
 import { CRM_PUBLIC_URL } from '@/lib/server/crm-url';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
@@ -102,9 +103,9 @@ function buildEmailHtml(input: DuplicateAlertEmailInput): string {
       const leadLink = `${CRM_PUBLIC_URL}/leads/${encodeURIComponent(w.existingLeadId)}`;
       return `
         <tr>
-          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#374151;font-weight:600;">${label}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">
-            <a href="${leadLink}" style="color:#4f46e5;text-decoration:underline;">
+          <td style="padding:8px 12px;border-bottom:1px solid #39393b;color:#ffffff;font-weight:600;">${label}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #39393b;">
+            <a href="${leadLink}" style="color:#3b82f6;text-decoration:underline;">
               View existing lead →
             </a>
           </td>
@@ -116,73 +117,15 @@ function buildEmailHtml(input: DuplicateAlertEmailInput): string {
     clientName ? `<strong>Name:</strong> ${clientName}` : null,
     clientEmail ? `<strong>Email:</strong> ${clientEmail}` : null,
     clientPhone ? `<strong>Phone:</strong> ${clientPhone}` : null,
-    clientLinkedinUrl ? `<strong>LinkedIn:</strong> <a href="${clientLinkedinUrl}" style="color:#4f46e5;">${clientLinkedinUrl}</a>` : null,
+    clientLinkedinUrl ? `<strong>LinkedIn:</strong> <a href="${clientLinkedinUrl}" style="color:#3b82f6;">${clientLinkedinUrl}</a>` : null,
   ]
     .filter(Boolean)
     .join('<br/>');
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"/></head>
-<body style="font-family:Arial,sans-serif;background:#f9fafb;margin:0;padding:0;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:32px 0;">
-    <tr>
-      <td align="center">
-        <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;border:1px solid #e5e7eb;overflow:hidden;">
-          <!-- Header -->
-          <tr>
-            <td style="background:#dc2626;padding:20px 32px;">
-              <p style="margin:0;font-size:18px;font-weight:700;color:#ffffff;">
-                ⚠️ Duplicate Lead ${context === 'create' ? 'Creation' : 'Update'} Blocked
-              </p>
-            </td>
-          </tr>
-
-          <!-- Body -->
-          <tr>
-            <td style="padding:28px 32px;">
-              <p style="margin:0 0 16px;color:#374151;font-size:15px;">
-                <strong>${actorName}</strong> was blocked while ${contextLabel} a lead because the following fields already exist in the system.
-                This client has triggered <strong>${attemptText}</strong> total.
-              </p>
-
-              <!-- Client Details -->
-              ${clientDetails ? `
-              <div style="background:#f3f4f6;border-radius:6px;padding:14px 16px;margin-bottom:20px;font-size:14px;color:#374151;line-height:1.7;">
-                ${clientDetails}
-              </div>` : ''}
-
-              <!-- Duplicate Fields Table -->
-              <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;margin-bottom:20px;">
-                <thead>
-                  <tr style="background:#f9fafb;">
-                    <th style="padding:10px 12px;text-align:left;font-size:13px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Duplicate Field</th>
-                    <th style="padding:10px 12px;text-align:left;font-size:13px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Existing Lead</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${duplicateRows}
-                </tbody>
-              </table>
-
-              <p style="margin:0;font-size:13px;color:#9ca3af;">
-                This is an automated alert. The acting user has <strong>not</strong> been notified via this email.
-              </p>
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:16px 32px;font-size:12px;color:#9ca3af;">
-              Sales CRM &mdash; Duplicate Lead Alert System
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
+  return `<p><strong>${actorName}</strong> was blocked while ${contextLabel} a lead because the following fields already exist in the system. This client has triggered <strong>${attemptText}</strong> total.</p>
+    ${clientDetails ? `<div style="background:#18181b;border:1px solid #39393b;border-radius:12px;padding:16px;margin-bottom:20px;">${clientDetails}</div>` : ''}
+    <table cellpadding="0" cellspacing="0"><thead><tr><th>Duplicate Field</th><th>Existing Lead</th></tr></thead><tbody>${duplicateRows}</tbody></table>
+    <p style="margin-top:20px;color:#9e9ea0;">The acting user has not been notified via this email.</p>`;
 }
 
 function buildEmailText(input: DuplicateAlertEmailInput): string {
@@ -255,7 +198,7 @@ export async function sendDuplicateAlertEmail(
       subject,
       body: {
         contentType: 'HTML',
-        content: buildEmailHtml(input),
+        content: renderCrmEmail({ title: subject, html: buildEmailHtml(input), crmUrl: CRM_PUBLIC_URL }),
       },
       toRecipients: toEmails.map((email) => ({
         emailAddress: { address: email },
@@ -328,7 +271,7 @@ export async function sendNotificationEmail({ to, subject, html, text, allowAllR
       replyTo: process.env.GMAIL_USER,
       to: filteredTo,
       subject,
-      html,
+      html: renderCrmEmail({ title: subject, html, crmUrl: CRM_PUBLIC_URL }),
       text,
       attachments,
       xMailer: false, // Disables X-Mailer header to prevent Outlook from flagging as automated spam

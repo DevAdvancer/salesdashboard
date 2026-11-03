@@ -318,7 +318,7 @@ export async function GET(request: NextRequest) {
     { total: 0, upfront: 0, pending: 0, remaining: 0, count: 0 }
   );
 
-  let html = `<h2>Daily Report Summary - ${todayKey}</h2>`;
+  let html = "";
   html += `<h3>Leads Generated Today</h3>`;
   if (generatedMap.size === 0) {
     html += `<p>No leads generated today.</p>`;
@@ -352,7 +352,7 @@ export async function GET(request: NextRequest) {
     html += `<p>No payments recorded today.</p>`;
   } else {
     html += `<table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%; max-width: 800px;">
-      <tr style="background-color: #f9fafb;">
+      <tr style="background-color: #18181b;">
         <th style="text-align: left;">Company</th>
         <th style="text-align: right;">Records</th>
         <th style="text-align: right;">Total</th>
@@ -366,24 +366,24 @@ export async function GET(request: NextRequest) {
         <td style="text-align: right;">${row.count}</td>
         <td style="text-align: right;">${currencyFormatter.format(row.total)}</td>
         <td style="text-align: right;">${currencyFormatter.format(row.upfront)}</td>
-        <td style="text-align: right; color: #1d4ed8;">${currencyFormatter.format(row.pending)}</td>
-        <td style="text-align: right; color: #b45309;">${currencyFormatter.format(row.remaining)}</td>
+        <td style="text-align: right; color: #3b82f6;">${currencyFormatter.format(row.pending)}</td>
+        <td style="text-align: right; color: #fbbf24;">${currencyFormatter.format(row.remaining)}</td>
       </tr>`;
     }
-    html += `<tr style="font-weight: bold; border-top: 2px solid #e5e7eb;">
+    html += `<tr style="font-weight: bold; border-top: 2px solid #39393b;">
         <td>Grand total</td>
         <td style="text-align: right;">${grandTotals.count}</td>
         <td style="text-align: right;">${currencyFormatter.format(grandTotals.total)}</td>
         <td style="text-align: right;">${currencyFormatter.format(grandTotals.upfront)}</td>
-        <td style="text-align: right; color: #1d4ed8;">${currencyFormatter.format(grandTotals.pending)}</td>
-        <td style="text-align: right; color: #b45309;">${currencyFormatter.format(grandTotals.remaining)}</td>
+        <td style="text-align: right; color: #3b82f6;">${currencyFormatter.format(grandTotals.pending)}</td>
+        <td style="text-align: right; color: #fbbf24;">${currencyFormatter.format(grandTotals.remaining)}</td>
       </tr>`;
-    html += `<tr style="color: #1d4ed8; font-weight: 600;">
+    html += `<tr style="color: #3b82f6; font-weight: 600;">
         <td colspan="3">Technical paid (Assessments & Interviews)</td>
         <td style="text-align: right;">${currencyFormatter.format(techTotal)}</td>
         <td colspan="2"></td>
       </tr>`;
-    html += `<tr style="font-weight: bold; color: #047857; border-top: 2px solid #e5e7eb;">
+    html += `<tr style="font-weight: bold; color: #1eaa52; border-top: 2px solid #39393b;">
         <td colspan="3">Total Revenue (Upfront + Pending + Technical)</td>
         <td style="text-align: right;">${currencyFormatter.format(grandTotals.upfront + techTotal)}</td>
         <td style="text-align: right;">${currencyFormatter.format(grandTotals.pending)}</td>
@@ -392,7 +392,6 @@ export async function GET(request: NextRequest) {
     html += `</table>`;
   }
 
-  html += `<br><p style="font-size: 12px; color: #6b7280;">You are receiving this because of a new notification in the CRM. This email and any attachments are confidential and intended solely for the addressee.<br />This is sent from crm.silverspaceinc.tech. Please don't reply to this mail.</p>`;
 
   const toEmails = reportEmails.join(",");
   const subject = `Daily Report Summary - ${todayKey}`;

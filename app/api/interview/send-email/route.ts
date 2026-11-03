@@ -1,3 +1,5 @@
+import { renderCrmEmail } from '@/lib/utils/crm-email-template';
+import { CRM_PUBLIC_URL } from '@/lib/server/crm-url';
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedAccount } from "@/lib/server/current-user";
 import { cookies } from "next/headers";
@@ -51,6 +53,11 @@ export async function POST(request: NextRequest) {
     const eligibleMessage = await excludeInactiveGraphRecipients((await createAdminClient()).databases, message);
     if (!eligibleMessage.toRecipients?.length) {
       return NextResponse.json({ error: "No active recipients remain." }, { status: 400 });
+    }
+    if (eligibleMessage.body?.contentType?.toLowerCase() === 'html' && typeof eligibleMessage.body.content === 'string') {
+      eligibleMessage.body = { ...eligibleMessage.body, content: renderCrmEmail({
+        title: String(eligibleMessage.subject || 'CRM HUB'), html: eligibleMessage.body.content, crmUrl: CRM_PUBLIC_URL, preserveContentStyles: true,
+      }) };
     }
     const graphPayload = {
       message: eligibleMessage,

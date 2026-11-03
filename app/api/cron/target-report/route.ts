@@ -307,10 +307,10 @@ export async function GET(request: NextRequest) {
     payments: clientPayments, leads: branchLeads, followups: followupsDocs,
     contributorIds, from: leadsAndPaymentsFromIso, to: leadsAndPaymentsToIso });
   const isMonthOver = isFinal;
-  let html = `<h2>${isFinal ? 'Final' : 'Weekly'} Target Report - ${monthKey}</h2>`;
+  let html = `<p>${isFinal ? 'Final' : 'Weekly'} target report</p>`;
   html += `<p>${targetReportEmailDates(reportingPeriod)}</p>`;
   html += `<table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%; max-width: 800px;">
-    <tr style="background-color: #f9fafb;">
+    <tr style="background-color: #18181b;">
       <th style="text-align: left;">TL / Agent</th>
       <th style="text-align: right;">Target</th>
       <th style="text-align: right;">Achieved</th>
@@ -321,9 +321,9 @@ export async function GET(request: NextRequest) {
   for (const row of result.rows) {
     const pct = row.percent !== null ? (row.percent * 100).toFixed(1) + "%" : "-";
     const status = (row.percent !== null && row.percent >= 1) ? "Met" : "Not Met";
-    const statusColor = status === "Met" ? "green" : "red";
+    const statusColor = status === "Met" ? "#1eaa52" : "#f87171";
     
-    html += `<tr style="font-weight: bold; background-color: #f3f4f6;">
+    html += `<tr style="font-weight: bold; background-color: #18181b;">
       <td>${row.teamLeadName} (Team Total)</td>
       <td style="text-align: right;">${currencyFormatter.format(row.target)}</td>
       <td style="text-align: right;">${currencyFormatter.format(row.achieved)}</td>
@@ -334,7 +334,7 @@ export async function GET(request: NextRequest) {
     for (const agent of row.agents) {
       const apct = agent.percent !== null ? (agent.percent * 100).toFixed(1) + "%" : "-";
       const astatus = (agent.percent !== null && agent.percent >= 1) ? "Met" : "Not Met";
-      const astatusColor = astatus === "Met" ? "green" : "red";
+      const astatusColor = astatus === "Met" ? "#1eaa52" : "#f87171";
 
       html += `<tr>
         <td style="padding-left: 20px;">${agent.userName}${agent.userId === row.teamLeadId ? ' (Personal)' : ''}</td>
@@ -347,7 +347,7 @@ export async function GET(request: NextRequest) {
   }
 
   const tpct = result.totals.percent !== null ? (result.totals.percent * 100).toFixed(1) + "%" : "-";
-  html += `<tr style="font-weight: bold; border-top: 2px solid #e5e7eb;">
+  html += `<tr style="font-weight: bold; border-top: 2px solid #39393b;">
     <td>Grand Total</td>
     <td style="text-align: right;">${currencyFormatter.format(result.totals.target)}</td>
     <td style="text-align: right;">${currencyFormatter.format(result.totals.achieved)}</td>
@@ -360,7 +360,6 @@ export async function GET(request: NextRequest) {
   }
   html += `</table>`;
 
-  html += `<br><p style="font-size: 12px; color: #6b7280;">You are receiving this because of a new notification in the CRM. This email and any attachments are confidential and intended solely for the addressee.<br />This is sent from crm.silverspaceinc.tech. Please don't reply to this mail.</p>`;
 
   const toEmails = reportEmails.join(",");
   const subject = targetReportEmailSubject(monthKey);
