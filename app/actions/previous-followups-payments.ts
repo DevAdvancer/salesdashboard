@@ -1,7 +1,7 @@
 "use server";
 
 import { getFollowupsPaymentAmount, getStoredFollowupsPaymentAmount } from "@/lib/utils/followups-payment-amount";
-import { BGC_FOLLOWUP_PREFIX, followupsPaymentCategory, type FollowupsPaymentCategory } from '@/lib/utils/followups-payment-category';
+import { OTHER_FOLLOWUP_PREFIX, BGC_FOLLOWUP_PREFIX, followupsPaymentCategory, type FollowupsPaymentCategory } from '@/lib/utils/followups-payment-category';
 import { canActorAccessLead } from '@/app/actions/client-payments/shared';
 
 import { ID, Query } from "node-appwrite";
@@ -307,7 +307,7 @@ function normalizeCompany(company: string): FollowupsPaymentCompany {
 }
 
 function makeManualLeadId(category?: FollowupsPaymentCategory): string {
-  return `${category === 'bgc' ? BGC_FOLLOWUP_PREFIX : MANUAL_FOLLOWUP_LEAD_ID_PREFIX}${ID.unique()}`;
+  return `${category === 'bgc' ? BGC_FOLLOWUP_PREFIX : category === 'other' ? OTHER_FOLLOWUP_PREFIX : MANUAL_FOLLOWUP_LEAD_ID_PREFIX}${ID.unique()}`;
 }
 
 export async function createPreviousFollowupsPaymentAction(input: {
@@ -328,9 +328,11 @@ export async function createPreviousFollowupsPaymentAction(input: {
 
   const { databases } = await createAdminClient();
   if (input.status && input.status !== 'paid' && input.status !== 'refunded') throw new Error('Invalid payment status');
-  if (input.category && input.category !== 'bgc' && input.category !== 'followup') throw new Error('Invalid category');
+  if (input.category && input.category !== 'bgc' && input.category !== 'other' && input.category !== 'followup') throw new Error('Invalid category');
   if (!input.candidateName.trim() || !Number.isFinite(input.amount) || !/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new Error('Enter a candidate, valid amount and payment date');
   if (input.category === 'bgc' && input.leadId && !input.leadId.startsWith(BGC_FOLLOWUP_PREFIX)) throw new Error('BGC profiles must be independent of leads');
+
+  if (input.category === 'other' && input.leadId && !input.leadId.startsWith(OTHER_FOLLOWUP_PREFIX)) throw new Error('Other profiles must be independent of leads');
 
   let creditedAgentId = input.creditedAgentId || null;
   if (creditedAgentId && !(await getCreditableAgentsAction(actor.$id)).some(agent => agent.id === creditedAgentId)) {
@@ -418,6 +420,9 @@ export async function updatePreviousFollowupsPaymentAction(input: {
   if (input.date !== undefined && (!input.date || !/^\d{4}-\d{2}-\d{2}$/.test(input.date))) throw new Error('Invalid payment date');
   if (followupsPaymentCategory(existing.leadId) === 'bgc' && input.leadId && input.leadId !== existing.leadId) {
     throw new Error('BGC profiles must remain independent of leads');
+  }
+  if (followupsPaymentCategory(existing.leadId) === 'other' && input.leadId && input.leadId !== existing.leadId) {
+    throw new Error('Other profiles must remain independent of leads');
   }
   const payload: Record<string, unknown> = {
     updatedAt: new Date().toISOString(),

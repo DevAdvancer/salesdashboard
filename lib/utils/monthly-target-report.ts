@@ -8,7 +8,7 @@ import { UNASSIGNED_FOLLOWUP_PROFILE_ID } from '@/lib/utils/followup-payment-att
  * targets, and assignments, then hands them in.
  *
  * Financial amounts are computed from dated payment history by the caller.
- * Lead activity counts remain separate. Followups (including independent BGC)
+ * Lead activity counts remain separate. Followups (including independent BGC and Other)
  * are added once to the credited profile; bgcAmount is a breakdown of achieved.
  */
 
@@ -21,6 +21,8 @@ export interface TargetReportAgentRow {
   achieved: number;
   /** BGC is included in achieved; exposed separately for the profile breakdown. */
   bgcAmount?: number;
+  /** Other is included in achieved and shown separately in the breakdown. */
+  otherAmount?: number;
   followupsAmount?: number;
   /** achieved / target as a 0-1 fraction. Null when no target has been set. */
   percent: number | null;
@@ -175,6 +177,7 @@ export function buildTargetReport(input: {
    */
   followupsByAgentId?: Record<string, number>;
   bgcByAgentId?: Record<string, number>;
+  otherByAgentId?: Record<string, number>;
   /** Only leadership callers may supply unattributed independent payments. */
   unassignedFollowupsAmount?: number;
   /**
@@ -242,7 +245,8 @@ export function buildTargetReport(input: {
         target: agentTarget,
         achieved,
         bgcAmount: input.bgcByAgentId?.[agentId] ?? 0,
-        followupsAmount: (followupsByAgentId[agentId] ?? 0) - (input.bgcByAgentId?.[agentId] ?? 0),
+        otherAmount: input.otherByAgentId?.[agentId] ?? 0,
+        followupsAmount: (followupsByAgentId[agentId] ?? 0) - (input.bgcByAgentId?.[agentId] ?? 0) - (input.otherByAgentId?.[agentId] ?? 0),
         percent: toPercent(achieved, agentTarget),
         leadCount: stats.leadCount,
         referralExcludedCount: stats.referralExcludedCount,
@@ -289,7 +293,8 @@ export function buildTargetReport(input: {
     const primary = getPrimaryBranchId(user);
     const agent: TargetReportAgentRow = { userId, userName: user.name, target, achieved, percent,
       bgcAmount: input.bgcByAgentId?.[userId] ?? 0,
-      followupsAmount: (followupsByAgentId[userId] ?? 0) - (input.bgcByAgentId?.[userId] ?? 0),
+      otherAmount: input.otherByAgentId?.[userId] ?? 0,
+      followupsAmount: (followupsByAgentId[userId] ?? 0) - (input.bgcByAgentId?.[userId] ?? 0) - (input.otherByAgentId?.[userId] ?? 0),
       leadCount: stats?.leadCount ?? 0, referralExcludedCount: stats?.referralExcludedCount ?? 0,
       notInterestedCount: stats?.notInterestedCount ?? 0, branchName: primary ? input.branchMap?.get(primary) || primary : '',
       branches: primary ? [{ id: primary, name: input.branchMap?.get(primary) || primary, primary: true }] : [] };

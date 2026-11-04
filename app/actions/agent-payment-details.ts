@@ -25,7 +25,7 @@ export interface AgentPaymentDetail {
   amount: number;
   leadId: string;
   /** "upfront" | "technical" | "followup" */
-  category: "upfront" | "technical" | "followup" | "bgc";
+  category: "upfront" | "technical" | "followup" | "bgc" | "other";
 }
 
 export interface AgentPaymentDetailsResult {
@@ -34,6 +34,8 @@ export interface AgentPaymentDetailsResult {
   technicalAndFollowups: AgentPaymentDetail[];
   bgc: AgentPaymentDetail[];
   bgcTotal: number;
+  other: AgentPaymentDetail[];
+  otherTotal: number;
   totalAmount: number;
   upfrontTotal: number;
   technicalAndFollowupsTotal: number;
@@ -336,9 +338,11 @@ export async function getAgentPaymentDetailsAction(input: {
   }
 
   // ── Assemble result ───────────────────────────────────────────────────
+  const other = followupDetails.filter(detail => detail.category === "other");
+  const otherTotal = other.reduce((sum, detail) => sum + detail.amount, 0);
   const bgc = followupDetails.filter(detail => detail.category === "bgc");
   const bgcTotal = bgc.reduce((sum, detail) => sum + detail.amount, 0);
-  const technicalAndFollowups = [...techDetails, ...followupDetails.filter(detail => detail.category !== "bgc")];
+  const technicalAndFollowups = [...techDetails, ...followupDetails.filter(detail => detail.category === "followup")];
   const upfrontTotal = upfrontDetails.reduce((s, d) => s + d.amount, 0);
   const technicalAndFollowupsTotal = technicalAndFollowups.reduce((s, d) => s + d.amount, 0);
 
@@ -348,7 +352,9 @@ export async function getAgentPaymentDetailsAction(input: {
     technicalAndFollowups,
     bgc,
     bgcTotal,
-    totalAmount: upfrontTotal + technicalAndFollowupsTotal + bgcTotal,
+    other,
+    otherTotal,
+    totalAmount: upfrontTotal + technicalAndFollowupsTotal + bgcTotal + otherTotal,
     upfrontTotal,
     technicalAndFollowupsTotal,
   };

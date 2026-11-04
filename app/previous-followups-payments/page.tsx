@@ -299,7 +299,7 @@ export default function PreviousFollowupsPaymentsPage() {
                 Followup Payments
               </h1>
               <p className="text-muted-foreground text-sm">
-                Track manual, client-linked, and independent BGC payments for your team
+                Track manual, client-linked, and independent BGC and Other payments for your team
               </p>
             </div>
             {canMutate ? (

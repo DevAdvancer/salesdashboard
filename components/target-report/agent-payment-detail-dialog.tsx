@@ -187,7 +187,7 @@ export function AgentPaymentDetailDialog({
         ) : data ? (
           <div className="space-y-6">
             {/* ── Summary cards ────────────────────────────────────── */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               <Card>
                 <CardHeader className="pb-1">
                   <CardTitle className="text-xs font-medium text-muted-foreground">
@@ -228,11 +228,20 @@ export function AgentPaymentDetailDialog({
                 <CardHeader className="pb-1"><CardTitle className="text-xs font-medium text-muted-foreground">BGC</CardTitle></CardHeader>
                 <CardContent><p className="text-lg font-semibold tabular-nums">{currency.format(data.bgcTotal ?? 0)}</p></CardContent>
               </Card>
+              <Card>
+                <CardHeader className="pb-1"><CardTitle className="text-xs font-medium text-muted-foreground">Other</CardTitle></CardHeader>
+                <CardContent><p className="text-lg font-semibold tabular-nums">{currency.format(data.otherTotal ?? 0)}</p></CardContent>
+              </Card>
             </div>
 
             <div className="space-y-2">
               <h3 className="text-sm font-semibold">BGC</h3>
               <DetailTable items={data.bgc ?? []} emptyMessage="No BGC payments in this month." />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold">Other</h3>
+              <DetailTable items={data.other ?? []} emptyMessage="No Other payments in this month." />
             </div>
 
             {/* ── Upfront section ─────────────────────────────────── */}

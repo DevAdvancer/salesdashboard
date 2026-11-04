@@ -166,6 +166,7 @@ export async function GET(request: NextRequest) {
   let unassignedFollowupsAmount = 0;
   const followupsByAgentId: Record<string, number> = {};
   const bgcByAgentId: Record<string, number> = {};
+  const otherByAgentId: Record<string, number> = {};
   const readableSet = new Set(readableAgentIds);
   const contributorIds = new Set<string>(allUsers.filter(user => user.role === 'admin' || user.role === 'monitor').map(user => user.$id));
   const followupsDocs = await listAllDocuments<any>({
@@ -211,6 +212,9 @@ export async function GET(request: NextRequest) {
     if (!targetAgentId && isIndependentFollowup(leadId)) { unassignedFollowupsAmount += amount; continue; }
     if (!targetAgentId || !readableSet.has(targetAgentId)) continue;
     followupsByAgentId[targetAgentId] = (followupsByAgentId[targetAgentId] ?? 0) + amount;
+    if (followupsPaymentCategory(leadId) === 'other') {
+      otherByAgentId[targetAgentId] = (otherByAgentId[targetAgentId] ?? 0) + amount;
+    }
     if (followupsPaymentCategory(leadId) === 'bgc') {
       bgcByAgentId[targetAgentId] = (bgcByAgentId[targetAgentId] ?? 0) + amount;
     }
@@ -296,6 +300,7 @@ export async function GET(request: NextRequest) {
     agentStatsByUserId,
     followupsByAgentId,
     bgcByAgentId,
+    otherByAgentId,
     unassignedFollowupsAmount,
     technicalPaymentsByAgentId,
     branchMap,

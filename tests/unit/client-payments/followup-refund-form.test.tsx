@@ -64,6 +64,26 @@ it('keeps the independent BGC identifier when editing', async () => {
   expect(save).toHaveBeenCalledWith(expect.objectContaining({ category: 'bgc', leadId: 'manual_followup:bgc:profile' }));
 });
 
+it('adds an independent Other profile without selecting a client', async () => {
+  const save = jest.fn();
+  render(<FollowupsPaymentForm onSave={save} onCancel={jest.fn()} />);
+  await userEvent.click(screen.getByRole('button', { name: 'Other' }));
+  await userEvent.type(screen.getByPlaceholderText('Enter candidate name'), 'Other Profile');
+  await userEvent.click(screen.getByRole('button', { name: 'Add Payment' }));
+  expect(save).toHaveBeenCalledWith(expect.objectContaining({ category: 'other', leadId: null,
+    candidateName: 'Other Profile', hasPaymentRecord: false }));
+});
+
+it('keeps the independent Other identifier when editing', async () => {
+  const save = jest.fn();
+  render(<FollowupsPaymentForm onSave={save} onCancel={jest.fn()} payment={{
+    $id: 'other', leadId: 'manual_followup:other:profile', category: 'other', company: FOLLOWUPS_PAYMENT_COMPANIES[0],
+    candidateName: 'Other Profile', amount: 200, status: 'paid', date: '2026-08-20', createdAt: '2026-09-01T12:00:00Z',
+  }} />);
+  await userEvent.click(screen.getByRole('button', { name: 'Update Payment' }));
+  expect(save).toHaveBeenCalledWith(expect.objectContaining({ category: 'other', leadId: 'manual_followup:other:profile' }));
+});
+
 it('finds an old payment client whose lead has since been reopened', async () => {
   mockSessionReady = true;
   const lead = { $id: 'old-client', isClosed: false, status: 'Reopened',

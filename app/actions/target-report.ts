@@ -257,6 +257,7 @@ export async function getTargetReportAction(input: {
   let unassignedFollowupsAmount = 0;
   const followupsByAgentId: Record<string, number> = {};
   const bgcByAgentId: Record<string, number> = {};
+  const otherByAgentId: Record<string, number> = {};
   const readableSet = new Set(readableAgentIds);
   
   const docs = await listAllDocuments<Record<string, unknown>>({
@@ -305,6 +306,9 @@ export async function getTargetReportAction(input: {
     if (!targetAgentId || !readableSet.has(targetAgentId)) continue;
     
     followupsByAgentId[targetAgentId] = (followupsByAgentId[targetAgentId] ?? 0) + amount;
+    if (followupsPaymentCategory(leadId) === 'other') {
+      otherByAgentId[targetAgentId] = (otherByAgentId[targetAgentId] ?? 0) + amount;
+    }
     if (followupsPaymentCategory(leadId) === 'bgc') {
       bgcByAgentId[targetAgentId] = (bgcByAgentId[targetAgentId] ?? 0) + amount;
     }
@@ -425,6 +429,7 @@ export async function getTargetReportAction(input: {
     agentStatsByUserId,
     followupsByAgentId,
     bgcByAgentId,
+    otherByAgentId,
     unassignedFollowupsAmount: ['admin', 'developer', 'monitor', 'operations'].includes(actor.role) ? unassignedFollowupsAmount : 0,
     technicalPaymentsByAgentId,
     branchMap,

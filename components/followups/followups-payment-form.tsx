@@ -53,13 +53,15 @@ export function FollowupsPaymentForm({
 }: FollowupsPaymentFormProps) {
   const { user, isTeamLead, isAdmin, isOperations, serverSessionReady } = useAuth();
   
-  // BGC is independent for every role that can create followup payments.
+  // BGC and Other are independent for every role that can create followup payments.
   const canUseManual = isTeamLead || isAdmin || isOperations;
-  const [mode, setMode] = useState<"manual" | "client" | "bgc">(
-    followupsPaymentCategory(payment?.leadId) === "bgc" ? "bgc" : payment?.leadId?.startsWith("manual_followup:") || (canUseManual && !payment)
+  const [mode, setMode] = useState<"manual" | "client" | "bgc" | "other">(() => {
+    const category = followupsPaymentCategory(payment?.leadId);
+    if (category !== "followup") return category;
+    return payment?.leadId?.startsWith("manual_followup:") || (canUseManual && !payment)
       ? "manual"
-      : "client"
-  );
+      : "client";
+  });
 
   const [company, setCompany] = useState<FollowupsPaymentCompany>(
     payment?.company || FOLLOWUPS_PAYMENT_COMPANIES[0],
@@ -89,7 +91,7 @@ export function FollowupsPaymentForm({
     payment ? (payment.creditedAgentId || "none") : canUseManual ? user?.$id || "none" : "none"
   );
 
-  function changeMode(next: "manual" | "client" | "bgc") {
+  function changeMode(next: "manual" | "client" | "bgc" | "other") {
     setMode(next);
     setSelectedLeadId("");
     setSearchQuery("");
@@ -237,7 +239,7 @@ export function FollowupsPaymentForm({
     e.preventDefault();
     onSave({
       leadId: mode === "client" ? selectedLeadId : payment?.leadId || null,
-      category: mode === "bgc" ? "bgc" : "followup",
+      category: mode === "bgc" || mode === "other" ? mode : "followup",
       company,
       candidateName,
       amount: (parseFloat(amount) || 0) * (isRefund ? -1 : 1),
@@ -275,10 +277,14 @@ export function FollowupsPaymentForm({
             className={`px-4 py-1.5 text-sm font-medium rounded-md ${mode === "bgc" ? "bg-background shadow-sm" : "text-muted-foreground"}`}>
             BGC
           </button>
+          <button type="button" onClick={() => changeMode("other")}
+            className={`px-4 py-1.5 text-sm font-medium rounded-md ${mode === "other" ? "bg-background shadow-sm" : "text-muted-foreground"}`}>
+            Other
+          </button>
         </div>
       )}
 
-      {mode === "bgc" && <p className="text-sm text-muted-foreground">Independent BGC profile. Payments and refunds count toward the credited profile&apos;s target on the payment date.</p>}
+      {(mode === "bgc" || mode === "other") && <p className="text-sm text-muted-foreground">Independent {mode === "bgc" ? "BGC" : "Other"} profile. Payments and refunds count toward the credited profile&apos;s target on the payment date.</p>}
 
       {mode === "client" && !payment && (
         <div className="space-y-3 p-4 bg-muted/50 border rounded-xl">

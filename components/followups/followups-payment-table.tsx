@@ -70,7 +70,7 @@ export function FollowupsPaymentTable({
               <TableCell className="text-muted-foreground">
                 {payment.company}
               </TableCell>
-              <TableCell>{payment.category === "bgc" ? "BGC" : "Followup"}</TableCell>
+              <TableCell>{payment.category === "bgc" ? "BGC" : payment.category === "other" ? "Other" : "Followup"}</TableCell>
               <TableCell className="font-medium">
                 {payment.candidateName}
               </TableCell>

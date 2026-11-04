@@ -204,6 +204,28 @@ describe('closure payment cycles', () => {
     expect(history).toEqual([expect.objectContaining({ $id: row.$id, date: '2026-08-20' })]);
   });
 
+  it('creates Other without a lead or client payment and keeps its category when edited', async () => {
+    const row = await createPreviousFollowupsPaymentAction({ actorId: 'admin', category: 'other',
+      company: FOLLOWUPS_PAYMENT_COMPANIES[0], candidateName: 'Independent profile', amount: 300,
+      date: '2026-08-20', status: 'paid' });
+    expect(row).toMatchObject({ category: 'other', leadId: 'manual_followup:other:unique', creditedAgentId: 'admin', amount: 300 });
+    expect(payments()).toHaveLength(0);
+    const edited = await updatePreviousFollowupsPaymentAction({ actorId: 'admin', paymentId: row.$id, amount: 150 });
+    expect(edited).toMatchObject({ category: 'other', leadId: row.leadId, amount: 150 });
+    const history = await listPreviousFollowupsPaymentsAction({ actorId: 'admin' });
+    expect(history).toEqual([expect.objectContaining({ $id: row.$id, date: '2026-08-20' })]);
+  });
+
+  it('rejects linking Other profiles to leads on create and edit', async () => {
+    await expect(createPreviousFollowupsPaymentAction({ actorId: 'admin', category: 'other', leadId: 'lead',
+      company: FOLLOWUPS_PAYMENT_COMPANIES[0], candidateName: 'Other profile', amount: 100,
+      date: '2026-08-20' })).rejects.toThrow('Other profiles must be independent');
+    const row = await createPreviousFollowupsPaymentAction({ actorId: 'admin', category: 'other',
+      company: FOLLOWUPS_PAYMENT_COMPANIES[0], candidateName: 'Other profile', amount: 100, date: '2026-08-20' });
+    await expect(updatePreviousFollowupsPaymentAction({ actorId: 'admin', paymentId: row.$id,
+      leadId: 'lead' })).rejects.toThrow('Other profiles must remain independent');
+  });
+
   it('stores a nonnegative refund magnitude and returns the signed amount', async () => {
     const row = await createPreviousFollowupsPaymentAction({ actorId: 'admin',
       company: FOLLOWUPS_PAYMENT_COMPANIES[0], candidateName: 'Client', amount: 200,

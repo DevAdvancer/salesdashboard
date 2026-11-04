@@ -121,6 +121,23 @@ test('independent BGC is included once and appears in its own target detail cate
   expect(detail.upfrontTotal).toBe(0);
 });
 
+test.each([300, -100])('independent Other amount %s is counted once in its own target detail category', async (amount) => {
+  mockFinancialRows = [];
+  mockFollowupRows = [{ $id: 'other', leadId: 'manual_followup:other:profile', candidateName: 'Other Profile', amount,
+    date: '2026-10-15', status: amount < 0 ? 'refunded' : 'paid', creditedAgentId: 'agent', createdById: 'viewer' }];
+  const { getTargetReportAction } = await import('@/app/actions/target-report');
+  const { getAgentPaymentDetailsAction } = await import('@/app/actions/agent-payment-details');
+  const { result } = await getTargetReportAction({ actorId: 'viewer', monthKey: '2026-10' });
+  expect(result.rows.flatMap(team => team.agents).find(agent => agent.userId === 'agent')).toMatchObject({ achieved: amount, otherAmount: amount, followupsAmount: 0 });
+  const detail = await getAgentPaymentDetailsAction({ actorId: 'viewer', agentId: 'agent', monthKey: '2026-10' });
+  expect(detail.other).toEqual([expect.objectContaining({ category: 'other', candidateName: 'Other Profile', amount })]);
+  expect(detail.otherTotal).toBe(amount);
+  expect(detail.totalAmount).toBe(amount);
+  expect(detail.technicalAndFollowups).toEqual([]);
+  expect(detail.bgc).toEqual([]);
+  expect(detail.upfrontTotal).toBe(0);
+});
+
 test('an unlinked July followup recorded by Admin in September belongs only to the assigned profile in July', async () => {
   mockFinancialRows = [{ leadId: 'lead', paymentPlan: '{}', updates: JSON.stringify([
     { id: 'legacy', actorId: 'admin', status: 'fully_paid', amount: 800,
