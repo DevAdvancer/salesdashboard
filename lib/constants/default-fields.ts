@@ -1,3 +1,4 @@
+import { LEAD_VISA_STATUSES } from '@/lib/constants/lead-visa-statuses';
 export type FieldType = 'text' | 'email' | 'phone' | 'dropdown' | 'textarea' | 'checklist';
 
 export interface FormField {
@@ -117,7 +118,7 @@ export const DEFAULT_FIELDS: FormField[] = [
     required: false,
     visible: true,
     order: 10,
-    options: ['Citizen', 'Green Card', 'H1B', 'F1', 'Day 1 CPT', 'Other']
+    options: [...LEAD_VISA_STATUSES]
   },
   {
     id: '13',

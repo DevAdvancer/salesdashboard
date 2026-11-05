@@ -1,3 +1,4 @@
+import { LEAD_VISA_STATUSES, completeLeadVisaOptions } from '@/lib/constants/lead-visa-statuses';
 import { Permission, Role } from 'appwrite';
 import { referenceDatabases as databases } from '@/lib/services/reference-databases';
 import { FormField, FormConfig } from '@/lib/types';
@@ -68,7 +69,7 @@ export const DEFAULT_FIELDS: FormField[] = [
     required: false,
     visible: true,
     order: 10,
-    options: ['Citizen', 'Green Card', 'H1B', 'F1', 'Day 1 CPT', 'Other'],
+    options: [...LEAD_VISA_STATUSES],
   },
   { id: '11', type: 'textarea', label: 'Notes', key: 'notes', required: false, visible: true, order: 11 },
   {
@@ -204,9 +205,9 @@ function dedupeOptions(options: unknown, fieldKey?: string): string[] | undefine
 export function normalizeFormFields(fields: FormField[]): FormField[] {
   return fields.map((field) => {
     if (field.type !== 'dropdown' && field.type !== 'checklist') return field;
-    // Keep the new status available in configurations saved before it was added.
+    // Keep saved configurations aligned with the supported lead visa statuses.
     const options = dedupeOptions(field.key === 'visaStatus'
-      ? [...(Array.isArray(field.options) ? field.options : []), 'Day 1 CPT']
+      ? completeLeadVisaOptions(field.options)
       : field.options, field.key);
     return options ? { ...field, options } : { ...field, options: undefined };
   });

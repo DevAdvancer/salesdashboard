@@ -1,5 +1,7 @@
 "use client";
 
+import { LEAD_GEN_VISA_STATUSES } from '@/lib/constants/lead-visa-statuses';
+
 import { CrmSelect } from '@/components/ui/crm-select';
 
 import { useCallback, useEffect, useState } from "react";
@@ -53,7 +55,6 @@ export function LeadGenerationNewLeadContent() {
     coldCallEnabled && coldCallPhoneParam ? formatUsPhone(coldCallPhoneParam) : ""
   );
   const [visaStatus, setVisaStatus] = useState("");
-  const [otherVisaStatus, setOtherVisaStatus] = useState("");
   const [linkedinProfileUrl, setLinkedinProfileUrl] = useState(linkedinTargetUrl);
   const [resumeFileId, setResumeFileId] = useState<string | null>(null);
   const [resumeFileName, setResumeFileName] = useState<string | null>(null);
@@ -193,7 +194,7 @@ export function LeadGenerationNewLeadContent() {
     const trimmedFirstName = firstName.trim();
     const trimmedLastName = lastName.trim();
     const trimmedPhone = phone.trim();
-    const trimmedVisaStatus = visaStatus === "Other" ? otherVisaStatus.trim() : visaStatus.trim();
+    const trimmedVisaStatus = visaStatus.trim();
     const trimmedLinkedinProfileUrl = linkedinProfileUrl.trim();
 
     if (!isLinkedinRequestLead) {
@@ -535,28 +536,10 @@ export function LeadGenerationNewLeadContent() {
                 clearFieldError("visaStatus");
               }}>
               <option value="">Select visa status</option>
-              <option value="Citizen">Citizen</option>
-              <option value="GC">GC</option>
-              <option value="H1B">H1B</option>
-              <option value="OPT">OPT</option>
-              <option value="CPT">CPT</option>
-              <option value="Day 1 CPT">Day 1 CPT</option>
-              <option value="Other">Other</option>
+              {LEAD_GEN_VISA_STATUSES.map((status) => (
+                <option key={status} value={status}>{status}</option>
+              ))}
             </CrmSelect>
-            {visaStatus === "Other" && (
-              <input
-                id="otherVisaStatus"
-                className={`mt-2 flex h-10 w-full rounded-md border ${
-                  fieldErrors.visaStatus ? "border-red-500" : "border-input"
-                } bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
-                placeholder="Specify Visa Status"
-                value={otherVisaStatus}
-                onChange={(e) => {
-                  setOtherVisaStatus(e.target.value);
-                  clearFieldError("visaStatus");
-                }}
-              />
-            )}
             {fieldErrors.visaStatus && (
               <p className="text-sm text-red-500">{fieldErrors.visaStatus}</p>
             )}
