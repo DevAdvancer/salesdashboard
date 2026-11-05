@@ -500,7 +500,7 @@ export function LeadGenerationNewLeadContent() {
 
             <div className="space-y-2">
               <Label htmlFor="phone">
-                Phone No. {!isLinkedinRequestLead && <span className="text-red-500">*</span>}
+                Phone No.
               </Label>
               <input
                 id="phone"

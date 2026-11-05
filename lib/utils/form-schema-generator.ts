@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { FormField } from '@/lib/types';
 import { isLinkedinProfileField } from './lead-linkedin-field';
-import { isSourceExemptFromLinkedin } from './lead-source';
+import { isReferralSource, isSourceExemptFromLinkedin } from './lead-source';
 
 /**
  * Generate a source-aware Zod schema from form configuration
@@ -117,7 +117,7 @@ export function generateSourceAwareZodSchema(
     }
 
     // Apply required/optional based on field configuration and source (Requirements 3.9, 11.1)
-    const isRequiredNormally = field.required && !(isExemptSource && isLinkedinField);
+    const isRequiredNormally = field.required && field.key !== 'phone' && !(isExemptSource && isLinkedinField);
 
     if (isRequiredNormally) {
       // For required fields, ensure non-empty values
@@ -142,6 +142,12 @@ export function generateSourceAwareZodSchema(
     // Add the field schema to the shape object using the field's key
     schemaShape[field.key] = fieldSchema;
   }
+
+  // The referral input is rendered outside the configurable fields. Include it
+  // explicitly so Zod retains it in the submitted data instead of stripping it.
+  schemaShape.referralName = isReferralSource(source)
+    ? z.string().trim().min(1, 'Referral Name is required')
+    : z.string().optional();
 
   // Return a Zod object schema
   return z.object(schemaShape);

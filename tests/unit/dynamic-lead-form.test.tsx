@@ -661,12 +661,8 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
       const emailLabel = screen.getByText(/Email/i);
       expect(emailLabel.parentElement).toHaveTextContent('*');
 
-      // `phone` is optional in this form config but the server rejects a lead
-      // without it (REQUIRED_LEAD_FIELD_KEYS in lib/utils/required-lead-fields.ts),
-      // and the form deliberately mirrors the server so the asterisks match
-      // what actually saves. So the asterisk is expected here.
       const phoneLabel = screen.getByText(/Phone/i);
-      expect(phoneLabel.textContent).toContain('*');
+      expect(phoneLabel.textContent).not.toContain('*');
     });
 
     it('should not display asterisk for a field that is optional everywhere', () => {
@@ -698,5 +694,37 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
       const notesLabel = screen.getByText(/Notes/i);
       expect(notesLabel.textContent).not.toContain('*');
     });
+  });
+});
+
+
+describe('Lead referral and source submissions', () => {
+  const fields: FormField[] = [
+    { id: 'source', key: 'source', label: 'Source', type: 'dropdown', required: false, visible: true, order: 1, options: ['Website', 'Referral', 'Social Media'] },
+    { id: 'phone', key: 'phone', label: 'Phone', type: 'phone', required: true, visible: true, order: 2 },
+  ];
+  beforeEach(() => mockUseAuth.mockReturnValue({ user: null, isAgent: true, isMonitor: false }));
+
+  it('submits the referral name and allows an empty phone with a saved required config', async () => {
+    const submit = jest.fn();
+    render(<DynamicLeadForm formConfig={fields} onSubmit={submit} />);
+    await selectCrmOption(screen.getByLabelText(/Source/i), 'Referral');
+    fireEvent.click(screen.getByRole('button', { name: 'Submit', exact: true }));
+    expect(await screen.findByText('Referral Name is required')).toBeInTheDocument();
+    expect(submit).not.toHaveBeenCalled();
+    await userEvent.type(screen.getByLabelText(/Referral Name/i), 'Jane Referrer');
+    fireEvent.click(screen.getByRole('button', { name: 'Submit', exact: true }));
+    await waitFor(() => expect(submit).toHaveBeenCalledWith(expect.objectContaining({ source: 'Referral', referralName: 'Jane Referrer', phone: '' })));
+  });
+
+  it('replaces Social Media with Teams Meeting in saved configs and submits the new choice', async () => {
+    const submit = jest.fn();
+    render(<DynamicLeadForm formConfig={fields} onSubmit={submit} />);
+    const source = screen.getByLabelText(/Source/i);
+    await userEvent.click(source);
+    expect(screen.queryByRole('option', { name: 'Social Media', exact: true })).not.toBeInTheDocument();
+    await selectCrmOption(source, 'Teams Meeting');
+    fireEvent.click(screen.getByRole('button', { name: 'Submit', exact: true }));
+    await waitFor(() => expect(submit).toHaveBeenCalledWith(expect.objectContaining({ source: 'Teams Meeting' })));
   });
 });

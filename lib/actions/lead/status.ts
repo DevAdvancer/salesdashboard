@@ -12,6 +12,8 @@ import { logger } from '@/lib/utils/logger';
 import { withdrawLeadRequests } from '@/lib/server/lead-request-release';
 import { recordLeadLifecycleEvent } from '@/lib/utils/lead-payment-cycle';
 import { checkedLeadClosingBranch } from '@/lib/server/lead-closing-branch';
+import { isBackoutStatusInternal, isTextMissing } from '@/lib/utils/lead-close-gate';
+import { LeadActionError } from '@/lib/server/lead-errors';
 
 type AdminDatabases = Awaited<ReturnType<typeof createAdminClient>>['databases'];
 
@@ -392,6 +394,12 @@ export async function closeLeadAction(
         }
         if (actorDoc.role !== 'monitor') await assertLeadAccessAllowed(actorDoc, currentLead, databases);
         if (currentLead.isClosed) return { success: true, lead: currentLead };
+        if (!isBackoutStatusInternal(closedStatus)) {
+            const data = JSON.parse(currentLead.data || '{}');
+            if (isTextMissing(data.phone)) {
+                throw new LeadActionError('MISSING_REQUIRED_FIELD', 'Phone is required to close a lead.', { field: 'phone' });
+            }
+        }
         const branchId = await checkedLeadClosingBranch(databases, actorDoc, currentLead, closingBranchId);
 
 

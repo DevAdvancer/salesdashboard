@@ -72,7 +72,7 @@ export const DEFAULT_FIELDS: FormField[] = [
     required: false,
     visible: true,
     order: 6,
-    options: ['Website', 'Referral', 'Cold Call', 'Social Media']
+    options: ['Website', 'Referral', 'Cold Call', 'Teams Meeting']
   },
   {
     id: '7',

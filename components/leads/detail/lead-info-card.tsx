@@ -33,6 +33,8 @@ import {
   withAmountField,
   withLastNameField,
   withLegalNameField,
+  withReferralNameField,
+  isReferralNameField,
 } from "./lead-detail-utils";
 
 interface LeadInfoCardProps {
@@ -83,7 +85,10 @@ export function LeadInfoCard({
   const renderField = (field: FormField) => {
     const value = isLinkedinProfileField(field)
       ? getLinkedinProfileValue(leadData, [field])
-      : String(leadData[field.key] ?? "");
+      : field.key === "referralName"
+        ? String(leadData.referralName ?? leadData.referral ?? leadData.referrerName ??
+            leadData[formFields.find(isReferralNameField)?.key ?? "Referral Name"] ?? "")
+        : String(leadData[field.key] ?? "");
     // Monitors are leadership-level observers and may edit any lead they
     // can view (mirrors the server-side `assertLeadUpdateAllowed` policy
     // in app/actions/lead.ts). Operations is read-only.
@@ -312,7 +317,7 @@ export function LeadInfoCard({
           </div>
         )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {withAmountField(withLegalNameField(withLastNameField(formFields)))
+          {withReferralNameField(withAmountField(withLegalNameField(withLastNameField(formFields))), leadData)
             .filter((field) => {
               // The static "Total Amount to be Paid" input below is
               // the canonical editor for Amount. Skip the dynamic

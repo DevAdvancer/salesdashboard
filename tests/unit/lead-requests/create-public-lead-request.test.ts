@@ -50,18 +50,29 @@ describe('createPublicLeadRequestAction', () => {
     } as any);
   });
 
-  it('requires firstName, lastName, email, phone, and linkedinProfileUrl fields', async () => {
+  it('requires firstName, lastName, email, and linkedinProfileUrl fields', async () => {
     const incompleteInputs = [
       { firstName: '', lastName: 'Doe', email: 'a@b.com', phone: '123', linkedinProfileUrl: 'li.com/in/a' },
       { firstName: 'Jane', lastName: '', email: 'a@b.com', phone: '123', linkedinProfileUrl: 'li.com/in/a' },
       { firstName: 'Jane', lastName: 'Doe', email: '', phone: '123', linkedinProfileUrl: 'li.com/in/a' },
-      { firstName: 'Jane', lastName: 'Doe', email: 'a@b.com', phone: '', linkedinProfileUrl: 'li.com/in/a' },
       { firstName: 'Jane', lastName: 'Doe', email: 'a@b.com', phone: '123', linkedinProfileUrl: '' },
     ];
 
     for (const input of incompleteInputs) {
       await expect(createPublicLeadRequestAction(input)).rejects.toThrow();
     }
+  });
+
+  it('saves a referral request with no phone number', async () => {
+    mockListAllDocuments.mockResolvedValue([]);
+    await expect(createPublicLeadRequestAction({
+      firstName: 'Jane', lastName: 'Doe', email: 'a@b.com',
+      phone: '', linkedinProfileUrl: 'https://linkedin.com/in/jane', referrerName: 'Alex',
+    })).resolves.toBeTruthy();
+    expect(mockDatabases.createDocument).toHaveBeenCalledWith(
+      expect.anything(), expect.anything(), expect.anything(),
+      expect.objectContaining({ phone: '', referrerName: 'Alex' }),
+    );
   });
 
   it('rejects duplicate email in pending/moved requests', async () => {

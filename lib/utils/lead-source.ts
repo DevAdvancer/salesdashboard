@@ -15,3 +15,8 @@ export function isWebsiteSource(source: unknown): boolean {
 export function isSourceExemptFromLinkedin(source: unknown): boolean {
     return isReferralSource(source) || isWebsiteSource(source);
 }
+
+/** Apply current source choices to saved configurations as well as defaults. */
+export function getLeadSourceOptions(options: string[] = []): string[] {
+    return [...options.filter(option => !['socialmedia', 'teamsmeeting'].includes(normalizeSource(option))), 'Teams Meeting'];
+}

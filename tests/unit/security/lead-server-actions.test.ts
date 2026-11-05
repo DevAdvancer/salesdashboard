@@ -439,7 +439,7 @@ describe('lead server action authorization', () => {
     expect(mockUpdateDocument).not.toHaveBeenCalled();
   });
 
-  it('allows monitor lead creation with the monitor as owner', async () => {
+  it('saves a referral name with an empty phone and the monitor as owner', async () => {
     mockGetDocument.mockResolvedValueOnce({
       $id: 'monitor-1',
       email: 'monitor@example.com',
@@ -452,7 +452,7 @@ describe('lead server action authorization', () => {
         firstName: 'New',
         lastName: 'Lead',
         email: 'new@example.com',
-        phone: '5551112222',
+        phone: '', source: 'Referral', referralName: 'Jane Referrer',
       }),
       ownerId: 'monitor-1',
       assignedToId: 'monitor-1',
@@ -472,7 +472,7 @@ describe('lead server action authorization', () => {
             firstName: 'New',
             lastName: 'Lead',
             email: 'new@example.com',
-            phone: '5551112222',
+            phone: '', source: 'Referral', referralName: 'Jane Referrer',
           },
           status: 'Interested',
         },
@@ -489,6 +489,7 @@ describe('lead server action authorization', () => {
       expect.any(String),
       expect.objectContaining({
         ownerId: 'monitor-1',
+        data: expect.stringContaining('Jane Referrer'),
       }),
       expect.arrayContaining(['read:user:monitor-1', 'update:user:monitor-1']),
     );

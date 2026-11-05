@@ -42,10 +42,6 @@ export async function createPublicLeadRequestAction(input: PublicLeadRequestInpu
     throw new Error('Email is required.');
   }
 
-  if (!normalized.phone) {
-    throw new Error('Phone is required.');
-  }
-
   if (!normalized.linkedinProfileUrl) {
     throw new Error('LinkedIn link is required.');
   }

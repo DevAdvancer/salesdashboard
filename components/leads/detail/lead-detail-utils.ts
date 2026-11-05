@@ -2,6 +2,26 @@ import {
   normalizeLeadStatus,
 } from "@/lib/utils/lead-status-workflow";
 import { FormField, LeadData } from "@/lib/types";
+import { isReferralSource, normalizeSource } from "@/lib/utils/lead-source";
+
+export function isReferralNameField(field: FormField): boolean {
+  return ["referralName", "referral", "referrerName"].includes(field.key) ||
+    normalizeSource(field.label) === "referralname";
+}
+
+/** Referral Name is a built-in field, even for older saved form configs. */
+export function withReferralNameField(fields: FormField[], data: LeadData): FormField[] {
+  const remaining = fields.filter(field => !isReferralNameField(field));
+  const source = data.source || data.sourceName;
+  if (!isReferralSource(source) && normalizeSource(source) !== "referralform") return remaining;
+  const sourceField = fields.find(field => ["source", "sourceName"].includes(field.key));
+  const referralField: FormField = {
+    id: "static-referral-name", key: "referralName", label: "Referral Name",
+    type: "text", required: true, visible: true,
+    order: sourceField ? sourceField.order + 0.1 : 6.1,
+  };
+  return [...remaining, referralField].sort((a, b) => a.order - b.order);
+}
 
 export function isBackoutStatus(value: unknown) {
   const text = typeof value === "string" ? value.trim().toLowerCase() : "";

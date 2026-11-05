@@ -146,8 +146,8 @@ export default function ReferralPage() {
                 <Field label="Last name" required>
                   <Input value={form.lastName} onChange={(event) => updateField('lastName', event.target.value)} required />
                 </Field>
-                <Field label="Phone" required>
-                  <Input value={form.phone} onChange={(event) => updateField('phone', event.target.value)} placeholder="+1 555 000 0000" required />
+                <Field label="Phone">
+                  <Input value={form.phone} onChange={(event) => updateField('phone', event.target.value)} placeholder="+1 555 000 0000" />
                 </Field>
                 <Field label="Email" required>
                   <Input type="email" value={form.email} onChange={(event) => updateField('email', event.target.value)} placeholder="lead@example.com" required />

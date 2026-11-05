@@ -25,7 +25,6 @@ const REQUIRED_FIELDS: Array<{
 }> = [
   { key: "firstName", label: "First Name" },
   { key: "lastName", label: "Last Name" },
-  { key: "phone", label: "Phone No." },
   { key: "visaStatus", label: "Visa Status" },
   { key: "linkedinProfileUrl", label: "LinkedIn profile link" },
 ];

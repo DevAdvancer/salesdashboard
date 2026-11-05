@@ -15,7 +15,6 @@ export const REQUIRED_LEAD_FIELD_KEYS: ReadonlySet<string> = new Set([
   'name',
   'legalName',
   'email',
-  'phone',
   'visaStatus',
   'linkedinProfileUrl',
   'linkedinProfile',
@@ -54,6 +53,7 @@ export function shouldShowRequiredAsterisk(
   source: unknown = '',
   field?: { key: string; label: string },
 ): boolean {
+  if (fieldKey === 'phone') return false;
   const isExemptSource = isSourceExemptFromLinkedin(source);
 
   // Check if this is a LinkedIn field (uses existing utility which handles legacy keys)

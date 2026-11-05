@@ -7,6 +7,7 @@ let mockBranches = ['ncr', 'ahm'];
 let mockActive = true;
 let mockLeadOwner = 'agent';
 let mockActorRole = 'agent';
+let mockPhone: unknown = '5551234567';
 jest.mock('@/lib/server/current-user', () => ({ assertAuthenticatedUserId: jest.fn() }));
 jest.mock('@/lib/server/notifications', () => ({ createNotificationsForRecipients: jest.fn() }));
 jest.mock('@/lib/server/lead-request-release', () => ({ withdrawLeadRequests: jest.fn() }));
@@ -16,10 +17,10 @@ jest.mock('@/lib/server/appwrite', () => ({ createAdminClient: async () => ({ da
   getDocument: async (_db: string, collection: string, id: string) => collection === COLLECTIONS.USERS
     ? { $id: id, name: 'Agent', role: id === 'agent' ? mockActorRole : 'agent', department: 'sales', branchIds: id === 'agent' ? mockBranches : ['owner-ahm'], primaryBranchId: id === 'agent' ? mockBranches[0] : 'owner-ahm' }
     : collection === COLLECTIONS.BRANCHES ? { $id: id, isActive: mockActive }
-    : { $id: 'lead', ownerId: mockLeadOwner, assignedToId: null, branchId: 'ncr', isClosed: false, status: 'Interested', data: '{}' },
+    : { $id: 'lead', ownerId: mockLeadOwner, assignedToId: null, branchId: 'ncr', isClosed: false, status: 'Interested', data: JSON.stringify({ phone: mockPhone }) },
   updateDocument: (...args: unknown[]) => mockWrite(...args), createDocument: async () => ({}),
 } }) }));
-beforeEach(() => { jest.clearAllMocks(); mockBranches = ['ncr', 'ahm']; mockActive = true; mockLeadOwner = 'agent'; mockActorRole = 'agent';
+beforeEach(() => { jest.clearAllMocks(); mockPhone = '5551234567'; mockBranches = ['ncr', 'ahm']; mockActive = true; mockLeadOwner = 'agent'; mockActorRole = 'agent';
   mockWrite.mockImplementation(async (_db, _col, id, data) => ({ $id: id, ...data })); });
 
 test('saves exactly one assigned branch and uses the server role even when the client claims admin', async () => {
@@ -50,4 +51,15 @@ test('an administrator closing another owner lead uses the owner branch rather t
   mockLeadOwner = 'other-owner';
   const result = await closeLeadAction('lead', 'Won', 'agent', 'Admin', 'admin', '');
   expect(result.lead.branchId).toBe('owner-ahm');
+});
+
+test('rejects closing without a phone for every closing role before writing', async () => {
+  for (const role of ['agent', 'team_lead', 'senior_tl', 'monitor', 'admin', 'developer']) {
+    mockActorRole = role;
+    for (const phone of [undefined, null, '', '   ', 'N/A']) {
+      mockPhone = phone;
+      await expect(closeLeadAction('lead', 'Won', 'agent', 'Agent', role as any, 'ncr')).rejects.toThrow('Phone is required');
+    }
+  }
+  expect(mockWrite).not.toHaveBeenCalled();
 });

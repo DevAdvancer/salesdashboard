@@ -97,7 +97,7 @@ describe("lead-close-gate", () => {
 
   describe("isCloseRequiredFieldsMissing", () => {
     it("returns false for closed leads regardless of field values", () => {
-      const leadData = { amount: "", lastName: "", legalName: "" };
+      const leadData = { phone: "5551234567", amount: "", lastName: "", legalName: "" };
       const result = isCloseRequiredFieldsMissing({
         isClosed: true,
         closeStatus: "Closed",
@@ -108,7 +108,7 @@ describe("lead-close-gate", () => {
     });
 
     it("returns true when Amount is missing", () => {
-      const leadData = {
+      const leadData = { phone: "5551234567",
         lastName: "Papasani",
         legalName: "Narendra",
       };
@@ -123,7 +123,7 @@ describe("lead-close-gate", () => {
     });
 
     it("returns true when LastName is missing", () => {
-      const leadData = {
+      const leadData = { phone: "5551234567",
         amount: "100",
         legalName: "Narendra",
       };
@@ -138,7 +138,7 @@ describe("lead-close-gate", () => {
     });
 
     it("returns true when Legal Name is missing", () => {
-      const leadData = {
+      const leadData = { phone: "5551234567",
         amount: "100",
         lastName: "Papasani",
       };
@@ -153,7 +153,7 @@ describe("lead-close-gate", () => {
     });
 
     it("returns true when LinkedIn Profile URL is missing", () => {
-      const leadData = {
+      const leadData = { phone: "5551234567",
         amount: "100",
         lastName: "Papasani",
         legalName: "Narendra",
@@ -169,7 +169,7 @@ describe("lead-close-gate", () => {
     });
 
     it("returns true when LinkedIn Profile URL is blank", () => {
-      const leadData = {
+      const leadData = { phone: "5551234567",
         amount: "100",
         lastName: "Papasani",
         legalName: "Narendra",
@@ -186,7 +186,7 @@ describe("lead-close-gate", () => {
     });
 
     it("returns true when LinkedIn Profile URL is N/A", () => {
-      const leadData = {
+      const leadData = { phone: "5551234567",
         amount: "100",
         lastName: "Papasani",
         legalName: "Narendra",
@@ -203,7 +203,7 @@ describe("lead-close-gate", () => {
     });
 
     it("returns false when all required fields including LinkedIn Profile URL are filled", () => {
-      const leadData = {
+      const leadData = { phone: "5551234567",
         amount: "100",
         lastName: "Papasani",
         legalName: "Narendra",
@@ -220,7 +220,7 @@ describe("lead-close-gate", () => {
     });
 
     it("treats `N/A` as missing for Amount, LastName, Legal Name, and LinkedIn Profile URL", () => {
-      const leadData = {
+      const leadData = { phone: "5551234567",
         amount: "N/A",
         lastName: "N/A",
         legalName: "N/A",
@@ -237,7 +237,7 @@ describe("lead-close-gate", () => {
     });
 
     it("bypasses the gate for Backout status even when LinkedIn Profile URL is missing", () => {
-      const leadData = { amount: "100", lastName: "Test", legalName: "Name" };
+      const leadData = { phone: "5551234567", amount: "100", lastName: "Test", legalName: "Name" };
       const result = isCloseRequiredFieldsMissing({
         isClosed: false,
         closeStatus: "Backout",
@@ -248,7 +248,7 @@ describe("lead-close-gate", () => {
     });
 
     it("treats whitespace-only values as missing", () => {
-      const leadData = {
+      const leadData = { phone: "5551234567",
         amount: "   ",
         lastName: "   ",
         legalName: "   ",
@@ -264,7 +264,7 @@ describe("lead-close-gate", () => {
     });
 
     it("bypasses the gate for Backout status even when fields are missing", () => {
-      const leadData = { amount: "", lastName: "", legalName: "" };
+      const leadData = { phone: "5551234567", amount: "", lastName: "", legalName: "" };
       const result = isCloseRequiredFieldsMissing({
         isClosed: false,
         closeStatus: "Backout",
@@ -277,7 +277,7 @@ describe("lead-close-gate", () => {
     it("bypasses the gate for `Backout`, `backedout`, `Backed Out`", () => {
       ["Backout", "backedout", "Backed Out", "Back Out"].forEach(
         (status) => {
-          const leadData = { amount: "", lastName: "", legalName: "" };
+          const leadData = { phone: "5551234567", amount: "", lastName: "", legalName: "" };
           const result = isCloseRequiredFieldsMissing({
             isClosed: false,
             closeStatus: status,
@@ -290,7 +290,7 @@ describe("lead-close-gate", () => {
     });
 
     it("accepts the legacy `field_15` Amount value (LinkedIn URL still required)", () => {
-      const leadData = {
+      const leadData = { phone: "5551234567",
         field_15: "250",
         lastName: "Papasani",
         legalName: "Narendra",
@@ -307,7 +307,7 @@ describe("lead-close-gate", () => {
     });
 
     it("accepts LinkedIn values stored under the legacy aliases before closing", () => {
-      const leadData = {
+      const leadData = { phone: "5551234567",
         amount: "250",
         lastName: "Papasani",
         legalName: "Narendra",
@@ -326,7 +326,7 @@ describe("lead-close-gate", () => {
 
   describe("getMissingCloseRequiredFields", () => {
     it("returns an empty list when all four are filled", () => {
-      const leadData = {
+      const leadData = { phone: "5551234567",
         amount: "100",
         lastName: "Papasani",
         legalName: "Narendra",
@@ -336,7 +336,7 @@ describe("lead-close-gate", () => {
     });
 
     it("lists Amount, Last Name, Legal Name, and LinkedIn Profile URL in order when all are missing", () => {
-      const leadData = {
+      const leadData = { phone: "5551234567",
         amount: "",
         lastName: "",
         legalName: "",
@@ -351,7 +351,7 @@ describe("lead-close-gate", () => {
     });
 
     it("lists only the missing field", () => {
-      const leadData = {
+      const leadData = { phone: "5551234567",
         amount: "100",
         lastName: "Papasani",
         legalName: "Narendra",
@@ -361,7 +361,7 @@ describe("lead-close-gate", () => {
     });
 
     it("lists missing LinkedIn Profile URL specifically", () => {
-      const leadData = {
+      const leadData = { phone: "5551234567",
         amount: "100",
         lastName: "Papasani",
         legalName: "Narendra",
@@ -372,7 +372,7 @@ describe("lead-close-gate", () => {
     });
 
     it("recognizes the legacy `field_15` Amount as present but LinkedIn URL is still required", () => {
-      const leadData = {
+      const leadData = { phone: "5551234567",
         field_15: "100",
         lastName: "Papasani",
         legalName: "Narendra",
@@ -383,7 +383,7 @@ describe("lead-close-gate", () => {
     });
 
     it("does not report LinkedIn as missing when only the legacy field_16 alias is filled", () => {
-      const leadData = {
+      const leadData = { phone: "5551234567",
         amount: "100",
         lastName: "Papasani",
         legalName: "Narendra",
@@ -461,4 +461,11 @@ describe("lead-close-gate", () => {
       expect(getMissingPaymentFields(values, "Backout")).toEqual([]);
     });
   });
+});
+
+
+test('requires Phone in the close button gate and missing-field explanation', () => {
+  const data = { amount: '100', lastName: 'Smith', legalName: 'Jane Smith', linkedinProfileUrl: 'https://linkedin.com/in/jane' };
+  expect(getMissingCloseRequiredFields(data)).toEqual(['Phone']);
+  expect(isCloseRequiredFieldsMissing({ isClosed: false, closeStatus: 'Won', leadData: data, isBackoutStatus: () => false })).toBe(true);
 });

@@ -17,6 +17,7 @@ import { useAuth } from "@/lib/contexts/auth-context";
 import { LeadAssignmentDropdown } from "@/components/lead-assignment-dropdown";
 import { shouldShowRequiredAsterisk } from "@/lib/utils/required-lead-fields";
 import { isLinkedinProfileField } from "@/lib/utils/lead-linkedin-field";
+import { getLeadSourceOptions } from "@/lib/utils/lead-source";
 
 const REFERRAL_SOURCE_NORMALIZED = "referral";
 
@@ -106,7 +107,7 @@ export function DynamicLeadForm({
 
   // Track source value to conditionally show referralName field
   const [selectedSource, setSelectedSource] = useState<string>(
-    typeof defaultValues?.source === "string" ? defaultValues.source : "",
+    String(defaultValues.source ?? defaultValues.sourceName ?? ""),
   );
 
   // Show referralName field when source is "Referral"
@@ -129,7 +130,12 @@ export function DynamicLeadForm({
 
   // If lastName is not in the config (removed by user), inject it manually just under firstName (or at start if firstName missing)
   const hasLastName = filteredConfig.some((f) => f.key === "lastName");
-  const effectiveConfig = [...filteredConfig];
+  const effectiveConfig = filteredConfig.map(field => ({
+    ...field,
+    ...(field.key === 'phone' ? { required: false } : {}),
+    ...(['source', 'sourceName'].includes(field.key)
+      ? { options: getLeadSourceOptions(field.options) } : {}),
+  }));
 
   if (!hasLastName) {
     const firstNameIndex = effectiveConfig.findIndex(

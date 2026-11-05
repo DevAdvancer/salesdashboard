@@ -126,7 +126,7 @@ describe('Form Configuration Service', () => {
 
       const result = await getFormConfig();
 
-      expect(result.fields[0].options).toEqual(['Referral', 'Website']);
+      expect(result.fields[0].options).toEqual(['Referral', 'Website', 'Teams Meeting']);
     });
   });
 

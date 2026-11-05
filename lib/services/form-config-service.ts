@@ -3,6 +3,7 @@ import { Permission, Role } from 'appwrite';
 import { referenceDatabases as databases } from '@/lib/services/reference-databases';
 import { FormField, FormConfig } from '@/lib/types';
 import { logAction } from './audit-service';
+import { getLeadSourceOptions } from '@/lib/utils/lead-source';
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const FORM_CONFIG_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_FORM_CONFIG_COLLECTION_ID!;
@@ -38,7 +39,7 @@ export const DEFAULT_FIELDS: FormField[] = [
     required: false,
     visible: true,
     order: 6,
-    options: ['Website', 'Referral', 'Cold Call', 'Social Media'],
+    options: ['Website', 'Referral', 'Cold Call', 'Teams Meeting'],
   },
   {
     id: '7',
@@ -206,7 +207,9 @@ export function normalizeFormFields(fields: FormField[]): FormField[] {
   return fields.map((field) => {
     if (field.type !== 'dropdown' && field.type !== 'checklist') return field;
     // Keep saved configurations aligned with the supported lead visa statuses.
-    const options = dedupeOptions(field.key === 'visaStatus'
+    const options = dedupeOptions(['source', 'sourceName'].includes(field.key)
+      ? getLeadSourceOptions(field.options)
+      : field.key === 'visaStatus'
       ? completeLeadVisaOptions(field.options)
       : field.options, field.key);
     return options ? { ...field, options } : { ...field, options: undefined };
