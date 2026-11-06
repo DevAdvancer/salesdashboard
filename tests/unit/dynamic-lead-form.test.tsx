@@ -662,7 +662,7 @@ describe('DynamicLeadForm - Task 8.7: Form Rendering', () => {
       expect(emailLabel.parentElement).toHaveTextContent('*');
 
       const phoneLabel = screen.getByText(/Phone/i);
-      expect(phoneLabel.textContent).not.toContain('*');
+      expect(phoneLabel.textContent).toContain('*');
     });
 
     it('should not display asterisk for a field that is optional everywhere', () => {
@@ -705,7 +705,7 @@ describe('Lead referral and source submissions', () => {
   ];
   beforeEach(() => mockUseAuth.mockReturnValue({ user: null, isAgent: true, isMonitor: false }));
 
-  it('submits the referral name and allows an empty phone with a saved required config', async () => {
+  it('submits the referral name with the required phone', async () => {
     const submit = jest.fn();
     render(<DynamicLeadForm formConfig={fields} onSubmit={submit} />);
     await selectCrmOption(screen.getByLabelText(/Source/i), 'Referral');
@@ -713,8 +713,9 @@ describe('Lead referral and source submissions', () => {
     expect(await screen.findByText('Referral Name is required')).toBeInTheDocument();
     expect(submit).not.toHaveBeenCalled();
     await userEvent.type(screen.getByLabelText(/Referral Name/i), 'Jane Referrer');
+    await userEvent.type(screen.getByLabelText(/Phone/i), '5551234567');
     fireEvent.click(screen.getByRole('button', { name: 'Submit', exact: true }));
-    await waitFor(() => expect(submit).toHaveBeenCalledWith(expect.objectContaining({ source: 'Referral', referralName: 'Jane Referrer', phone: '' })));
+    await waitFor(() => expect(submit).toHaveBeenCalledWith(expect.objectContaining({ source: 'Referral', referralName: 'Jane Referrer', phone: '5551234567' })));
   });
 
   it('replaces Social Media with Teams Meeting in saved configs and submits the new choice', async () => {

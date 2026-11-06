@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { FormField } from '@/lib/types';
 import { isLinkedinProfileField } from './lead-linkedin-field';
-import { isReferralSource, isSourceExemptFromLinkedin } from './lead-source';
+import { isPhoneRequiredForLeadSource, isReferralSource, isSourceExemptFromLinkedin } from './lead-source';
 
 /**
  * Generate a source-aware Zod schema from form configuration
@@ -117,7 +117,9 @@ export function generateSourceAwareZodSchema(
     }
 
     // Apply required/optional based on field configuration and source (Requirements 3.9, 11.1)
-    const isRequiredNormally = field.required && field.key !== 'phone' && !(isExemptSource && isLinkedinField);
+    const isRequiredNormally = field.key === 'phone'
+      ? isPhoneRequiredForLeadSource(source)
+      : field.required && !(isExemptSource && isLinkedinField);
 
     if (isRequiredNormally) {
       // For required fields, ensure non-empty values

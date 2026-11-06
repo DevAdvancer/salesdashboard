@@ -1,5 +1,5 @@
 import { isLinkedinProfileField } from "./lead-linkedin-field";
-import { isSourceExemptFromLinkedin, normalizeSource } from "./lead-source";
+import { isPhoneRequiredForLeadSource, isSourceExemptFromLinkedin, normalizeSource } from "./lead-source";
 
 /**
  * Server-enforced required lead fields. The server's
@@ -53,7 +53,7 @@ export function shouldShowRequiredAsterisk(
   source: unknown = '',
   field?: { key: string; label: string },
 ): boolean {
-  if (fieldKey === 'phone') return false;
+  if (fieldKey === 'phone') return isPhoneRequiredForLeadSource(source);
   const isExemptSource = isSourceExemptFromLinkedin(source);
 
   // Check if this is a LinkedIn field (uses existing utility which handles legacy keys)

@@ -439,7 +439,7 @@ describe('lead server action authorization', () => {
     expect(mockUpdateDocument).not.toHaveBeenCalled();
   });
 
-  it('saves a referral name with an empty phone and the monitor as owner', async () => {
+  it('saves a referral name with a phone and the monitor as owner', async () => {
     mockGetDocument.mockResolvedValueOnce({
       $id: 'monitor-1',
       email: 'monitor@example.com',
@@ -452,7 +452,7 @@ describe('lead server action authorization', () => {
         firstName: 'New',
         lastName: 'Lead',
         email: 'new@example.com',
-        phone: '', source: 'Referral', referralName: 'Jane Referrer',
+        phone: '5551112222', source: 'Referral', referralName: 'Jane Referrer',
       }),
       ownerId: 'monitor-1',
       assignedToId: 'monitor-1',
@@ -472,7 +472,7 @@ describe('lead server action authorization', () => {
             firstName: 'New',
             lastName: 'Lead',
             email: 'new@example.com',
-            phone: '', source: 'Referral', referralName: 'Jane Referrer',
+            phone: '5551112222', source: 'Referral', referralName: 'Jane Referrer',
           },
           status: 'Interested',
         },
@@ -1013,7 +1013,7 @@ describe('lead server action authorization', () => {
 
     const { createLeadAction } = await import('@/app/actions/lead/mutations');
     await expect(createLeadAction('agent-1', {
-      data: { firstName: 'New', [field]: value }, status: 'Interested',
+      data: { firstName: 'New', phone: '5551112222', [field]: value }, status: 'Interested',
     }, 'agent-1')).rejects.toMatchObject({ code: 'DUPLICATE_FIELD', field });
     expect(mockCreateDocument).not.toHaveBeenCalled();
     expect(mockUpdateDocument).not.toHaveBeenCalled();
@@ -1064,7 +1064,7 @@ describe('lead server action authorization', () => {
     mockGetDocument
       .mockResolvedValueOnce({ $id: 'teamLead-1', role: 'team_lead', branchIds: ['branch-1'] })
       .mockResolvedValueOnce({
-        $id: 'lead-1', data: JSON.stringify({ firstName: 'Current' }),
+        $id: 'lead-1', data: JSON.stringify({ firstName: 'Current', ...(field !== 'phone' ? { phone: '5551112222' } : {}) }),
         ownerId: 'teamLead-1', assignedToId: 'agent-1', branchId: 'branch-1',
         isClosed: false, status: 'Interested',
       });

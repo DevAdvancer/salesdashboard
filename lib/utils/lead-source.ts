@@ -12,6 +12,10 @@ export function isWebsiteSource(source: unknown): boolean {
     return norm === "website" || norm === "websites";
 }
 
+export function isPhoneRequiredForLeadSource(source: unknown): boolean {
+    return normalizeSource(source) !== "teamsmeeting";
+}
+
 export function isSourceExemptFromLinkedin(source: unknown): boolean {
     return isReferralSource(source) || isWebsiteSource(source);
 }

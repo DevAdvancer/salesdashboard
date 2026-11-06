@@ -338,7 +338,7 @@ export function LeadInfoCard({
               <div key={field.id}>
                 <Label htmlFor={field.key}>
                   {field.label}
-                  {shouldShowRequiredAsterisk(field.key, field.required) && (
+                  {shouldShowRequiredAsterisk(field.key, field.required, leadData.source || leadData.sourceName, field) && (
                     <span className="text-red-500 ml-1">*</span>
                   )}
                 </Label>

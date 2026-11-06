@@ -63,16 +63,12 @@ describe('createPublicLeadRequestAction', () => {
     }
   });
 
-  it('saves a referral request with no phone number', async () => {
-    mockListAllDocuments.mockResolvedValue([]);
+  it('rejects a referral request with no phone number before any database writes', async () => {
     await expect(createPublicLeadRequestAction({
       firstName: 'Jane', lastName: 'Doe', email: 'a@b.com',
       phone: '', linkedinProfileUrl: 'https://linkedin.com/in/jane', referrerName: 'Alex',
-    })).resolves.toBeTruthy();
-    expect(mockDatabases.createDocument).toHaveBeenCalledWith(
-      expect.anything(), expect.anything(), expect.anything(),
-      expect.objectContaining({ phone: '', referrerName: 'Alex' }),
-    );
+    })).rejects.toThrow('Phone is required.');
+    expect(mockDatabases.createDocument).not.toHaveBeenCalled();
   });
 
   it('rejects duplicate email in pending/moved requests', async () => {

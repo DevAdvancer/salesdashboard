@@ -17,7 +17,7 @@ import { useAuth } from "@/lib/contexts/auth-context";
 import { LeadAssignmentDropdown } from "@/components/lead-assignment-dropdown";
 import { shouldShowRequiredAsterisk } from "@/lib/utils/required-lead-fields";
 import { isLinkedinProfileField } from "@/lib/utils/lead-linkedin-field";
-import { getLeadSourceOptions } from "@/lib/utils/lead-source";
+import { getLeadSourceOptions, isPhoneRequiredForLeadSource } from "@/lib/utils/lead-source";
 
 const REFERRAL_SOURCE_NORMALIZED = "referral";
 
@@ -132,7 +132,7 @@ export function DynamicLeadForm({
   const hasLastName = filteredConfig.some((f) => f.key === "lastName");
   const effectiveConfig = filteredConfig.map(field => ({
     ...field,
-    ...(field.key === 'phone' ? { required: false } : {}),
+    ...(field.key === 'phone' ? { required: isPhoneRequiredForLeadSource(selectedSource) } : {}),
     ...(['source', 'sourceName'].includes(field.key)
       ? { options: getLeadSourceOptions(field.options) } : {}),
   }));
