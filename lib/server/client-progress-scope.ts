@@ -20,9 +20,10 @@ export async function resolveProgressVisibleIds(db: Databases, actor: ProgressAc
     const next: string[] = [];
     for (let start = 0; start < frontier.length; start += 50) {
       const ids = frontier.slice(start, start + 50);
+      const parentQueries = fields.map(field => field.endsWith('Ids') ? Query.contains(field, ids) : Query.equal(field, ids));
       const users = await listAllDocuments<Models.Document & HierarchyPerson>({
         databases: db, databaseId: DATABASE_ID, collectionId: COLLECTIONS.USERS,
-        queries: [Query.or(fields.map(field => field.endsWith('Ids') ? Query.contains(field, ids) : Query.equal(field, ids))),
+        queries: [parentQueries.length === 1 ? parentQueries[0] : Query.or(parentQueries),
           Query.select(['$id', 'role', 'department', ...fields]), Query.orderAsc('$id')],
         pageLimit: 100, maxPages: 20, requireComplete: true, maxDocuments: 1001,
       });

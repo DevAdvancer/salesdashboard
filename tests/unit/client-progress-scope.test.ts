@@ -1,6 +1,34 @@
 /** @jest-environment node */
 import { resolveProgressVisibleIds } from '@/lib/server/client-progress-scope';
 import type { Databases } from 'node-appwrite';
+import fc from 'fast-check';
+
+test('Sales team leads see their reports when only the legacy teamLeadId field exists', async () => {
+  await jest.isolateModulesAsync(async () => {
+    const { resolveProgressVisibleIds } = await import('@/lib/server/client-progress-scope');
+
+    await fc.assert(fc.asyncProperty(fc.uniqueArray(fc.uuid(), { minLength: 2, maxLength: 12 }), async ([leadId, ...reportIds]) => {
+      const users = reportIds.map(($id, index) => ({
+        $id,
+        role: 'agent',
+        teamLeadId: leadId,
+        department: index % 2 ? 'resume' : undefined,
+      }));
+      const db = {
+        getCollection: jest.fn().mockResolvedValue({ attributes: [{ key: 'teamLeadId' }] }),
+        listDocuments: jest.fn(async (_d, _c, raw: string[]) => {
+          const queries = raw.map(query => JSON.parse(query));
+          expect(queries).toContainEqual({ method: 'equal', attribute: 'teamLeadId', values: [leadId] });
+          expect(queries.some(query => query.method === 'or')).toBe(false);
+          return { documents: users, total: users.length };
+        }),
+      };
+
+      await expect(resolveProgressVisibleIds(db as unknown as Databases, { $id: leadId, role: 'team_lead', department: 'sales' }))
+        .resolves.toEqual([leadId, ...users.filter(user => !user.department).map(user => user.$id)]);
+    }));
+  });
+});
 
 test('hierarchy queries target direct reports, follow array parents, and do not scan the user collection', async () => {
   const queries: any[][] = [];
