@@ -9,11 +9,13 @@ import { LinkedinExtensionSection } from "@/components/linkedin-extension-guide"
 import { LinkedinDailyExport } from "@/components/linkedin-daily-export";
 import { LinkedinLeadHistory } from '@/components/linkedin-lead-history';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useRouter } from "next/navigation";
+import Link from 'next/link';
+import { useLinkedinConversationAccess } from '@/lib/hooks/use-linkedin-conversation-access';
 import {
   Table,
   TableBody,
@@ -83,6 +85,7 @@ function RequiredMark() {
 
 function LinkedinRequestsContent() {
   const { user, serverSessionReady } = useAuth();
+  const conversationsBeta = useLinkedinConversationAccess() === true;
   const { toast } = useToast();
   const { prompt, promptDialog } = usePromptDialog();
   const router = useRouter();
@@ -152,7 +155,7 @@ function LinkedinRequestsContent() {
   );
 
   const dashboardQuery = useQuery({
-    queryKey: ['linkedin-dashboard-data', user?.$id, appliedFilterUrl, filterDate],
+    queryKey: ['linkedin-dashboard-data', user?.$id, appliedFilterUrl, filterDate, ...(conversationsBeta ? ['conversations-beta'] : [])],
     queryFn: async () => {
       if (!user || !serverSessionReady) return { requests: [], leadOutcomeByLeadId: {} };
       
@@ -161,10 +164,12 @@ function LinkedinRequestsContent() {
         dateSent: filterDate || null,
         searchQuery: appliedFilterUrl || undefined,
         limit: 100,
+        fresh: conversationsBeta,
       });
     },
     enabled: !!user && serverSessionReady,
-    staleTime: 5 * 60 * 1000,
+    staleTime: conversationsBeta ? 0 : 5 * 60 * 1000,
+    refetchOnWindowFocus: conversationsBeta ? 'always' : true,
   });
 
   const loadingList = dashboardQuery.isLoading || dashboardQuery.isFetching;
@@ -372,6 +377,9 @@ function LinkedinRequestsContent() {
         variant: "success",
       });
       void queryClient.invalidateQueries({ queryKey: ['linkedin-dashboard-data'] });
+      if (conversationsBeta && !request.coldCall && request.recordSource !== 'lead_backfill') {
+        router.push(`/linkedin-conversations?request=${encodeURIComponent(request.$id)}`);
+      }
     } catch (error: unknown) {
       toast({
         title: "Failed to update",
@@ -461,8 +469,12 @@ function LinkedinRequestsContent() {
   return (
     <div className="container mx-auto space-y-6">
       {promptDialog}
-      {!helperDetected && <LinkedinExtensionSection onDetection={setHelperDetected} />}
+      {!helperDetected && <LinkedinExtensionSection onDetection={setHelperDetected} conversationsBeta={conversationsBeta} />}
       <LinkedinDailyExport />
+      {conversationsBeta && <div className="flex flex-wrap gap-2">
+        <Link className={buttonVariants({ variant: 'outline' })} href="/linkedin-conversations">Accepted Connections · Beta</Link>
+        <Link className={buttonVariants({ variant: 'outline' })} href="/linkedin-conversations?view=sent">Export invitations with conversations</Link>
+      </div>}
       <Card>
         <CardHeader>
           <CardTitle>Linkedin Request</CardTitle>
@@ -766,6 +778,11 @@ function LinkedinRequestsContent() {
                       </TableCell>
                       <TableCell>{r.recordSource === 'lead_backfill' ? `Existing lead${leadStatusLabel ? ` · ${leadStatusLabel}` : ''}` : statusLabel}</TableCell>
                       <TableCell>
+                        {conversationsBeta && r.acceptedAt && r.recordSource !== 'lead_backfill' && !r.coldCall &&
+                          <Link className={buttonVariants({ variant: 'outline', size: 'sm', className: 'mb-2' })}
+                            href={`/linkedin-conversations?request=${encodeURIComponent(r.$id)}&date=${getCurrentEasternIsoDate(new Date(r.acceptedAt))}`}>
+                            Open conversation
+                          </Link>}
                         {r.leadId && !leadOutcome?.isTerminal ? (
                           <div className="flex flex-wrap gap-2">
                             <Button variant="outline" onClick={() => router.push(`/leads/${encodeURIComponent(r.leadId!)}`)}>Open Lead</Button>
@@ -980,7 +997,7 @@ function LinkedinRequestsContent() {
           </div>
         </div>
       )}
-      {helperDetected && <LinkedinExtensionSection onDetection={setHelperDetected} />}
+      {helperDetected && <LinkedinExtensionSection onDetection={setHelperDetected} conversationsBeta={conversationsBeta} />}
     </div>
   );
 }

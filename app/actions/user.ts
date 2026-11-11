@@ -12,7 +12,13 @@ import { getUserBranchIds, normalizeUserBranches } from '@/lib/utils/user-branch
 import { getErrorMessage } from '@/lib/utils';
 import { getUsersByIds } from '@/lib/services/user-service';
 import { sendLinkedinWithdrawalReport, withdrawLinkedinRequestsForAgent } from '@/lib/server/linkedin-auto-withdraw';
-import { planUserDeactivation, handoffDeactivatedUserLeads } from '@/lib/server/user-deactivation';
+import {
+    countRemainingHandoffLeads,
+    findCompletedUserHandoffIds,
+    getPendingLinkedinHandoffIds,
+    handoffDeactivatedUserLeads,
+    planUserDeactivation,
+} from '@/lib/server/user-deactivation';
 import { canDeactivateUser, type HandoffUser } from '@/lib/utils/user-deactivation';
 import { withLinkedinProfileLock } from '@/lib/server/linkedin-lead-protection';
 import { clearCrmIdentityCache } from '@/lib/server/crm-identity-cache';
@@ -764,6 +770,21 @@ export async function previewUserDeactivationAction(input: { userId: string; cur
         requests: plan.requests.length, accounts: plan.accounts.length };
 }
 
+export async function getCompletedUserHandoffsAction(userIds: string[]): Promise<string[]> {
+    const actor = await getAuthenticatedUserDoc();
+    if (!Array.isArray(userIds) || userIds.length > 50 || userIds.some(id => typeof id !== 'string' || !id || id.length > 36)) {
+        throw new Error('Invalid users for handoff status.');
+    }
+    if (!userIds.length) return [];
+
+    const { databases } = await createAdminClient();
+    const { documents } = await databases.uncachedReads.listDocuments(DATABASE_ID, COLLECTIONS.USERS, [
+        Query.equal('$id', userIds), Query.equal('isActive', false), Query.limit(userIds.length),
+    ]);
+    const targets = (documents as unknown as HandoffUser[]).filter(target => canDeactivateUser(actor, target));
+    return findCompletedUserHandoffIds(databases, targets.map(target => target.$id));
+}
+
 export async function setAgentActiveAction(input: {
     userId: string;
     isActive: boolean;
@@ -850,6 +871,7 @@ export async function setAgentActiveAction(input: {
                 );
             }
 
+            let remainingLeads = 0;
             if (plan) {
                 // Login is disabled first. Failures leave a visible, retryable handoff
                 // instead of reporting a successful deactivation with stranded leads.
@@ -860,6 +882,7 @@ export async function setAgentActiveAction(input: {
                             accountDoc.$id, { isActive: false });
                     }
                     const now = new Date();
+                    databases.clearReadCacheForCollection(COLLECTIONS.LINKEDIN_REQUESTS);
                     const result = await withdrawLinkedinRequestsForAgent(databases,
                         { $id: targetUserDoc.$id, name: String(targetUserDoc.name ?? userId) }, now,
                         plan.accounts.map(account => account.$id));
@@ -874,6 +897,11 @@ export async function setAgentActiveAction(input: {
                         reportEmailSent = report.emailSent;
                         reportRecipientCount = report.recipientCount;
                     } catch (error) { logger.error({ error, userId }, 'Withdrawal report delivery failed'); }
+
+                    remainingLeads = await countRemainingHandoffLeads(databases, userId);
+                    if (remainingLeads === 0 && (await getPendingLinkedinHandoffIds(databases, [userId])).has(userId)) {
+                        throw new Error('LinkedIn accounts or requests still need to be processed.');
+                    }
                 } catch (error) {
                     throw new Error(`Login is disabled. Handoff is incomplete: ${getErrorMessage(error)} Use Complete handoff on the inactive user to retry.`);
                 }
@@ -891,10 +919,8 @@ export async function setAgentActiveAction(input: {
 
             // Inactivating a user affects which leads they're visible for.
             invalidateDepartmentScopedUserIds();
-
             databases.clearReadCacheForCollection(COLLECTIONS.LEADS);
-            const remainingLeads = plan ? (await databases.listDocuments(DATABASE_ID, COLLECTIONS.LEADS,
-                [Query.or([Query.equal('ownerId', userId), Query.equal('assignedToId', userId)]), Query.limit(1)])).total : 0;
+
             return { success: true, leadsTransferred, remainingLeads, linkedinWithdrawn, withdrawalErrors, reportEmailSent, reportRecipientCount };
         } catch (error: unknown) {
             invalidateDepartmentScopedUserIds();

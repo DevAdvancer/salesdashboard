@@ -21,6 +21,10 @@ import { listLinkedinReportRequests } from "@/lib/server/linkedin-report-request
 import { runLinkedinWithdrawalSweep, sendLinkedinWithdrawalReport } from "@/lib/server/linkedin-auto-withdraw";
 import { assertLinkedinProfileAvailable, findProtectedLinkedinLead, requestBlocksLinkedinProfile } from '@/lib/server/linkedin-lead-protection';
 import { leadProfileUrl } from '@/lib/utils/linkedin-lead-protection';
+import { randomUUID } from 'node:crypto';
+import { LINKEDIN_INVITATION_TEXT_LIMIT } from '@/lib/types/linkedin-conversation';
+import { stageLinkedinInvitation } from '@/lib/server/linkedin-conversation-storage';
+import { hasLinkedinConversationAccess } from '@/lib/server/linkedin-conversation-access';
 
 function linkedinRequestSearch(value: string) {
     const text = value.trim();
@@ -75,6 +79,7 @@ export async function createLinkedinRequestAction(input: {
       targetUrl: string;
       coldCall?: boolean;
       coldCallPhone?: string;
+      initialInvitationText?: string;
     }) {
     await assertAuthenticatedUserId(input.currentUserId);
     const user = await getAuthenticatedUserDoc();
@@ -93,6 +98,12 @@ export async function createLinkedinRequestAction(input: {
     }
 
     const { databases } = await createAdminClient();
+    let invitationText: string | undefined;
+    if (input.initialInvitationText !== undefined) {
+      if (!await hasLinkedinConversationAccess(databases, user)) throw new Error('LinkedIn Conversations beta access is required.');
+      invitationText = typeof input.initialInvitationText === 'string' ? input.initialInvitationText : '';
+      if (coldCall || !invitationText.trim() || invitationText.length > LINKEDIN_INVITATION_TEXT_LIMIT) throw new Error('Enter valid initial invitation text.');
+    }
     databases.clearReadCacheForCollection(COLLECTIONS.LINKEDIN_ACCOUNTS);
     const account = await assertAccessibleLinkedinAccount(databases, user.$id, input.accountId);
     if (account.isActive === false) {
@@ -150,6 +161,8 @@ export async function createLinkedinRequestAction(input: {
     ];
 
     const docToUpdate = existingByCompany.length > 0 ? existingByCompany[0] : null;
+    const conversationId = invitationText ? randomUUID() : undefined;
+    if (conversationId && invitationText) await stageLinkedinInvitation(databases, conversationId, invitationText);
 
     if (docToUpdate) {
       const canonicalKeyOccupied = existingByCompany.some(doc => doc.$id !== docToUpdate.$id &&
@@ -188,6 +201,8 @@ export async function createLinkedinRequestAction(input: {
           recordSource: null,
           withdrawnAt: null,
           isActive: true,
+          ...(conversationId ? { conversationId } : {}),
+          expectedRequestUpdatedAt: docToUpdate.$updatedAt,
         },
         permissions,
       );
@@ -234,6 +249,7 @@ export async function createLinkedinRequestAction(input: {
         leadId: null,
         withdrawnAt: null,
         isActive: true,
+        ...(conversationId ? { conversationId } : {}),
       },
       permissions,
     );
@@ -565,12 +581,14 @@ export async function listMyLinkedinRequestsAction(input: {
       limit?: number;
       searchQuery?: string;
       dateSent?: string | null;
+      fresh?: boolean;
     }) {
     await assertAuthenticatedUserId(input.currentUserId);
     const user = await getAuthenticatedUserDoc();
     const { databases } = await createAdminClient();
     const delegatedUserIds = await listDelegatedSourceUserIdsForToday(databases, user.$id);
     const agentIds = delegatedUserIds.length > 0 ? [user.$id, ...delegatedUserIds] : [user.$id];
+    const reads = input.fresh && await hasLinkedinConversationAccess(databases, user) ? databases.uncachedReads : databases;
     
     const queries = [
       Query.equal("agentId", agentIds),
@@ -587,7 +605,7 @@ export async function listMyLinkedinRequestsAction(input: {
     if (searchText) {
       const search = linkedinRequestSearch(searchText);
       const find = (query: string | null) => listAllDocuments<LinkedinRequest>({
-        databases, databaseId: DATABASE_ID, collectionId: COLLECTIONS.LINKEDIN_REQUESTS,
+        databases: reads, databaseId: DATABASE_ID, collectionId: COLLECTIONS.LINKEDIN_REQUESTS,
         queries: [...queries, ...(query ? [query] : [])],
         maxPages: query ? 5 : 1000,
       });
@@ -599,7 +617,7 @@ export async function listMyLinkedinRequestsAction(input: {
     }
 
     queries.push(Query.limit(Math.min(Math.max(input.limit ?? 10, 1), 500)));
-    const response = await databases.listDocuments(DATABASE_ID, COLLECTIONS.LINKEDIN_REQUESTS, queries);
+    const response = await reads.listDocuments(DATABASE_ID, COLLECTIONS.LINKEDIN_REQUESTS, queries);
     return response.documents as unknown as LinkedinRequest[];
 }
 
@@ -634,6 +652,7 @@ export async function markLinkedinRequestAcceptedAction(input: {
         {
           acceptedAt: existing.acceptedAt ?? new Date().toISOString(),
           isActive: true,
+          ...(existing.conversationId ? { expectedRequestUpdatedAt: existing.$updatedAt } : {}),
         },
       );
       return updated as unknown as LinkedinRequest;
@@ -657,6 +676,7 @@ export async function markLinkedinRequestAcceptedAction(input: {
               status: "accepted" satisfies LinkedinRequestStatus,
               acceptedAt: new Date().toISOString(),
               isActive: true,
+              ...(existing.conversationId ? { expectedRequestUpdatedAt: existing.$updatedAt } : {}),
             },
           );
     await logAuditAction(databases, {
@@ -731,6 +751,7 @@ export async function withdrawLinkedinRequestAction(input: {
               status: "withdrawn" satisfies LinkedinRequestStatus,
               isActive: false,
               withdrawnAt: nowIso,
+              ...(existing.conversationId ? { expectedRequestUpdatedAt: existing.$updatedAt } : {}),
             },
           );
     await logAuditAction(databases, {
@@ -1043,6 +1064,7 @@ export async function loadLinkedinRequestDashboardDataAction(input: {
   dateSent: string | null;
   searchQuery?: string;
   limit?: number;
+  fresh?: boolean;
 }) {
   await assertAuthenticatedUserId(input.currentUserId);
   
@@ -1052,6 +1074,7 @@ export async function loadLinkedinRequestDashboardDataAction(input: {
     limit: input.limit ?? 100,
     searchQuery: input.searchQuery,
     dateSent: input.dateSent,
+    fresh: input.fresh,
   });
 
   // 2. Fetch the backout statuses for the leads in the list

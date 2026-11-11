@@ -6,6 +6,7 @@ export interface ExtensionAccount {
 }
 export interface ExtensionBootstrap {
   user: ExtensionUser; today: string; accounts: Array<ExtensionAccount & ExtensionQuota>;
+  conversationsBeta?: boolean;
 }
 export type ExtensionState = "new" | "active_request" | "resend_available" | "limit_reached" | "missing_limit";
 export interface ExtensionHistory {
@@ -19,6 +20,7 @@ export interface ExtensionCheck extends ExtensionQuota {
 }
 export interface ExtensionRecord extends ExtensionCheck { mode: "created" | "resent" | "existing" }
 export type ExtensionInput = { operation: "check" | "history"; accountId: string; targetUrl: string } |
-  { operation: "record"; accountId: string; targetUrl: string; revision?: string; confirmResend: boolean };
+  { operation: "record"; accountId: string; targetUrl: string; revision?: string; confirmResend: boolean;
+    initialInvitationText?: string; expectedUserId?: string };
 export type ExtensionMessage = { type: "crm-api"; input?: ExtensionInput; fresh?: boolean } | { type: "ensure-crm" | "open-crm" };
 export type ExtensionResponse<T = unknown> = { ok: true; data?: T } | { ok: false; error: string; status?: number };

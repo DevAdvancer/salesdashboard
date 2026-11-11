@@ -30,6 +30,8 @@ export const COLLECTIONS = {
   LEAD_REQUESTS: process.env.NEXT_PUBLIC_APPWRITE_LEAD_REQUESTS_COLLECTION_ID || 'lead_requests',
   LINKEDIN_ACCOUNTS: process.env.NEXT_PUBLIC_APPWRITE_LINKEDIN_ACCOUNTS_COLLECTION_ID || 'linkedin_accounts',
   LINKEDIN_REQUESTS: process.env.NEXT_PUBLIC_APPWRITE_LINKEDIN_REQUESTS_COLLECTION_ID || 'linkedin_requests',
+  // Server-only invitation text, messages, and retained invitation attempts.
+  LINKEDIN_CONVERSATIONS: process.env.NEXT_PUBLIC_APPWRITE_LINKEDIN_CONVERSATIONS_COLLECTION_ID || 'linkedin_conversations',
   // Server-only profile reservations/lookup. A withdrawal never releases a lead.
   LINKEDIN_LEAD_REGISTRY: process.env.NEXT_PUBLIC_APPWRITE_LINKEDIN_LEAD_REGISTRY_COLLECTION_ID || 'linkedin_lead_registry',
   // Append-only lead/request events. No browser write/update/delete permissions.

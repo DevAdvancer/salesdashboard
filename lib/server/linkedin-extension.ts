@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { Permission, Query, Role } from "node-appwrite";
 import { createAdminClient } from "@/lib/server/appwrite";
 import { getAuthenticatedUserDoc } from "@/lib/server/current-user";
@@ -16,6 +16,9 @@ import { canUseLinkedinExtension, LinkedinExtensionError, projectExtensionHistor
 import type { LinkedinAccount, LinkedinRequest } from "@/lib/types";
 import type { ExtensionBootstrap, ExtensionCheck, ExtensionRecord, ExtensionState } from "@/lib/types/linkedin-extension";
 import { findProtectedLinkedinLead, LinkedinLeadProtectionError, requestBlocksLinkedinProfile } from '@/lib/server/linkedin-lead-protection';
+import { hasLinkedinConversationAccess } from '@/lib/server/linkedin-conversation-access';
+import { stageLinkedinInvitation } from '@/lib/server/linkedin-conversation-storage';
+import { LINKEDIN_INVITATION_TEXT_LIMIT } from '@/lib/types/linkedin-conversation';
 
 type Databases = Awaited<ReturnType<typeof createAdminClient>>["databases"];
 
@@ -49,6 +52,7 @@ export async function bootstrapLinkedinExtension(): Promise<ExtensionBootstrap> 
   const { actor, databases, today } = await context();
   const accounts = await listMyLinkedinAccountsAction({ currentUserId: actor.$id });
   return { user: { id: actor.$id, name: actor.name }, today,
+    conversationsBeta: Boolean(await hasLinkedinConversationAccess(databases, actor)),
     accounts: await Promise.all(accounts.map(async account => ({ ...projectAccount(account),
       ...await usage(databases, account, today) }))) };
 }
@@ -112,8 +116,16 @@ export async function checkLinkedinExtension(input: { accountId: string; targetU
 
 export async function recordLinkedinExtension(input: {
   accountId: string; targetUrl: string; revision?: string; confirmResend: boolean;
+  initialInvitationText?: string; expectedUserId?: string;
 }): Promise<ExtensionRecord> {
   const current = await inspect(input, true);
+  const beta = await hasLinkedinConversationAccess(current.databases, current.actor);
+  const initialInvitationText = input.initialInvitationText;
+  if (!beta && input.initialInvitationText !== undefined) throw new LinkedinExtensionError(403, 'LinkedIn Conversations beta access is required.');
+  if (beta && (!initialInvitationText?.trim() || initialInvitationText.length > LINKEDIN_INVITATION_TEXT_LIMIT)) {
+    throw new LinkedinExtensionError(400, 'Enter the initial invitation text in LinkedIn Helper v2.1 before recording.');
+  }
+  if (beta && input.expectedUserId !== current.actor.$id) throw new LinkedinExtensionError(409, 'Refresh accounts before recording this invitation.');
   const checked = result(current);
   if (input.revision && checked.revision !== input.revision) throw new LinkedinExtensionError(409, "The profile history or business date changed. Check again before recording.");
   if (!input.revision && (!checked.canRecord || current.latest)) return { ...checked, mode: "existing" };
@@ -124,18 +136,21 @@ export async function recordLinkedinExtension(input: {
     // Reuse the existing resend business operation, including its permission and limit checks.
     // Reuse the legacy row; the request action saves its canonical profile URL.
     const saved = await createLinkedinRequestAction({ currentUserId: current.actor.$id,
-      accountId: current.account.$id, targetUrl: current.latest.targetUrl, dateSent: current.today });
+      accountId: current.account.$id, targetUrl: current.latest.targetUrl, dateSent: current.today,
+      ...(initialInvitationText ? { initialInvitationText } : {}) });
     mode = saved.mode;
   } else {
     // Stable company/profile ID makes concurrent extension creates collide at the database.
-    // Schema and record shape are identical to the existing CRM; no extra attributes are introduced.
     const id = `ext_${createHash("sha256").update(JSON.stringify([current.account.company.trim(), current.targetUrl])).digest("hex").slice(0, 32)}`;
     try {
+      const conversationId = initialInvitationText ? randomUUID() : undefined;
+      if (conversationId && initialInvitationText) await stageLinkedinInvitation(current.databases, conversationId, initialInvitationText);
       await current.databases.createDocument(DATABASE_ID, COLLECTIONS.LINKEDIN_REQUESTS, id, {
         accountId: current.account.$id, agentId: current.actor.$id, teamLeadId: current.actor.teamLeadId || null,
         company: current.account.company.trim(), targetUrl: current.targetUrl,
         dateSent: `${current.today}T00:00:00.000Z`, status: "sent", acceptedAt: null,
         leadId: null, withdrawnAt: null, isActive: true,
+        ...(conversationId ? { conversationId } : {}),
       }, [Permission.read(Role.user(current.actor.$id)), Permission.update(Role.user(current.actor.$id)),
         Permission.delete(Role.user(current.actor.$id)), Permission.read(Role.label("admin"))]);
       await logAuditAction(current.databases, { action: "LINKEDIN_REQUEST_CREATE", actorId: current.actor.$id,

@@ -26,13 +26,13 @@ it('includes assigned-account requests sent by other agents across more than 100
   const accountIds = Array.from({ length: 181 }, (_, index) => `account-${index}`);
   const own = request('own', { accountId: 'different-account' });
   const fromAccount = request('other-sender', { accountId: 'account-180', agentId: 'other-agent', status: 'accepted', leadId: 'protected-lead' });
-  const db = { clearReadCacheForCollection: jest.fn(), listDocuments: jest.fn(async (_db, _collection, queries) => ({
+  const listDocuments = jest.fn(async (_db, _collection, queries) => ({
     total: queries.some((query: string) => query.includes('account-180')) ? 2 : 1,
     documents: queries.some((query: string) => query.includes('account-180')) ? [own, fromAccount] : [own],
-  })) };
-  const rows = await listDeactivationLinkedinRequests(db as never, 'agent-inactive', accountIds);
+  }));
+  const rows = await listDeactivationLinkedinRequests({ uncachedReads: { listDocuments } } as never, 'agent-inactive', accountIds);
   expect(rows.map(row => row.$id)).toEqual(['own', 'other-sender']);
-  expect(db.listDocuments).toHaveBeenCalledTimes(3);
+  expect(listDocuments).toHaveBeenCalledTimes(3);
 });
 
 it('withdraws every active request of an inactive agent, including accepted requests with leads', () => {

@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useConfirmDialog } from "@/lib/hooks/use-confirm-dialog";
@@ -6,6 +7,7 @@ import {
   createAdminAction,
   createTeamLeadAction,
   createAgentAction,
+  getCompletedUserHandoffsAction,
 } from "@/app/actions/user";
 import { listBranches } from "@/lib/services/branch-service";
 import { invalidateUsersCache } from "@/lib/services/user-service";
@@ -13,6 +15,7 @@ import { useIsVisible } from "@/lib/hooks/use-is-visible";
 import { User, Branch, UserRole, Department } from "@/lib/types";
 import { client, databases } from "@/lib/appwrite";
 import { canDeactivateUser } from '@/lib/utils/user-deactivation';
+import { buildScope, queryKeys } from '@/lib/queries/keys';
 
 export function useUserManagement() {
   const searchParams = useSearchParams();
@@ -633,6 +636,24 @@ export function useUserManagement() {
     return result;
   }, [branchMap, search, users, departmentFilter, activeDashboard, statusFilter]);
 
+  const inactiveHandoffUserIds = useMemo(() => user && statusFilter === 'inactive'
+    ? users.filter(target => target.isActive === false && canDeactivateUser(user, target)).map(target => target.$id).sort()
+    : [], [user, users, statusFilter]);
+  const handoffs = useQuery({
+    queryKey: queryKeys.users.completedHandoffs(user ? buildScope(user.$id, user.role) : '', inactiveHandoffUserIds),
+    enabled: !isLoading && inactiveHandoffUserIds.length > 0,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    queryFn: async () => {
+      const completedIds: string[] = [];
+      for (let start = 0; start < inactiveHandoffUserIds.length; start += USERS_PAGE_SIZE) {
+        completedIds.push(...await getCompletedUserHandoffsAction(inactiveHandoffUserIds.slice(start, start + USERS_PAGE_SIZE)));
+      }
+      return completedIds;
+    },
+  });
+  const completedHandoffIds = new Set(handoffs.isSuccess && handoffs.isFetchedAfterMount && !handoffs.isFetching ? handoffs.data : []);
+
   const teamLeadOptions = useMemo(() => {
     if (activeDashboard !== "resume" && createDepartment !== "resume") {
       return availableTeamLeads;
@@ -670,6 +691,6 @@ export function useUserManagement() {
     canCreateLeadGeneration, canCreateMonitor, canCreateOperations, canCreateCompliance, canCreate,
     availableBranches, toggleBranch, handleEdit, handleUpdateUser,
     handleDeleteUser, handleSetAgentActive, handleCreate, resetForm,
-    filteredUsers, teamLeadOptions
+    filteredUsers, teamLeadOptions, completedHandoffIds, checkingHandoffs: handoffs.isFetching,
   };
 }

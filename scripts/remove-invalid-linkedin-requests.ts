@@ -21,7 +21,7 @@ const requestsCollection = process.env.NEXT_PUBLIC_APPWRITE_LINKEDIN_REQUESTS_CO
 const leadsCollection = process.env.NEXT_PUBLIC_APPWRITE_LEADS_COLLECTION_ID || 'leads';
 const apply = process.argv.includes('--apply');
 const expectedPreview = process.argv.find(value => value.startsWith('--preview='))?.slice(10);
-type Row = { $id: string; $updatedAt: string; targetUrl: string; status: string; leadId?: string | null };
+type Row = { $id: string; $updatedAt: string; targetUrl: string; status: string; leadId?: string | null; conversationId?: string | null };
 type LeadRow = { $id: string; data: string };
 
 async function retry<T>(operation: () => Promise<T>): Promise<T> {
@@ -57,7 +57,7 @@ function isInvalid(row: Row): boolean {
 
 async function main() {
   const requests = await listAll(requestsCollection);
-  const invalid = requests.filter(isInvalid);
+  const invalid = requests.filter(row => !row.conversationId && isInvalid(row));
   const invalidIds = new Set(invalid.map(row => row.$id));
   const leads = await listAll(leadsCollection);
   const references = leads.flatMap(lead => {
@@ -90,7 +90,7 @@ async function main() {
   for (const row of invalid) {
     try {
       const current = await retry(() => db.getDocument(databaseId, requestsCollection, row.$id));
-      if (current.$updatedAt !== row.$updatedAt || !isInvalid(current as unknown as Row)) {
+      if (current.$updatedAt !== row.$updatedAt || current.conversationId || !isInvalid(current as unknown as Row)) {
         throw new Error('Request changed since preview');
       }
       for (const { lead } of references.filter(item => item.requestId === row.$id)) {

@@ -48,7 +48,7 @@ function UserManagementContent() {
     canCreateLeadGeneration, canCreateMonitor, canCreateOperations, canCreateCompliance, canCreate,
     availableBranches, toggleBranch, handleEdit, handleUpdateUser,
     handleDeleteUser, handleSetAgentActive, handleCreate, resetForm,
-    filteredUsers, teamLeadOptions
+    filteredUsers, teamLeadOptions, completedHandoffIds, checkingHandoffs,
   } = useUserManagement();
 
   const dialogTitle = "Create User";
@@ -114,6 +114,8 @@ function UserManagementContent() {
             handleDeleteUser={handleDeleteUser}
             activeStatusUserId={activeStatusUserId}
             deletingUserId={deletingUserId}
+            completedHandoffIds={completedHandoffIds}
+            checkingHandoffs={checkingHandoffs}
             currentUsersPage={currentUsersPage}
             setCurrentUsersPage={setCurrentUsersPage}
             usersTotal={usersTotal}

@@ -1,4 +1,5 @@
 const mockAssertAuthenticatedUserId = jest.fn();
+const mockGetAuthenticatedUserDoc = jest.fn();
 const mockCreateAdminClient = jest.fn();
 const mockGetDocument = jest.fn();
 const mockUpdateDocument = jest.fn();
@@ -14,6 +15,7 @@ jest.mock('@/lib/server/linkedin-auto-withdraw', () => ({
 
 jest.mock('@/lib/server/current-user', () => ({
   assertAuthenticatedUserId: (...args: unknown[]) => mockAssertAuthenticatedUserId(...args),
+  getAuthenticatedUserDoc: () => mockGetAuthenticatedUserDoc(),
 }));
 
 jest.mock('@/lib/server/appwrite', () => ({
@@ -34,6 +36,7 @@ jest.mock('node-appwrite', () => ({
     equal: jest.fn((key, value) => `equal:${key}:${JSON.stringify(value)}`),
     limit: jest.fn((limit) => `limit:${limit}`),
     or: jest.fn((queries) => `or:${JSON.stringify(queries)}`),
+    select: jest.fn((fields) => `select:${fields.join(',')}`),
   },
   Role: {
     user: jest.fn((userId) => `user:${userId}`),
@@ -59,6 +62,7 @@ describe('setAgentActiveAction authorization and cascading deactivation', () => 
         getDocument: mockGetDocument,
         updateDocument: mockUpdateDocument,
         listDocuments: mockListDocuments,
+        uncachedReads: { listDocuments: mockListDocuments },
         getAttribute: jest.fn().mockResolvedValue({}),
         createDocument: jest.fn().mockResolvedValue({}),
         clearReadCacheForCollection: jest.fn(),
@@ -169,9 +173,10 @@ describe('setAgentActiveAction authorization and cascading deactivation', () => 
     });
 
     // Mock returning some LinkedIn accounts
-    mockListDocuments.mockImplementation(async (_db, collection) => collection === 'linkedin_accounts' ? {
+    mockListDocuments.mockImplementation(async (_db, collection, queries) => collection === 'linkedin_accounts' ? {
       documents: [
-        { $id: 'li-acc-1', assignedUserId: 'agent-1', idName: 'LI Account 1' },
+        { $id: 'li-acc-1', assignedUserId: 'agent-1', idName: 'LI Account 1',
+          isActive: !queries.includes('select:$id,assignedUserId,isActive') },
       ],
       total: 1,
     } : { documents: [], total: 0 });
@@ -238,5 +243,47 @@ describe('setAgentActiveAction authorization and cascading deactivation', () => 
       .rejects.toThrow('Login is disabled. Handoff is incomplete');
     expect(mockUsersUpdateStatus).toHaveBeenCalledWith('agent-1', false);
     expect(mockSendLinkedinWithdrawalReport).not.toHaveBeenCalled();
+  });
+
+  it('confirms completion only for authorized inactive users with no remaining leads, accounts, or requests', async () => {
+    const { COLLECTIONS } = await import('@/lib/constants/appwrite');
+    mockGetAuthenticatedUserDoc.mockResolvedValue({ $id: 'tl-1', role: 'team_lead', department: 'sales' });
+    const ownTeam = ['complete', 'owns-lead', 'assigned-lead', 'active-account', 'own-request', 'account-request'];
+    const users = [
+      ...ownTeam.map($id => ({ $id, role: 'agent', teamLeadId: 'tl-1', isActive: false })),
+      { $id: 'other-team', role: 'agent', teamLeadId: 'tl-2', isActive: false },
+    ];
+    const rows = {
+      [COLLECTIONS.USERS]: users,
+      [COLLECTIONS.LEADS]: [{ $id: 'closed', ownerId: 'owns-lead', assignedToId: 'assigned-lead', isClosed: true }],
+      [COLLECTIONS.LINKEDIN_ACCOUNTS]: [
+        { $id: 'active', assignedUserId: 'active-account', isActive: true },
+        { $id: 'disabled', assignedUserId: 'account-request', isActive: false },
+      ],
+      [COLLECTIONS.LINKEDIN_REQUESTS]: [
+        { $id: 'request-1', agentId: 'own-request', accountId: 'another-account' },
+        { $id: 'request-2', agentId: 'another-agent', accountId: 'disabled' },
+      ],
+    };
+    mockListDocuments.mockImplementation(async (_db, collection) => ({ documents: rows[collection], total: rows[collection].length }));
+    const { getCompletedUserHandoffsAction } = await import('@/app/actions/user');
+    await expect(getCompletedUserHandoffsAction([...ownTeam, 'other-team', 'active-user'])).resolves.toEqual(['complete']);
+    expect(mockListDocuments).toHaveBeenCalledWith(expect.any(String), COLLECTIONS.USERS,
+      expect.arrayContaining(['equal:isActive:false']));
+    expect(mockListDocuments).toHaveBeenCalledWith(expect.any(String), COLLECTIONS.LEADS,
+      expect.not.arrayContaining([expect.stringContaining('other-team')]));
+  });
+
+  it('keeps the handoff retryable when an active LinkedIn request remains after withdrawal', async () => {
+    const { COLLECTIONS } = await import('@/lib/constants/appwrite');
+    mockGetDocument.mockImplementation(async (_db, _collection, id) => ({ $id: id, role: id === 'admin-1' ? 'admin' : 'agent' }));
+    mockListDocuments.mockImplementation(async (_db, collection) => collection === COLLECTIONS.LINKEDIN_REQUESTS
+      ? { documents: [{ $id: 'request-1', agentId: 'agent-1', accountId: 'account-1' }], total: 1 }
+      : { documents: [], total: 0 });
+    const { setAgentActiveAction, previewUserDeactivationAction } = await import('@/app/actions/user');
+    const input = { currentUserId: 'admin-1', userId: 'agent-1' };
+    const preview = await previewUserDeactivationAction(input);
+    await expect(setAgentActiveAction({ ...input, isActive: false, planHash: preview.hash }))
+      .rejects.toThrow('LinkedIn accounts or requests still need to be processed.');
   });
 });

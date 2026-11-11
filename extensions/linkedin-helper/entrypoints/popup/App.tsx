@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ExtensionState } from "crm-shared/types/linkedin-extension";
+import { LINKEDIN_INVITATION_TEXT_LIMIT } from "crm-shared/types/linkedin-conversation";
 import { useLinkedinHelper } from "../../lib/use-linkedin-helper";
 import { usePageTheme } from "../../lib/use-page-theme";
 import { AccountPicker, History, Quota } from "./RequestDetails";
@@ -57,6 +58,13 @@ export function App() {
           {state.checked?.previousRequest && <p>CRM record: {state.checked.previousRequest.status} · {state.checked.previousRequest.dateSent.slice(0, 10)}</p>}</div>}
         {isResend && <div className="confirmation"><label><input type="checkbox" checked={state.confirmResend} disabled={state.pending}
           onChange={event => helper.setConfirmResend(event.target.checked)} /> I sent another invitation on LinkedIn and want to update this CRM request.</label></div>}
+        {state.bootstrap.conversationsBeta && state.accountId && state.profile.trim() && (!state.checked || state.checked.canRecord) &&
+          <div className="invitation-text">
+            <label htmlFor="initial-invitation-text">Initial invitation text <span className="badge">Beta</span></label>
+            <textarea id="initial-invitation-text" value={state.initialInvitationText} disabled={state.pending} required
+              maxLength={LINKEDIN_INVITATION_TEXT_LIMIT} onChange={event => helper.setInitialInvitationText(event.target.value)}
+              placeholder="Paste the text you sent on LinkedIn" rows={3} />
+          </div>}
         <div className="actions"><button id="record" disabled={!canRecord} onClick={helper.record}>{isResend ? "Record resend" : "Record request sent"}</button></div>
         <div className="actions"><button id="check" className="secondary" disabled={state.pending || !state.accountId || !state.profile.trim()} onClick={helper.check}>Check before inviting</button>
           <button id="history" className="secondary" disabled={state.pending || !state.accountId || !state.profile.trim()} onClick={helper.history}>View history</button></div>
@@ -103,6 +111,7 @@ function getView(state: ReturnType<typeof useLinkedinHelper>["state"]) {
 function canRecordRequest(state: ReturnType<typeof useLinkedinHelper>["state"], connected: boolean, isResend: boolean) {
   const canRecord = connected && !state.pending && !!state.accountId && !!state.profile.trim() &&
     (!state.checked || state.checked.canRecord) &&
+    (!state.bootstrap?.conversationsBeta || !!state.initialInvitationText.trim()) &&
     (state.checked?.state !== "resend_available" || (isResend && state.confirmResend));
   return canRecord;
 }

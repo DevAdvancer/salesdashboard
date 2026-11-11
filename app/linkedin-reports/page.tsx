@@ -5,7 +5,9 @@ import { CrmSelect } from '@/components/ui/crm-select';
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import Link from 'next/link';
+import { useLinkedinConversationAccess } from '@/lib/hooks/use-linkedin-conversation-access';
 import { Label } from "@/components/ui/label";
 import { DateRangePicker } from "@/components/ui/date-picker";
 import {
@@ -78,6 +80,7 @@ function RequiredMark() {
 
 function LinkedinReportsContent() {
   const { user } = useAuth();
+  const conversationsBeta = useLinkedinConversationAccess() === true;
   const { toast } = useToast();
   const canReadLikeAdmin =
     user?.role === "admin" ||
@@ -441,6 +444,7 @@ function LinkedinReportsContent() {
             <Button variant="outline" onClick={handleExport} disabled={exporting || loading || !teamLeadId}>
               {exporting ? "Exporting..." : "Export Excel"}
             </Button>
+            {conversationsBeta && <Link className={buttonVariants({ variant: 'outline' })} href="/linkedin-conversations">Accepted Connections · Beta</Link>}
             {(user?.role === "admin" || user?.role === "developer") && (
               <>
                 <Button

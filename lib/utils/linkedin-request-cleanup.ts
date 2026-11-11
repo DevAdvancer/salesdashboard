@@ -14,6 +14,7 @@ export type LinkedinRequestCleanupRow = {
   dateSent?: string;
   acceptedAt?: string | null;
   withdrawnAt?: string | null;
+  conversationId?: string | null;
 };
 
 const CURRENT_COMPANIES: Record<string, string> = {
@@ -68,7 +69,8 @@ export function planLinkedinRequestCleanup(
     return {
       key, keeper, remove, winner,
       linkedLeadIds,
-      blockedReason: linkedLeadIds.length > 1 ? "Several different leads link to this profile" : null,
+      blockedReason: sorted.some(row => row.conversationId) ? 'A request has a saved conversation' :
+        linkedLeadIds.length > 1 ? "Several different leads link to this profile" : null,
       keeperAfter: {
         company: CURRENT_COMPANIES[companyKey] ?? keeper.company.trim(),
         targetUrl,

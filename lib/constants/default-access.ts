@@ -20,6 +20,7 @@ export type ComponentKey =
   | 'attendance-report'
   | 'lead-requests'
   | 'linkedin-requests'
+  | 'linkedin-conversations'
   | 'linkedin-account-management'
   | 'linkedin-reports'
   | 'target-report'
@@ -62,6 +63,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'attendance-report', role: 'admin', allowed: true },
   { componentKey: 'lead-requests', role: 'admin', allowed: true },
   { componentKey: 'linkedin-requests', role: 'admin', allowed: false },
+  { componentKey: 'linkedin-conversations', role: 'admin', allowed: true },
   { componentKey: 'linkedin-account-management', role: 'admin', allowed: true },
   { componentKey: 'linkedin-reports', role: 'admin', allowed: true },
   { componentKey: 'payments-report', role: 'admin', allowed: true },
@@ -158,6 +160,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'attendance-report', role: 'team_lead', allowed: true },
   { componentKey: 'lead-requests', role: 'team_lead', allowed: false },
   { componentKey: 'linkedin-requests', role: 'team_lead', allowed: true },
+  { componentKey: 'linkedin-conversations', role: 'team_lead', allowed: true },
   { componentKey: 'linkedin-account-management', role: 'team_lead', allowed: false },
   { componentKey: 'linkedin-reports', role: 'team_lead', allowed: true },
   { componentKey: 'payments-report', role: 'team_lead', allowed: false },
@@ -205,6 +208,7 @@ export const DEFAULT_ACCESS_RULES: AccessRule[] = [
   { componentKey: 'attendance-report', role: 'agent', allowed: false },
   { componentKey: 'lead-requests', role: 'agent', allowed: false },
   { componentKey: 'linkedin-requests', role: 'agent', allowed: true },
+  { componentKey: 'linkedin-conversations', role: 'agent', allowed: true },
   { componentKey: 'linkedin-account-management', role: 'agent', allowed: false },
   { componentKey: 'linkedin-reports', role: 'agent', allowed: false },
   { componentKey: 'payments-report', role: 'agent', allowed: false },

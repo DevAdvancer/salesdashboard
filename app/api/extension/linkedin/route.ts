@@ -4,6 +4,7 @@ import { assertExtensionRequest, LinkedinExtensionError } from "@/lib/server/lin
 import { bootstrapLinkedinExtension, checkLinkedinExtension, recordLinkedinExtension } from "@/lib/server/linkedin-extension";
 import { withCrmRequestContext } from '@/lib/server/crm-request-context';
 import { ProfileReadBudgetError } from '@/lib/server/lead-profile-index';
+import { LINKEDIN_INVITATION_TEXT_LIMIT } from '@/lib/types/linkedin-conversation';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +15,8 @@ const inputSchema = z.object({
   targetUrl: z.string().min(1).max(2048),
   revision: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   confirmResend: z.boolean().default(false),
+  initialInvitationText: z.string().max(LINKEDIN_INVITATION_TEXT_LIMIT).optional(),
+  expectedUserId: z.string().min(1).max(36).optional(),
 }).strict();
 
 function json(body: unknown, status = 200) {
@@ -55,7 +58,7 @@ async function execute(request: NextRequest) {
       throw new LinkedinExtensionError(415, "Send a JSON request.");
     }
     const body = await request.text();
-    if (body.length > 4096) throw new LinkedinExtensionError(413, "Request too large.");
+    if (body.length > 8192) throw new LinkedinExtensionError(413, "Request too large.");
     let parsed;
     try { parsed = JSON.parse(body); } catch { throw new LinkedinExtensionError(400, "Invalid JSON request."); }
     const validation = inputSchema.safeParse(parsed);
@@ -65,6 +68,7 @@ async function execute(request: NextRequest) {
       if (input.confirmResend && !input.revision) throw new LinkedinExtensionError(400, "Check the profile before confirming a resend.");
       return json(await recordLinkedinExtension(input));
     }
+    if (input.initialInvitationText !== undefined || input.expectedUserId !== undefined) throw new LinkedinExtensionError(400, "Invitation text is only accepted when recording a request.");
     return json(await checkLinkedinExtension(input, input.operation === "history"));
   } catch (error) { return failure(error); }
 }

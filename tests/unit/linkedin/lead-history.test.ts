@@ -30,6 +30,38 @@ it('does not perform an untracked mutation when the history store is unavailable
   await expect(withLeadHistory(raw,async()=>({id:'agent',name:'Agent'})).updateDocument(DATABASE_ID,COLLECTIONS.LINKEDIN_REQUESTS,'request',{status:'withdrawn'})).rejects.toThrow('history offline');
   expect(raw.updateDocument).not.toHaveBeenCalled();
 });
+
+it('archives the original invitation before a resend changes the sender on the same request row', async () => {
+  const before = { $id: 'request', $updatedAt: 'version', agentId: 'original-agent', teamLeadId: 'original-tl',
+    accountId: 'original-account', conversationId: 'original-attempt', status: 'withdrawn', isActive: false,
+    targetUrl: 'https://www.linkedin.com/in/person', company: 'Example', dateSent: '2026-10-05T00:00:00.000Z',
+    acceptedAt: '2026-10-06T13:00:00.000Z', withdrawnAt: '2026-10-20T14:00:00.000Z' };
+  const raw = {
+    getDocument: jest.fn(async (_db, collection) => {
+      if (collection === COLLECTIONS.LINKEDIN_REQUESTS) return before;
+      throw { code: 404 };
+    }),
+    listDocuments: jest.fn().mockResolvedValue({ total: 0, documents: [] }),
+    createDocument: jest.fn(async (_db, _collection, id, data) => ({ $id: id, ...data })),
+    updateDocument: jest.fn(async (_db, _collection, _id, data) => ({ ...before, ...data })),
+    deleteDocument: jest.fn(),
+  } as unknown as Databases;
+  const db = withLeadHistory(raw, async () => ({ id: 'next-agent', name: 'Next Agent' }));
+  const updated = await db.updateDocument(DATABASE_ID, COLLECTIONS.LINKEDIN_REQUESTS, before.$id, {
+    agentId: 'next-agent', status: 'sent', isActive: true, acceptedAt: null, withdrawnAt: null, expectedRequestUpdatedAt: 'version',
+  });
+  expect(updated.conversationId).not.toBe(before.conversationId);
+  expect(updated).not.toHaveProperty('expectedRequestUpdatedAt');
+  const creates = jest.mocked(raw.createDocument);
+  const archive = creates.mock.calls.find(([, collection]) => collection === COLLECTIONS.LINKEDIN_CONVERSATIONS);
+  expect(archive?.[3]).toMatchObject({ kind: 'archive', conversationId: 'original-attempt', agentId: 'original-agent', teamLeadId: 'original-tl' });
+  expect(JSON.parse((archive?.[3] as { payload: string }).payload)).toMatchObject({
+    $id: before.$id, agentId: before.agentId, accountId: before.accountId, dateSent: before.dateSent,
+    acceptedAt: before.acceptedAt, withdrawnAt: before.withdrawnAt, status: before.status,
+  });
+  const archiveOrder = creates.mock.invocationCallOrder[creates.mock.calls.indexOf(archive!)];
+  expect(archiveOrder).toBeLessThan(jest.mocked(raw.updateDocument).mock.invocationCallOrder[0]);
+});
 it('checks a new request under its profile lock and blocks a lead that appeared since preview', async () => {
   let locked = false;
   const raw = {

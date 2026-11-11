@@ -1,4 +1,6 @@
 jest.mock('@/lib/server/current-user', () => ({ getAuthenticatedUserDoc: jest.fn() }));
+jest.mock('@/lib/server/appwrite', () => ({ createAdminClient: jest.fn() }));
+jest.mock('node-appwrite', () => ({ Query: {} }));
 
 import fc from 'fast-check';
 import { getAuthenticatedUserDoc } from '@/lib/server/current-user';

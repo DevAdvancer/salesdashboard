@@ -27,6 +27,8 @@
     "link:linkedin-leads:apply": "tsx scripts/link-linkedin-leads.ts --apply",
     "setup:beta-access:dry": "tsx scripts/setup-beta-feature-access.ts",
     "setup:beta-access:apply": "tsx scripts/setup-beta-feature-access.ts --apply",
+    "setup:linkedin-conversations:dry": "tsx scripts/setup-linkedin-conversations.ts",
+    "setup:linkedin-conversations:apply": "tsx scripts/setup-linkedin-conversations.ts --apply",
     "setup:push:dry": "tsx scripts/setup-push-subscriptions.ts",
     "setup:push:apply": "tsx scripts/setup-push-subscriptions.ts --apply",
     "push:keys": "tsx scripts/generate-vapid-keys.ts",

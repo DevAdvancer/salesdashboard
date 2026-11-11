@@ -8,9 +8,11 @@ interface HelperState {
   crmUrl: string; origin: string | null; connection: "disconnected" | "connecting" | "connected";
   bootstrap: ExtensionBootstrap | null; accountId: string; profile: string; checked: ExtensionCheck | null;
   confirmResend: boolean; historyVisible: boolean; pending: boolean; note: string; noteKind: "info" | "error" | "success";
+  initialInvitationText: string;
 }
 const initial: HelperState = { crmUrl: "https://crm.silverspaceinc.tech", origin: null, connection: "disconnected",
-  bootstrap: null, accountId: "", profile: "", checked: null, confirmResend: false, historyVisible: false, pending: true, note: "", noteKind: "info" };
+  bootstrap: null, accountId: "", profile: "", checked: null, confirmResend: false, historyVisible: false,
+  pending: true, note: "", noteKind: "info", initialInvitationText: "" };
 
 function withResult(state: HelperState, data: ExtensionCheck): HelperState {
   return { ...state, profile: data.targetUrl, checked: data, confirmResend: false,
@@ -107,7 +109,9 @@ export function useLinkedinHelper() {
     const loaded = await loadConnection(origin, true);
     if (!mounted.current) return;
     setState(previous => ({ ...previous, bootstrap: loaded.data, accountId: loaded.selectedAccountId,
-      connection: "connected", note: loaded.note, origin }));
+      connection: "connected", note: loaded.note, origin,
+      initialInvitationText: previous.bootstrap?.user.id === loaded.data.user.id &&
+        previous.accountId === loaded.selectedAccountId && loaded.data.conversationsBeta ? previous.initialInvitationText : "" }));
   }
 
   function connect() {
@@ -124,8 +128,9 @@ export function useLinkedinHelper() {
   }
 
   return { state,
-    setCrmUrl(crmUrl: string) { invalidate(); setState(previous => ({ ...previous, crmUrl, connection: "disconnected" })); },
-    setProfile(profile: string) { profileTab.current = null; invalidate(); setState(previous => ({ ...previous, profile })); },
+    setCrmUrl(crmUrl: string) { invalidate(); setState(previous => ({ ...previous, crmUrl, connection: "disconnected", initialInvitationText: "" })); },
+    setProfile(profile: string) { profileTab.current = null; invalidate(); setState(previous => ({ ...previous, profile, initialInvitationText: "" })); },
+    setInitialInvitationText(initialInvitationText: string) { setState(previous => ({ ...previous, initialInvitationText })); },
     setConfirmResend(confirmResend: boolean) { setState(previous => ({ ...previous, confirmResend })); },
     connect,
     refresh() { void perform(() => refreshConnection(normalizeCrmOrigin(state.origin))); },
@@ -134,10 +139,11 @@ export function useLinkedinHelper() {
     detect() { void perform(async () => {
       invalidate();
       const detected = await detectProfile(); profileTab.current = detected.tabId;
-      setState(previous => ({ ...previous, profile: detected.url }));
+      setState(previous => ({ ...previous, profile: detected.url,
+        initialInvitationText: previous.profile === detected.url ? previous.initialInvitationText : "" }));
     }); },
     selectAccount(accountId: string) { void perform(async () => {
-      invalidate(); setState(previous => ({ ...previous, accountId }));
+      invalidate(); setState(previous => ({ ...previous, accountId, initialInvitationText: "" }));
       if (!state.origin || !state.bootstrap) return;
       await rememberAccount(state.origin, state.bootstrap.user.id, accountId);
     }); },
@@ -153,7 +159,9 @@ export function useLinkedinHelper() {
       }
       setState(previous => ({ ...previous, note: "Checking duplicates and recording…", noteKind: "info" }));
       const data = await requestCrm<ExtensionRecord>({ operation: "record", accountId: state.accountId,
-        targetUrl, ...(checked ? { revision: checked.revision } : {}), confirmResend: state.confirmResend });
+        targetUrl, ...(checked ? { revision: checked.revision } : {}), confirmResend: state.confirmResend,
+        ...(state.bootstrap?.conversationsBeta ? { initialInvitationText: state.initialInvitationText,
+          expectedUserId: state.bootstrap.user.id } : {}) });
       if (data.user.id !== state.bootstrap?.user.id) throw new Error("The signed-in CRM user changed. Refresh accounts before continuing.");
       let copyNote = "";
       if (data.mode === "created" || data.mode === "resent") {
@@ -165,6 +173,7 @@ export function useLinkedinHelper() {
         }
       }
       if (mounted.current) setState(previous => ({ ...withResult(previous, data), historyVisible: false,
+        initialInvitationText: "",
         note: data.mode === "existing" ? "No request added. Review the profile status." :
           `${data.mode === "resent" ? "Resend" : "Request"} recorded · ${data.remaining ?? "?"} remaining.${copyNote}`,
         noteKind: data.mode === "existing" ? "info" : "success" }));

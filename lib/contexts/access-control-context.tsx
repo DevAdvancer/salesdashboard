@@ -30,6 +30,7 @@ export type ComponentKey =
   | 'attendance-report'
   | 'lead-requests'
   | 'linkedin-requests'
+  | 'linkedin-conversations'
   | 'linkedin-account-management'
   | 'linkedin-reports'
   | 'payments-report'
@@ -72,6 +73,7 @@ const SALES_ONLY_COMPONENTS = new Set<ComponentKey>([
   'attendance-report',
   'lead-requests',
   'linkedin-requests',
+  'linkedin-conversations',
   'linkedin-account-management',
   'linkedin-reports',
   'payments-report',

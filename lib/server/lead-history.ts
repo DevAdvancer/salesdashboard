@@ -1,10 +1,12 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Databases, ID, type Models } from 'node-appwrite';
 import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { isLeadReleased, leadOwnershipMayChange, leadProfileUrl } from '@/lib/utils/linkedin-lead-protection';
 import { findProtectedLinkedinLead, invalidateLinkedinLeadPreviews, LinkedinLeadProtectionError, profileDocumentId, saveLeadProfileRegistry, withLinkedinProfileLock } from '@/lib/server/linkedin-lead-protection';
 import { parseLeadHistory, type LeadHistorySnapshotEvent } from '@/lib/utils/lead-history-snapshot';
 import { canReceiveDeactivationHandoff, type HandoffUser } from '@/lib/utils/user-deactivation';
+import { archiveLinkedinConversation } from '@/lib/server/linkedin-conversation-storage';
+import type { LinkedinRequest } from '@/lib/types';
 
 type Row = Record<string, unknown>;
 export type HistoryActor = { id: string; name: string; impersonatedUserId?: string; impersonatedUserName?: string };
@@ -71,8 +73,22 @@ export function withLeadHistory(databases: Databases, actor: () => Promise<Histo
         // Assign the final ID before acquiring a reservation or writing an intent event.
         if (creating && documentId === 'unique()') args[2] = ID.unique();
         const id = String(args[2]);
-        const patch = input as Row | undefined;
+        let patch = input as Row | undefined;
+        let expectedRequestUpdatedAt: unknown;
+        if (!isLead && patch && 'expectedRequestUpdatedAt' in patch) {
+          const { expectedRequestUpdatedAt: expected, ...documentPatch } = patch;
+          expectedRequestUpdatedAt = expected;
+          patch = documentPatch;
+          args[3] = patch;
+        }
         const before = creating ? null : await target.getDocument(String(databaseId),String(collectionId),id);
+        const resend = !isLead && !creating && patch?.status === 'sent' && (before?.status !== 'sent' ||
+          before?.isActive === false || ('dateSent' in patch && patch.dateSent !== before?.dateSent));
+        const preserveConversation = !isLead && before?.conversationId && (deleting || resend);
+        if (preserveConversation && resend && !patch?.conversationId) {
+          patch = { ...patch, conversationId: randomUUID() };
+          args[3] = patch;
+        }
         const proposed: Row | null = deleting ? null : { ...before, ...patch, $id: id };
         const profileUrl = isLead ? leadProfileUrl(proposed?.data ?? before?.data) :
           leadProfileUrl({ linkedinProfileUrl: proposed?.targetUrl ?? before?.targetUrl });
@@ -83,6 +99,12 @@ export function withLeadHistory(databases: Databases, actor: () => Promise<Histo
         const changes = leadHistoryChanges(before,proposed);
         const intentId = ID.unique();
         const run = async () => {
+          if (!isLead && before && (deleting || resend || expectedRequestUpdatedAt || patch?.conversationId)) {
+            const fresh = await target.getDocument(DATABASE_ID, COLLECTIONS.LINKEDIN_REQUESTS, id);
+            if (fresh.$updatedAt !== (expectedRequestUpdatedAt || before.$updatedAt) || fresh.$updatedAt !== before.$updatedAt) {
+              throw new Error('This LinkedIn request changed. Refresh before saving.');
+            }
+          }
           if (isLead && !creating && !deleting) {
             const fresh = await target.getDocument(String(databaseId),String(collectionId),id);
             if (fresh.$updatedAt !== before?.$updatedAt) throw new Error('This lead changed. Refresh before saving.');
@@ -118,10 +140,8 @@ export function withLeadHistory(databases: Databases, actor: () => Promise<Histo
           }
           if (!isLead && profileUrl && !deleting) {
             const reassignment = creating || ['agentId','accountId','targetUrl'].some(key => patch && key in patch && patch[key] !== before?.[key]);
-            const resending = patch?.status === 'sent' && (before?.status !== 'sent' ||
-              before?.isActive === false || ('dateSent' in patch && patch.dateSent !== before?.dateSent));
             const removesLink = patch && 'leadId' in patch && patch.leadId !== before?.leadId && !patch.leadId;
-            if ((reassignment || resending || removesLink) && await findProtectedLinkedinLead(target,profileUrl)) {
+            if ((reassignment || resend || removesLink) && await findProtectedLinkedinLead(target,profileUrl)) {
               await appendLeadHistory(target,{...event,eventType:'REQUEST_CHANGE_BLOCKED',payload:{changes,reason:'Existing protected lead'}});
               throw new LinkedinLeadProtectionError('This LinkedIn profile has a protected lead. Request reassignment cannot release or replace it.');
             }
@@ -133,6 +153,7 @@ export function withLeadHistory(databases: Databases, actor: () => Promise<Histo
           }
           // Persist intent BEFORE the mutation, so a logging outage never permits an untracked write.
           await appendLeadHistory(target,{ ...event, id:intentId, eventType:`${operation}_ATTEMPT`, payload:{ changes } });
+          if (preserveConversation) await archiveLinkedinConversation(target, before as unknown as LinkedinRequest);
           if (isLead && !deleting && process.env.CRM_LEAD_HISTORY_SNAPSHOT === 'true') {
             const snapshot: LeadHistorySnapshotEvent = { id: intentId, actorId: eventActor.id, actorName: eventActor.name,
               occurredAt: new Date().toISOString(), eventType: operation, changes };

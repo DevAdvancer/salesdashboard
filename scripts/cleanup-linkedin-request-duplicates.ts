@@ -111,7 +111,7 @@ async function main() {
     throw new Error('Live data changed since the reviewed dry run. Run the dry preview again.');
   }
   if (duplicates.some(group => group.blockedReason)) {
-    throw new Error('Some groups have multiple linked leads; resolve them before applying cleanup.');
+    throw new Error('Some groups have multiple linked leads or saved conversations. Review the blocked groups before applying cleanup.');
   }
 
   const linkedLeadIds = [...new Set(duplicates.flatMap(group => group.leadRewrites.map(rewrite => rewrite.leadId)))];

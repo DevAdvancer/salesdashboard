@@ -59,7 +59,7 @@ function fixture(count = 2) {
   };
   mockCreateAdmin.mockImplementation(async options => ({ databases: withLeadHistory(raw as never,
     async () => ({ id: actor.$id, name: actor.name }), options?.deactivationHandoff) }));
-  return { raw, users, leads, archive };
+  return { raw: { ...raw, uncachedReads: { listDocuments: raw.listDocuments } }, users, leads, archive };
 }
 
 beforeEach(() => { process.env.CRM_LEAD_HISTORY_SNAPSHOT = 'true'; });

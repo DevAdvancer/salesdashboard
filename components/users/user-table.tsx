@@ -29,6 +29,8 @@ interface UserTableProps {
   handleDeleteUser: (u: User) => void;
   activeStatusUserId: string | null;
   deletingUserId: string | null;
+  completedHandoffIds: ReadonlySet<string>;
+  checkingHandoffs: boolean;
   currentUsersPage: number;
   setCurrentUsersPage: (val: number | ((prev: number) => number)) => void;
   usersTotal: number;
@@ -58,6 +60,8 @@ export function UserTable({
   handleDeleteUser,
   activeStatusUserId,
   deletingUserId,
+  completedHandoffIds,
+  checkingHandoffs,
   currentUsersPage,
   setCurrentUsersPage,
   usersTotal,
@@ -227,9 +231,15 @@ export function UserTable({
                                       {u.isActive === false ? "Reactivate" : "Inactivate"}
                                     </Button>
                                   )}
-                                {u.isActive === false && user && canDeactivateUser(user, u) &&
-                                  ['agent', 'lead_generation', 'monitor', 'operations'].includes(u.role) && (
-                                  <Button variant="outline" size="sm" onClick={() => handleSetAgentActive(u, false)}>Complete handoff</Button>
+                                {u.isActive === false && user && canDeactivateUser(user, u) && (
+                                  completedHandoffIds.has(u.$id) ? (
+                                    <span className="self-center text-sm text-muted-foreground">Handoff completed</span>
+                                  ) : (
+                                    <Button variant="outline" size="sm" disabled={checkingHandoffs || activeStatusUserId === u.$id}
+                                      onClick={() => handleSetAgentActive(u, false)}>
+                                      {checkingHandoffs ? 'Checking handoff…' : 'Complete handoff'}
+                                    </Button>
+                                  )
                                 )}
                                 {user && canSetUserPassword(user, u) && (
                                   <Button variant="outline" size="sm" onClick={() => setPasswordTarget(u)}>

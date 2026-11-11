@@ -16,7 +16,7 @@ jest.mock("node-appwrite", () => ({
 }));
 jest.mock("@/lib/server/appwrite", () => ({ createAdminClient: jest.fn() }));
 jest.mock("@/lib/server/current-user", () => ({ getAuthenticatedUserDoc: jest.fn() }));
-jest.mock("@/lib/server/beta-feature-access", () => ({ hasLinkedinHelperAccess: jest.fn() }));
+jest.mock("@/lib/server/beta-feature-access", () => ({ hasLinkedinHelperAccess: jest.fn(), hasBetaFeatureAccess: jest.fn() }));
 jest.mock("@/lib/server/appwrite-pagination", () => ({ listAllDocuments: jest.fn() }));
 jest.mock('@/lib/server/linkedin-lead-protection',()=>({ ...jest.requireActual('@/lib/server/linkedin-lead-protection'),
   findProtectedLinkedinLead:jest.fn(),requestBlocksLinkedinProfile:jest.fn()}));
@@ -30,7 +30,7 @@ jest.mock("@/app/actions/linkedin/shared", () => ({
 
 import { createAdminClient } from "@/lib/server/appwrite";
 import { getAuthenticatedUserDoc } from "@/lib/server/current-user";
-import { hasLinkedinHelperAccess } from "@/lib/server/beta-feature-access";
+import { hasBetaFeatureAccess, hasLinkedinHelperAccess } from "@/lib/server/beta-feature-access";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import { listMyLinkedinAccountsAction } from "@/app/actions/linkedin/accounts";
 import { createLinkedinRequestAction } from "@/app/actions/linkedin/requests";
@@ -55,6 +55,7 @@ beforeEach(() => {
   (createAdminClient as jest.Mock).mockResolvedValue({ databases });
   (getAuthenticatedUserDoc as jest.Mock).mockResolvedValue({ $id: "agent-1", name: "Agent", role: "agent", department: "sales", isActive: true });
   (hasLinkedinHelperAccess as jest.Mock).mockResolvedValue(true);
+  (hasBetaFeatureAccess as jest.Mock).mockResolvedValue(false);
   (listMyLinkedinAccountsAction as jest.Mock).mockResolvedValue([account]);
   (assertAccessibleLinkedinAccount as jest.Mock).mockResolvedValue(account);
   (isBlockingLinkedinRequest as jest.Mock).mockImplementation(r =>
@@ -96,6 +97,32 @@ it("allows eligible users without a beta grant", async () => {
   (hasLinkedinHelperAccess as jest.Mock).mockResolvedValue(false);
   await expect(checkLinkedinExtension(input)).resolves.toMatchObject({ canRecord: true });
   expect(hasLinkedinHelperAccess).not.toHaveBeenCalled();
+});
+
+it('records exact invitation text in private storage for the granted CRM user', async () => {
+  (hasBetaFeatureAccess as jest.Mock).mockResolvedValue(true);
+  await expect(bootstrapLinkedinExtension()).resolves.toMatchObject({ conversationsBeta: true });
+  const initialInvitationText = '  Hi there!\nI would like to connect.  ';
+  await expect(recordLinkedinExtension({ ...input, confirmResend: false, expectedUserId: 'agent-1', initialInvitationText }))
+    .resolves.toMatchObject({ mode: 'created' });
+  const [, collection, conversationId, invitation, permissions] = databases.createDocument.mock.calls[0];
+  expect(collection).toBe(COLLECTIONS.LINKEDIN_CONVERSATIONS);
+  expect(invitation).toEqual({ conversationId, kind: 'invitation', payload: initialInvitationText });
+  expect(permissions).toEqual([]);
+  const request = databases.createDocument.mock.calls[1][3];
+  expect(request.conversationId).toBe(conversationId);
+  expect(request).not.toHaveProperty('initialInvitationText');
+});
+
+it('rejects missing beta text, a stale login, and text submitted after grant revocation', async () => {
+  (hasBetaFeatureAccess as jest.Mock).mockResolvedValue(true);
+  await expect(recordLinkedinExtension({ ...input, confirmResend: false })).rejects.toMatchObject({ status: 400 });
+  await expect(recordLinkedinExtension({ ...input, confirmResend: false, expectedUserId: 'previous-login', initialInvitationText: 'Hi' }))
+    .rejects.toMatchObject({ status: 409 });
+  (hasBetaFeatureAccess as jest.Mock).mockResolvedValue(false);
+  await expect(recordLinkedinExtension({ ...input, confirmResend: false, expectedUserId: 'agent-1', initialInvitationText: 'Hi' }))
+    .rejects.toMatchObject({ status: 403 });
+  expect(databases.createDocument).not.toHaveBeenCalled();
 });
 it("allows the same profile through another company's LinkedIn account", async () => {
   records = [{ $id: "other-company-request", targetUrl: "https://www.linkedin.com/in/person",

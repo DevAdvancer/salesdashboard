@@ -412,6 +412,7 @@ export type ComponentKey =
   | 'attendance-report'
   | 'lead-requests'
   | 'linkedin-requests'
+  | 'linkedin-conversations'
   | 'linkedin-account-management'
   | 'linkedin-reports'
   | 'payments-report'
@@ -477,6 +478,7 @@ export interface LinkedinRequest {
   dateSent: string;
   status: LinkedinRequestStatus;
   acceptedAt: string | null;
+  conversationId?: string | null;
   leadId?: string | null;
   withdrawnAt?: string | null;
   isActive?: boolean;

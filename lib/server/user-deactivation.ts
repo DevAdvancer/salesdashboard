@@ -10,6 +10,53 @@ import { listDeactivationLinkedinRequests } from '@/lib/server/deactivation-link
 
 type Database = Awaited<ReturnType<typeof createAdminClient>>['databases'];
 
+const deactivationLeadScope = (userIds: string | string[]) =>
+  Query.or([Query.equal('ownerId', userIds), Query.equal('assignedToId', userIds)]);
+
+export async function countRemainingHandoffLeads(databases: Database, userId: string) {
+  const { total } = await databases.uncachedReads.listDocuments(DATABASE_ID, COLLECTIONS.LEADS,
+    [deactivationLeadScope(userId), Query.limit(1), Query.select(['$id'])]);
+  return total;
+}
+
+export async function getPendingLinkedinHandoffIds(databases: Database, userIds: string[]) {
+  const pendingIds = new Set<string>();
+  if (!userIds.length) return pendingIds;
+  const accounts = await listAllDocuments<Pick<LinkedinAccount, '$id' | 'assignedUserId' | 'isActive'>>({
+    databases: databases.uncachedReads, databaseId: DATABASE_ID, collectionId: COLLECTIONS.LINKEDIN_ACCOUNTS,
+    queries: [Query.equal('assignedUserId', userIds), Query.select(['$id', 'assignedUserId', 'isActive'])],
+    requireComplete: true,
+  });
+  for (const account of accounts) {
+    if (account.isActive !== false) pendingIds.add(account.assignedUserId);
+  }
+  const usersToCheck = userIds.filter(id => !pendingIds.has(id));
+  if (usersToCheck.length) {
+    const accountOwners = new Map(accounts.filter(account => !pendingIds.has(account.assignedUserId))
+      .map(account => [account.$id, account.assignedUserId]));
+    const requests = await listDeactivationLinkedinRequests(databases, usersToCheck, [...accountOwners.keys()]);
+    for (const request of requests) {
+      pendingIds.add(request.agentId);
+      const accountOwner = accountOwners.get(request.accountId);
+      if (accountOwner) pendingIds.add(accountOwner);
+    }
+  }
+  return pendingIds;
+}
+
+export async function findCompletedUserHandoffIds(databases: Database, userIds: string[]) {
+  if (!userIds.length) return [];
+  const leads = await listAllDocuments<Pick<Lead, '$id' | 'ownerId' | 'assignedToId'>>({
+    databases: databases.uncachedReads, databaseId: DATABASE_ID, collectionId: COLLECTIONS.LEADS,
+    queries: [deactivationLeadScope(userIds), Query.select(['$id', 'ownerId', 'assignedToId'])],
+    requireComplete: true,
+  });
+  const usersWithLeads = new Set(leads.flatMap(lead => [lead.ownerId, lead.assignedToId]));
+  const usersWithoutLeads = userIds.filter(id => !usersWithLeads.has(id));
+  const pendingLinkedinIds = await getPendingLinkedinHandoffIds(databases, usersWithoutLeads);
+  return usersWithoutLeads.filter(id => !pendingLinkedinIds.has(id));
+}
+
 export async function planUserDeactivation(databases: Database, actorId: string, sourceId: string, recipientId?: string) {
   // Never use settled reference caches for authorization or a mutation preview.
   for (const collection of [COLLECTIONS.USERS, COLLECTIONS.LEADS, COLLECTIONS.LINKEDIN_ACCOUNTS, COLLECTIONS.LINKEDIN_REQUESTS]) {
@@ -21,7 +68,7 @@ export async function planUserDeactivation(databases: Database, actorId: string,
   const list = <T>(collectionId: string, queries: string[]) => listAllDocuments<T>({
     databases, databaseId: DATABASE_ID, collectionId, queries, requireComplete: true,
   });
-  const leads = await list<Lead>(COLLECTIONS.LEADS, [Query.or([Query.equal('ownerId', sourceId), Query.equal('assignedToId', sourceId)])]);
+  const leads = await list<Lead>(COLLECTIONS.LEADS, [deactivationLeadScope(sourceId)]);
   const accounts = await list<LinkedinAccount>(COLLECTIONS.LINKEDIN_ACCOUNTS, [Query.equal('assignedUserId', sourceId)]);
   const requests = await listDeactivationLinkedinRequests(databases, sourceId, accounts.map(account => account.$id));
   const recipients = (await list<HandoffUser>(COLLECTIONS.USERS, []))

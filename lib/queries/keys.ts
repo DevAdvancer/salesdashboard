@@ -35,6 +35,8 @@ export const queryKeys = {
     teamLeads: (scope: string, includeInactive?: boolean) => ["users", "teamLeads", scope, includeInactive ?? false] as const,
     list: (scope: string, page: number, pageSize: number) =>
       ["users", "list", scope, page, pageSize] as const,
+    completedHandoffs: (scope: string, userIds: string[]) =>
+      ["users", "completedHandoffs", scope, userIds] as const,
   },
   branches: {
     all: ["branches"] as const,
