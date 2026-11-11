@@ -20,6 +20,7 @@ import { cookies } from 'next/headers';
 import { canSetUserPassword, MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from '@/lib/utils/password-reset-policy';
 import { CRM_IMPERSONATION_COOKIE } from '@/lib/utils/crm-impersonation';
 import { appendLeadHistory } from '@/lib/server/lead-history';
+import { isProtectedUserFromDeletion } from '@/lib/utils/protected-user';
 
 // Constants
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
@@ -671,10 +672,22 @@ export async function deleteUserAction(input: {
         throw new Error("Permission denied: Only admins and developers can delete users");
     }
 
-    const targetUserDoc = await getUserDoc(userId);
+    const { users, databases } = await createAdminClient();
+    const targetUserDoc = await databases.uncachedReads.getDocument(DATABASE_ID, USERS_COLLECTION_ID, userId).catch(error => {
+        if (getErrorCode(error) === 404) return null;
+        throw error;
+    });
     if (!targetUserDoc) throw new Error("Target user not found");
 
-    const { users, databases } = await createAdminClient();
+    const protectedUserError = 'This CRM account is protected from deletion.';
+    if (isProtectedUserFromDeletion(targetUserDoc)) throw new Error(protectedUserError);
+
+    // Check the sign-in email too in case the CRM profile and Appwrite account differ.
+    const targetAccount = await users.get(userId).catch(error => {
+        if (getErrorCode(error) === 404) return null;
+        throw error;
+    });
+    if (targetAccount && isProtectedUserFromDeletion(targetAccount)) throw new Error(protectedUserError);
 
     try {
         const relatedUsers = await databases.listDocuments(

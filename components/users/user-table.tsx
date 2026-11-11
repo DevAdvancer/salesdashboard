@@ -6,6 +6,7 @@ import { getVisibleUserBranches } from "@/lib/utils/branch-visibility";
 import { getPrimaryBranchId } from '@/lib/utils/user-branches';
 import { canDeactivateUser } from '@/lib/utils/user-deactivation';
 import { canSetUserPassword } from '@/lib/utils/password-reset-policy';
+import { isProtectedUserFromDeletion } from '@/lib/utils/protected-user';
 import { SetPasswordDialog } from '@/components/users/set-password-dialog';
 import { useState } from 'react';
 
@@ -235,7 +236,7 @@ export function UserTable({
                                     Set password
                                   </Button>
                                 )}
-                                {(isAdmin || isDeveloper) && (
+                                {(isAdmin || isDeveloper) && !isProtectedUserFromDeletion(u) && (
                                   <Button
                                     variant="outline"
                                     size="sm"

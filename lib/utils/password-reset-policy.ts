@@ -1,6 +1,6 @@
-/** The CRM owner may set any other user's password, admins included. */
-export const CRM_OWNER_EMAIL = 'abhirupvizva@gmail.com';
-export const CRM_OWNER_USER_ID = '698a5e64002675ad41f6';
+import { CRM_OWNER_EMAIL, CRM_OWNER_USER_ID } from '@/lib/utils/protected-user';
+
+export { CRM_OWNER_EMAIL, CRM_OWNER_USER_ID } from '@/lib/utils/protected-user';
 /** Roles an ordinary admin may set a password for directly. */
 export const ADMIN_PASSWORD_RESET_ROLES = ['agent', 'team_lead'] as const;
 export const MIN_PASSWORD_LENGTH = 8;
