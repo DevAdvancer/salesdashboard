@@ -13,9 +13,12 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 const secretCollections = new Set([COLLECTIONS.SECURITY_CHALLENGES, COLLECTIONS.CRM_ACCESS_REQUESTS, COLLECTIONS.LEAD_HISTORY,
   COLLECTIONS.LINKEDIN_LEAD_REGISTRY, COLLECTIONS.REPORT_EMAIL_SETTINGS, COLLECTIONS.BETA_FEATURE_ACCESS]);
-// Share only empty-payload change markers, after fresh authorization and scope
-// resolution. Chat/notification bodies and access decisions are never cached here.
+// Share empty-payload change markers, after fresh authorization and scope
+// resolution. Access decisions and per-recipient notification bodies are never cached.
 const markers = createBriefReadCache<Awaited<ReturnType<typeof readChange>>>(60_000, 512);
+// Department chat is identical for every authorized reader, so after each reader's own
+// department check the latest message is shared for 60 seconds instead of read per tab.
+const chatSnapshots = createBriefReadCache<Awaited<ReturnType<typeof readChange>>>(60_000, 16);
 // Which owners' leads to watch only picks the change marker; leads are authorized
 // again when loaded. Reuse it briefly so each poll does not re-list users.
 const leadScopes = createBriefReadCache<string[]>(5 * 60_000, 512);
@@ -48,6 +51,9 @@ async function changeFor(actor: User, collectionId: string) {
       if (!ids.length) return null;
       queries.push(Query.or([Query.equal('ownerId', ids), Query.equal('assignedToId', ids)]));
     }
+  }
+  if (collectionId === COLLECTIONS.CHAT_MESSAGES || collectionId === COLLECTIONS.RESUME_CHAT_MESSAGES) {
+    return chatSnapshots.read(appwriteCacheKey('chat-snapshot', DATABASE_ID, collectionId, queries), () => readChange(collectionId, queries, true));
   }
   if (bodyVisible) return readChange(collectionId, queries, true);
   const key = appwriteCacheKey('change-markers', DATABASE_ID, collectionId, queries);

@@ -82,7 +82,11 @@ in a save. No browser-provided "already checked" flag is trusted.
   visible window checks once the last check is 30 seconds old.
 - Identical marker reads share a 60-second bounded cache on a warm server. The
   list of owners whose leads a non-leadership user watches is reused for 5 minutes;
-  leads are still authorized when loaded.
+  leads are still authorized when loaded. The latest department chat message is
+  shared for 60 seconds after each reader's own department check; per-recipient
+  notifications are always read fresh.
+- Sidebar links to server-rendered pages (Resume Profiles, Marketing, Compliance,
+  Team Report) use Next's default prefetch, so their data loads only when opened.
   Exact visibility queries are part of the key, after fresh authorization and
   hierarchy resolution. No access decision is cached.
 - Browser subscriptions with identical channels reuse one EventSource, and

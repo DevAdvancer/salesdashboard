@@ -70,9 +70,10 @@ export function useLeadsQuery({
       return response.json();
     },
     enabled: Boolean(userId),
-    // History must include closures made in another tab or server instance.
+    // History must include closures made in another tab or server instance. Opening
+    // the page always reloads; returning to the window reloads once data is 30 s old.
     ...(filters.isClosed === true && filters.sortBy === 'closedAt' ? {
-      staleTime: 0,
+      staleTime: 30_000,
       refetchOnMount: 'always' as const,
       refetchOnWindowFocus: true,
     } : {}),

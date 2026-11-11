@@ -22,7 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
-import { NAV_ITEMS, appIcons } from "./navigation-config";
+import { NAV_ITEMS, SERVER_RENDERED_NAV_HREFS, appIcons } from "./navigation-config";
 
 import {
   startDashboardTour,
@@ -161,7 +161,7 @@ export function Navigation({
         key={item.key}
         id={`nav-${item.key}`}
         href={item.href}
-        prefetch
+        prefetch={SERVER_RENDERED_NAV_HREFS.has(item.href) ? null : true}
         onClick={() => setMobileMenuOpen(false)}
         className={`nav-item${isActive ? " active" : ""}`}
         title={item.label}
@@ -238,7 +238,7 @@ export function Navigation({
                   key={item.key}
                   id={`nav-${item.key}`}
                   href={item.href}
-                  prefetch
+                  prefetch={SERVER_RENDERED_NAV_HREFS.has(item.href) ? null : true}
                   onClick={() => setMobileMenuOpen(false)}
                   className={`nav-item${isActive ? " active" : ""}`}
                   title={item.label}
@@ -302,7 +302,7 @@ export function Navigation({
                 key={item.key}
                 id={`nav-${item.key}`}
                 href={item.href}
-                prefetch
+                prefetch={SERVER_RENDERED_NAV_HREFS.has(item.href) ? null : true}
                 onClick={() => setMobileMenuOpen(false)}
                 className={`nav-item${isActive ? " active" : ""}`}
                 title={item.label}

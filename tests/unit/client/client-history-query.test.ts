@@ -6,10 +6,10 @@ jest.mock('@/lib/queries/leads/use-lead-change-refresh', () => ({ wantsFreshLead
 
 const args = { userId: 'agent', role: 'agent' as const, page: 1, pageSize: 10 };
 
-it('refreshes Client History when opened or focused instead of retaining a persisted snapshot', () => {
+it('refreshes Client History whenever opened, and on focus once its data is 30 seconds old', () => {
   useLeadsQuery({ ...args, filters: { isClosed: true, sortBy: 'closedAt' } });
   expect(useQuery).toHaveBeenLastCalledWith(expect.objectContaining({
-    staleTime: 0, refetchOnMount: 'always', refetchOnWindowFocus: true,
+    staleTime: 30_000, refetchOnMount: 'always', refetchOnWindowFocus: true,
   }));
 });
 

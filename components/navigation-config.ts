@@ -28,6 +28,11 @@ import {
   Wallet,
 } from 'lucide-react';
 
+/** Sidebar pages rendered on the server with data reads. Full prefetch would render
+ * them (and read their data) on every page load, so they load only when opened. */
+export const SERVER_RENDERED_NAV_HREFS: ReadonlySet<string> =
+  new Set(['/resume', '/resume-marketing', '/compliance-dashboard', '/team-report']);
+
 export type AppIcon = ComponentType<{ className?: string; size?: number }>;
 
 export interface NavItem {

@@ -78,12 +78,31 @@ describe('authorized change snapshot budget', () => {
     expect(mockVisibility).toHaveBeenCalledTimes(3);
   });
 
-  it('never caches chat or notification bodies and scopes recipients', async () => {
-    await read([COLLECTIONS.NOTIFICATIONS, COLLECTIONS.CHAT_MESSAGES]);
-    await read([COLLECTIONS.NOTIFICATIONS, COLLECTIONS.CHAT_MESSAGES]);
-    expect(mockList).toHaveBeenCalledTimes(4);
+  it('never caches per-recipient notification bodies and scopes recipients', async () => {
+    await read([COLLECTIONS.NOTIFICATIONS]);
+    mockActor.mockResolvedValue({ $id: 'other', role: 'agent', department: 'sales' });
+    await read([COLLECTIONS.NOTIFICATIONS]);
+    expect(mockList).toHaveBeenCalledTimes(2);
     expect(JSON.stringify(mockList.mock.calls[0][2])).toContain('recipientId');
     expect(JSON.stringify(mockList.mock.calls[0][2])).toContain('actor');
+    expect(JSON.stringify(mockList.mock.calls[1][2])).toContain('other');
+  });
+
+  it("shares one department chat read for 60 seconds, after each reader's own access check", async () => {
+    mockActor.mockResolvedValue({ $id: 'one', role: 'agent', department: 'sales' });
+    const first = await (await read([COLLECTIONS.CHAT_MESSAGES])).json();
+    mockActor.mockResolvedValue({ $id: 'two', role: 'agent', department: 'sales' });
+    const second = await (await read([COLLECTIONS.CHAT_MESSAGES])).json();
+    expect(mockList).toHaveBeenCalledTimes(1);
+    expect(second.changes[0].payload).toEqual(first.changes[0].payload);
+    expect(mockActor).toHaveBeenCalledTimes(2);
+    mockActor.mockResolvedValue({ $id: 'three', role: 'agent', department: 'resume' });
+    expect((await (await read([COLLECTIONS.CHAT_MESSAGES])).json()).changes).toEqual([]);
+    expect(mockList).toHaveBeenCalledTimes(1);
+    await jest.advanceTimersByTimeAsync(60_000);
+    mockActor.mockResolvedValue({ $id: 'one', role: 'agent', department: 'sales' });
+    await read([COLLECTIONS.CHAT_MESSAGES]);
+    expect(mockList).toHaveBeenCalledTimes(2);
   });
 
   it.each(['sales', 'resume'])('keeps %s non-leadership within department chat and lead scopes', async department => {
