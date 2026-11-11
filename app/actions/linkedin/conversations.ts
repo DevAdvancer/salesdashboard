@@ -12,7 +12,7 @@ import { easternWallTimeToIso, getCurrentEasternIsoDate } from '@/lib/utils/east
 import { getLinkedinRequestDateFilterValue, linkedinRequestDateBounds } from '@/lib/utils/linkedin-request-dates';
 import { isWithdrawnLinkedinRequest } from '@/lib/utils/linkedin-request-state';
 import { normalizeProfileUrl } from '@/lib/utils/linkedin-extension-url';
-import { LINKEDIN_MESSAGE_TEXT_LIMIT, type LinkedinConversation, type LinkedinConversationMessage } from '@/lib/types/linkedin-conversation';
+import { LINKEDIN_MESSAGE_TEXT_LIMIT, type LinkedinConversation, type LinkedinConversationExportRow, type LinkedinConversationListItem, type LinkedinConversationMessage } from '@/lib/types/linkedin-conversation';
 import type { LinkedinAccount, LinkedinRequest, User } from '@/lib/types';
 
 const day = z.iso.date();
@@ -25,6 +25,10 @@ const messageSchema = referenceSchema.extend({ id: z.uuid(), date: day, directio
 type Range = z.input<typeof rangeSchema>;
 type Reference = z.input<typeof referenceSchema>;
 type Context = Awaited<ReturnType<typeof authorizedContext>>;
+type AccountLabel = Pick<LinkedinAccount, '$id' | 'idName' | 'accountType' | 'mainAccountId'>;
+const RECENT_CONNECTIONS_LIMIT = 10;
+const requestFields = ['$id', 'conversationId', 'agentId', 'accountId', 'teamLeadId', 'company', 'targetUrl',
+  'dateSent', 'acceptedAt', 'withdrawnAt', 'status', 'isActive', 'coldCall', 'recordSource'];
 
 async function authorizedContext() {
   const actor = await getAuthenticatedUserDoc();
@@ -56,10 +60,20 @@ function scopeQuery(actor: User) {
   return [actor.role === 'team_lead' ? Query.or([owner, Query.equal('teamLeadId', actor.$id)]) : owner];
 }
 
+function mergeRequests(actor: User, current: LinkedinRequest[], archive: LinkedinConversationRecord[], mode: Range['mode']) {
+  const requests = new Map<string, LinkedinRequest>();
+  for (const request of [...archive.map(row => JSON.parse(row.payload) as LinkedinRequest), ...current]) {
+    if (isInvitation(request) && canReadLinkedinConversation(actor, request)) requests.set(linkedinConversationId(request), request);
+  }
+  const dateField = mode === 'sent' ? 'dateSent' : 'acceptedAt';
+  return [...requests.values()].sort((left, right) => (right[dateField] || '').localeCompare(left[dateField] || '') ||
+    left.$id.localeCompare(right.$id) || linkedinConversationId(left).localeCompare(linkedinConversationId(right)));
+}
+
 async function listRequests({ actor, databases }: Context, input: Range) {
   const parsed = rangeSchema.safeParse(input);
   if (!parsed.success || parsed.data.start > parsed.data.end) throw new Error('Choose a valid start and end date.');
-  const { start, end, mode, search } = parsed.data;
+  const { start, end, mode } = parsed.data;
   const from = linkedinRequestDateBounds(start).start;
   const until = linkedinRequestDateBounds(end).endExclusive;
   const queries = mode === 'sent' ? [Query.greaterThanEqual('dateSent', from), Query.lessThan('dateSent', until)] : [
@@ -70,21 +84,11 @@ async function listRequests({ actor, databases }: Context, input: Range) {
   const scoped = [...queries, ...scopeQuery(actor), Query.orderAsc('$id')];
   // A resend archives the old attempt before replacing the live pointer.
   // Read live requests first so a concurrent resend cannot fall between scans.
-  const current = await listAllDocuments<LinkedinRequest>({ ...options, collectionId: COLLECTIONS.LINKEDIN_REQUESTS, queries: scoped });
+  const current = await listAllDocuments<LinkedinRequest>({ ...options, collectionId: COLLECTIONS.LINKEDIN_REQUESTS,
+    queries: [...scoped, Query.select(requestFields)] });
   const archive = await listAllDocuments<LinkedinConversationRecord>({ ...options, collectionId: COLLECTIONS.LINKEDIN_CONVERSATIONS,
-    queries: [Query.equal('kind', 'archive'), ...scoped] });
-  const requests = new Map<string, LinkedinRequest>();
-  for (const request of [...archive.map(row => JSON.parse(row.payload) as LinkedinRequest), ...current]) {
-    if (isInvitation(request) && canReadLinkedinConversation(actor, request)) requests.set(linkedinConversationId(request), request);
-  }
-  const term = search?.toLowerCase();
-  let profileTerm = term;
-  if (term) {
-    try { profileTerm = new URL(normalizeProfileUrl(term)).pathname.toLowerCase(); } catch { /* Match partial searches as entered. */ }
-  }
-  return [...requests.values()].filter(request => !term || request.company.toLowerCase().includes(term) || request.targetUrl.toLowerCase().includes(profileTerm!))
-    .sort((left, right) => ((mode === 'sent' ? right.dateSent : right.acceptedAt) || '').localeCompare(
-      (mode === 'sent' ? left.dateSent : left.acceptedAt) || '') || linkedinConversationId(left).localeCompare(linkedinConversationId(right)));
+    queries: [Query.equal('kind', 'archive'), ...scoped, Query.select(['$id', 'payload'])] });
+  return mergeRequests(actor, current, archive, mode);
 }
 
 async function getRequest({ actor, databases }: Context, ref: Reference) {
@@ -123,11 +127,6 @@ async function readTranscripts({ databases }: Context, ids: string[]) {
   return transcripts;
 }
 
-export async function listLinkedinConversationsAction(input: Range) {
-  const context = await authorizedContext();
-  return (await listRequests(context, input)).map(request => project(context.actor, request));
-}
-
 export async function getLinkedinConversationAction(ref: Reference) {
   const context = await authorizedContext();
   const { request } = await getRequest(context, ref);
@@ -152,26 +151,71 @@ export async function addLinkedinConversationMessageAction(input: z.input<typeof
   await saveLinkedinConversationMessage(context.databases, conversationId, message);
 }
 
-async function readLabels<T extends { $id: string }>(context: Context, collectionId: string, ids: string[], field: string) {
+async function readLabels<T extends { $id: string }>(context: Context, collectionId: string, ids: string[], fields: string[]) {
   const rows: T[] = [];
   for (let start = 0; start < ids.length; start += 100) {
     rows.push(...await listAllDocuments<T>({ databases: context.databases, databaseId: DATABASE_ID, collectionId,
-      queries: [Query.equal('$id', ids.slice(start, start + 100)), Query.select(['$id', field])], requireComplete: true }));
+      queries: [Query.equal('$id', ids.slice(start, start + 100)), Query.select(['$id', ...fields])], requireComplete: true }));
   }
   return new Map(rows.map(row => [row.$id, row]));
 }
 
-export async function exportLinkedinConversationsAction(input: Range, selectedIds?: string[]) {
+async function withAgentNames(context: Context, requests: LinkedinRequest[]): Promise<LinkedinConversationListItem[]> {
+  const ids = [...new Set(requests.map(request => request.agentId))].filter(id => id !== context.actor.$id);
+  const users = await readLabels<Pick<User, '$id' | 'name'>>(context, COLLECTIONS.USERS, ids, ['name']);
+  return requests.map(request => ({ ...project(context.actor, request), agent: request.agentId === context.actor.$id
+    ? context.actor.name : users.get(request.agentId)?.name ?? request.agentId }));
+}
+
+async function listFilteredRequests(context: Context, input: Range, selection?: Set<string>) {
+  const requests = await listRequests(context, input);
+  const rows = await withAgentNames(context, selection ? requests.filter(request => selection.has(linkedinConversationId(request))) : requests);
+  const term = input.search?.trim().toLowerCase();
+  if (!term) return rows;
+  let profileTerm = term.replace(/\s+/g, '-');
+  try { profileTerm = new URL(normalizeProfileUrl(term)).pathname.toLowerCase(); } catch { /* Match partial profile text. */ }
+  return rows.filter(row => row.agent.toLowerCase().includes(term) || row.company.toLowerCase().includes(term) ||
+    row.targetUrl.toLowerCase().includes(profileTerm));
+}
+
+export async function listLinkedinConversationsAction(input: Range) {
+  return listFilteredRequests(await authorizedContext(), input);
+}
+
+export async function listRecentLinkedinConnectionsAction() {
+  const context = await authorizedContext();
+  const { actor, databases } = context;
+  if (actor.role !== 'admin' && actor.role !== 'team_lead') throw new Error('Only team leads and admins can see recent connections.');
+  const queries = [Query.isNotNull('acceptedAt'), ...scopeQuery(actor), Query.orderDesc('acceptedAt'), Query.orderAsc('$id')];
+  const options = { databases, databaseId: DATABASE_ID, requireComplete: true,
+    pageLimit: RECENT_CONNECTIONS_LIMIT, take: RECENT_CONNECTIONS_LIMIT };
+  const matches = (request: LinkedinRequest) => isInvitation(request) && canReadLinkedinConversation(actor, request);
+  const current = await listAllDocuments<LinkedinRequest>({ ...options, collectionId: COLLECTIONS.LINKEDIN_REQUESTS,
+    queries: [...queries, Query.select(requestFields)], matches });
+  const archive = await listAllDocuments<LinkedinConversationRecord>({ ...options, collectionId: COLLECTIONS.LINKEDIN_CONVERSATIONS,
+    queries: [Query.equal('kind', 'archive'), ...queries, Query.select(['$id', 'payload'])],
+    matches: row => matches(JSON.parse(row.payload) as LinkedinRequest) });
+  return withAgentNames(context, mergeRequests(actor, current, archive, 'accepted').slice(0, RECENT_CONNECTIONS_LIMIT));
+}
+
+export async function exportLinkedinConversationsAction(input: Range, selectedIds?: string[]): Promise<LinkedinConversationExportRow[]> {
   const context = await authorizedContext();
   const selected = selectedIds === undefined ? undefined : z.array(id).max(5000).safeParse(selectedIds);
   if (selected && !selected.success) throw new Error('Choose valid LinkedIn requests.');
-  const selection = selected ? new Set(selected.data) : null;
-  const requests = (await listRequests(context, input)).filter(request => !selection || selection.has(linkedinConversationId(request)));
-  const [transcripts, users, accounts] = await Promise.all([
-    readTranscripts(context, requests.map(linkedinConversationId)),
-    readLabels<Pick<User, '$id' | 'name'>>(context, COLLECTIONS.USERS, [...new Set(requests.map(request => request.agentId))], 'name'),
-    readLabels<Pick<LinkedinAccount, '$id' | 'idName'>>(context, COLLECTIONS.LINKEDIN_ACCOUNTS, [...new Set(requests.map(request => request.accountId))], 'idName'),
+  const requests = await listFilteredRequests(context, input, selected ? new Set(selected.data) : undefined);
+  const [transcripts, accounts] = await Promise.all([
+    readTranscripts(context, requests.map(request => request.id)),
+    readLabels<AccountLabel>(context, COLLECTIONS.LINKEDIN_ACCOUNTS, [...new Set(requests.map(request => request.accountId))], ['idName', 'accountType', 'mainAccountId']),
   ]);
-  return requests.map(request => ({ ...project(context.actor, request), ...transcripts.get(linkedinConversationId(request))!,
-    agent: users.get(request.agentId)?.name ?? request.agentId, account: accounts.get(request.accountId)?.idName ?? request.accountId }));
+  const missingMainIds = [...new Set([...accounts.values()].flatMap(account =>
+    account.accountType === 'sudo' && account.mainAccountId && !accounts.has(account.mainAccountId) ? [account.mainAccountId] : []))];
+  const mainAccounts = await readLabels<AccountLabel>(context, COLLECTIONS.LINKEDIN_ACCOUNTS, missingMainIds, ['idName']);
+  return requests.map(request => {
+    const account = accounts.get(request.accountId);
+    const sudo = account?.accountType === 'sudo';
+    const mainAccountId = sudo ? account.mainAccountId ?? '' : account?.$id ?? '';
+    return { ...request, ...transcripts.get(request.id)!, accountType: account?.accountType ?? null, mainAccountId,
+      mainAccount: accounts.get(mainAccountId)?.idName ?? mainAccounts.get(mainAccountId)?.idName ?? '',
+      sudoAccountId: sudo ? account.$id : '', sudoAccount: sudo ? account.idName : '' };
+  });
 }

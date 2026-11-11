@@ -1,26 +1,32 @@
 import type { LinkedinRequest } from '@/lib/types';
+import { daysSinceLinkedinRequestDate } from '@/lib/utils/linkedin-request-dates';
 
 export const LINKEDIN_WITHDRAWAL_REMINDER_TYPE = 'linkedin_withdrawal_due';
 export const LINKEDIN_ACCEPTED_WITHDRAWAL_REMINDER_TYPE =
   'linkedin_accepted_withdrawal_due';
 export const LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS = 15;
-export const LINKEDIN_SENT_AUTO_WITHDRAW_DAYS = 20;
-export const LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS = 5;
-export const LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS = 7;
+export const LINKEDIN_SENT_AUTO_WITHDRAW_DAYS = LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS;
+export const LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS = 20;
+export const LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS = 25;
 export const LINKEDIN_REMINDER_MAX_PER_DAY = 5;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function parseTime(value: string | null | undefined) {
-  if (!value) return null;
-  const time = new Date(value).getTime();
-  return Number.isNaN(time) ? null : time;
+function getAgeDays(anchorIso: string | null, isSentDate: boolean, now: Date) {
+  if (!anchorIso) return null;
+  const anchor = Date.parse(anchorIso);
+  if (!Number.isFinite(anchor)) return null;
+  return isSentDate ? daysSinceLinkedinRequestDate(anchorIso, now) : Math.floor((now.getTime() - anchor) / DAY_MS);
 }
 
-function getAgeDays(anchorIso: string | null, now: Date) {
-  const anchor = parseTime(anchorIso);
-  if (anchor === null) return null;
-  return Math.floor((now.getTime() - anchor) / DAY_MS);
+export function getLinkedinManualWithdrawalTiming(request: LinkedinRequest, now = new Date()) {
+  if (request.isActive === false || request.withdrawnAt) return null;
+  const minimumDays = request.status === 'sent' ? LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS :
+    request.status === 'accepted' && !request.leadId ? LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS : null;
+  if (minimumDays === null) return null;
+  const acceptedAt = request.status === 'accepted' ? request.acceptedAt : null;
+  const ageDays = getAgeDays(acceptedAt || request.dateSent, !acceptedAt, now);
+  return ageDays === null ? null : { minimumDays, daysLeft: Math.max(0, minimumDays - ageDays) };
 }
 
 export function getLinkedinReminderPolicy(request: LinkedinRequest) {
@@ -33,7 +39,7 @@ export function getLinkedinReminderPolicy(request: LinkedinRequest) {
     return {
       type: LINKEDIN_WITHDRAWAL_REMINDER_TYPE,
       title: 'Withdraw Linkedin connection',
-      body: `${request.company} connection has been pending for 15+ days. Please withdraw it from Linkedin and mark it withdrawn in CRM.`,
+      body: `${request.company} connection has been pending for ${LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS}+ days. Please withdraw it from Linkedin and mark it withdrawn in CRM.`,
       anchorIso: request.dateSent,
       remindAfterDays: LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS,
       autoWithdrawAfterDays: LINKEDIN_SENT_AUTO_WITHDRAW_DAYS,
@@ -44,7 +50,7 @@ export function getLinkedinReminderPolicy(request: LinkedinRequest) {
     return {
       type: LINKEDIN_ACCEPTED_WITHDRAWAL_REMINDER_TYPE,
       title: 'Create lead or withdraw Linkedin connection',
-      body: `${request.company} connection was accepted 7+ days ago. Create a lead now or withdraw it from Linkedin and CRM.`,
+      body: `${request.company} connection was accepted ${LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS}+ days ago. Create a lead within ${LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS} days of acceptance to keep it active.`,
       anchorIso: request.acceptedAt,
       remindAfterDays: LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS,
       autoWithdrawAfterDays: LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS,
@@ -68,7 +74,7 @@ export function shouldSendLinkedinWithdrawalReminder({
     return false;
   }
 
-  const ageDays = getAgeDays(policy.anchorIso, now);
+  const ageDays = getAgeDays(policy.anchorIso, request.status === 'sent', now);
   if (ageDays === null) return false;
   // Fire the reminder exactly on the day it becomes due, so it only happens once.
   if (ageDays !== policy.remindAfterDays) return false;
@@ -77,19 +83,16 @@ export function shouldSendLinkedinWithdrawalReminder({
   return true;
 }
 
-export function shouldAutoWithdrawLinkedinRequest({
-  request,
-  now,
-}: {
-  request: LinkedinRequest;
-  now: Date;
-}) {
+export function getLinkedinAutoWithdrawalDaysLeft(request: LinkedinRequest, now = new Date()) {
   const policy = getLinkedinReminderPolicy(request);
-  if (!policy) return false;
+  if (!policy) return null;
 
-  const ageDays = getAgeDays(policy.anchorIso, now);
-  if (ageDays === null) return false;
-  return ageDays >= policy.autoWithdrawAfterDays;
+  const ageDays = getAgeDays(policy.anchorIso, request.status === 'sent', now);
+  return ageDays === null ? null : Math.max(0, policy.autoWithdrawAfterDays - ageDays);
+}
+
+export function shouldAutoWithdrawLinkedinRequest({ request, now }: { request: LinkedinRequest; now: Date }) {
+  return getLinkedinAutoWithdrawalDaysLeft(request, now) === 0;
 }
 
 export function buildLinkedinWithdrawalReminder(request: LinkedinRequest) {

@@ -36,6 +36,7 @@ import type { LinkedinAccount, User } from "@/lib/types";
 import { getErrorMessage } from "@/lib/utils";
 import { getTodayEst } from "@/lib/utils/est-date";
 import { exportLinkedinRequestsForAdminAction } from "@/app/actions/linkedin/requests";
+import { LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS, LINKEDIN_SENT_AUTO_WITHDRAW_DAYS } from '@/lib/utils/linkedin-withdrawal-reminders';
 
 /**
  * Format a Date object as YYYY-MM-DD in America/New_York.
@@ -464,10 +465,11 @@ function LinkedinReportsContent() {
                           Are you sure you want to run the LinkedIn auto-withdrawal logic right now?
                           <br />
                           <br />
-                          This will scan and mark as <strong>withdrawn</strong>:
+                          The sweep marks these requests as <strong>withdrawn</strong>.
                           <ul className="list-disc pl-5 mt-2 space-y-1">
-                            <li>All active <strong>sent</strong> requests older than 20 days.</li>
-                            <li>All <strong>accepted</strong> requests without a linked lead older than 11 days.</li>
+                            <li>Active <strong>sent</strong> requests without a linked lead after {LINKEDIN_SENT_AUTO_WITHDRAW_DAYS} days from sending.</li>
+                            <li>Active <strong>accepted</strong> requests without a linked lead after {LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS} days from acceptance.</li>
+                            <li>Active requests owned by inactive agents.</li>
                           </ul>
                         </div>
                       </DialogDescription>

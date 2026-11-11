@@ -5,7 +5,7 @@ import { Suspense, useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { endOfMonth, endOfWeek, format, parseISO, startOfMonth, startOfWeek } from 'date-fns';
 import { Download, ExternalLink } from 'lucide-react';
-import { addLinkedinConversationMessageAction, exportLinkedinConversationsAction, getLinkedinConversationAction, listLinkedinConversationsAction } from '@/app/actions/linkedin/conversations';
+import { addLinkedinConversationMessageAction, exportLinkedinConversationsAction, getLinkedinConversationAction, listLinkedinConversationsAction, listRecentLinkedinConnectionsAction } from '@/app/actions/linkedin/conversations';
 import { ProtectedRoute } from '@/components/protected-route';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,11 +15,12 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useLinkedinConversationAccess } from '@/lib/hooks/use-linkedin-conversation-access';
 import { useAuth } from '@/lib/contexts/auth-context';
-import { formatEasternDateTime, getCurrentEasternIsoDate } from '@/lib/utils/eastern-date';
+import { getCurrentEasternIsoDate } from '@/lib/utils/eastern-date';
 import { getLinkedinRequestDateFilterValue } from '@/lib/utils/linkedin-request-dates';
 import { normalizeProfileUrl } from '@/lib/utils/linkedin-extension-url';
 import { getErrorMessage } from '@/lib/utils';
-import { LINKEDIN_MESSAGE_TEXT_LIMIT, type LinkedinConversation, type LinkedinConversationMode } from '@/lib/types/linkedin-conversation';
+import { LINKEDIN_MESSAGE_TEXT_LIMIT, type LinkedinConversation, type LinkedinConversationListItem, type LinkedinConversationMode } from '@/lib/types/linkedin-conversation';
+import { buildLinkedinConversationWorkbook } from '@/lib/utils/linkedin-conversation-workbook';
 
 type RangePreset = 'Day' | 'Week' | 'Month' | 'Custom range';
 type Transcript = Awaited<ReturnType<typeof getLinkedinConversationAction>>;
@@ -38,23 +39,7 @@ function presetRange(preset: Exclude<RangePreset, 'Custom range'>) {
 
 async function downloadWorkbook(rows: ExportRows, filename: string) {
   const XLSX = await import('xlsx');
-  const requests = XLSX.utils.json_to_sheet(rows.map(row => ({
-    'Conversation ID': row.id, 'Request ID': row.requestId, Agent: row.agent, Account: row.account, Company: row.company,
-    'Profile URL': row.targetUrl, 'Sent date (ET)': getLinkedinRequestDateFilterValue(row.dateSent),
-    'Accepted at (ET)': row.acceptedAt ? formatEasternDateTime(row.acceptedAt) : '',
-    'Withdrawn at (ET)': row.withdrawnAt ? formatEasternDateTime(row.withdrawnAt) : '',
-    Status: row.status, 'Initial invitation text': row.initialText,
-  })));
-  const messages = XLSX.utils.json_to_sheet(rows.flatMap(row => row.messages.map(message => ({
-    'Conversation ID': row.id, 'Request ID': row.requestId, 'Profile URL': row.targetUrl,
-    'Message date (ET)': message.date, Direction: message.direction, Message: message.text,
-  }))), { header: ['Conversation ID', 'Request ID', 'Profile URL', 'Message date (ET)', 'Direction', 'Message'] });
-  requests['!cols'] = [38, 38, 22, 22, 25, 55, 18, 23, 23, 14, 65].map(wch => ({ wch }));
-  messages['!cols'] = [38, 38, 55, 20, 13, 75].map(wch => ({ wch }));
-  const book = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(book, requests, 'Requests');
-  XLSX.utils.book_append_sheet(book, messages, 'Messages');
-  XLSX.writeFile(book, filename, { bookType: 'xlsx' });
+  XLSX.writeFile(buildLinkedinConversationWorkbook(XLSX, rows), filename, { bookType: 'xlsx' });
 }
 
 function ConversationDetail({ item }: { item: LinkedinConversation }) {
@@ -143,15 +128,19 @@ function ConversationDetail({ item }: { item: LinkedinConversation }) {
 function LinkedinConversationsContent() {
   const params = useSearchParams();
   const { user } = useAuth();
+  const canSeeRecent = user?.role === 'admin' || user?.role === 'team_lead';
+  const viewerId = user?.$id;
   const requestId = params.get('request');
   const date = params.get('date');
   const focusedDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
   const [mode, setMode] = useState<LinkedinConversationMode>(params.get('view') === 'sent' ? 'sent' : 'accepted');
-  const [preset, setPreset] = useState<RangePreset>(focusedDate ? 'Custom range' : 'Month');
-  const [{ start, end }, setRange] = useState(() => focusedDate ? { start: focusedDate, end: focusedDate } : presetRange('Month'));
+  const [preset, setPreset] = useState<RangePreset>(focusedDate ? 'Custom range' : 'Day');
+  const [{ start, end }, setRange] = useState(() => focusedDate ? { start: focusedDate, end: focusedDate } : presetRange('Day'));
   const [search, setSearch] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
-  const [rows, setRows] = useState<LinkedinConversation[]>([]);
+  const [rows, setRows] = useState<LinkedinConversationListItem[]>([]);
+  const [recent, setRecent] = useState<LinkedinConversationListItem[] | null>(null);
+  const [recentError, setRecentError] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(true);
@@ -179,7 +168,17 @@ function LinkedinConversationsContent() {
     }).catch(error => { if (!cancelled) setError(getErrorMessage(error)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [mode, start, end, appliedSearch, requestId]);
+  }, [mode, start, end, appliedSearch, requestId, viewerId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRecent(null);
+    setRecentError(false);
+    if (!canSeeRecent) return;
+    void listRecentLinkedinConnectionsAction().then(data => { if (!cancelled) setRecent(data); })
+      .catch(() => { if (!cancelled) setRecentError(true); });
+    return () => { cancelled = true; };
+  }, [canSeeRecent, viewerId]);
 
   async function download() {
     setExporting(true);
@@ -193,7 +192,7 @@ function LinkedinConversationsContent() {
     finally { setExporting(false); }
   }
 
-  const active = rows.find(row => row.id === activeId);
+  const active = rows.find(row => row.id === activeId) ?? recent?.find(row => row.id === activeId);
   return <div className="container mx-auto max-w-7xl space-y-5">
     <header className="flex flex-wrap items-center gap-3">
       <h1 className="text-3xl font-semibold">Accepted Connections</h1><Badge variant="secondary">Beta</Badge>
@@ -224,7 +223,7 @@ function LinkedinConversationsContent() {
         </div>
         <p className="text-xs text-muted-foreground">Filtered by {mode === 'sent' ? 'invitation sent date' : 'acceptance date'}. Exports include the full saved conversation.</p>
         <form className="flex max-w-lg gap-2" onSubmit={event => { event.preventDefault(); setAppliedSearch(search.trim()); }}>
-          <Input aria-label="Company or profile URL" placeholder="Company or profile URL" value={search} maxLength={300} onChange={event => setSearch(event.target.value)} />
+          <Input aria-label="Profile URL, company, or sender name" placeholder="Profile URL, company, or sender name" value={search} maxLength={300} onChange={event => setSearch(event.target.value)} />
           <Button type="submit" variant="outline">Search</Button>
         </form>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
@@ -232,10 +231,12 @@ function LinkedinConversationsContent() {
       </CardContent>
     </Card>
     <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-      <Card>
+      <div className="space-y-4"><Card>
         <CardHeader><CardTitle>{mode === 'accepted' ? 'Connections' : 'Invitations'}</CardTitle></CardHeader>
         <CardContent>
-          {loading ? <p role="status" className="text-sm">Loading requests…</p> : !rows.length && !error ? <p className="text-sm text-muted-foreground">No matching requests.</p> :
+          {loading ? <p role="status" className="text-sm">Loading requests…</p> : !rows.length && !error ?
+            <p className="text-sm text-muted-foreground">{appliedSearch ? 'No requests match these filters.' :
+              mode === 'sent' ? 'No invitations sent in the selected dates.' : 'No connections accepted in the selected dates.'}</p> :
             <ul className="divide-y">{rows.map(row => <li key={row.id} className="flex items-start gap-3 py-2">
               <input type="checkbox" className="mt-2 size-4" aria-label={`Select ${row.company} ${row.targetUrl} for export`} checked={selected.has(row.id)}
                 onChange={event => {
@@ -246,12 +247,29 @@ function LinkedinConversationsContent() {
               <button className="min-w-0 flex-1 rounded-md p-1 text-left hover:bg-accent aria-pressed:bg-accent" aria-pressed={row.id === activeId} onClick={() => setActiveId(row.id)}>
                 <span className="flex flex-wrap items-center gap-2 text-sm font-medium">{row.company}<Badge variant="outline" className="capitalize">{row.status}</Badge></span>
                 <span className="block break-all text-xs text-muted-foreground">{row.targetUrl}</span>
+                {canSeeRecent && <span className="block text-xs text-muted-foreground">{row.agent}</span>}
                 <span className="block text-xs text-muted-foreground">{mode === 'accepted' && row.acceptedAt
                   ? `Accepted ${getCurrentEasternIsoDate(new Date(row.acceptedAt))}` : `Sent ${getLinkedinRequestDateFilterValue(row.dateSent)}`} ET</span>
               </button>
             </li>)}</ul>}
         </CardContent>
       </Card>
+      {canSeeRecent && <Card>
+        <CardHeader><CardTitle>Latest 10 accepted connections</CardTitle></CardHeader>
+        <CardContent>
+          {recentError ? <p role="alert" className="text-sm text-destructive">Could not load recent connections.</p> :
+            recent === null ? <p role="status" className="text-sm">Loading recent connections…</p> :
+            !recent.length ? <p className="text-sm text-muted-foreground">No accepted connections yet.</p> :
+            <ul className="divide-y">{recent.map(row => <li key={row.id} className="py-2">
+              <button className="w-full rounded-md p-1 text-left hover:bg-accent aria-pressed:bg-accent" aria-pressed={row.id === activeId} onClick={() => setActiveId(row.id)}>
+                <span className="block text-sm font-medium">{row.company} · {row.agent}</span>
+                <span className="block break-all text-xs text-muted-foreground">{row.targetUrl}</span>
+                {row.acceptedAt && <span className="block text-xs text-muted-foreground">Accepted {getCurrentEasternIsoDate(new Date(row.acceptedAt))} ET</span>}
+              </button>
+            </li>)}</ul>}
+        </CardContent>
+      </Card>}
+      </div>
       {active && <ConversationDetail key={active.id} item={active} />}
     </div>
   </div>;

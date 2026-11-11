@@ -23,3 +23,15 @@ export type LinkedinConversationMessage = {
   date: string;
   text: string;
 };
+
+export type LinkedinConversationListItem = LinkedinConversation & { agent: string };
+
+export type LinkedinConversationExportRow = LinkedinConversationListItem & {
+  mainAccountId: string;
+  mainAccount: string;
+  sudoAccountId: string;
+  sudoAccount: string;
+  accountType: 'main' | 'sudo' | null;
+  initialText: string;
+  messages: LinkedinConversationMessage[];
+};

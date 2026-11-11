@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Re-aggregate the last 30 days to catch any leads that were closed recently or auto-withdrawn (20 days)
+    // Re-aggregate the last 30 days to catch recent lead closures and request withdrawals.
     const dateKeys = [];
     const today = new Date();
     for (let i = 0; i < 30; i++) {

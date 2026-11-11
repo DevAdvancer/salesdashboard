@@ -41,16 +41,15 @@ import {
 } from "@/app/actions/linkedin/requests";
 import type { LinkedinAccount, LinkedinRequest } from "@/lib/types";
 import { getErrorMessage } from "@/lib/utils";
-import { daysSinceLinkedinRequestDate, daysSinceLinkedinRequestEvent, formatLinkedinRequestSentDate, getLinkedinRequestDateFilterValue } from "@/lib/utils/linkedin-request-dates";
+import { formatLinkedinRequestSentDate, getLinkedinRequestDateFilterValue } from "@/lib/utils/linkedin-request-dates";
 import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import { DISPLAY_TIME_ZONE_CHANGE_EVENT, getDisplayTimeZone } from "@/lib/utils/display-time-zone";
 import { normalizeProfileUrl } from "@/lib/utils/linkedin-extension-url";
 import { isWithdrawnLinkedinRequest } from "@/lib/utils/linkedin-request-state";
 import {
   LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS,
-  LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS,
-  LINKEDIN_SENT_AUTO_WITHDRAW_DAYS,
-  LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS,
+  getLinkedinAutoWithdrawalDaysLeft,
+  getLinkedinManualWithdrawalTiming,
 } from "@/lib/utils/linkedin-withdrawal-reminders";
 import { validateLeadUniquenessAction } from "@/app/actions/lead/validation";
 
@@ -372,8 +371,7 @@ function LinkedinRequestsContent() {
       });
       toast({
         title: "Accepted",
-        description:
-          "Marked as accepted. Create a lead within 7 days or withdraw it.",
+        description: `Marked as accepted. Create a lead within ${LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS} days to keep the request active.`,
         variant: "success",
       });
       void queryClient.invalidateQueries({ queryKey: ['linkedin-dashboard-data'] });
@@ -724,51 +722,27 @@ function LinkedinRequestsContent() {
                     ? leadOutcomeByLeadId[r.leadId]
                     : undefined;
                   const leadStatusLabel = leadOutcome?.statusLabel ?? null;
-                  const sentDaysPassed = daysSinceLinkedinRequestDate(r.dateSent);
-                  const sentDaysLeft = Math.max(
-                    LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS - sentDaysPassed,
-                    0,
-                  );
-                  const sentAutoDaysLeft = Math.max(
-                    LINKEDIN_SENT_AUTO_WITHDRAW_DAYS - sentDaysPassed,
-                    0,
-                  );
-                  const acceptedDaysPassed = r.acceptedAt
-                    ? daysSinceLinkedinRequestEvent(r.acceptedAt)
-                    : sentDaysPassed;
-                  const acceptedLeadDaysLeft = Math.max(
-                    LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS - acceptedDaysPassed,
-                    0,
-                  );
-                  const acceptedAutoDaysLeft = Math.max(
-                    LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS - acceptedDaysPassed,
-                    0,
-                  );
-                  const canWithdrawSent =
-                    r.status === "sent" &&
-                    (r.isActive ?? true) &&
-                    sentDaysPassed >= LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS;
-                  const canWithdrawAccepted =
-                    r.status === "accepted" &&
-                    (r.isActive ?? true) &&
-                    !r.leadId &&
-                    acceptedDaysPassed >= LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS;
+                  const autoDaysLeft = getLinkedinAutoWithdrawalDaysLeft(r);
+                  const manualWithdrawal = getLinkedinManualWithdrawalTiming(r);
+                  const canWithdraw = manualWithdrawal?.daysLeft === 0;
                   const withdrawn = isWithdrawnLinkedinRequest(r);
                   const statusLabel = withdrawn
                     ? "Withdrawn"
                     : leadStatusLabel
                     ? leadStatusLabel
                     : r.status === "accepted"
-                      ? r.leadId
+                      ? autoDaysLeft === null
                         ? "Accepted"
-                        : acceptedDaysPassed < LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS
-                          ? `Accepted - ${acceptedLeadDaysLeft} days left to create lead`
-                          : `Accepted - withdraw now (${acceptedAutoDaysLeft} days before auto-withdraw)`
+                        : autoDaysLeft === 0
+                          ? "Accepted - due for auto-withdrawal"
+                          : `Accepted - ${autoDaysLeft} ${autoDaysLeft === 1 ? 'day' : 'days'} left to create a lead`
                       : r.isActive === false
                         ? "Withdrawn"
-                        : sentDaysPassed < LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS
-                          ? `Sent - ${sentDaysLeft} days left to withdraw`
-                          : `Sent - withdraw now (${sentAutoDaysLeft} days before auto-withdraw)`;
+                        : autoDaysLeft === null
+                          ? "Sent"
+                          : autoDaysLeft === 0
+                            ? "Sent - due for auto-withdrawal"
+                            : `Sent - ${autoDaysLeft} ${autoDaysLeft === 1 ? 'day' : 'days'} until auto-withdrawal`;
 
                   return (
                     <TableRow key={r.$id}>
@@ -811,7 +785,7 @@ function LinkedinRequestsContent() {
                               <Button
                                 variant="outline"
                                 disabled={
-                                  !canWithdrawAccepted ||
+                                  !canWithdraw ||
                                   withdrawingId === r.$id ||
                                   acceptingId === r.$id
                                 }
@@ -827,6 +801,11 @@ function LinkedinRequestsContent() {
                                 ? `(${new Date(r.acceptedAt).toLocaleDateString("en-US", { timeZone: displayTimeZone })})`
                                 : ""}
                             </span>
+                            {manualWithdrawal && manualWithdrawal.daysLeft > 0 && (
+                              <span className="text-sm text-muted-foreground">
+                                Manual withdrawal opens in {manualWithdrawal.daysLeft} {manualWithdrawal.daysLeft === 1 ? 'day' : 'days'}
+                              </span>
+                            )}
                           </div>
                         ) : r.status === "sent" && (r.isActive ?? true) ? (
                           <div className="flex flex-wrap gap-2">
@@ -843,7 +822,7 @@ function LinkedinRequestsContent() {
                             <Button
                               variant="outline"
                               disabled={
-                                !canWithdrawSent ||
+                                !canWithdraw ||
                                 withdrawingId === r.$id ||
                                 acceptingId === r.$id
                               }

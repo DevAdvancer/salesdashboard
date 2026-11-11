@@ -67,6 +67,25 @@ it('rechecks current state before writing a withdrawal', async () => {
   expect(databases.updateDocument).toHaveBeenCalledTimes(1);
 });
 
+it('rechecks expiry from the latest state before withdrawing recently accepted or newly linked requests', async () => {
+  const expiredSent = request('sent', { dateSent: '2026-09-01T00:00:00.000Z' });
+  const expiredAccepted = request('accepted', { status: 'accepted', acceptedAt: '2026-09-01T00:00:00.000Z' });
+  const stillExpired = { ...expiredAccepted, $id: 'still-expired', $updatedAt: 'fresh-version' };
+  const getDocument = jest.fn()
+    .mockResolvedValueOnce({ ...expiredSent, status: 'accepted', acceptedAt: now.toISOString() })
+    .mockResolvedValueOnce({ ...expiredAccepted, leadId: 'new-lead' })
+    .mockResolvedValueOnce(stillExpired);
+  const updateDocument = jest.fn().mockResolvedValue({});
+  const planned = [expiredSent, expiredAccepted, stillExpired].map(item => ({ request: item, agentName: 'Agent', reason: 'expired request' as const }));
+  const result = await applyLinkedinWithdrawals({ uncachedReads: { getDocument }, updateDocument } as never, planned, now);
+  expect(result.withdrawn.map(item => item.request.$id)).toEqual(['still-expired']);
+  expect(result.errors).toEqual([]);
+  expect(updateDocument).toHaveBeenCalledWith(expect.any(String), expect.any(String), 'still-expired', {
+    status: 'withdrawn', isActive: false, withdrawnAt: now.toISOString(), expectedRequestUpdatedAt: 'fresh-version',
+  });
+  expect(updateDocument).toHaveBeenCalledTimes(1);
+});
+
 it('emails only actual withdrawals to Settings recipients and escapes profile data', async () => {
   (getReportEmails as jest.Mock).mockResolvedValue(['reports@example.com']);
   (sendNotificationEmail as jest.Mock).mockResolvedValue({ messageId: 'sent' });

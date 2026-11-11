@@ -1,5 +1,7 @@
 import {
   buildLinkedinWithdrawalReminder,
+  getLinkedinAutoWithdrawalDaysLeft,
+  getLinkedinManualWithdrawalTiming,
   shouldAutoWithdrawLinkedinRequest,
   shouldSendLinkedinWithdrawalReminder,
 } from '@/lib/utils/linkedin-withdrawal-reminders';
@@ -66,7 +68,7 @@ describe('linkedin withdrawal reminders', () => {
     ).toBe(false);
   });
 
-  it('uses the accepted reminder copy after 7 days when no lead exists', () => {
+  it('includes the 25-day conversion deadline in the accepted reminder', () => {
     expect(
       buildLinkedinWithdrawalReminder(
         request({
@@ -78,54 +80,35 @@ describe('linkedin withdrawal reminders', () => {
     ).toEqual({
       type: 'linkedin_accepted_withdrawal_due',
       title: 'Create lead or withdraw Linkedin connection',
-      body: 'Acme connection was accepted 7+ days ago. Create a lead now or withdraw it from Linkedin and CRM.',
+      body: 'Acme connection was accepted 20+ days ago. Create a lead within 25 days of acceptance to keep it active.',
       targetId: 'request-1',
       targetType: 'LINKEDIN_REQUEST',
     });
   });
 
-  it('auto withdraws sent requests after 20 days and accepted requests without leads after 11 days', () => {
-    expect(
-      shouldAutoWithdrawLinkedinRequest({
-        request: request({ dateSent: '2026-04-26T00:00:00.000Z' }),
-        now,
-      }),
-    ).toBe(true);
+  it('makes a pending invitation eligible on the fifteenth Eastern calendar day', () => {
+    const pending = request({ dateSent: '2026-05-01T00:00:00.000Z' });
+    expect(shouldAutoWithdrawLinkedinRequest({ request: pending, now: new Date('2026-05-16T03:59:59.999Z') })).toBe(false);
+    expect(shouldAutoWithdrawLinkedinRequest({ request: pending, now: new Date('2026-05-16T04:00:00.000Z') })).toBe(true);
+  });
 
-    // 7 days age should auto withdraw
-    expect(
-      shouldAutoWithdrawLinkedinRequest({
-        request: request({
-          status: 'accepted',
-          acceptedAt: '2026-05-09T00:00:00.000Z', // 7 days ago
-          leadId: null,
-        }),
-        now,
-      }),
-    ).toBe(true);
+  it('makes an accepted connection eligible after 25 elapsed days from acceptance when it has no lead', () => {
+    const accepted = request({ status: 'accepted', dateSent: '2026-04-03T00:00:00.000Z', acceptedAt: '2026-04-21T12:00:00.000Z' });
+    const almostDue = new Date('2026-05-16T11:59:59.999Z');
+    expect(getLinkedinAutoWithdrawalDaysLeft(accepted, almostDue)).toBe(1);
+    expect(shouldAutoWithdrawLinkedinRequest({ request: accepted, now: almostDue })).toBe(false);
+    expect(getLinkedinAutoWithdrawalDaysLeft(accepted, now)).toBe(0);
+    expect(shouldAutoWithdrawLinkedinRequest({ request: accepted, now })).toBe(true);
+    expect(shouldAutoWithdrawLinkedinRequest({ request: { ...accepted, leadId: 'lead-1' }, now })).toBe(false);
+  });
 
-    // 6 days age should NOT auto withdraw
-    expect(
-      shouldAutoWithdrawLinkedinRequest({
-        request: request({
-          status: 'accepted',
-          acceptedAt: '2026-05-10T00:00:00.000Z', // 6 days ago
-          leadId: null,
-        }),
-        now,
-      }),
-    ).toBe(false);
-
-    expect(
-      shouldAutoWithdrawLinkedinRequest({
-        request: request({
-          status: 'accepted',
-          acceptedAt: '2026-05-04T00:00:00.000Z',
-          leadId: 'lead-1',
-        }),
-        now,
-      }),
-    ).toBe(false);
+  it('opens manual withdrawal at 20 elapsed days after acceptance and leaves five days before automatic eligibility', () => {
+    const accepted = request({ status: 'accepted', acceptedAt: '2026-04-26T12:00:00.000Z' });
+    const before = new Date('2026-05-16T11:59:59.999Z');
+    expect(getLinkedinManualWithdrawalTiming(accepted, before)).toEqual({ minimumDays: 20, daysLeft: 1 });
+    expect(getLinkedinManualWithdrawalTiming(accepted, now)).toEqual({ minimumDays: 20, daysLeft: 0 });
+    expect(getLinkedinAutoWithdrawalDaysLeft(accepted, now)).toBe(5);
+    expect(getLinkedinManualWithdrawalTiming({ ...accepted, leadId: 'lead-1' }, now)).toBeNull();
   });
 
   it('builds a clear agent notification payload', () => {

@@ -45,14 +45,17 @@ export async function applyLinkedinWithdrawals(databases: Databases, planned: Li
   const errors: Array<{ requestId: string; message: string }> = [];
   const processEntry = async (entry: LinkedinWithdrawal) => {
     try {
-      const current = await databases.getDocument(DATABASE_ID, COLLECTIONS.LINKEDIN_REQUESTS,
+      const expires = entry.reason === 'expired request';
+      const reads = expires ? databases.uncachedReads : databases;
+      const current = await reads.getDocument(DATABASE_ID, COLLECTIONS.LINKEDIN_REQUESTS,
         entry.request.$id) as unknown as LinkedinRequest;
       if (current.isActive === false || !["sent", "accepted"].includes(current.status) ||
           current.agentId !== entry.request.agentId || current.accountId !== entry.request.accountId ||
           (current.conversationId || null) !== (entry.request.conversationId || null)) return;
+      if (expires && !shouldAutoWithdrawLinkedinRequest({ request: current, now })) return;
       await databases.updateDocument(DATABASE_ID, COLLECTIONS.LINKEDIN_REQUESTS, current.$id, {
         status: "withdrawn", isActive: false, withdrawnAt: now.toISOString(),
-        ...(current.conversationId ? { expectedRequestUpdatedAt: current.$updatedAt } : {}),
+        ...(expires || current.conversationId ? { expectedRequestUpdatedAt: current.$updatedAt } : {}),
       });
       withdrawn.push({ ...entry, request: current });
     } catch (error) {

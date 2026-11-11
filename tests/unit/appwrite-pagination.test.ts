@@ -47,3 +47,14 @@ it('bounds the total rows retained even when large pages are enabled', async () 
   const databases = { listDocuments: jest.fn().mockResolvedValue({ total: 100, documents: [{ $id: 'a' }, { $id: 'b' }] }) };
   await expect(listAllDocuments({ ...input, databases, pageLimit: 5000, maxDocuments: 2 })).rejects.toThrow('safety limit');
 });
+
+it('stops after enough eligible rows and uses the last scanned row as the cursor', async () => {
+  const databases = { listDocuments: jest.fn()
+    .mockResolvedValueOnce({ total: 9, documents: [{ $id: 'a', eligible: true }, { $id: 'b', eligible: false }] })
+    .mockResolvedValueOnce({ total: 9, documents: [{ $id: 'c', eligible: true }, { $id: 'd', eligible: true }] }) };
+  const rows = await listAllDocuments<{ $id: string; eligible: boolean }>({ ...input, databases, pageLimit: 2,
+    take: 2, matches: row => row.eligible });
+  expect(rows.map(row => row.$id)).toEqual(['a', 'c']);
+  expect(databases.listDocuments).toHaveBeenCalledTimes(2);
+  expect(databases.listDocuments.mock.calls[1][2]).toContain('cursor:b');
+});

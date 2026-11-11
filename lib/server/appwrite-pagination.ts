@@ -9,6 +9,8 @@ export async function listAllDocuments<T>(input: {
   maxPages?: number;
   requireComplete?: boolean;
   maxDocuments?: number;
+  take?: number;
+  matches?: (document: T) => boolean;
 }): Promise<T[]> {
   // Keep the small default for UI lists. Large server scans may explicitly use
   // Appwrite's supported 5,000-row limit instead of paying for 50 round trips.
@@ -16,6 +18,7 @@ export async function listAllDocuments<T>(input: {
   const maxPages = Math.max(input.maxPages ?? 1000, 1);
 
   const documents: T[] = [];
+  let scanned = 0;
   let cursorAfter: string | null = null;
 
   for (let page = 0; page < maxPages; page += 1) {
@@ -36,12 +39,14 @@ export async function listAllDocuments<T>(input: {
     });
 
     const pageDocuments = (response?.documents ?? []) as T[];
-    documents.push(...pageDocuments);
-    if (input.maxDocuments && documents.length >= input.maxDocuments) {
+    scanned += pageDocuments.length;
+    documents.push(...(input.matches ? pageDocuments.filter(input.matches) : pageDocuments));
+    if (input.maxDocuments && scanned >= input.maxDocuments) {
       throw new Error('The document scan exceeded its safety limit. Ask an admin to review it.');
     }
+    if (input.take !== undefined && documents.length >= input.take) return documents.slice(0, input.take);
 
-    const moreReported = typeof response?.total === 'number' && documents.length < response.total;
+    const moreReported = typeof response?.total === 'number' && scanned < response.total;
     if (pageDocuments.length < pageLimit && !moreReported) {
       return documents;
     }

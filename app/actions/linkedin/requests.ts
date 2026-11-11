@@ -4,14 +4,14 @@ import { createAdminClient } from "@/lib/server/appwrite";
 import { assertAuthenticatedUserId, getAuthenticatedUserDoc } from "@/lib/server/current-user";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/constants/appwrite";
 import type { Lead, LinkedinAccount, LinkedinAccountType, LinkedinRequest, LinkedinRequestStatus, User } from "@/lib/types";
-import { LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS, LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS } from "@/lib/utils/linkedin-withdrawal-reminders";
+import { getLinkedinManualWithdrawalTiming } from "@/lib/utils/linkedin-withdrawal-reminders";
 import { workingDaysInRange } from "@/lib/utils/dashboard-kpi";
 import { listAllDocuments } from "@/lib/server/appwrite-pagination";
 import { getLinkedinAccountUsage } from "@/lib/server/linkedin-account-usage";
 import { expandIsoDateToEnd, expandIsoDateToStart } from "@/lib/utils/iso-date-range";
 import { listHolidayDateKeys } from "@/lib/server/holiday-calendar";
 import { getAgentsByTeamLead, getAssignableUsers, getUserByIdOrNull } from "@/lib/services/user-service";
-import { normalizeCompany, normalizeUrl, parseDateOnly, toUtcDayStartIso, toUtcDayEndIso, daysBetweenUtc, assertDateIso, normalizeLeadOutcomeStatus, getLeadOutcomeLabel, getLinkedinRequestLeadSnapshot, getLinkedinRequestLeadOutcomeLabel, isBlockingLinkedinRequest, createGeneralChatMessage, logAuditAction, canManageLinkedinAccounts, canSeeLinkedinReports, canReadLinkedinAccountsLikeAdmin, resolveLinkedinReportTeamLeadId, assertLinkedinReportTeamScope, assertAgentIsInTeam, getEtDateKey, getLinkedinAccountDoc, getTeamLeadAssignedUserIds, listDelegatedSourceUserIdsForToday, assertAccessibleLinkedinAccount, getSalesUserIds, resolveScopeUsersForLinkedin, LinkedinConnectionKpiRow, AutoWithdrawResult } from "./shared";
+import { normalizeCompany, normalizeUrl, parseDateOnly, toUtcDayStartIso, toUtcDayEndIso, assertDateIso, normalizeLeadOutcomeStatus, getLeadOutcomeLabel, getLinkedinRequestLeadSnapshot, getLinkedinRequestLeadOutcomeLabel, isBlockingLinkedinRequest, createGeneralChatMessage, logAuditAction, canManageLinkedinAccounts, canSeeLinkedinReports, canReadLinkedinAccountsLikeAdmin, resolveLinkedinReportTeamLeadId, assertLinkedinReportTeamScope, assertAgentIsInTeam, getEtDateKey, getLinkedinAccountDoc, getTeamLeadAssignedUserIds, listDelegatedSourceUserIdsForToday, assertAccessibleLinkedinAccount, getSalesUserIds, resolveScopeUsersForLinkedin, LinkedinConnectionKpiRow, AutoWithdrawResult } from "./shared";
 import { parseIsoDateLocal, daysInMonthLocal } from "../lead/sync-helpers";
 import { listLinkedinRequestsForProfile } from "./shared";
 import { normalizeProfileUrl } from "@/lib/utils/linkedin-extension-url";
@@ -718,30 +718,13 @@ export async function withdrawLinkedinRequestAction(input: {
     throw new Error("Unauthorized");
     }
 
-    const nowIso = new Date().toISOString();
-    let eligibilityAnchor = "";
-    let manualWithdrawDays = 0;
-    if (existing.status === "sent" && existing.isActive !== false) {
-    eligibilityAnchor = existing.dateSent;
-    manualWithdrawDays = LINKEDIN_SENT_MANUAL_WITHDRAW_DAYS;
-    } else if (
-    existing.status === "accepted" &&
-    existing.isActive !== false &&
-    !existing.leadId
-    ) {
-    eligibilityAnchor = existing.acceptedAt || existing.dateSent;
-    manualWithdrawDays = LINKEDIN_ACCEPTED_LEAD_GRACE_DAYS;
-    } else {
-    throw new Error("This Linkedin request cannot be withdrawn.");
+    const now = new Date();
+    const timing = getLinkedinManualWithdrawalTiming(existing, now);
+    if (!timing) throw new Error("This Linkedin request cannot be withdrawn.");
+    if (timing.daysLeft > 0) {
+      throw new Error(`You can withdraw after ${timing.minimumDays} days. ${timing.daysLeft} days left.`);
     }
-
-    const daysPassed = daysBetweenUtc(eligibilityAnchor, nowIso);
-    if (daysPassed < manualWithdrawDays) {
-    const remaining = manualWithdrawDays - daysPassed;
-    throw new Error(
-      `You can withdraw after ${manualWithdrawDays} days. ${remaining} days left.`,
-    );
-    }
+    const nowIso = now.toISOString();
 
     const updated = await databases.updateDocument(
             DATABASE_ID,

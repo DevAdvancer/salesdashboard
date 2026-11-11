@@ -76,6 +76,30 @@ describe('LinkedIn Server Actions Regression', () => {
     });
   });
 
+  it('allows lead creation on acceptance and holds manual withdrawal until day 20', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-05-16T12:00:00.000Z'));
+    try {
+      mockGetAuthenticatedUserDoc.mockResolvedValue({ $id: 'agent-1', name: 'Agent', role: 'agent', department: 'sales' });
+      const input = { currentUserId: 'agent-1', requestId: 'accepted' };
+      const accepted = { $id: input.requestId, agentId: 'agent-1', status: 'accepted', isActive: true,
+        dateSent: '2026-04-25T00:00:00.000Z', acceptedAt: '2026-04-26T12:00:00.000Z', targetUrl: 'https://linkedin.com/in/person' };
+      const { checkLinkedinLeadCreationAction, withdrawLinkedinRequestAction } = await import('@/app/actions/linkedin/requests');
+      mockGetDocument.mockResolvedValueOnce({ ...accepted, acceptedAt: '2026-05-16T11:59:59.000Z' });
+      await expect(checkLinkedinLeadCreationAction(input)).resolves.toEqual({ canCreate: true });
+
+      mockGetDocument.mockResolvedValueOnce({ ...accepted, acceptedAt: '2026-04-26T12:00:00.001Z' });
+      await expect(withdrawLinkedinRequestAction({ ...input, reason: 'Agent withdrew' })).rejects.toThrow('after 20 days');
+      expect(mockUpdateDocument).not.toHaveBeenCalled();
+
+      mockGetDocument.mockResolvedValueOnce(accepted);
+      await withdrawLinkedinRequestAction({ ...input, reason: 'Agent withdrew' });
+      expect(mockUpdateDocument).toHaveBeenCalledWith('database', 'linkedin_requests', 'accepted',
+        expect.objectContaining({ status: 'withdrawn', isActive: false }));
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   describe('listMyLinkedinRequestsAction', () => {
     it('scopes queries to the authenticated user ID (and delegated IDs)', async () => {
       mockGetAuthenticatedUserDoc.mockResolvedValueOnce({
