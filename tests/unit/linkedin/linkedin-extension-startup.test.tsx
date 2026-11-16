@@ -129,6 +129,29 @@ it("records directly without an initial history request", async () => {
   expect(navigator.clipboard.writeText).toHaveBeenCalledWith(checked.targetUrl);
 });
 
+it.each(['created', 'resent'])('records a beta %s with invitation text and leaves the clipboard alone', async mode => {
+  (loadConnection as jest.Mock).mockResolvedValue({
+    data: { ...bootstrap, conversationsBeta: true }, selectedAccountId: 'account', note: '',
+  });
+  const send = jest.mocked(requestCrm);
+  if (mode === 'resent') send.mockResolvedValueOnce({ ...checked, state: 'resend_available' });
+  send.mockResolvedValueOnce({ ...checked, mode, state: 'active_request', canRecord: false, remaining: 57 });
+  const { result } = renderHook(() => useLinkedinHelper());
+  await waitFor(() => expect(result.current.state.pending).toBe(false));
+  if (mode === 'resent') {
+    await act(async () => { result.current.check(); });
+    act(() => { result.current.setConfirmResend(true); });
+  }
+  act(() => { result.current.setInitialInvitationText('Thanks for connecting!'); });
+  await act(async () => { result.current.record(); });
+  expect(send).toHaveBeenLastCalledWith(expect.objectContaining({
+    operation: 'record', targetUrl: checked.targetUrl, expectedUserId: bootstrap.user.id,
+    initialInvitationText: 'Thanks for connecting!', confirmResend: mode === 'resent',
+  }));
+  expect(result.current.state.note).toBe(`${mode === 'resent' ? 'Resend' : 'Request'} recorded · 57 remaining.`);
+  expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
+});
+
 it.each(['created', 'resent'])("keeps a successful %s saved when clipboard access fails", async mode => {
   (navigator.clipboard.writeText as jest.Mock).mockRejectedValue(new Error('Denied'));
   (requestCrm as jest.Mock).mockResolvedValue({ ...checked, mode, state: 'active_request', canRecord: false });

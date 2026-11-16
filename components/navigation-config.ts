@@ -100,6 +100,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'team-report', label: 'Team Report', href: '/team-report', icon: appIcons.teamReport },
 
   { key: 'linkedin-requests', label: 'Linkedin Request', href: '/linkedin-requests', icon: appIcons.linkedinRequests },
+  { key: 'linkedin-conversations', label: 'Accepted Connections', href: '/linkedin-conversations', icon: appIcons.chat },
   { key: 'linkedin-account-management', label: 'Manage Linkedin IDs', href: '/linkedin-accounts', icon: appIcons.linkedinAccounts },
   { key: 'linkedin-reports', label: 'Linkedin Reports', href: '/linkedin-reports', icon: appIcons.linkedinReports },
   { key: 'payments-report', label: 'Payments Report', href: '/payments-report', icon: appIcons.paymentsReport },

@@ -1,5 +1,5 @@
 import type * as SheetJS from 'xlsx';
-import type { LinkedinConversationExportRow, LinkedinConversationMessage } from '@/lib/types/linkedin-conversation';
+import { LINKEDIN_MESSAGE_LABELS, type LinkedinConversationExportRow, type LinkedinConversationMessage } from '@/lib/types/linkedin-conversation';
 import { formatEasternDateTime } from '@/lib/utils/eastern-date';
 import { getLinkedinRequestDateFilterValue } from '@/lib/utils/linkedin-request-dates';
 
@@ -9,7 +9,7 @@ const headers = ['Conversation ID', 'Request ID', 'Sender', 'CRM sender ID', 'Li
   'Sent date (ET)', 'Accepted at (ET)', 'Withdrawn at (ET)', 'Status', 'Initial invitation text', 'Conversation'];
 
 function conversationCells(messages: LinkedinConversationMessage[]) {
-  const text = messages.map(message => `${message.date} ET · ${message.direction === 'sent' ? 'Sent' : 'Received'}\n${message.text}`).join('\n\n');
+  const text = messages.map(message => `${message.date} ET · ${LINKEDIN_MESSAGE_LABELS[message.direction]}\n${message.text}`).join('\n\n');
   const cells: string[] = [];
   for (let offset = 0; offset < text.length;) {
     let end = Math.min(offset + EXCEL_CELL_LIMIT, text.length);

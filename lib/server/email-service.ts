@@ -244,7 +244,7 @@ const transporter = nodemailer.createTransport({
 
 export async function sendNotificationEmail({ to, subject, html, text, allowAllRecipients = false, attachments = [] }: {
   to: string; subject: string; html: string; text?: string; allowAllRecipients?: boolean;
-  attachments?: Array<{ filename: string; content: string; contentType: string }>;
+  attachments?: Array<{ filename: string; content: string | Buffer; contentType: string }>;
 }) {
   const requested = to.split(',').map(e => e.trim()).filter(e => allowAllRecipients || (
     e.toLowerCase() !== 'unassigned@silverspaceinc.com' &&

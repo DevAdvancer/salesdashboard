@@ -5,9 +5,9 @@ import { getMyLinkedinConversationAccessAction } from '@/app/actions/beta';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { isRoleEligibleForComponent } from '@/lib/constants/component-access';
 
-export function useLinkedinConversationAccess() {
+export function useLinkedinConversationAccess(checkAccess = true) {
   const { user, serverSessionReady } = useAuth();
-  const userId = user && user.isActive !== false && (user.department ?? 'sales') === 'sales' &&
+  const userId = checkAccess && user && user.isActive !== false && (user.department ?? 'sales') === 'sales' &&
     isRoleEligibleForComponent('linkedin-conversations', user.role) ? user.$id : null;
   const [result, setResult] = useState<{ userId: string; enabled: boolean } | null>(null);
   useEffect(() => {

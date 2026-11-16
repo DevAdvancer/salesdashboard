@@ -1,6 +1,7 @@
 import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { Navigation } from "@/components/navigation";
+import { getMyLinkedinConversationAccessAction } from "@/app/actions/beta";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useAccess } from "@/lib/contexts/access-control-context";
 import { useRouter, usePathname } from "next/navigation";
@@ -8,6 +9,7 @@ import { useRouter, usePathname } from "next/navigation";
 // Mock the contexts and hooks
 jest.mock("@/lib/contexts/auth-context");
 jest.mock("@/lib/contexts/access-control-context");
+jest.mock("@/app/actions/beta", () => ({ getMyLinkedinConversationAccessAction: jest.fn() }));
 // The notification bell pulls in the SOP service, which imports the
 // `node-appwrite` server SDK (ESM-only dependency Jest cannot parse).
 // The bell is not part of what these navigation tests assert, so stub it.
@@ -48,6 +50,18 @@ describe("Navigation Component", () => {
     mockUseAccess.mockReturnValue({ canAccess: () => true, isLoading: false } as any);
     render(<Navigation />);
     expect(screen.getByText('Client Progress')).toBeInTheDocument();
+  });
+
+  it.each([true, false])('gates the admin Accepted Connections link on a beta grant of %s', async granted => {
+    mockUseAuth.mockReturnValue({ user: { $id: 'admin', name: 'Admin', role: 'admin', department: 'sales' },
+      activeDashboard: 'sales', serverSessionReady: true, logout: mockLogout } as any);
+    mockUseAccess.mockReturnValue({ canAccess: () => true, isLoading: false } as any);
+    jest.mocked(getMyLinkedinConversationAccessAction).mockResolvedValue(granted);
+    render(<Navigation />);
+    fireEvent.click(screen.getByRole('button', { name: 'Linkedin Tools' }));
+    await waitFor(() => expect(getMyLinkedinConversationAccessAction).toHaveBeenCalledTimes(1));
+    if (granted) expect(await screen.findByRole('link', { name: 'Accepted Connections' })).toHaveAttribute('href', '/linkedin-conversations');
+    else expect(screen.queryByRole('link', { name: 'Accepted Connections' })).not.toBeInTheDocument();
   });
 
   describe("Agent sees only permitted components", () => {

@@ -2,7 +2,7 @@
 
 Admins manage individual grants under **Beta → LinkedIn Conversations**. The `linkedin-conversations` feature is available to active Sales agents, team leads, and admins. A grant enables Accepted Connections and conversation exports. Agents see their own invitations, team leads see their own and their team's, and admins can export across Sales. The agent who recorded an invitation can add messages after acceptance, including after the CRM archives the request on withdrawal.
 
-Granted agents and team leads can download LinkedIn Helper v2.1.0 from **LinkedIn Requests**. Check the profile in the extension, send the invitation manually on LinkedIn, then paste the exact invitation text into the extension before recording it. **Connection Accepted** opens the conversation in CRM. The workbook contains the invitation and its saved messages, with Eastern date filters by sent or accepted date.
+Granted agents and team leads can download LinkedIn Helper v2.1.1 from **LinkedIn Requests**. Check the profile in the extension, send the invitation manually on LinkedIn, then paste the exact invitation text into the extension before recording it. Recording preserves the clipboard contents. **Connection Accepted** opens the conversation in CRM. The workbook contains the invitation and its saved messages, with Eastern date filters by sent or accepted date.
 
 ## Appwrite rollout
 
@@ -17,4 +17,4 @@ If the preview reports that `beta_feature_access` is missing, use `bun run setup
 
 ## Extension package
 
-LinkedIn Requests links to `public/downloads/crm-hub-linkedin-helper-2.1.0-chrome.zip` for beta users and the v2.0.0 package for standard users. Build the package with `bun run zip` in `extensions/linkedin-helper`, then copy the generated ZIP from `.output` to `public/downloads`. The version detected in the CRM tab comes from the extension manifest. The server reads the individual grant when bootstrapping the popup and recording an invitation.
+LinkedIn Requests links to `public/downloads/crm-hub-linkedin-helper-2.1.1-chrome.zip` for beta users and the v2.0.0 package for standard users. Build the package with `bun run zip` in `extensions/linkedin-helper`, then copy the generated ZIP from `.output` to `public/downloads`. The version detected in the CRM tab comes from the extension manifest. The server reads the individual grant when bootstrapping the popup and recording an invitation.

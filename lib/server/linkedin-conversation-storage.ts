@@ -64,3 +64,16 @@ export async function archiveLinkedinConversation(databases: Databases, request:
 export function linkedinConversationRecordQueries(ids: string[]) {
   return [Query.equal('conversationId', ids), Query.equal('kind', ['invitation', 'message'])];
 }
+
+export async function claimLinkedinWeeklyEmail(databases: Databases, userId: string, weekStart: string) {
+  const id = storageId('weekly', `${userId}:${weekStart}`);
+  try {
+    await databases.createDocument(DATABASE_ID, COLLECTIONS.LINKEDIN_CONVERSATIONS, id, {
+      conversationId: id, kind: 'weekly-email', payload: weekStart, agentId: userId,
+    }, []);
+    return id;
+  } catch (error) {
+    if ((error as { code?: number }).code !== 409) throw error;
+    return null;
+  }
+}

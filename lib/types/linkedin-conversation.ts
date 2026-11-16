@@ -1,5 +1,9 @@
 export const LINKEDIN_INVITATION_TEXT_LIMIT = 500;
 export const LINKEDIN_MESSAGE_TEXT_LIMIT = 8000;
+export const LINKEDIN_CONVERSATION_PAYLOAD_LIMIT = 60_000;
+
+export const LINKEDIN_MESSAGE_KINDS = ['sent', 'received', 'transcript'] as const;
+export const LINKEDIN_MESSAGE_LABELS = { sent: 'Sent', received: 'Received', transcript: 'Pasted conversation' };
 
 export type LinkedinConversationMode = 'sent' | 'accepted';
 
@@ -19,7 +23,7 @@ export type LinkedinConversation = {
 
 export type LinkedinConversationMessage = {
   id: string;
-  direction: 'sent' | 'received';
+  direction: (typeof LINKEDIN_MESSAGE_KINDS)[number];
   date: string;
   text: string;
 };

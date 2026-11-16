@@ -12,14 +12,15 @@ jest.mock('@/lib/server/appwrite', () => ({ createAdminClient: jest.fn() }));
 jest.mock('@/lib/server/appwrite-pagination', () => ({ listAllDocuments: jest.fn() }));
 jest.mock('@/lib/server/beta-feature-access', () => ({ hasBetaFeatureAccess: jest.fn().mockResolvedValue(true) }));
 
-import { exportLinkedinConversationsAction, listLinkedinConversationsAction, listRecentLinkedinConnectionsAction } from '@/app/actions/linkedin/conversations';
+import { addLinkedinConversationMessageAction, exportLinkedinConversationsAction,
+  listLinkedinConversationsAction, listRecentLinkedinConnectionsAction } from '@/app/actions/linkedin/conversations';
 import { COLLECTIONS } from '@/lib/constants/appwrite';
 import { createAdminClient } from '@/lib/server/appwrite';
 import { listAllDocuments } from '@/lib/server/appwrite-pagination';
 import { getAuthenticatedUserDoc } from '@/lib/server/current-user';
 import type { LinkedinRequest, User } from '@/lib/types';
 
-const databases = { clearReadCacheForCollection: jest.fn() };
+const databases = { clearReadCacheForCollection: jest.fn(), getDocument: jest.fn(), createDocument: jest.fn() };
 const viewer = { $id: 'tl', name: 'Team Lead', role: 'team_lead', department: 'sales' } as User;
 const request: LinkedinRequest = { $id: 'request', agentId: 'agent', accountId: 'sudo', teamLeadId: 'tl', company: 'Company',
   targetUrl: 'https://www.linkedin.com/in/jane-doe', dateSent: '2026-11-01T00:00:00.000Z', acceptedAt: '2026-11-12T18:00:00.000Z',
@@ -33,6 +34,8 @@ beforeEach(() => {
   jest.mocked(createAdminClient).mockResolvedValue({ databases } as never);
   list.mockResolvedValue([]);
 });
+
+afterEach(() => jest.useRealTimers());
 
 it('uses the requested day and event date for both lists, without loading names or transcripts for an empty day', async () => {
   await expect(listLinkedinConversationsAction({ ...today, mode: 'sent' })).resolves.toEqual([]);
@@ -86,4 +89,26 @@ it('exports both the used sudo account and its main account with the invitation 
     expect.objectContaining({ agent: 'Alex Sender', mainAccount: 'Main ID', mainAccountId: 'main',
       sudoAccount: 'Sudo ID', sudoAccountId: 'sudo', initialText: 'Initial text', messages: [expect.objectContaining({ text: 'Follow-up' })] }),
   ]);
+});
+
+it('saves a long pasted conversation verbatim as one entry and preserves the same entry on retry', async () => {
+  jest.useFakeTimers().setSystemTime(new Date('2026-11-12T16:00:00Z'));
+  const input = { requestId: request.$id, conversationId: request.conversationId!,
+    id: 'af6ca5b2-4cc2-463e-a899-2dd2f2a7ef07', date: '2026-11-12', direction: 'transcript' as const,
+    text: '  Alex: Thanks for connecting!\n\nJane: Please send details.\n' + 'Follow-up details.\n'.repeat(900) + '  ' };
+  jest.mocked(getAuthenticatedUserDoc).mockResolvedValue({ ...viewer, $id: request.agentId, role: 'agent' });
+  let saved: { payload: string } | undefined;
+  databases.createDocument.mockImplementation(async (_database, _collection, _id, data) => {
+    if (saved) throw { code: 409 };
+    saved = data;
+  });
+  databases.getDocument.mockImplementation(async (_database, collection) =>
+    collection === COLLECTIONS.LINKEDIN_REQUESTS ? request : saved);
+  await addLinkedinConversationMessageAction(input);
+  await addLinkedinConversationMessageAction(input);
+  expect(databases.createDocument.mock.calls[0][2]).toEqual(databases.createDocument.mock.calls[1][2]);
+  expect(JSON.parse(saved!.payload)).toMatchObject({ direction: 'transcript', date: input.date, text: input.text });
+  await expect(addLinkedinConversationMessageAction({ ...input, text: '🙂'.repeat(16_000) })).rejects.toThrow('too long');
+  await expect(addLinkedinConversationMessageAction({ ...input, direction: 'sent' })).rejects.toThrow('Paste conversation');
+  expect(databases.createDocument).toHaveBeenCalledTimes(2);
 });

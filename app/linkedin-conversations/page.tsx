@@ -19,7 +19,8 @@ import { getCurrentEasternIsoDate } from '@/lib/utils/eastern-date';
 import { getLinkedinRequestDateFilterValue } from '@/lib/utils/linkedin-request-dates';
 import { normalizeProfileUrl } from '@/lib/utils/linkedin-extension-url';
 import { getErrorMessage } from '@/lib/utils';
-import { LINKEDIN_MESSAGE_TEXT_LIMIT, type LinkedinConversation, type LinkedinConversationListItem, type LinkedinConversationMode } from '@/lib/types/linkedin-conversation';
+import { LINKEDIN_MESSAGE_LABELS, LINKEDIN_MESSAGE_TEXT_LIMIT, type LinkedinConversation,
+  type LinkedinConversationListItem, type LinkedinConversationMessage, type LinkedinConversationMode } from '@/lib/types/linkedin-conversation';
 import { buildLinkedinConversationWorkbook } from '@/lib/utils/linkedin-conversation-workbook';
 
 type RangePreset = 'Day' | 'Week' | 'Month' | 'Custom range';
@@ -46,7 +47,8 @@ function ConversationDetail({ item }: { item: LinkedinConversation }) {
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
-  const [direction, setDirection] = useState<'sent' | 'received'>('sent');
+  const [direction, setDirection] = useState<LinkedinConversationMessage['direction']>('sent');
+  const pastingConversation = direction === 'transcript';
   const [date, setDate] = useState(getCurrentEasternIsoDate);
   const [text, setText] = useState('');
   const [messageId, setMessageId] = useState<string>();
@@ -100,25 +102,30 @@ function ConversationDetail({ item }: { item: LinkedinConversation }) {
           <h2 className="font-medium">Follow-up messages</h2>
           {transcript.messages.length === 0 && <p className="text-muted-foreground">No follow-up messages yet.</p>}
           {transcript.messages.map(message => <article key={message.id} className="space-y-1 rounded-md border p-3">
-            <p className="text-xs text-muted-foreground">{message.direction === 'sent' ? 'Sent' : 'Received'} · {message.date} ET</p>
+            <p className="text-xs text-muted-foreground">{LINKEDIN_MESSAGE_LABELS[message.direction]} · {message.date} ET</p>
             <p className="whitespace-pre-wrap break-words">{message.text}</p>
           </article>)}
         </section>
         {transcript.conversation.canAppend && <form onSubmit={event => void save(event)} className="space-y-3 border-t pt-4">
           <div className="flex flex-wrap gap-3">
-            <div className="space-y-1"><Label htmlFor="message-direction">Direction</Label>
+            <div className="space-y-1"><Label htmlFor="message-direction">Follow-up type</Label>
               <select id="message-direction" className={selectStyle} value={direction} disabled={saving}
                 onChange={event => { setDirection(event.target.value as typeof direction); setMessageId(undefined); }}>
-                <option value="sent">Sent</option><option value="received">Received</option>
+                <option value="sent">Sent message</option>
+                <option value="received">Received message</option>
+                <option value="transcript">Paste conversation</option>
               </select></div>
-            <div className="space-y-1"><Label htmlFor="message-date">Message date (ET)</Label>
+            <div className="space-y-1"><Label htmlFor="message-date">{pastingConversation ? 'Conversation date (ET)' : 'Message date (ET)'}</Label>
               <Input id="message-date" type="date" value={date} min={getLinkedinRequestDateFilterValue(item.dateSent)} max={getCurrentEasternIsoDate()}
                 onChange={event => { setDate(event.target.value); setMessageId(undefined); }} disabled={saving} required /></div>
           </div>
-          <div className="space-y-1"><Label htmlFor="message-text">Message</Label>
+          <div className="space-y-1"><Label htmlFor="message-text">{pastingConversation ? 'Conversation text' : 'Message'}</Label>
             <Textarea id="message-text" value={text} onChange={event => { setText(event.target.value); setMessageId(undefined); }}
-              maxLength={LINKEDIN_MESSAGE_TEXT_LIMIT} disabled={saving} required /></div>
-          <Button type="submit" disabled={saving || !text.trim() || !date}>{saving ? 'Saving…' : 'Add message'}</Button>
+              rows={pastingConversation ? 8 : 3} maxLength={pastingConversation ? undefined : LINKEDIN_MESSAGE_TEXT_LIMIT}
+              disabled={saving} required /></div>
+          <Button type="submit" disabled={saving || !text.trim() || !date}>
+            {saving ? 'Saving…' : pastingConversation ? 'Save conversation' : 'Add message'}
+          </Button>
         </form>}
       </>}
     </CardContent>

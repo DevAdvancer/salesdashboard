@@ -9,8 +9,13 @@ import { useAuth } from '@/lib/contexts/auth-context';
 import { canUseLinkedinExtension } from '@/lib/server/linkedin-extension-policy';
 
 const STANDARD_VERSION = '2.0.0';
-const CONVERSATION_VERSION = '2.1.0';
+const CONVERSATION_VERSION = '2.1.1';
 const ATTRIBUTE = 'data-crm-hub-linkedin-helper-version';
+
+function isSupportedVersion(detected: string | null, conversationsBeta?: boolean) {
+  return detected === CONVERSATION_VERSION ||
+    (!conversationsBeta && (detected === STANDARD_VERSION || detected === '2.1.0'));
+}
 
 type GuideProps = { onDetection?: (detected: boolean) => void; conversationsBeta?: boolean };
 
@@ -24,7 +29,7 @@ export function LinkedinExtensionGuide({ onDetection, conversationsBeta }: Guide
   const download = `/downloads/crm-hub-linkedin-helper-${version}-chrome.zip`;
   const [detectedVersion, setDetectedVersion] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(true);
-  const current = detectedVersion === version || (!conversationsBeta && detectedVersion === CONVERSATION_VERSION);
+  const current = isSupportedVersion(detectedVersion, conversationsBeta);
 
   useEffect(() => {
     let previousVersion: string | null = null;
@@ -33,7 +38,7 @@ export function LinkedinExtensionGuide({ onDetection, conversationsBeta }: Guide
       setDetectedVersion(detected);
       if (detected !== previousVersion) {
         previousVersion = detected;
-        const installed = detected === version || (!conversationsBeta && detected === CONVERSATION_VERSION);
+        const installed = isSupportedVersion(detected, conversationsBeta);
         setExpanded(!installed);
         onDetection?.(installed);
       }
@@ -42,7 +47,7 @@ export function LinkedinExtensionGuide({ onDetection, conversationsBeta }: Guide
     const observer = new MutationObserver(read);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: [ATTRIBUTE] });
     return () => observer.disconnect();
-  }, [onDetection, version, conversationsBeta]);
+  }, [onDetection, conversationsBeta]);
 
   if (!expanded && current) return <Card className="py-3">
     <div className="flex flex-wrap items-center justify-between gap-2 px-6 text-sm">
@@ -81,7 +86,11 @@ export function LinkedinExtensionGuide({ onDetection, conversationsBeta }: Guide
         <li>Pin the extension, keep this signed-in CRM tab open, open a LinkedIn profile, and select <strong>Connect</strong> in the extension. Approve access to the CRM site if the browser asks.</li>
         <li>Return to this page and refresh it. The status above should show <strong>Detected · v{detectedVersion && current ? detectedVersion : version}</strong>.</li>
       </ol>
-      <p className="text-muted-foreground">Send the invitation on LinkedIn first, then record it in CRM. After a successful save, the profile URL is copied to your clipboard.</p>
+      <p className="text-muted-foreground">
+        {conversationsBeta
+          ? 'Send the invitation on LinkedIn first, then paste the invitation text and record it in CRM.'
+          : 'Send the invitation on LinkedIn first, then record it in CRM. After a successful save, the profile URL is copied to your clipboard.'}
+      </p>
     </CardContent>
   </Card>;
 }

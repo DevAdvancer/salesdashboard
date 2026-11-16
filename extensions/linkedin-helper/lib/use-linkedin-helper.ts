@@ -149,6 +149,8 @@ export function useLinkedinHelper() {
     }); },
     record() { void perform(async () => {
       const checked = state.checked;
+      const bootstrap = state.bootstrap;
+      const conversationsBeta = bootstrap?.conversationsBeta;
       if (!state.accountId) throw new Error("Choose an assigned LinkedIn account first.");
       const targetUrl = normalizeProfileUrl(state.profile);
       if (checked && !checked.canRecord) throw new Error("This profile is already recorded or unavailable.");
@@ -160,11 +162,11 @@ export function useLinkedinHelper() {
       setState(previous => ({ ...previous, note: "Checking duplicates and recording…", noteKind: "info" }));
       const data = await requestCrm<ExtensionRecord>({ operation: "record", accountId: state.accountId,
         targetUrl, ...(checked ? { revision: checked.revision } : {}), confirmResend: state.confirmResend,
-        ...(state.bootstrap?.conversationsBeta ? { initialInvitationText: state.initialInvitationText,
-          expectedUserId: state.bootstrap.user.id } : {}) });
-      if (data.user.id !== state.bootstrap?.user.id) throw new Error("The signed-in CRM user changed. Refresh accounts before continuing.");
+        ...(conversationsBeta ? { initialInvitationText: state.initialInvitationText,
+          expectedUserId: bootstrap.user.id } : {}) });
+      if (data.user.id !== bootstrap?.user.id) throw new Error("The signed-in CRM user changed. Refresh accounts before continuing.");
       let copyNote = "";
-      if (data.mode === "created" || data.mode === "resent") {
+      if (!conversationsBeta && (data.mode === "created" || data.mode === "resent")) {
         try {
           await navigator.clipboard.writeText(data.targetUrl);
           copyNote = " Profile URL copied.";

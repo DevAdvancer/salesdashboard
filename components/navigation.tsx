@@ -4,6 +4,7 @@ import { CrmSelect } from '@/components/ui/crm-select';
 
 import { useAuth } from "@/lib/contexts/auth-context";
 import { useAccess, ComponentKey } from "@/lib/contexts/access-control-context";
+import { useLinkedinConversationAccess } from "@/lib/hooks/use-linkedin-conversation-access";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import {
@@ -65,6 +66,7 @@ export function Navigation({
 }: NavigationProps = {}) {
   const { user, logout, isResumeTeam, canSwitchDashboard, activeDashboard, setActiveDashboard } = useAuth();
   const { canAccess, isLoading: accessLoading } = useAccess();
+  const canSeeLinkedinConversations = useLinkedinConversationAccess(user?.role === 'admin' && canAccess('linkedin-conversations'));
   const router = useRouter();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -95,7 +97,8 @@ export function Navigation({
 
   const visibleItems = accessLoading
     ? []
-    : NAV_ITEMS.filter((item) => canAccess(item.key as ComponentKey));
+    : NAV_ITEMS.filter((item) => canAccess(item.key as ComponentKey) &&
+      (item.key !== "linkedin-conversations" || canSeeLinkedinConversations === true));
 
   // Define section grouping
   const agentItemKeys = new Set(["dashboard", "leads", "calendar", "history", "client-progress", "work-queue"]);
@@ -103,7 +106,7 @@ export function Navigation({
   const teamLeadItemKeys = new Set(["user-management", "reports", "assigned-report", "team-report"]);
   const adminItemKeys = new Set(["branch-management", "hierarchy", "lead-requests", "settings", "beta"]);
   const technicalItemKeys = new Set(["mock", "interview-support", "assessment-support"]);
-  const linkedinItemKeys = new Set(["linkedin-requests", "linkedin-account-management", "linkedin-reports"]);
+  const linkedinItemKeys = new Set(["linkedin-requests", "linkedin-conversations", "linkedin-account-management", "linkedin-reports"]);
   const paymentsItemKeys = new Set(["payments-report", "target-report", "technical-payments", "followups-payments"]);
   const resumeItemKeys = new Set(["resume-dashboard", "resume-profiles", "resume-marketing", "call-requests", "resume-hierarchy", "resume-reports", "compliance-dashboard"]);
   const salesResumeItemKeys = new Set(["request-calls", "my-call-requests"]);

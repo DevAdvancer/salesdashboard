@@ -30,6 +30,15 @@ it('keeps an older version expanded at the top with a visible download', () => {
   expect(screen.getByRole('link', { name: 'Download v2.0.0' })).toHaveAttribute('href', '/downloads/crm-hub-linkedin-helper-2.0.0-chrome.zip');
 });
 
+it('directs beta users on v2.1.0 to the clipboard-safe release', async () => {
+  document.documentElement.setAttribute(attribute, '2.1.0');
+  render(<LinkedinExtensionGuide conversationsBeta />);
+  expect(screen.getByText('Update needed · v2.1.0')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Download v2.1.1 beta' })).toHaveAttribute('href', '/downloads/crm-hub-linkedin-helper-2.1.1-chrome.zip');
+  await act(async () => document.documentElement.setAttribute(attribute, '2.1.1'));
+  expect(screen.getByText('Detected · v2.1.1')).toBeInTheDocument();
+});
+
 it('moves between update and current states when the installed version changes', async () => {
   document.documentElement.setAttribute(attribute, '2.0.0');
   const onDetection = jest.fn();
