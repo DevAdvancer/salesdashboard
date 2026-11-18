@@ -34,7 +34,7 @@ import {
   withLastNameField,
   withLegalNameField,
   withReferralNameField,
-  isReferralNameField,
+  getReferralName,
 } from "./lead-detail-utils";
 
 interface LeadInfoCardProps {
@@ -81,13 +81,15 @@ export function LeadInfoCard({
     typeof leadData.resumeFileId === "string" ? leadData.resumeFileId : "";
   const resumeFileName =
     typeof leadData.resumeFileName === "string" ? leadData.resumeFileName : "";
+  const referralName = isEditing && typeof leadData.referralName === "string"
+    ? leadData.referralName
+    : getReferralName(leadData, formFields);
 
   const renderField = (field: FormField) => {
     const value = isLinkedinProfileField(field)
       ? getLinkedinProfileValue(leadData, [field])
       : field.key === "referralName"
-        ? String(leadData.referralName ?? leadData.referral ?? leadData.referrerName ??
-            leadData[formFields.find(isReferralNameField)?.key ?? "Referral Name"] ?? "")
+        ? referralName
         : String(leadData[field.key] ?? "");
     // Monitors are leadership-level observers and may edit any lead they
     // can view (mirrors the server-side `assertLeadUpdateAllowed` policy

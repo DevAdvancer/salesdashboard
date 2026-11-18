@@ -4,16 +4,29 @@ import {
 import { FormField, LeadData } from "@/lib/types";
 import { isReferralSource, normalizeSource } from "@/lib/utils/lead-source";
 
-export function isReferralNameField(field: FormField): boolean {
-  return ["referralName", "referral", "referrerName"].includes(field.key) ||
-    normalizeSource(field.label) === "referralname";
+const REFERRAL_NAME_KEYS = ["referralName", "referral", "referrerName", "Referral Name"];
+
+function isReferralNameField(field: FormField): boolean {
+  return REFERRAL_NAME_KEYS.includes(field.key) ||
+    ["referralname", "referrername"].includes(normalizeSource(field.label));
+}
+
+export function getReferralName(data: LeadData, fields: FormField[]): string {
+  const keys = [...REFERRAL_NAME_KEYS, ...fields.filter(isReferralNameField).map(field => field.key)];
+  for (const key of keys) {
+    const value = data[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return "";
 }
 
 /** Referral Name is a built-in field, even for older saved form configs. */
 export function withReferralNameField(fields: FormField[], data: LeadData): FormField[] {
   const remaining = fields.filter(field => !isReferralNameField(field));
   const source = data.source || data.sourceName;
-  if (!isReferralSource(source) && normalizeSource(source) !== "referralform") return remaining;
+  if (!isReferralSource(source) && normalizeSource(source) !== "referralform" && !getReferralName(data, fields)) {
+    return remaining;
+  }
   const sourceField = fields.find(field => ["source", "sourceName"].includes(field.key));
   const referralField: FormField = {
     id: "static-referral-name", key: "referralName", label: "Referral Name",

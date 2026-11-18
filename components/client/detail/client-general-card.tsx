@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { FormField, LeadData } from "@/lib/types";
 import { getLinkedinProfileValue, isLinkedinProfileField } from "@/lib/utils/lead-linkedin-field";
+import { getReferralName, withReferralNameField } from "@/components/leads/detail/lead-detail-utils";
 
 interface ClientGeneralCardProps {
   formFields: FormField[];
@@ -14,10 +15,13 @@ export function ClientGeneralCard({
   formFields,
   leadData,
 }: ClientGeneralCardProps) {
+  const referralName = getReferralName(leadData, formFields);
   const renderField = (field: FormField) => {
     const rawValue = isLinkedinProfileField(field)
       ? getLinkedinProfileValue(leadData, [field])
-      : leadData[field.key];
+      : field.key === "referralName"
+        ? referralName
+        : leadData[field.key];
     const value =
       rawValue === null || rawValue === undefined
         ? ""
@@ -87,7 +91,7 @@ export function ClientGeneralCard({
       </CardHeader>
       <CardContent>
         <div className="grid gap-4 md:grid-cols-2">
-          {formFields
+          {withReferralNameField(formFields, leadData)
             .filter((f) => f.visible)
             .map((field) => (
               <div key={field.id} className="space-y-2">
