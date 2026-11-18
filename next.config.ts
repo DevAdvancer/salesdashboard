@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    agentUpgrade: "security",
+  },
   env: {
     NEXT_PUBLIC_CRM_SERVER_DATA: 'true',
     CRM_ACCESS_ENFORCEMENT: process.env.CRM_ACCESS_ENFORCEMENT || 'true',
