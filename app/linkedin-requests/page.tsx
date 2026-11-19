@@ -84,7 +84,8 @@ function RequiredMark() {
 
 function LinkedinRequestsContent() {
   const { user, serverSessionReady } = useAuth();
-  const conversationsBeta = useLinkedinConversationAccess() === true;
+  const conversationAccess = useLinkedinConversationAccess();
+  const conversationsBeta = conversationAccess === true;
   const { toast } = useToast();
   const { prompt, promptDialog } = usePromptDialog();
   const router = useRouter();
@@ -375,9 +376,6 @@ function LinkedinRequestsContent() {
         variant: "success",
       });
       void queryClient.invalidateQueries({ queryKey: ['linkedin-dashboard-data'] });
-      if (conversationsBeta && !request.coldCall && request.recordSource !== 'lead_backfill') {
-        router.push(`/linkedin-conversations?request=${encodeURIComponent(request.$id)}`);
-      }
     } catch (error: unknown) {
       toast({
         title: "Failed to update",
@@ -468,10 +466,9 @@ function LinkedinRequestsContent() {
     <div className="container mx-auto space-y-6">
       {promptDialog}
       {!helperDetected && <LinkedinExtensionSection onDetection={setHelperDetected} conversationsBeta={conversationsBeta} />}
-      <LinkedinDailyExport />
+      {conversationAccess === false && <LinkedinDailyExport />}
       {conversationsBeta && <div className="flex flex-wrap gap-2">
         <Link className={buttonVariants({ variant: 'outline' })} href="/linkedin-conversations">Accepted Connections · Beta</Link>
-        <Link className={buttonVariants({ variant: 'outline' })} href="/linkedin-conversations?view=sent">Export invitations with conversations</Link>
       </div>}
       <Card>
         <CardHeader>

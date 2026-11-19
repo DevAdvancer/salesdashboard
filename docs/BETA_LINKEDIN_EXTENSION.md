@@ -2,7 +2,7 @@
 
 Admins manage individual grants under **Beta → LinkedIn Conversations**. The `linkedin-conversations` feature is available to active Sales agents, team leads, and admins. A grant enables Accepted Connections and conversation exports. Agents see their own invitations, team leads see their own and their team's, and admins can export across Sales. The agent who recorded an invitation can add messages after acceptance, including after the CRM archives the request on withdrawal.
 
-Granted agents and team leads can download LinkedIn Helper v2.1.1 from **LinkedIn Requests**. Check the profile in the extension, send the invitation manually on LinkedIn, then paste the exact invitation text into the extension before recording it. Recording preserves the clipboard contents. **Connection Accepted** opens the conversation in CRM. The workbook contains the invitation and its saved messages, with Eastern date filters by sent or accepted date.
+Granted agents and team leads can download LinkedIn Helper v2.1.1 from **LinkedIn Requests**. Check the profile in the extension, send the invitation manually on LinkedIn, then paste the exact invitation text into the extension before recording it. Recording preserves the clipboard contents. **Connection Accepted** updates the request on the same page so agents can continue accepting other requests. Use **Open conversation** to view the saved thread and **Accepted Connections** for conversation exports. The workbook contains the invitation and its saved messages, with Eastern date filters by sent or accepted date.
 
 ## Appwrite rollout
 
