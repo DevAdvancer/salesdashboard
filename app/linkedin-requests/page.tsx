@@ -16,6 +16,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { useRouter } from "next/navigation";
 import Link from 'next/link';
 import { useLinkedinConversationAccess } from '@/lib/hooks/use-linkedin-conversation-access';
+import { useLinkedinConversationRelease } from '@/lib/hooks/use-linkedin-conversation-release';
 import {
   Table,
   TableBody,
@@ -85,6 +86,7 @@ function RequiredMark() {
 function LinkedinRequestsContent() {
   const { user, serverSessionReady } = useAuth();
   const conversationAccess = useLinkedinConversationAccess();
+  const conversationsReleased = useLinkedinConversationRelease();
   const conversationsBeta = conversationAccess === true;
   const { toast } = useToast();
   const { prompt, promptDialog } = usePromptDialog();
@@ -468,7 +470,9 @@ function LinkedinRequestsContent() {
       {!helperDetected && <LinkedinExtensionSection onDetection={setHelperDetected} conversationsBeta={conversationsBeta} />}
       {conversationAccess === false && <LinkedinDailyExport />}
       {conversationsBeta && <div className="flex flex-wrap gap-2">
-        <Link className={buttonVariants({ variant: 'outline' })} href="/linkedin-conversations">Accepted Connections · Beta</Link>
+        <Link className={buttonVariants({ variant: 'outline' })} href="/linkedin-conversations">
+          Accepted Connections{conversationsReleased ? '' : ' · Beta'}
+        </Link>
       </div>}
       <Card>
         <CardHeader>

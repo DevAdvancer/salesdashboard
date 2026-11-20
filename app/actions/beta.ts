@@ -9,6 +9,7 @@ import { listAllDocuments } from '@/lib/server/appwrite-pagination';
 import { betaAccessDocumentId, LINKEDIN_CONVERSATIONS_FEATURE, listBetaFeatureAccess } from '@/lib/server/beta-feature-access';
 import { canJoinLinkedinConversations, hasLinkedinConversationAccess } from '@/lib/server/linkedin-conversation-access';
 import type { User } from '@/lib/types';
+import { isLinkedinConversationReleased } from '@/lib/utils/linkedin-conversation-release';
 
 // Preserve the access read for older CRM tabs during the general release.
 export async function getMyLinkedinHelperAccessAction() {
@@ -36,6 +37,7 @@ export async function getMyLinkedinConversationAccessAction() {
 async function getBetaAdminDatabases() {
   const actor = await getAuthenticatedUserDoc();
   if (actor.role !== 'admin' || actor.isActive === false) throw new Error('Only active admins can manage beta access.');
+  if (isLinkedinConversationReleased()) throw new Error('LinkedIn Conversations is available to all eligible users. Beta settings have been retired.');
   return (await createAdminClient()).databases;
 }
 

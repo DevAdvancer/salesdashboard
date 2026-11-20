@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import Link from 'next/link';
 import { useLinkedinConversationAccess } from '@/lib/hooks/use-linkedin-conversation-access';
+import { useLinkedinConversationRelease } from '@/lib/hooks/use-linkedin-conversation-release';
 import { Label } from "@/components/ui/label";
 import { DateRangePicker } from "@/components/ui/date-picker";
 import {
@@ -36,6 +37,8 @@ import type { LinkedinAccount, User } from "@/lib/types";
 import { getErrorMessage } from "@/lib/utils";
 import { getTodayEst } from "@/lib/utils/est-date";
 import { exportLinkedinRequestsForAdminAction } from "@/app/actions/linkedin/requests";
+import { exportLinkedinConversationReportAction } from '@/app/actions/linkedin/conversations';
+import { buildLinkedinConversationWorkbook } from '@/lib/utils/linkedin-conversation-workbook';
 import { LINKEDIN_ACCEPTED_AUTO_WITHDRAW_DAYS, LINKEDIN_SENT_AUTO_WITHDRAW_DAYS } from '@/lib/utils/linkedin-withdrawal-reminders';
 
 /**
@@ -82,6 +85,7 @@ function RequiredMark() {
 function LinkedinReportsContent() {
   const { user } = useAuth();
   const conversationsBeta = useLinkedinConversationAccess() === true;
+  const conversationsReleased = useLinkedinConversationRelease();
   const { toast } = useToast();
   const canReadLikeAdmin =
     user?.role === "admin" ||
@@ -279,6 +283,20 @@ function LinkedinReportsContent() {
             ? null
             : teamLeadId;
 
+      if (conversationsBeta) {
+        const data = await exportLinkedinConversationReportAction({
+          teamLeadId: effectiveTeamLeadId, start: startDate, end: endDate,
+        });
+        if (!data.length) {
+          toast({ title: 'No data to export', description: 'No requests found for this date range.' });
+          return;
+        }
+        const XLSX = await import('xlsx');
+        XLSX.writeFile(buildLinkedinConversationWorkbook(XLSX, data),
+          `linkedin_requests_export_${startDate}_${endDate}.xlsx`, { bookType: 'xlsx' });
+        return;
+      }
+
       const exportData = await exportLinkedinRequestsForAdminAction({
         currentUserId: user.$id,
         teamLeadId: effectiveTeamLeadId,
@@ -445,7 +463,9 @@ function LinkedinReportsContent() {
             <Button variant="outline" onClick={handleExport} disabled={exporting || loading || !teamLeadId}>
               {exporting ? "Exporting..." : "Export Excel"}
             </Button>
-            {conversationsBeta && <Link className={buttonVariants({ variant: 'outline' })} href="/linkedin-conversations">Accepted Connections · Beta</Link>}
+            {conversationsBeta && <Link className={buttonVariants({ variant: 'outline' })} href="/linkedin-conversations">
+              Accepted Connections{conversationsReleased ? '' : ' · Beta'}
+            </Link>}
             {(user?.role === "admin" || user?.role === "developer") && (
               <>
                 <Button

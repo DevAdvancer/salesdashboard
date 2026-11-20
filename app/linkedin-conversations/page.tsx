@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useLinkedinConversationAccess } from '@/lib/hooks/use-linkedin-conversation-access';
+import { useLinkedinConversationRelease } from '@/lib/hooks/use-linkedin-conversation-release';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { getCurrentEasternIsoDate } from '@/lib/utils/eastern-date';
 import { getLinkedinRequestDateFilterValue } from '@/lib/utils/linkedin-request-dates';
@@ -133,6 +134,7 @@ function ConversationDetail({ item }: { item: LinkedinConversation }) {
 }
 
 function LinkedinConversationsContent() {
+  const released = useLinkedinConversationRelease();
   const params = useSearchParams();
   const { user } = useAuth();
   const canSeeRecent = user?.role === 'admin' || user?.role === 'team_lead';
@@ -202,7 +204,7 @@ function LinkedinConversationsContent() {
   const active = rows.find(row => row.id === activeId) ?? recent?.find(row => row.id === activeId);
   return <div className="container mx-auto max-w-7xl space-y-5">
     <header className="flex flex-wrap items-center gap-3">
-      <h1 className="text-3xl font-semibold">Accepted Connections</h1><Badge variant="secondary">Beta</Badge>
+      <h1 className="text-3xl font-semibold">Accepted Connections</h1>{!released && <Badge variant="secondary">Beta</Badge>}
       <Link className="ml-auto text-sm underline" href={user?.role === 'admin' ? '/linkedin-reports' : '/linkedin-requests'}>
         {user?.role === 'admin' ? 'LinkedIn Reports' : 'LinkedIn Requests'}
       </Link>
@@ -284,8 +286,8 @@ function LinkedinConversationsContent() {
 
 function LinkedinConversationGate() {
   const enabled = useLinkedinConversationAccess();
-  if (enabled === null) return <p role="status">Checking beta access…</p>;
-  if (!enabled) return <div className="space-y-3"><h1 className="text-2xl font-semibold">Beta access required</h1>
+  if (enabled === null) return <p role="status">Checking conversation access…</p>;
+  if (!enabled) return <div className="space-y-3"><h1 className="text-2xl font-semibold">Conversation access required</h1>
     <Link href="/dashboard" className="text-sm underline">Back to dashboard</Link></div>;
   return <Suspense fallback={<p role="status">Loading connections…</p>}><LinkedinConversationsContent /></Suspense>;
 }

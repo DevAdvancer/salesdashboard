@@ -121,9 +121,9 @@ export async function recordLinkedinExtension(input: {
   const current = await inspect(input, true);
   const beta = await hasLinkedinConversationAccess(current.databases, current.actor);
   const initialInvitationText = input.initialInvitationText;
-  if (!beta && input.initialInvitationText !== undefined) throw new LinkedinExtensionError(403, 'LinkedIn Conversations beta access is required.');
+  if (!beta && input.initialInvitationText !== undefined) throw new LinkedinExtensionError(403, 'LinkedIn Conversations access is required.');
   if (beta && (!initialInvitationText?.trim() || initialInvitationText.length > LINKEDIN_INVITATION_TEXT_LIMIT)) {
-    throw new LinkedinExtensionError(400, 'Enter the initial invitation text in LinkedIn Helper v2.1 before recording.');
+    throw new LinkedinExtensionError(400, 'Update LinkedIn Helper, refresh accounts, and enter the initial invitation text before recording.');
   }
   if (beta && input.expectedUserId !== current.actor.$id) throw new LinkedinExtensionError(409, 'Refresh accounts before recording this invitation.');
   const checked = result(current);

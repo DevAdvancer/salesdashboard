@@ -100,7 +100,7 @@ export async function createLinkedinRequestAction(input: {
     const { databases } = await createAdminClient();
     let invitationText: string | undefined;
     if (input.initialInvitationText !== undefined) {
-      if (!await hasLinkedinConversationAccess(databases, user)) throw new Error('LinkedIn Conversations beta access is required.');
+      if (!await hasLinkedinConversationAccess(databases, user)) throw new Error('LinkedIn Conversations access is required.');
       invitationText = typeof input.initialInvitationText === 'string' ? input.initialInvitationText : '';
       if (coldCall || !invitationText.trim() || invitationText.length > LINKEDIN_INVITATION_TEXT_LIMIT) throw new Error('Enter valid initial invitation text.');
     }

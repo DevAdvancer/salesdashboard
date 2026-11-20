@@ -4,8 +4,8 @@ import { formatEasternDateTime } from '@/lib/utils/eastern-date';
 import { getLinkedinRequestDateFilterValue } from '@/lib/utils/linkedin-request-dates';
 
 const EXCEL_CELL_LIMIT = 32_767;
-const headers = ['Conversation ID', 'Request ID', 'Sender', 'CRM sender ID', 'LinkedIn account type', 'LinkedIn account ID',
-  'Main LinkedIn account', 'Main LinkedIn ID', 'Sudo LinkedIn account', 'Sudo LinkedIn ID', 'Company', 'Profile URL',
+const headers = ['Sender', 'LinkedIn account type',
+  'Main LinkedIn account', 'Sudo LinkedIn account', 'Company', 'Profile URL',
   'Sent date (ET)', 'Accepted at (ET)', 'Withdrawn at (ET)', 'Status', 'Initial invitation text', 'Conversation'];
 
 function conversationCells(messages: LinkedinConversationMessage[]) {
@@ -50,15 +50,15 @@ export function buildLinkedinConversationWorkbook(xlsx: typeof SheetJS, rows: Li
     const name = uniqueSheetName(group[0].agent, used);
     group.sort((left, right) => left.mainAccount.localeCompare(right.mainAccount) || left.mainAccountId.localeCompare(right.mainAccountId) ||
       left.sudoAccount.localeCompare(right.sudoAccount) || left.sudoAccountId.localeCompare(right.sudoAccountId));
-    const data = group.map(row => [row.id, row.requestId, row.agent, row.agentId, row.accountType ?? '', row.accountId,
-      row.mainAccount, row.mainAccountId, row.sudoAccount, row.sudoAccountId, row.company, row.targetUrl,
+    const data = group.map(row => [row.agent, row.accountType ?? '',
+      row.mainAccount, row.sudoAccount, row.company, row.targetUrl,
       getLinkedinRequestDateFilterValue(row.dateSent), row.acceptedAt ? formatEasternDateTime(row.acceptedAt) : '',
       row.withdrawnAt ? formatEasternDateTime(row.withdrawnAt) : '', row.status, row.initialText,
       ...conversationCells(row.messages)]);
     const extraColumns = data.reduce((count, row) => Math.max(count, row.length - headers.length), 0);
     const sheet = xlsx.utils.aoa_to_sheet([[...headers,
       ...Array.from({ length: extraColumns }, (_, index) => `Conversation continued ${index + 1}`)], ...data]);
-    sheet['!cols'] = [38, 38, 24, 38, 23, 38, 24, 38, 24, 38, 25, 55, 18, 23, 23, 14, 65, 75,
+    sheet['!cols'] = [24, 23, 24, 24, 25, 55, 18, 23, 23, 14, 65, 75,
       ...Array.from({ length: extraColumns }, () => 75)].map(wch => ({ wch }));
     xlsx.utils.book_append_sheet(book, sheet, name);
   }

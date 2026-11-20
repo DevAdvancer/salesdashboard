@@ -32,9 +32,11 @@ describe("Navigation Component", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.useFakeTimers().setSystemTime(new Date('2026-11-20T14:00:00Z'));
     mockUseRouter.mockReturnValue({ push: mockPush } as any);
     mockUsePathname.mockReturnValue("/dashboard");
   });
+  afterEach(() => jest.useRealTimers());
 
   it.each(['sales', 'resume'])('hides Client Progress from the Resume dashboard for %s accounts', department => {
     mockUseAuth.mockReturnValue({ user: { $id: 'admin', name: 'Admin', role: 'admin', department },
@@ -62,6 +64,18 @@ describe("Navigation Component", () => {
     await waitFor(() => expect(getMyLinkedinConversationAccessAction).toHaveBeenCalledTimes(1));
     if (granted) expect(await screen.findByRole('link', { name: 'Accepted Connections' })).toHaveAttribute('href', '/linkedin-conversations');
     else expect(screen.queryByRole('link', { name: 'Accepted Connections' })).not.toBeInTheDocument();
+  });
+
+  it('shows Accepted Connections to an eligible agent after launch and removes Beta from navigation', async () => {
+    jest.setSystemTime(new Date('2026-11-21T14:00:00Z'));
+    mockUseAuth.mockReturnValue({ user: { $id: 'agent', name: 'Agent', role: 'agent', department: 'sales' },
+      activeDashboard: 'sales', serverSessionReady: true, logout: mockLogout } as any);
+    mockUseAccess.mockReturnValue({ canAccess: () => true, isLoading: false } as any);
+    render(<Navigation />);
+    fireEvent.click(screen.getByRole('button', { name: 'Linkedin Tools' }));
+    expect(await screen.findByRole('link', { name: 'Accepted Connections' })).toHaveAttribute('href', '/linkedin-conversations');
+    expect(screen.queryByRole('link', { name: 'Beta' })).not.toBeInTheDocument();
+    expect(getMyLinkedinConversationAccessAction).not.toHaveBeenCalled();
   });
 
   describe("Agent sees only permitted components", () => {

@@ -124,6 +124,20 @@ it('rejects missing beta text, a stale login, and text submitted after grant rev
     .rejects.toMatchObject({ status: 403 });
   expect(databases.createDocument).not.toHaveBeenCalled();
 });
+
+it('enables invitation capture without a beta grant exactly at release and guides old extensions to refresh', async () => {
+  jest.setSystemTime(new Date('2026-11-21T13:59:59.999Z'));
+  await expect(bootstrapLinkedinExtension()).resolves.toMatchObject({ conversationsBeta: false });
+  jest.setSystemTime(new Date('2026-11-21T14:00:00.000Z'));
+  jest.mocked(hasBetaFeatureAccess).mockClear();
+  await expect(bootstrapLinkedinExtension()).resolves.toMatchObject({ conversationsBeta: true });
+  await expect(recordLinkedinExtension({ ...input, confirmResend: false })).rejects.toMatchObject({ status: 400 });
+  const initialInvitationText = 'New public invitation';
+  await expect(recordLinkedinExtension({ ...input, confirmResend: false, expectedUserId: 'agent-1', initialInvitationText }))
+    .resolves.toMatchObject({ mode: 'created' });
+  expect(databases.createDocument.mock.calls[0][3]).toMatchObject({ payload: initialInvitationText });
+  expect(hasBetaFeatureAccess).not.toHaveBeenCalled();
+});
 it("allows the same profile through another company's LinkedIn account", async () => {
   records = [{ $id: "other-company-request", targetUrl: "https://www.linkedin.com/in/person",
     company: account.company, status: "sent", isActive: true }];

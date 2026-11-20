@@ -126,9 +126,10 @@ it('keeps each workbook scoped to its sender regardless of result order or role'
       expect(book.SheetNames).toHaveLength(1);
       const rows = XLSX.utils.sheet_to_json<Record<string, string>>(book.Sheets[book.SheetNames[0]]);
       const owner = to.split('@')[0];
-      expect(rows.map(row => row['CRM sender ID'])).toEqual(owner === 'agent' ? ['agent', 'agent'] : [owner]);
+      const sender = users.find(user => user.$id === owner)!.name;
+      expect(rows.map(row => row.Sender)).toEqual(owner === 'agent' ? [sender, sender] : [sender]);
       if (owner === 'agent') expect(rows).toContainEqual(expect.objectContaining({
-        'Conversation ID': 'agent-archive', Status: 'withdrawn', 'Main LinkedIn ID': 'main', 'Sudo LinkedIn ID': 'sudo',
+        Status: 'withdrawn', 'Main LinkedIn account': 'Main profile', 'Sudo LinkedIn account': 'Sudo profile',
         'Initial invitation text': 'Invitation', Conversation: '2026-11-10 ET · Pasted conversation\nAgent: Hello\n\nClient: Hi',
       }));
     }
@@ -145,4 +146,19 @@ it('sends once per sender when invocations overlap, and retries only failed reci
   const retried = await Promise.all([GET(request()), GET(request())]);
   expect(retried.every(response => response.ok)).toBe(true);
   expect(send.mock.calls.map(([email]) => email.to)).toEqual(['tl@example.com']);
+});
+
+it('includes eligible users without grants in Friday reports after release and never reads beta grants', async () => {
+  jest.setSystemTime(new Date('2026-11-27T14:00:00Z'));
+  expect(await (await GET(request())).json()).toEqual({ ok: true, sent: 4, duplicate: 0, failed: 0 });
+  expect(send.mock.calls.map(([email]) => email.to).sort()).toEqual([
+    'admin@example.com', 'agent@example.com', 'no-grant@example.com', 'tl@example.com',
+  ]);
+  expect(list.mock.calls.some(([options]) => options.collectionId === COLLECTIONS.BETA_FEATURE_ACCESS)).toBe(false);
+  for (const [{ to, attachments }] of send.mock.calls) {
+    const workbook = XLSX.read(attachments![0].content);
+    const rows = XLSX.utils.sheet_to_json<Record<string, string>>(workbook.Sheets[workbook.SheetNames[0]]);
+    const sender = users.find(user => user.email === to)!.name;
+    expect(rows.every(row => row.Sender === sender)).toBe(true);
+  }
 });

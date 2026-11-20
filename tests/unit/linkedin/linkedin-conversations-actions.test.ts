@@ -12,13 +12,14 @@ jest.mock('@/lib/server/appwrite', () => ({ createAdminClient: jest.fn() }));
 jest.mock('@/lib/server/appwrite-pagination', () => ({ listAllDocuments: jest.fn() }));
 jest.mock('@/lib/server/beta-feature-access', () => ({ hasBetaFeatureAccess: jest.fn().mockResolvedValue(true) }));
 
-import { addLinkedinConversationMessageAction, exportLinkedinConversationsAction,
+import { addLinkedinConversationMessageAction, exportLinkedinConversationsAction, exportLinkedinConversationReportAction,
   listLinkedinConversationsAction, listRecentLinkedinConnectionsAction } from '@/app/actions/linkedin/conversations';
 import { COLLECTIONS } from '@/lib/constants/appwrite';
 import { createAdminClient } from '@/lib/server/appwrite';
 import { listAllDocuments } from '@/lib/server/appwrite-pagination';
 import { getAuthenticatedUserDoc } from '@/lib/server/current-user';
 import type { LinkedinRequest, User } from '@/lib/types';
+import fc from 'fast-check';
 
 const databases = { clearReadCacheForCollection: jest.fn(), getDocument: jest.fn(), createDocument: jest.fn() };
 const viewer = { $id: 'tl', name: 'Team Lead', role: 'team_lead', department: 'sales' } as User;
@@ -111,4 +112,37 @@ it('saves a long pasted conversation verbatim as one entry and preserves the sam
   await expect(addLinkedinConversationMessageAction({ ...input, text: '🙂'.repeat(16_000) })).rejects.toThrow('too long');
   await expect(addLinkedinConversationMessageAction({ ...input, direction: 'sent' })).rejects.toThrow('Paste conversation');
   expect(databases.createDocument).toHaveBeenCalledTimes(2);
+});
+
+it('keeps report exports scoped across admin team filters and forged team-lead selections', async () => {
+  const sources = [
+    request,
+    { ...request, $id: 'own', conversationId: 'own-attempt', agentId: 'tl', teamLeadId: 'senior' },
+    { ...request, $id: 'other', conversationId: 'other-attempt', agentId: 'other-agent', teamLeadId: 'other-tl' },
+    { ...request, $id: 'resume', conversationId: 'resume-attempt', agentId: 'resume-user', teamLeadId: 'tl' },
+  ];
+  await fc.assert(fc.asyncProperty(fc.constantFrom('admin', 'team_lead'), fc.constantFrom(null, 'tl', 'other-tl'),
+    async (role, selectedTeam) => {
+      jest.mocked(getAuthenticatedUserDoc).mockResolvedValue({ ...viewer, role });
+      list.mockImplementation(async ({ collectionId, queries }) => {
+        if (collectionId === COLLECTIONS.LINKEDIN_REQUESTS) return sources;
+        if (collectionId === COLLECTIONS.USERS) return [{ $id: 'agent', name: 'Agent' },
+          { $id: 'other-agent', name: 'Other Agent' }, { $id: 'tl', name: 'Team Lead' },
+          { $id: 'resume-user', name: 'Resume User', department: 'resume' }];
+        if (collectionId === COLLECTIONS.LINKEDIN_CONVERSATIONS && !queries.includes('kind="archive"')) return [
+          { kind: 'invitation', conversationId: 'attempt', payload: 'Initial text' },
+        ];
+        return [];
+      });
+      const team = role === 'team_lead' ? viewer.$id : selectedTeam;
+      const result = await exportLinkedinConversationReportAction({ ...today, teamLeadId: selectedTeam });
+      const expected = sources.filter(row => row.agentId !== 'resume-user' &&
+        (!team || row.agentId === team || row.teamLeadId === team));
+      expect(result.map(row => row.id).sort()).toEqual(expected.map(row => row.conversationId).sort());
+      if (result.some(row => row.id === request.conversationId)) {
+        expect(result.find(row => row.id === request.conversationId)?.initialText).toBe('Initial text');
+      }
+    }), { numRuns: 40 });
+  jest.mocked(getAuthenticatedUserDoc).mockResolvedValue({ ...viewer, role: 'agent' });
+  await expect(exportLinkedinConversationReportAction(today)).rejects.toThrow('Only team leads and admins');
 });

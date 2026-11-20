@@ -13,6 +13,9 @@ import type { User } from '@/lib/types';
 import type { LinkedinConversationExportRow } from '@/lib/types/linkedin-conversation';
 import { buildLinkedinConversationWorkbook } from '@/lib/utils/linkedin-conversation-workbook';
 import { logger } from '@/lib/utils/logger';
+import { COMPONENT_ACCESS } from '@/lib/constants/component-access';
+import { listAllDocuments } from '@/lib/server/appwrite-pagination';
+import { isLinkedinConversationReleased } from '@/lib/utils/linkedin-conversation-release';
 
 const emailAddress = z.email();
 
@@ -46,10 +49,16 @@ async function deliverReport(databases: Databases, to: string, rows: LinkedinCon
 
 export async function sendLinkedinWeeklyFollowups(databases: Awaited<ReturnType<typeof createAdminClient>>['databases'],
   range: { start: string; end: string }) {
-  const access = await listBetaFeatureAccess(databases, LINKEDIN_CONVERSATIONS_FEATURE);
-  const users = await readLabels<User>(databases, COLLECTIONS.USERS, [...access], ['role', 'department', 'isActive', 'name', 'email']);
+  const released = isLinkedinConversationReleased();
+  const access = released ? null : await listBetaFeatureAccess(databases, LINKEDIN_CONVERSATIONS_FEATURE);
+  const fields = ['role', 'department', 'isActive', 'name', 'email'];
+  const users = released
+    ? new Map((await listAllDocuments<User>({ databases, databaseId: DATABASE_ID, collectionId: COLLECTIONS.USERS,
+      queries: [Query.equal('role', [...COMPONENT_ACCESS['linkedin-conversations']]), Query.select(['$id', ...fields])],
+      requireComplete: true })).map(user => [user.$id, user]))
+    : await readLabels<User>(databases, COLLECTIONS.USERS, [...access!], fields);
   const recipients = new Map([...users].filter(([id, user]) =>
-    access.has(id) && canJoinLinkedinConversations(user) && emailAddress.safeParse(user.email).success));
+    (!access || access.has(id)) && canJoinLinkedinConversations(user) && emailAddress.safeParse(user.email).success));
   const ids = [...recipients.keys()];
   const result = { sent: 0, duplicate: 0, failed: 0 };
 

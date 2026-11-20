@@ -7,13 +7,16 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { canUseLinkedinExtension } from '@/lib/server/linkedin-extension-policy';
+import { useLinkedinConversationRelease } from '@/lib/hooks/use-linkedin-conversation-release';
 
 const STANDARD_VERSION = '2.0.0';
 const CONVERSATION_VERSION = '2.1.1';
+const RELEASE_VERSION = '2.2.0';
 const ATTRIBUTE = 'data-crm-hub-linkedin-helper-version';
 
-function isSupportedVersion(detected: string | null, conversationsBeta?: boolean) {
-  return detected === CONVERSATION_VERSION ||
+function isSupportedVersion(detected: string | null, conversationsBeta: boolean | undefined, released: boolean) {
+  if (released) return detected === RELEASE_VERSION;
+  return detected === RELEASE_VERSION || detected === CONVERSATION_VERSION ||
     (!conversationsBeta && (detected === STANDARD_VERSION || detected === '2.1.0'));
 }
 
@@ -25,11 +28,12 @@ export function LinkedinExtensionSection({ onDetection, conversationsBeta }: Gui
 }
 
 export function LinkedinExtensionGuide({ onDetection, conversationsBeta }: GuideProps) {
-  const version = conversationsBeta ? CONVERSATION_VERSION : STANDARD_VERSION;
+  const released = useLinkedinConversationRelease();
+  const version = released ? RELEASE_VERSION : conversationsBeta ? CONVERSATION_VERSION : STANDARD_VERSION;
   const download = `/downloads/crm-hub-linkedin-helper-${version}-chrome.zip`;
   const [detectedVersion, setDetectedVersion] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(true);
-  const current = isSupportedVersion(detectedVersion, conversationsBeta);
+  const current = isSupportedVersion(detectedVersion, conversationsBeta, released);
 
   useEffect(() => {
     let previousVersion: string | null = null;
@@ -38,7 +42,7 @@ export function LinkedinExtensionGuide({ onDetection, conversationsBeta }: Guide
       setDetectedVersion(detected);
       if (detected !== previousVersion) {
         previousVersion = detected;
-        const installed = isSupportedVersion(detected, conversationsBeta);
+        const installed = isSupportedVersion(detected, conversationsBeta, released);
         setExpanded(!installed);
         onDetection?.(installed);
       }
@@ -47,7 +51,7 @@ export function LinkedinExtensionGuide({ onDetection, conversationsBeta }: Guide
     const observer = new MutationObserver(read);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: [ATTRIBUTE] });
     return () => observer.disconnect();
-  }, [onDetection, conversationsBeta]);
+  }, [onDetection, conversationsBeta, released]);
 
   if (!expanded && current) return <Card className="py-3">
     <div className="flex flex-wrap items-center justify-between gap-2 px-6 text-sm">
@@ -76,7 +80,7 @@ export function LinkedinExtensionGuide({ onDetection, conversationsBeta }: Guide
         {current && <Button variant="outline" onClick={() => setExpanded(false)}>Collapse</Button>}
         {detectedVersion && !current && <p className="w-full font-medium">Update available. Download LinkedIn Helper v{version} below.</p>}
         <a href={download} download className={`${buttonVariants({ variant: 'default' })} gap-2`}>
-          <Download className="h-4 w-4" /> Download v{version}{conversationsBeta ? ' beta' : ''}
+          <Download className="h-4 w-4" /> Download v{version}{conversationsBeta && !released ? ' beta' : ''}
         </a>
       </div>
       <ol className="list-decimal space-y-2 pl-5">

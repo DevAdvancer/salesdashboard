@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { listLinkedinConversationBetaUsersAction, setLinkedinConversationBetaAccessAction } from '@/app/actions/beta';
 import { getErrorMessage } from '@/lib/utils';
+import { useLinkedinConversationRelease } from '@/lib/hooks/use-linkedin-conversation-release';
 
 type BetaUser = Awaited<ReturnType<typeof listLinkedinConversationBetaUsersAction>>[number];
 
@@ -61,10 +62,19 @@ function LinkedinConversationGrants() {
 }
 
 export default function BetaPage() {
+  const conversationsReleased = useLinkedinConversationRelease();
+  const [releaseReady, setReleaseReady] = useState(false);
+  useEffect(() => { setReleaseReady(true); }, []);
   return <ProtectedRoute componentKey="beta">
     <div className="container mx-auto max-w-5xl space-y-6">
       <h1 className="text-3xl font-semibold tracking-tight">Beta</h1>
-      <LinkedinConversationGrants />
+      {!releaseReady ? <p role="status">Checking feature availability…</p> : conversationsReleased ? <Card>
+        <CardHeader><CardTitle>LinkedIn Conversations is available to everyone</CardTitle></CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <p>All eligible Sales users can now save invitations, add conversations, and export their LinkedIn requests.</p>
+          <Link className="underline" href="/linkedin-conversations">Open Accepted Connections</Link>
+        </CardContent>
+      </Card> : <LinkedinConversationGrants />}
       <Card>
         <CardHeader><CardTitle>LinkedIn Helper is available to everyone</CardTitle></CardHeader>
         <CardContent className="space-y-3 text-sm">

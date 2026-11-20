@@ -4,7 +4,9 @@ jest.mock('node-appwrite', () => ({ Query: {} }));
 
 import fc from 'fast-check';
 import { getAuthenticatedUserDoc } from '@/lib/server/current-user';
-import { getMyLinkedinHelperAccessAction, setLinkedinHelperBetaAccessAction } from '@/app/actions/beta';
+import { getMyLinkedinHelperAccessAction, setLinkedinHelperBetaAccessAction,
+  listLinkedinConversationBetaUsersAction, setLinkedinConversationBetaAccessAction } from '@/app/actions/beta';
+import { createAdminClient } from '@/lib/server/appwrite';
 import { canUseLinkedinExtension } from '@/lib/server/linkedin-extension-policy';
 import { VALID_ROLES } from '@/lib/types';
 
@@ -22,4 +24,17 @@ it('prevents stale beta controls from revoking general-release access', async ()
   await expect(setLinkedinHelperBetaAccessAction('agent', false)).rejects.toThrow('retired');
   (getAuthenticatedUserDoc as jest.Mock).mockResolvedValue({ role: 'agent', isActive: true });
   await expect(setLinkedinHelperBetaAccessAction('agent', true)).rejects.toThrow('Only active admins');
+});
+
+it('retires conversation grant changes after launch even from a stale admin page', async () => {
+  jest.useFakeTimers().setSystemTime(new Date('2026-11-21T14:00:00Z'));
+  try {
+    jest.mocked(createAdminClient).mockClear();
+    jest.mocked(getAuthenticatedUserDoc).mockResolvedValue({ role: 'admin', isActive: true } as never);
+    await expect(listLinkedinConversationBetaUsersAction()).rejects.toThrow('retired');
+    await expect(setLinkedinConversationBetaAccessAction('agent', false)).rejects.toThrow('retired');
+    expect(createAdminClient).not.toHaveBeenCalled();
+  } finally {
+    jest.useRealTimers();
+  }
 });

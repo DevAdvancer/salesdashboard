@@ -16,12 +16,15 @@ import { LINKEDIN_CONVERSATION_PAYLOAD_LIMIT, LINKEDIN_MESSAGE_KINDS, LINKEDIN_M
 import type { LinkedinRequest, User } from '@/lib/types';
 import { buildLinkedinConversationExportRows, isInvitation, mergeRequests, projectLinkedinConversation, readLabels,
   readLinkedinInvitations, readTranscripts, requestFields } from '@/lib/server/linkedin-conversation-reads';
+import { resolveLinkedinReportTeamLeadId, assertLinkedinReportTeamScope } from '@/app/actions/linkedin/shared';
 
 const day = z.iso.date();
 const id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,35}$/);
 const rangeSchema = z.object({ mode: z.enum(['sent', 'accepted']), start: day, end: day,
   search: z.string().trim().max(300).optional() }).strict();
 const referenceSchema = z.object({ requestId: id, conversationId: id }).strict();
+const reportRangeSchema = rangeSchema.omit({ mode: true, search: true })
+  .extend({ teamLeadId: id.nullable().optional() });
 const messageSchema = referenceSchema.extend({ id: z.uuid(), date: day, direction: z.enum(LINKEDIN_MESSAGE_KINDS),
   text: z.string().refine(value => Boolean(value.trim())) });
 type Range = z.input<typeof rangeSchema>;
@@ -32,7 +35,7 @@ const RECENT_CONNECTIONS_LIMIT = 10;
 async function authorizedContext() {
   const actor = await getAuthenticatedUserDoc();
   const { databases } = await createAdminClient();
-  if (!await hasLinkedinConversationAccess(databases, actor)) throw new Error('LinkedIn Conversations beta access is required.');
+  if (!await hasLinkedinConversationAccess(databases, actor)) throw new Error('LinkedIn Conversations access is required.');
   databases.clearReadCacheForCollection(COLLECTIONS.LINKEDIN_REQUESTS);
   databases.clearReadCacheForCollection(COLLECTIONS.LINKEDIN_CONVERSATIONS);
   return { actor, databases };
@@ -146,4 +149,27 @@ export async function exportLinkedinConversationsAction(input: Range, selectedId
   if (selected && !selected.success) throw new Error('Choose valid LinkedIn requests.');
   const requests = await listFilteredRequests(context, input, selected ? new Set(selected.data) : undefined);
   return buildLinkedinConversationExportRows(context.databases, requests);
+}
+
+export async function exportLinkedinConversationReportAction(input: z.input<typeof reportRangeSchema>): Promise<LinkedinConversationExportRow[]> {
+  const context = await authorizedContext();
+  const { actor, databases } = context;
+  if (actor.role !== 'admin' && actor.role !== 'team_lead') throw new Error('Only team leads and admins can export conversation reports.');
+  const parsed = reportRangeSchema.safeParse(input);
+  if (!parsed.success || parsed.data.start > parsed.data.end) throw new Error('Choose a valid start and end date.');
+  const teamLeadId = resolveLinkedinReportTeamLeadId(actor, parsed.data.teamLeadId);
+  assertLinkedinReportTeamScope(actor, teamLeadId);
+  const scope = teamLeadId ? [Query.or([Query.equal('teamLeadId', teamLeadId), Query.equal('agentId', teamLeadId)])] : [];
+  const requests = await readLinkedinInvitations(databases, { ...parsed.data, mode: 'sent' }, scope,
+    request => canReadLinkedinConversation(actor, request) &&
+      (!teamLeadId || request.teamLeadId === teamLeadId || request.agentId === teamLeadId));
+  const senders = await readLabels<Pick<User, '$id' | 'name' | 'department'>>(databases, COLLECTIONS.USERS,
+    [...new Set(requests.map(request => request.agentId))], ['name', 'department']);
+  const salesRequests = requests.filter(request => {
+    const sender = senders.get(request.agentId);
+    return sender && (sender.department ?? 'sales') === 'sales';
+  });
+  return buildLinkedinConversationExportRows(databases, salesRequests.map(request => ({
+    ...projectLinkedinConversation(request, canAppend(actor, request)), agent: senders.get(request.agentId)!.name,
+  })));
 }

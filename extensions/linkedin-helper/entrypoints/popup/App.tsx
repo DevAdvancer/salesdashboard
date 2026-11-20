@@ -60,7 +60,7 @@ export function App() {
           onChange={event => helper.setConfirmResend(event.target.checked)} /> I sent another invitation on LinkedIn and want to update this CRM request.</label></div>}
         {state.bootstrap.conversationsBeta && state.accountId && state.profile.trim() && (!state.checked || state.checked.canRecord) &&
           <div className="invitation-text">
-            <label htmlFor="initial-invitation-text">Initial invitation text <span className="badge">Beta</span></label>
+            <label htmlFor="initial-invitation-text">Initial invitation text</label>
             <textarea id="initial-invitation-text" value={state.initialInvitationText} disabled={state.pending} required
               maxLength={LINKEDIN_INVITATION_TEXT_LIMIT} onChange={event => helper.setInitialInvitationText(event.target.value)}
               placeholder="Paste the text you sent on LinkedIn" rows={3} />

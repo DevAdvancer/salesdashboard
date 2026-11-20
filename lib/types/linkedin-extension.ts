@@ -6,6 +6,7 @@ export interface ExtensionAccount {
 }
 export interface ExtensionBootstrap {
   user: ExtensionUser; today: string; accounts: Array<ExtensionAccount & ExtensionQuota>;
+  /** Retained for installed v2.1 helpers. Also enables conversations after general release. */
   conversationsBeta?: boolean;
 }
 export type ExtensionState = "new" | "active_request" | "resend_available" | "limit_reached" | "missing_limit";
