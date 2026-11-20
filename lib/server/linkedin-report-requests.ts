@@ -42,7 +42,7 @@ export async function listLinkedinReportRequests(input: {
     queries.unshift(Query.equal("teamLeadId", input.teamLeadId));
   }
   const requests = await listAllDocuments<LinkedinRequest>({
-    databases: input.databases, databaseId: DATABASE_ID,
+    databases: input.databases.uncachedReads ?? input.databases, databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.LINKEDIN_REQUESTS, queries,
   });
   return requests.filter(request => {

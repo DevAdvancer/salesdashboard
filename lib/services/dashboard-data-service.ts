@@ -29,6 +29,7 @@ import {
   type ReferralSplit,
 } from "@/lib/utils/dashboard-referral";
 import { isVisibleClientLead } from "@/lib/utils/client-history";
+import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import { expandIsoDateToStart, expandIsoDateToEnd } from "@/lib/utils/iso-date-range";
 import { cacheClientRead, clearClientReadCache } from "@/lib/utils/client-read-cache";
 import type { Branch, Department, Lead, LgHandoff, User } from "@/lib/types";
@@ -345,6 +346,10 @@ export async function loadLinkedinConnectionKpiProgress(
   input: LinkedinConnectionKpiInput,
 ): Promise<LinkedinConnectionKpiRow[]> {
   const branchIds = [...(input.branchIds ?? [])].sort();
+  const today = getCurrentEasternIsoDate();
+  const from = input.dateRange.from?.slice(0, 10);
+  const to = (input.dateRange.to ?? input.dateRange.from)?.slice(0, 10);
+  const includesToday = from && to && from <= today && today <= to;
 
   return cacheClientRead(
     "dashboard:linkedinConnectionKpi",
@@ -365,7 +370,7 @@ export async function loadLinkedinConnectionKpiProgress(
         dateRange: input.dateRange,
       });
     },
-    DASHBOARD_DATA_TTL_MS,
+    includesToday ? 0 : DASHBOARD_DATA_TTL_MS,
   );
 }
 

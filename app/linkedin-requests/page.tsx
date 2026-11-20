@@ -42,7 +42,7 @@ import {
 import type { LinkedinAccount, LinkedinRequest } from "@/lib/types";
 import { getErrorMessage } from "@/lib/utils";
 import { formatLinkedinRequestSentDate, getLinkedinRequestDateFilterValue } from "@/lib/utils/linkedin-request-dates";
-import { getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
+import { formatEasternCalendarDate, getCurrentEasternIsoDate } from "@/lib/utils/eastern-date";
 import { DISPLAY_TIME_ZONE_CHANGE_EVENT, getDisplayTimeZone } from "@/lib/utils/display-time-zone";
 import { normalizeProfileUrl } from "@/lib/utils/linkedin-extension-url";
 import { isWithdrawnLinkedinRequest } from "@/lib/utils/linkedin-request-state";
@@ -106,7 +106,8 @@ function LinkedinRequestsContent() {
     ReturnType<typeof getLinkedinConnectionHistoryAction>
   > | null>(null);
   const [adding, setAdding] = useState(false);
-  const [filterDate, setFilterDate] = useState<string>(todayDateInputValue);
+  const [selectedFilterDate, setFilterDate] = useState<string | null>(null);
+  const filterDate = selectedFilterDate ?? today;
   const [filterStatus, setFilterStatus] = useState<"all" | "sent" | "accepted" | "withdrawn">("all");
   const [filterUrl, setFilterUrl] = useState<string>("");
   const [appliedFilterUrl, setAppliedFilterUrl] = useState<string>("");
@@ -142,7 +143,8 @@ function LinkedinRequestsContent() {
     refetchInterval: 5 * 60 * 1000,
   });
   const accounts: LinkedinAccount[] = accountUsageQuery.data?.accounts ?? [];
-  const sentByAccountId = accountUsageQuery.data?.sentByAccountId;
+  const usageDate = accountUsageQuery.data?.today;
+  const sentByAccountId = usageDate === today ? accountUsageQuery.data?.sentByAccountId : undefined;
 
   useEffect(() => {
     if (selectedAccountId && !accounts.some((account) => account.$id === selectedAccountId) &&
@@ -535,7 +537,7 @@ function LinkedinRequestsContent() {
                   <div key={account.$id} className="rounded-xl border border-border px-4 py-3 text-sm">
                     <div className="font-medium">{account.accountType.toUpperCase()} · {account.idName}</div>
                     <div className="text-muted-foreground">
-                      Limit: {limit ?? "Not set"} · Sent today: {sent ?? "Loading…"} · Remaining: {remaining ?? "Loading…"}
+                      Limit: {limit ?? "Not set"} · Sent today ({formatEasternCalendarDate(today)} ET): {sent ?? "Loading…"} · Remaining: {remaining ?? "Loading…"}
                     </div>
                   </div>
                 );

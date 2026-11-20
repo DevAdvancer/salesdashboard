@@ -31,7 +31,7 @@ export async function computeLinkedinStatsForDate(dateKey: string, accountsMap?:
 
   // 1. Fetch all requests sent on this date
   const requests = await listAllDocuments<any>({
-    databases,
+    databases: databases.uncachedReads ?? databases,
     databaseId: DATABASE_ID,
     collectionId: COLLECTIONS.LINKEDIN_REQUESTS,
     queries: [
