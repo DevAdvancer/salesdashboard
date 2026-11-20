@@ -13,8 +13,14 @@ import { reportingPeriodThroughToday } from '@/lib/utils/reporting-period';
 import type { DateRange } from "@/lib/utils/dashboard-kpi";
 import { getResumeDashboardDataAction, type ResumeDashboardData } from "@/app/actions/resume-dashboard";
 import { ResumeTopMetrics } from "@/components/resume-dashboard/resume-top-metrics";
-import { ResumeCharts } from "@/components/resume-dashboard/resume-charts";
+import dynamic from "next/dynamic";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ResumeKpiTable } from "@/components/resume-dashboard/resume-kpi-table";
+// The charts library is large; load it after the page, like the sales dashboard charts.
+const ResumeCharts = dynamic(
+  () => import("@/components/resume-dashboard/resume-charts").then((m) => m.ResumeCharts),
+  { loading: () => <Skeleton className="h-[380px] w-full rounded-xl" />, ssr: false }
+);
 import { ResumeRecentActivity } from "@/components/resume-dashboard/resume-recent-activity";
 
 function ResumeDashboardContent() {
