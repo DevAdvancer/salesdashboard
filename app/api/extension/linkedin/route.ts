@@ -9,6 +9,9 @@ import { LINKEDIN_INVITATION_TEXT_LIMIT } from '@/lib/types/linkedin-conversatio
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// JSON escaping can expand a single character to six code units.
+const MAX_REQUEST_JSON_LENGTH = 32 * 1024;
+
 const inputSchema = z.object({
   operation: z.enum(["check", "history", "record"]),
   accountId: z.string().min(1).max(36),
@@ -58,7 +61,7 @@ async function execute(request: NextRequest) {
       throw new LinkedinExtensionError(415, "Send a JSON request.");
     }
     const body = await request.text();
-    if (body.length > 8192) throw new LinkedinExtensionError(413, "Request too large.");
+    if (body.length > MAX_REQUEST_JSON_LENGTH) throw new LinkedinExtensionError(413, "Request too large.");
     let parsed;
     try { parsed = JSON.parse(body); } catch { throw new LinkedinExtensionError(400, "Invalid JSON request."); }
     const validation = inputSchema.safeParse(parsed);

@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useAuth } from '@/lib/contexts/auth-context';
 import { canUseLinkedinExtension } from '@/lib/server/linkedin-extension-policy';
 
-const RELEASE_VERSION = '2.2.0';
+const RELEASE_VERSION = '2.2.1';
 const ATTRIBUTE = 'data-crm-hub-linkedin-helper-version';
 
 type GuideProps = { onDetection?: (detected: boolean) => void };

@@ -43,6 +43,18 @@ it("redacts raw SDK errors but reports safe authentication errors", async () => 
   expect((await GET(new NextRequest(url, { headers }))).status).toBe(401);
 });
 
+it('accepts 2,300 invitation characters even when JSON escaping expands them', async () => {
+  jest.mocked(recordLinkedinExtension).mockResolvedValue({ mode: 'created' } as never);
+  const send = (initialInvitationText: string) => POST(new NextRequest(url, { method: 'POST', headers,
+    body: JSON.stringify({ operation: 'record', accountId: 'a', targetUrl: 'https://linkedin.com/in/person', initialInvitationText }) }));
+  const initialInvitationText = 'Hi\u0001' + '\u0001'.repeat(2297);
+
+  expect((await send(initialInvitationText)).status).toBe(200);
+  expect(recordLinkedinExtension).toHaveBeenCalledWith(expect.objectContaining({ initialInvitationText }));
+  expect((await send(initialInvitationText + 'a')).status).toBe(400);
+  expect(recordLinkedinExtension).toHaveBeenCalledTimes(1);
+});
+
 it("allows direct recording while history remains an explicit operation", async () => {
   (recordLinkedinExtension as jest.Mock).mockResolvedValue({ mode: "created" });
   expect((await POST(new NextRequest(url, { method: "POST", headers, body: JSON.stringify({ operation: "record", accountId: "a", targetUrl: "url" }) }))).status).toBe(200);

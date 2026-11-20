@@ -99,10 +99,10 @@ it("allows eligible users without a beta grant", async () => {
   expect(hasLinkedinHelperAccess).not.toHaveBeenCalled();
 });
 
-it('records exact invitation text in private storage for the granted CRM user', async () => {
+it('records the full 2,300-character invitation in private storage', async () => {
   (hasBetaFeatureAccess as jest.Mock).mockResolvedValue(true);
   await expect(bootstrapLinkedinExtension()).resolves.toMatchObject({ conversationsBeta: true });
-  const initialInvitationText = '  Hi there!\nI would like to connect.  ';
+  const initialInvitationText = '  Hi there!\nI would like to connect.  '.padEnd(2300);
   await expect(recordLinkedinExtension({ ...input, confirmResend: false, expectedUserId: 'agent-1', initialInvitationText }))
     .resolves.toMatchObject({ mode: 'created' });
   const [, collection, conversationId, invitation, permissions] = databases.createDocument.mock.calls[0];
