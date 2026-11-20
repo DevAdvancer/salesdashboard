@@ -26,8 +26,8 @@ it('prevents stale beta controls from revoking general-release access', async ()
   await expect(setLinkedinHelperBetaAccessAction('agent', true)).rejects.toThrow('Only active admins');
 });
 
-it('retires conversation grant changes after launch even from a stale admin page', async () => {
-  jest.useFakeTimers().setSystemTime(new Date('2026-11-21T14:00:00Z'));
+it.each(['2026-11-20T14:00:00Z', '2026-11-21T14:00:00Z'])('permanently rejects conversation grant changes from a stale admin page on %s', async now => {
+  jest.useFakeTimers().setSystemTime(new Date(now));
   try {
     jest.mocked(createAdminClient).mockClear();
     jest.mocked(getAuthenticatedUserDoc).mockResolvedValue({ role: 'admin', isActive: true } as never);

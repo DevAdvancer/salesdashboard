@@ -1,41 +1,48 @@
-import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
-import { getMyLinkedinConversationAccessAction, listLinkedinConversationBetaUsersAction } from '@/app/actions/beta';
+import { render, renderHook, screen } from '@testing-library/react';
 import BetaPage from '@/app/beta/page';
+import { getMyLinkedinConversationAccessAction } from '@/app/actions/beta';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { useLinkedinConversationAccess } from '@/lib/hooks/use-linkedin-conversation-access';
-import { LINKEDIN_CONVERSATION_RELEASE_AT } from '@/lib/utils/linkedin-conversation-release';
 
-jest.mock('@/app/actions/beta', () => ({ getMyLinkedinConversationAccessAction: jest.fn(),
-  listLinkedinConversationBetaUsersAction: jest.fn(), setLinkedinConversationBetaAccessAction: jest.fn() }));
+jest.mock('@/app/actions/beta', () => ({ getMyLinkedinConversationAccessAction: jest.fn() }));
 jest.mock('@/lib/contexts/auth-context', () => ({ useAuth: jest.fn() }));
 jest.mock('@/components/protected-route', () => ({
-  ProtectedRoute: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  ProtectedRoute: ({ children, componentKey }: { children: React.ReactNode; componentKey: string }) => (
+    <div data-testid="protected-route" data-component-key={componentKey}>{children}</div>
+  ),
 }));
 
 beforeEach(() => {
   jest.clearAllMocks();
-  jest.useFakeTimers().setSystemTime(new Date(Date.parse(LINKEDIN_CONVERSATION_RELEASE_AT) - 1000));
   jest.mocked(useAuth).mockReturnValue({ user: { $id: 'agent', role: 'agent', department: 'sales', isActive: true },
     serverSessionReady: true } as never);
-  jest.mocked(getMyLinkedinConversationAccessAction).mockResolvedValue(false);
 });
-afterEach(() => jest.useRealTimers());
 
-it('opens an existing browser tab at launch without another grant read and requires a ready CRM session', async () => {
+it('keeps the admin Beta page as an empty state without access controls', () => {
+  render(<BetaPage />);
+  expect(screen.getByTestId('protected-route')).toHaveAttribute('data-component-key', 'beta');
+  expect(screen.getByRole('heading', { name: 'Beta' })).toBeInTheDocument();
+  expect(screen.getByText('No new features are currently in beta.')).toBeInTheDocument();
+  expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+  expect(getMyLinkedinConversationAccessAction).not.toHaveBeenCalled();
+});
+
+it.each(['agent', 'team_lead', 'senior_tl', 'lead_generation'])('enables %s without a beta lookup and requires a ready CRM session', role => {
+  jest.mocked(useAuth).mockReturnValue({ user: { $id: 'sender', role, department: 'sales', isActive: true },
+    serverSessionReady: true } as never);
   const { result, rerender } = renderHook(() => useLinkedinConversationAccess());
-  await waitFor(() => expect(result.current).toBe(false));
-  act(() => { jest.advanceTimersByTime(1000); });
   expect(result.current).toBe(true);
-  expect(getMyLinkedinConversationAccessAction).toHaveBeenCalledTimes(1);
-  jest.mocked(useAuth).mockReturnValue({ user: { $id: 'agent', role: 'agent', department: 'sales', isActive: true },
+  expect(getMyLinkedinConversationAccessAction).not.toHaveBeenCalled();
+  jest.mocked(useAuth).mockReturnValue({ user: { $id: 'sender', role, department: 'sales', isActive: true },
     serverSessionReady: false } as never);
   rerender();
   expect(result.current).toBeNull();
 });
 
 it.each([{ department: 'resume' }, { isActive: false }, { role: 'compliance' }])(
-  'keeps ineligible users blocked after launch for %s', override => {
-    jest.setSystemTime(new Date(LINKEDIN_CONVERSATION_RELEASE_AT));
+  'keeps ineligible users blocked for %s', override => {
     jest.mocked(useAuth).mockReturnValue({ user: { $id: 'agent', role: 'agent', department: 'sales', isActive: true, ...override },
       serverSessionReady: true } as never);
     const { result } = renderHook(() => useLinkedinConversationAccess());
@@ -43,10 +50,3 @@ it.each([{ department: 'resume' }, { isActive: false }, { role: 'compliance' }])
     expect(getMyLinkedinConversationAccessAction).not.toHaveBeenCalled();
   },
 );
-
-it('opens the retired Beta page after launch without mounting its old grant reader', () => {
-  jest.setSystemTime(new Date(LINKEDIN_CONVERSATION_RELEASE_AT));
-  render(<BetaPage />);
-  expect(screen.getByText('LinkedIn Conversations is available to everyone')).toBeInTheDocument();
-  expect(listLinkedinConversationBetaUsersAction).not.toHaveBeenCalled();
-});

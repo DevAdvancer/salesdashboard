@@ -16,7 +16,6 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { useRouter } from "next/navigation";
 import Link from 'next/link';
 import { useLinkedinConversationAccess } from '@/lib/hooks/use-linkedin-conversation-access';
-import { useLinkedinConversationRelease } from '@/lib/hooks/use-linkedin-conversation-release';
 import {
   Table,
   TableBody,
@@ -86,8 +85,7 @@ function RequiredMark() {
 function LinkedinRequestsContent() {
   const { user, serverSessionReady } = useAuth();
   const conversationAccess = useLinkedinConversationAccess();
-  const conversationsReleased = useLinkedinConversationRelease();
-  const conversationsBeta = conversationAccess === true;
+  const conversationsEnabled = conversationAccess === true;
   const { toast } = useToast();
   const { prompt, promptDialog } = usePromptDialog();
   const router = useRouter();
@@ -157,7 +155,7 @@ function LinkedinRequestsContent() {
   );
 
   const dashboardQuery = useQuery({
-    queryKey: ['linkedin-dashboard-data', user?.$id, appliedFilterUrl, filterDate, ...(conversationsBeta ? ['conversations-beta'] : [])],
+    queryKey: ['linkedin-dashboard-data', user?.$id, appliedFilterUrl, filterDate, ...(conversationsEnabled ? ['conversations'] : [])],
     queryFn: async () => {
       if (!user || !serverSessionReady) return { requests: [], leadOutcomeByLeadId: {} };
       
@@ -166,12 +164,12 @@ function LinkedinRequestsContent() {
         dateSent: filterDate || null,
         searchQuery: appliedFilterUrl || undefined,
         limit: 100,
-        fresh: conversationsBeta,
+        fresh: conversationsEnabled,
       });
     },
     enabled: !!user && serverSessionReady,
-    staleTime: conversationsBeta ? 0 : 5 * 60 * 1000,
-    refetchOnWindowFocus: conversationsBeta ? 'always' : true,
+    staleTime: conversationsEnabled ? 0 : 5 * 60 * 1000,
+    refetchOnWindowFocus: conversationsEnabled ? 'always' : true,
   });
 
   const loadingList = dashboardQuery.isLoading || dashboardQuery.isFetching;
@@ -467,11 +465,11 @@ function LinkedinRequestsContent() {
   return (
     <div className="container mx-auto space-y-6">
       {promptDialog}
-      {!helperDetected && <LinkedinExtensionSection onDetection={setHelperDetected} conversationsBeta={conversationsBeta} />}
+      {!helperDetected && <LinkedinExtensionSection onDetection={setHelperDetected} />}
       {conversationAccess === false && <LinkedinDailyExport />}
-      {conversationsBeta && <div className="flex flex-wrap gap-2">
+      {conversationsEnabled && <div className="flex flex-wrap gap-2">
         <Link className={buttonVariants({ variant: 'outline' })} href="/linkedin-conversations">
-          Accepted Connections{conversationsReleased ? '' : ' · Beta'}
+          Accepted Connections
         </Link>
       </div>}
       <Card>
@@ -753,7 +751,7 @@ function LinkedinRequestsContent() {
                       </TableCell>
                       <TableCell>{r.recordSource === 'lead_backfill' ? `Existing lead${leadStatusLabel ? ` · ${leadStatusLabel}` : ''}` : statusLabel}</TableCell>
                       <TableCell>
-                        {conversationsBeta && r.acceptedAt && r.recordSource !== 'lead_backfill' && !r.coldCall &&
+                        {conversationsEnabled && r.acceptedAt && r.recordSource !== 'lead_backfill' && !r.coldCall &&
                           <Link className={buttonVariants({ variant: 'outline', size: 'sm', className: 'mb-2' })}
                             href={`/linkedin-conversations?request=${encodeURIComponent(r.$id)}&date=${getCurrentEasternIsoDate(new Date(r.acceptedAt))}`}>
                             Open conversation
@@ -977,7 +975,7 @@ function LinkedinRequestsContent() {
           </div>
         </div>
       )}
-      {helperDetected && <LinkedinExtensionSection onDetection={setHelperDetected} conversationsBeta={conversationsBeta} />}
+      {helperDetected && <LinkedinExtensionSection onDetection={setHelperDetected} />}
     </div>
   );
 }

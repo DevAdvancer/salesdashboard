@@ -6,7 +6,7 @@ import { COLLECTIONS, DATABASE_ID } from '@/lib/constants/appwrite';
 import { createAdminClient } from '@/lib/server/appwrite';
 import { getAuthenticatedUserDoc } from '@/lib/server/current-user';
 import { listAllDocuments } from '@/lib/server/appwrite-pagination';
-import { canReadLinkedinConversation, hasLinkedinConversationAccess } from '@/lib/server/linkedin-conversation-access';
+import { canReadAllLinkedinConversations, canReadLinkedinConversation, hasLinkedinConversationAccess } from '@/lib/server/linkedin-conversation-access';
 import { linkedinArchiveId, linkedinConversationId, saveLinkedinConversationMessage, type LinkedinConversationRecord } from '@/lib/server/linkedin-conversation-storage';
 import { getCurrentEasternIsoDate } from '@/lib/utils/eastern-date';
 import { getLinkedinRequestDateFilterValue } from '@/lib/utils/linkedin-request-dates';
@@ -16,7 +16,7 @@ import { LINKEDIN_CONVERSATION_PAYLOAD_LIMIT, LINKEDIN_MESSAGE_KINDS, LINKEDIN_M
 import type { LinkedinRequest, User } from '@/lib/types';
 import { buildLinkedinConversationExportRows, isInvitation, mergeRequests, projectLinkedinConversation, readLabels,
   readLinkedinInvitations, readTranscripts, requestFields } from '@/lib/server/linkedin-conversation-reads';
-import { resolveLinkedinReportTeamLeadId, assertLinkedinReportTeamScope } from '@/app/actions/linkedin/shared';
+import { canSeeLinkedinReports, resolveLinkedinReportTeamLeadId, assertLinkedinReportTeamScope } from '@/app/actions/linkedin/shared';
 
 const day = z.iso.date();
 const id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,35}$/);
@@ -42,11 +42,11 @@ async function authorizedContext() {
 }
 
 function canAppend(actor: User, request: LinkedinRequest) {
-  return request.agentId === actor.$id && Boolean(request.acceptedAt || request.status === 'accepted');
+  return actor.role !== 'operations' && request.agentId === actor.$id && Boolean(request.acceptedAt || request.status === 'accepted');
 }
 
 function scopeQuery(actor: User) {
-  if (actor.role === 'admin') return [];
+  if (canReadAllLinkedinConversations(actor)) return [];
   const owner = Query.equal('agentId', actor.$id);
   return [actor.role === 'team_lead' ? Query.or([owner, Query.equal('teamLeadId', actor.$id)]) : owner];
 }
@@ -130,7 +130,7 @@ export async function listLinkedinConversationsAction(input: Range) {
 export async function listRecentLinkedinConnectionsAction() {
   const context = await authorizedContext();
   const { actor, databases } = context;
-  if (actor.role !== 'admin' && actor.role !== 'team_lead') throw new Error('Only team leads and admins can see recent connections.');
+  if (!canReadAllLinkedinConversations(actor) && actor.role !== 'team_lead') throw new Error('Only team leads and leadership can see recent connections.');
   const queries = [Query.isNotNull('acceptedAt'), ...scopeQuery(actor), Query.orderDesc('acceptedAt'), Query.orderAsc('$id')];
   const options = { databases, databaseId: DATABASE_ID, requireComplete: true,
     pageLimit: RECENT_CONNECTIONS_LIMIT, take: RECENT_CONNECTIONS_LIMIT };
@@ -154,7 +154,7 @@ export async function exportLinkedinConversationsAction(input: Range, selectedId
 export async function exportLinkedinConversationReportAction(input: z.input<typeof reportRangeSchema>): Promise<LinkedinConversationExportRow[]> {
   const context = await authorizedContext();
   const { actor, databases } = context;
-  if (actor.role !== 'admin' && actor.role !== 'team_lead') throw new Error('Only team leads and admins can export conversation reports.');
+  if (!canSeeLinkedinReports(actor)) throw new Error('Only team leads and leadership can export conversation reports.');
   const parsed = reportRangeSchema.safeParse(input);
   if (!parsed.success || parsed.data.start > parsed.data.end) throw new Error('Choose a valid start and end date.');
   const teamLeadId = resolveLinkedinReportTeamLeadId(actor, parsed.data.teamLeadId);

@@ -42,7 +42,7 @@ import { findProtectedLinkedinLead, LinkedinLeadProtectionError, requestBlocksLi
 const account = { $id: "account-1", assignedUserId: "agent-1", company: "Silverspace", idName: "Account A", accountType: "main", isActive: true, connectionLimit: 3 };
 const databases = { clearReadCacheForCollection: jest.fn(), createDocument: jest.fn(),
   listDocuments: jest.fn() };
-const input = { accountId: account.$id, targetUrl: "https://linkedin.com/in/person/?trk=test" };
+const input = { initialInvitationText: 'Initial text', expectedUserId: 'agent-1', accountId: account.$id, targetUrl: "https://linkedin.com/in/person/?trk=test" };
 let records: any[];
 let used: any[];
 
@@ -114,28 +114,21 @@ it('records exact invitation text in private storage for the granted CRM user', 
   expect(request).not.toHaveProperty('initialInvitationText');
 });
 
-it('rejects missing beta text, a stale login, and text submitted after grant revocation', async () => {
-  (hasBetaFeatureAccess as jest.Mock).mockResolvedValue(true);
-  await expect(recordLinkedinExtension({ ...input, confirmResend: false })).rejects.toMatchObject({ status: 400 });
-  await expect(recordLinkedinExtension({ ...input, confirmResend: false, expectedUserId: 'previous-login', initialInvitationText: 'Hi' }))
+it('requires invitation text and the current signed-in user for every recording', async () => {
+  await expect(recordLinkedinExtension({ ...input, confirmResend: false, initialInvitationText: undefined }))
+    .rejects.toMatchObject({ status: 400 });
+  await expect(recordLinkedinExtension({ ...input, confirmResend: false, expectedUserId: 'previous-login' }))
     .rejects.toMatchObject({ status: 409 });
-  (hasBetaFeatureAccess as jest.Mock).mockResolvedValue(false);
-  await expect(recordLinkedinExtension({ ...input, confirmResend: false, expectedUserId: 'agent-1', initialInvitationText: 'Hi' }))
-    .rejects.toMatchObject({ status: 403 });
   expect(databases.createDocument).not.toHaveBeenCalled();
 });
 
-it('enables invitation capture without a beta grant exactly at release and guides old extensions to refresh', async () => {
-  jest.setSystemTime(new Date('2026-11-21T13:59:59.999Z'));
-  await expect(bootstrapLinkedinExtension()).resolves.toMatchObject({ conversationsBeta: false });
-  jest.setSystemTime(new Date('2026-11-21T14:00:00.000Z'));
+it('enables invitation capture without a beta grant or date restriction', async () => {
+  jest.setSystemTime(new Date('2026-11-20T14:00:00Z'));
   jest.mocked(hasBetaFeatureAccess).mockClear();
   await expect(bootstrapLinkedinExtension()).resolves.toMatchObject({ conversationsBeta: true });
-  await expect(recordLinkedinExtension({ ...input, confirmResend: false })).rejects.toMatchObject({ status: 400 });
-  const initialInvitationText = 'New public invitation';
-  await expect(recordLinkedinExtension({ ...input, confirmResend: false, expectedUserId: 'agent-1', initialInvitationText }))
+  await expect(recordLinkedinExtension({ ...input, confirmResend: false }))
     .resolves.toMatchObject({ mode: 'created' });
-  expect(databases.createDocument.mock.calls[0][3]).toMatchObject({ payload: initialInvitationText });
+  expect(databases.createDocument.mock.calls[0][3]).toMatchObject({ payload: input.initialInvitationText });
   expect(hasBetaFeatureAccess).not.toHaveBeenCalled();
 });
 it("allows the same profile through another company's LinkedIn account", async () => {
@@ -191,7 +184,7 @@ it("explicit resend reuses the legacy URL and existing action without adding a r
   await expect(recordLinkedinExtension({ ...input, revision: checked.revision, confirmResend: false })).rejects.toMatchObject({ status: 409 });
   await recordLinkedinExtension({ ...input, revision: checked.revision, confirmResend: true });
   expect(createLinkedinRequestAction).toHaveBeenCalledWith({ currentUserId: "agent-1", accountId: account.$id,
-    targetUrl: records[0].targetUrl, dateSent: "2026-10-05" });
+    targetUrl: records[0].targetUrl, dateSent: "2026-10-05", initialInvitationText: input.initialInvitationText });
   expect(databases.createDocument).not.toHaveBeenCalled();
 });
 it("offers resend when an inactive accepted row has a recorded withdrawal", async () => {

@@ -22,12 +22,7 @@ async function main() {
       { key: 'teamLeadId', size: 36, required: false }, { key: 'dateSent', required: false }, { key: 'acceptedAt', required: false },
     ], indexes: [['conversationId', 'kind'], ['kind', 'dateSent'], ['kind', 'acceptedAt'], ['agentId'], ['teamLeadId']] },
   ] satisfies { id: string; attributes: Attribute[]; indexes: string[][] }[];
-  const beta = await db.getCollection(DATABASE_ID, COLLECTIONS.BETA_FEATURE_ACCESS).catch(error => {
-    if ((error as { code?: number }).code !== 404) throw error;
-    return null;
-  });
-  if (!beta) console.log('The beta access collection needs setup:beta-access:dry, followed by setup:beta-access:apply.');
-  console.log(`${apply ? 'APPLY' : 'DRY RUN'} LinkedIn Conversations schema. No request data or beta grants will be changed.`);
+  console.log(`${apply ? 'APPLY' : 'DRY RUN'} LinkedIn Conversations schema.`);
   for (const definition of definitions) {
     const isPrivate = definition.id === COLLECTIONS.LINKEDIN_CONVERSATIONS;
     const collection = await db.getCollection(DATABASE_ID, definition.id).catch(error => {

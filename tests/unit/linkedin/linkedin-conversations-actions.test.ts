@@ -70,7 +70,7 @@ it('limits the latest accepted list across live requests and archives and denies
     'notNull:acceptedAt', 'desc:acceptedAt', 'or(agentId="tl",teamLeadId="tl")',
   ]) });
   jest.mocked(getAuthenticatedUserDoc).mockResolvedValue({ ...viewer, role: 'agent' });
-  await expect(listRecentLinkedinConnectionsAction()).rejects.toThrow('Only team leads and admins');
+  await expect(listRecentLinkedinConnectionsAction()).rejects.toThrow('Only team leads and leadership');
   expect(list).toHaveBeenCalledTimes(3);
 });
 
@@ -121,7 +121,7 @@ it('keeps report exports scoped across admin team filters and forged team-lead s
     { ...request, $id: 'other', conversationId: 'other-attempt', agentId: 'other-agent', teamLeadId: 'other-tl' },
     { ...request, $id: 'resume', conversationId: 'resume-attempt', agentId: 'resume-user', teamLeadId: 'tl' },
   ];
-  await fc.assert(fc.asyncProperty(fc.constantFrom('admin', 'team_lead'), fc.constantFrom(null, 'tl', 'other-tl'),
+  await fc.assert(fc.asyncProperty(fc.constantFrom('admin', 'developer', 'monitor', 'operations', 'team_lead'), fc.constantFrom(null, 'tl', 'other-tl'),
     async (role, selectedTeam) => {
       jest.mocked(getAuthenticatedUserDoc).mockResolvedValue({ ...viewer, role });
       list.mockImplementation(async ({ collectionId, queries }) => {
@@ -139,10 +139,21 @@ it('keeps report exports scoped across admin team filters and forged team-lead s
       const expected = sources.filter(row => row.agentId !== 'resume-user' &&
         (!team || row.agentId === team || row.teamLeadId === team));
       expect(result.map(row => row.id).sort()).toEqual(expected.map(row => row.conversationId).sort());
+      if (role === 'operations') expect(result.every(row => !row.canAppend)).toBe(true);
       if (result.some(row => row.id === request.conversationId)) {
         expect(result.find(row => row.id === request.conversationId)?.initialText).toBe('Initial text');
       }
     }), { numRuns: 40 });
   jest.mocked(getAuthenticatedUserDoc).mockResolvedValue({ ...viewer, role: 'agent' });
-  await expect(exportLinkedinConversationReportAction(today)).rejects.toThrow('Only team leads and admins');
+  await expect(exportLinkedinConversationReportAction(today)).rejects.toThrow('Only team leads and leadership');
+});
+
+it('keeps Operations conversation access read-only even for a formerly owned request', async () => {
+  jest.mocked(getAuthenticatedUserDoc).mockResolvedValue({ ...viewer, role: 'operations' });
+  databases.getDocument.mockResolvedValue({ ...request, agentId: viewer.$id });
+  await expect(addLinkedinConversationMessageAction({
+    requestId: request.$id, conversationId: request.conversationId!,
+    id: 'af6ca5b2-4cc2-463e-a899-2dd2f2a7ef07', date: '2026-11-12', direction: 'sent', text: 'Update',
+  })).rejects.toThrow('Only the agent');
+  expect(databases.createDocument).not.toHaveBeenCalled();
 });

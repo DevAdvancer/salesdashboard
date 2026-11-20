@@ -54,28 +54,23 @@ describe("Navigation Component", () => {
     expect(screen.getByText('Client Progress')).toBeInTheDocument();
   });
 
-  it.each([true, false])('gates the admin Accepted Connections link on a beta grant of %s', async granted => {
-    mockUseAuth.mockReturnValue({ user: { $id: 'admin', name: 'Admin', role: 'admin', department: 'sales' },
-      activeDashboard: 'sales', serverSessionReady: true, logout: mockLogout } as any);
-    mockUseAccess.mockReturnValue({ canAccess: () => true, isLoading: false } as any);
-    jest.mocked(getMyLinkedinConversationAccessAction).mockResolvedValue(granted);
-    render(<Navigation />);
-    fireEvent.click(screen.getByRole('button', { name: 'Linkedin Tools' }));
-    await waitFor(() => expect(getMyLinkedinConversationAccessAction).toHaveBeenCalledTimes(1));
-    if (granted) expect(await screen.findByRole('link', { name: 'Accepted Connections' })).toHaveAttribute('href', '/linkedin-conversations');
-    else expect(screen.queryByRole('link', { name: 'Accepted Connections' })).not.toBeInTheDocument();
-  });
-
-  it('shows Accepted Connections to an eligible agent after launch and removes Beta from navigation', async () => {
-    jest.setSystemTime(new Date('2026-11-21T14:00:00Z'));
+  it('shows Accepted Connections by role without a beta lookup', async () => {
     mockUseAuth.mockReturnValue({ user: { $id: 'agent', name: 'Agent', role: 'agent', department: 'sales' },
       activeDashboard: 'sales', serverSessionReady: true, logout: mockLogout } as any);
-    mockUseAccess.mockReturnValue({ canAccess: () => true, isLoading: false } as any);
+    mockUseAccess.mockReturnValue({ canAccess: (key: string) => key !== 'beta', isLoading: false } as any);
     render(<Navigation />);
     fireEvent.click(screen.getByRole('button', { name: 'Linkedin Tools' }));
     expect(await screen.findByRole('link', { name: 'Accepted Connections' })).toHaveAttribute('href', '/linkedin-conversations');
     expect(screen.queryByRole('link', { name: 'Beta' })).not.toBeInTheDocument();
     expect(getMyLinkedinConversationAccessAction).not.toHaveBeenCalled();
+  });
+
+  it('keeps the Beta page in admin navigation', () => {
+    mockUseAuth.mockReturnValue({ user: { $id: 'admin', name: 'Admin', role: 'admin', department: 'sales' },
+      activeDashboard: 'sales', serverSessionReady: true, logout: mockLogout } as any);
+    mockUseAccess.mockReturnValue({ canAccess: () => true, isLoading: false } as any);
+    render(<Navigation />);
+    expect(screen.getByRole('link', { name: 'Beta' })).toHaveAttribute('href', '/beta');
   });
 
   describe("Agent sees only permitted components", () => {

@@ -102,7 +102,7 @@ it.each([['2026-10-30', 13, '2026-10-26'], ['2026-11-06', 14, '2026-11-02']])(
       jest.setSystemTime(new Date(`${date}T${hour}:00:00Z`));
       const result = await (await GET(request())).json();
       expect(result).toEqual(hour === activeHour
-        ? { ok: true, sent: 3, duplicate: 0, failed: 0 }
+        ? { ok: true, sent: 4, duplicate: 0, failed: 0 }
         : { ok: true, skipped: true });
     }
     expect(admin).toHaveBeenCalledTimes(1);
@@ -119,8 +119,8 @@ it('keeps each workbook scoped to its sender regardless of result order or role'
     claims.clear();
     send.mockClear();
     setFixtures(shuffled);
-    expect(await (await GET(request())).json()).toEqual({ ok: true, sent: 3, duplicate: 0, failed: 0 });
-    expect(send.mock.calls.map(([email]) => email.to).sort()).toEqual(['admin@example.com', 'agent@example.com', 'tl@example.com']);
+    expect(await (await GET(request())).json()).toEqual({ ok: true, sent: 4, duplicate: 0, failed: 0 });
+    expect(send.mock.calls.map(([email]) => email.to).sort()).toEqual(['admin@example.com', 'agent@example.com', 'no-grant@example.com', 'tl@example.com']);
     for (const [{ to, attachments }] of send.mock.calls) {
       const book = XLSX.read(attachments![0].content);
       expect(book.SheetNames).toHaveLength(1);
@@ -140,7 +140,7 @@ it('sends once per sender when invocations overlap, and retries only failed reci
   send.mockImplementation(async ({ to }) => to === 'tl@example.com' ? null : { messageId: 'local-test' } as never);
   const failed = await GET(request());
   expect(failed.status).toBe(500);
-  expect(await failed.json()).toEqual({ ok: false, sent: 2, duplicate: 0, failed: 1 });
+  expect(await failed.json()).toEqual({ ok: false, sent: 3, duplicate: 0, failed: 1 });
   expect(databases.deleteDocument).toHaveBeenCalledTimes(1);
   send.mockClear().mockResolvedValue({ messageId: 'local-retry' } as never);
   const retried = await Promise.all([GET(request()), GET(request())]);

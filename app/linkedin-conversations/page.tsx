@@ -14,7 +14,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useLinkedinConversationAccess } from '@/lib/hooks/use-linkedin-conversation-access';
-import { useLinkedinConversationRelease } from '@/lib/hooks/use-linkedin-conversation-release';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { getCurrentEasternIsoDate } from '@/lib/utils/eastern-date';
 import { getLinkedinRequestDateFilterValue } from '@/lib/utils/linkedin-request-dates';
@@ -134,10 +133,9 @@ function ConversationDetail({ item }: { item: LinkedinConversation }) {
 }
 
 function LinkedinConversationsContent() {
-  const released = useLinkedinConversationRelease();
   const params = useSearchParams();
   const { user } = useAuth();
-  const canSeeRecent = user?.role === 'admin' || user?.role === 'team_lead';
+  const canSeeRecent = Boolean(user && ['admin', 'developer', 'monitor', 'operations', 'team_lead'].includes(user.role));
   const viewerId = user?.$id;
   const requestId = params.get('request');
   const date = params.get('date');
@@ -204,7 +202,7 @@ function LinkedinConversationsContent() {
   const active = rows.find(row => row.id === activeId) ?? recent?.find(row => row.id === activeId);
   return <div className="container mx-auto max-w-7xl space-y-5">
     <header className="flex flex-wrap items-center gap-3">
-      <h1 className="text-3xl font-semibold">Accepted Connections</h1>{!released && <Badge variant="secondary">Beta</Badge>}
+      <h1 className="text-3xl font-semibold">Accepted Connections</h1>
       <Link className="ml-auto text-sm underline" href={user?.role === 'admin' ? '/linkedin-reports' : '/linkedin-requests'}>
         {user?.role === 'admin' ? 'LinkedIn Reports' : 'LinkedIn Requests'}
       </Link>

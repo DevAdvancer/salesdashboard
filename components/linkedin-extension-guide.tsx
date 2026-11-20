@@ -7,33 +7,23 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { canUseLinkedinExtension } from '@/lib/server/linkedin-extension-policy';
-import { useLinkedinConversationRelease } from '@/lib/hooks/use-linkedin-conversation-release';
 
-const STANDARD_VERSION = '2.0.0';
-const CONVERSATION_VERSION = '2.1.1';
 const RELEASE_VERSION = '2.2.0';
 const ATTRIBUTE = 'data-crm-hub-linkedin-helper-version';
 
-function isSupportedVersion(detected: string | null, conversationsBeta: boolean | undefined, released: boolean) {
-  if (released) return detected === RELEASE_VERSION;
-  return detected === RELEASE_VERSION || detected === CONVERSATION_VERSION ||
-    (!conversationsBeta && (detected === STANDARD_VERSION || detected === '2.1.0'));
-}
+type GuideProps = { onDetection?: (detected: boolean) => void };
 
-type GuideProps = { onDetection?: (detected: boolean) => void; conversationsBeta?: boolean };
-
-export function LinkedinExtensionSection({ onDetection, conversationsBeta }: GuideProps) {
+export function LinkedinExtensionSection({ onDetection }: GuideProps) {
   const { user } = useAuth();
-  return user && canUseLinkedinExtension(user) ? <LinkedinExtensionGuide onDetection={onDetection} conversationsBeta={conversationsBeta} /> : null;
+  return user && canUseLinkedinExtension(user) ? <LinkedinExtensionGuide onDetection={onDetection} /> : null;
 }
 
-export function LinkedinExtensionGuide({ onDetection, conversationsBeta }: GuideProps) {
-  const released = useLinkedinConversationRelease();
-  const version = released ? RELEASE_VERSION : conversationsBeta ? CONVERSATION_VERSION : STANDARD_VERSION;
+export function LinkedinExtensionGuide({ onDetection }: GuideProps) {
+  const version = RELEASE_VERSION;
   const download = `/downloads/crm-hub-linkedin-helper-${version}-chrome.zip`;
   const [detectedVersion, setDetectedVersion] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(true);
-  const current = isSupportedVersion(detectedVersion, conversationsBeta, released);
+  const current = detectedVersion === RELEASE_VERSION;
 
   useEffect(() => {
     let previousVersion: string | null = null;
@@ -42,7 +32,7 @@ export function LinkedinExtensionGuide({ onDetection, conversationsBeta }: Guide
       setDetectedVersion(detected);
       if (detected !== previousVersion) {
         previousVersion = detected;
-        const installed = isSupportedVersion(detected, conversationsBeta, released);
+        const installed = detected === RELEASE_VERSION;
         setExpanded(!installed);
         onDetection?.(installed);
       }
@@ -51,7 +41,7 @@ export function LinkedinExtensionGuide({ onDetection, conversationsBeta }: Guide
     const observer = new MutationObserver(read);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: [ATTRIBUTE] });
     return () => observer.disconnect();
-  }, [onDetection, conversationsBeta, released]);
+  }, [onDetection]);
 
   if (!expanded && current) return <Card className="py-3">
     <div className="flex flex-wrap items-center justify-between gap-2 px-6 text-sm">
@@ -80,7 +70,7 @@ export function LinkedinExtensionGuide({ onDetection, conversationsBeta }: Guide
         {current && <Button variant="outline" onClick={() => setExpanded(false)}>Collapse</Button>}
         {detectedVersion && !current && <p className="w-full font-medium">Update available. Download LinkedIn Helper v{version} below.</p>}
         <a href={download} download className={`${buttonVariants({ variant: 'default' })} gap-2`}>
-          <Download className="h-4 w-4" /> Download v{version}{conversationsBeta && !released ? ' beta' : ''}
+          <Download className="h-4 w-4" /> Download v{version}
         </a>
       </div>
       <ol className="list-decimal space-y-2 pl-5">
@@ -91,9 +81,7 @@ export function LinkedinExtensionGuide({ onDetection, conversationsBeta }: Guide
         <li>Return to this page and refresh it. The status above should show <strong>Detected · v{detectedVersion && current ? detectedVersion : version}</strong>.</li>
       </ol>
       <p className="text-muted-foreground">
-        {conversationsBeta
-          ? 'Send the invitation on LinkedIn first, then paste the invitation text and record it in CRM.'
-          : 'Send the invitation on LinkedIn first, then record it in CRM. After a successful save, the profile URL is copied to your clipboard.'}
+        Send the invitation on LinkedIn first, then paste the invitation text and record it in CRM.
       </p>
     </CardContent>
   </Card>;

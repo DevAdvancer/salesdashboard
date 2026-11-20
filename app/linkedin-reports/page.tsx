@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import Link from 'next/link';
 import { useLinkedinConversationAccess } from '@/lib/hooks/use-linkedin-conversation-access';
-import { useLinkedinConversationRelease } from '@/lib/hooks/use-linkedin-conversation-release';
 import { Label } from "@/components/ui/label";
 import { DateRangePicker } from "@/components/ui/date-picker";
 import {
@@ -84,8 +83,7 @@ function RequiredMark() {
 
 function LinkedinReportsContent() {
   const { user } = useAuth();
-  const conversationsBeta = useLinkedinConversationAccess() === true;
-  const conversationsReleased = useLinkedinConversationRelease();
+  const conversationsEnabled = useLinkedinConversationAccess() === true;
   const { toast } = useToast();
   const canReadLikeAdmin =
     user?.role === "admin" ||
@@ -283,7 +281,7 @@ function LinkedinReportsContent() {
             ? null
             : teamLeadId;
 
-      if (conversationsBeta) {
+      if (conversationsEnabled) {
         const data = await exportLinkedinConversationReportAction({
           teamLeadId: effectiveTeamLeadId, start: startDate, end: endDate,
         });
@@ -463,8 +461,8 @@ function LinkedinReportsContent() {
             <Button variant="outline" onClick={handleExport} disabled={exporting || loading || !teamLeadId}>
               {exporting ? "Exporting..." : "Export Excel"}
             </Button>
-            {conversationsBeta && <Link className={buttonVariants({ variant: 'outline' })} href="/linkedin-conversations">
-              Accepted Connections{conversationsReleased ? '' : ' · Beta'}
+            {conversationsEnabled && <Link className={buttonVariants({ variant: 'outline' })} href="/linkedin-conversations">
+              Accepted Connections
             </Link>}
             {(user?.role === "admin" || user?.role === "developer") && (
               <>

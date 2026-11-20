@@ -1,8 +1,6 @@
 import { isRoleEligibleForComponent } from '@/lib/constants/component-access';
-import { hasBetaFeatureAccess, LINKEDIN_CONVERSATIONS_FEATURE } from '@/lib/server/beta-feature-access';
 import type { createAdminClient } from '@/lib/server/appwrite';
 import type { LinkedinRequest, User } from '@/lib/types';
-import { isLinkedinConversationReleased } from '@/lib/utils/linkedin-conversation-release';
 
 type Databases = Awaited<ReturnType<typeof createAdminClient>>['databases'];
 
@@ -11,12 +9,15 @@ export function canJoinLinkedinConversations(user: Pick<User, 'department' | 'is
     isRoleEligibleForComponent('linkedin-conversations', user.role);
 }
 
-export async function hasLinkedinConversationAccess(databases: Databases, actor: User, now = new Date()) {
-  return canJoinLinkedinConversations(actor) && (isLinkedinConversationReleased(now) ||
-    await hasBetaFeatureAccess(databases, actor.$id, LINKEDIN_CONVERSATIONS_FEATURE));
+export async function hasLinkedinConversationAccess(_databases: Databases, actor: User) {
+  return canJoinLinkedinConversations(actor);
+}
+
+export function canReadAllLinkedinConversations(actor: Pick<User, 'role'>) {
+  return ['admin', 'developer', 'monitor', 'operations'].includes(actor.role);
 }
 
 export function canReadLinkedinConversation(actor: User, request: Pick<LinkedinRequest, 'agentId' | 'teamLeadId'>) {
-  return canJoinLinkedinConversations(actor) && (request.agentId === actor.$id || actor.role === 'admin' ||
+  return canJoinLinkedinConversations(actor) && (request.agentId === actor.$id || canReadAllLinkedinConversations(actor) ||
     (actor.role === 'team_lead' && request.teamLeadId === actor.$id));
 }
