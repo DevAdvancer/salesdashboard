@@ -101,7 +101,7 @@ export function Navigation({
       (item.key !== "linkedin-conversations" || canSeeLinkedinConversations === true));
 
   // Define section grouping
-  const agentItemKeys = new Set(["dashboard", "leads", "calendar", "history", "client-progress", "work-queue"]);
+  const agentItemKeys = new Set(["dashboard", "leads", "calendar", "history", "client-progress", "client-progress-report", "work-queue"]);
   const attendanceItemKeys = new Set(["attendance", "attendance-report"]);
   const teamLeadItemKeys = new Set(["user-management", "reports", "assigned-report", "team-report"]);
   const adminItemKeys = new Set(["branch-management", "hierarchy", "lead-requests", "settings", "beta"]);

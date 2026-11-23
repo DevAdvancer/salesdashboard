@@ -1,6 +1,7 @@
 'use client';
 
 import { CrmSelect } from '@/components/ui/crm-select';
+import Link from 'next/link';
 
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -157,13 +158,14 @@ function ClientProgressContent() {
   const { user } = useAuth(); const client = useQueryClient();
   const [draft, setDraft] = useState<ProgressFilters>(emptyFilters); const [filters, setFilters] = useState<ProgressFilters>(emptyFilters);
   const [selectedId, setSelectedId] = useState<string | null>(null); const [creating, setCreating] = useState(false);
+  const isAdmin = !!user && canManageProgress(user);
   const query = useQuery({ queryKey: ['client-progress', user?.$id, 'list', user?.role, user?.department, filters],
-    queryFn: ({ signal }) => fetchClientProgress(filters, signal), enabled: !!user && !selectedId, ...listQueryOptions });
+    queryFn: () => fetchClientProgress(filters), enabled: !!user && !selectedId, ...listQueryOptions });
   const reset = () => { setDraft(emptyFilters); setFilters(emptyFilters); };
   const change = (key: keyof ProgressFilters, value: string) => setDraft(current => ({ ...current, [key]: value }));
   if (!user) return null;
   if (selectedId) return <EntryDetail key={selectedId} id={selectedId} onBack={() => setSelectedId(null)} />;
-  return <div className="space-y-6"><header className="flex flex-wrap items-center justify-between gap-4"><div><p className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Client operations</p><h1 className="text-3xl font-bold tracking-tight">Client Progress</h1><p className="mt-2 text-sm text-muted-foreground">Track closed clients, candidate assignments, and feedback in one place.</p></div>{canManageProgress(user) && <Button onClick={() => setCreating(true)}><Plus className="mr-2 size-4" />Add candidate</Button>}</header>
+  return <div className="space-y-6"><header className="flex flex-wrap items-center justify-between gap-4"><div><p className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Client operations</p><h1 className="text-3xl font-bold tracking-tight">Client Progress</h1><p className="mt-2 text-sm text-muted-foreground">Track closed clients, candidate assignments, and feedback in one place.</p></div>{isAdmin && <div className="flex flex-wrap gap-2"><Button variant="outline" asChild><Link href="/client-progress-report">Reports</Link></Button><Button onClick={() => setCreating(true)}><Plus className="mr-2 size-4" />Add candidate</Button></div>}</header>
     <Card className="p-5"><form className="space-y-4" onSubmit={event => { event.preventDefault(); setFilters({ ...draft }); if (JSON.stringify(filters) === JSON.stringify(draft)) void query.refetch(); }}><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <Field label="Search clients"><Input value={draft.search} onChange={event => change('search', event.target.value)} maxLength={100} placeholder="Search candidate name" /></Field><Field label="Progress status"><CrmSelect className={selectClass} value={draft.status} onChange={event => change('status', event.target.value)}><option value="">All active statuses</option>{PROGRESS_STATUSES.filter(isProgressEligible).map(status => <option key={status}>{status}</option>)}</CrmSelect></Field>
       <Field label="Salesperson"><Input value={draft.salesperson} onChange={event => change('salesperson', event.target.value)} maxLength={100} placeholder="Search salesperson" /></Field><Field label="Marketing TL"><Input value={draft.marketingTl} onChange={event => change('marketingTl', event.target.value)} maxLength={100} placeholder="Search Marketing TL" /></Field><Field label="Recruiter"><Input value={draft.recruiter} onChange={event => change('recruiter', event.target.value)} maxLength={100} placeholder="Search recruiter" /></Field><div className="grid gap-2"><Label htmlFor="progress-date-from">Added from (Eastern)</Label><DatePicker id="progress-date-from" value={draft.from || ''} onChange={value => change('from', value)} maxDate={draft.to || undefined} /></div><div className="grid gap-2"><Label htmlFor="progress-date-to">Added to (Eastern)</Label><DatePicker id="progress-date-to" value={draft.to || ''} onChange={value => change('to', value)} minDate={draft.from || undefined} /></div>

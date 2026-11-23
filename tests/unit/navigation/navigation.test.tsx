@@ -44,6 +44,7 @@ describe("Navigation Component", () => {
     mockUseAccess.mockReturnValue({ canAccess: () => true, isLoading: false } as any);
     render(<Navigation />);
     expect(screen.queryByText('Client Progress')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Client Progress Report' })).not.toBeInTheDocument();
   });
 
   it('keeps Client Progress in the Sales dashboard', () => {
@@ -52,6 +53,7 @@ describe("Navigation Component", () => {
     mockUseAccess.mockReturnValue({ canAccess: () => true, isLoading: false } as any);
     render(<Navigation />);
     expect(screen.getByText('Client Progress')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Client Progress Report' })).toHaveAttribute('href', '/client-progress-report');
   });
 
   it('shows Accepted Connections by role without a beta lookup', async () => {

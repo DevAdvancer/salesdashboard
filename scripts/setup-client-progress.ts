@@ -32,7 +32,8 @@ async function main() {
       .concat([['eligible', 'enteredAt'], ['eligible', 'department', 'salespersonId', 'enteredAt']]) },
     { id: COLLECTIONS.CLIENT_PROGRESS_EVENTS, name: 'Client Progress Events', attributes: [
       string('entryId', 36), string('kind', 20), string('text', 15000), string('authorId', 36), string('authorName', 200),
-    ], indexes: [['entryId', 'kind', '$createdAt']] },
+    ], indexes: [['entryId', 'kind', '$createdAt'], ['kind', '$createdAt'], ['authorId', 'kind', '$createdAt'],
+      ['entryId', 'kind', 'authorId', '$createdAt']] },
   ];
   console.log(`${apply ? 'APPLY' : 'DRY RUN'}: database ${DATABASE_ID}. No existing lead data will be modified.`);
   for (const definition of definitions) {

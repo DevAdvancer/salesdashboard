@@ -26,6 +26,7 @@ describe('Access Control Context', () => {
       mockUseAuth.mockReturnValue({ user: { $id: 'user', role, department, isActive: true }, isAdmin: role === 'admin' });
       const { result, unmount } = renderHook(() => useAccess(), { wrapper });
       expect(result.current.canAccess('client-progress')).toBe(department === 'sales');
+      expect(result.current.canAccess('client-progress-report')).toBe(department === 'sales' && role === 'admin');
       unmount();
     }));
   });

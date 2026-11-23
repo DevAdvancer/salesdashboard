@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { useAuth } from './auth-context';
-import { canAccessProgress } from '@/lib/client-progress';
+import { canAccessProgress, canManageProgress } from '@/lib/client-progress';
 import {
   getDefaultComponentAccess,
   isRoleEligibleForComponent,
@@ -14,6 +14,7 @@ export type ComponentKey =
   | 'leads'
   | 'history'
   | 'client-progress'
+  | 'client-progress-report'
   | 'user-management'
   | 'field-management'
   | 'settings'
@@ -109,6 +110,7 @@ export function AccessControlProvider({ children }: { children: React.ReactNode 
     }
     // Client Progress is strictly Sales-only, including leadership accounts.
     if (componentKey === 'client-progress') return canAccessProgress(user);
+    if (componentKey === 'client-progress-report') return canManageProgress(user);
 
     if (
       user.department === 'resume' &&

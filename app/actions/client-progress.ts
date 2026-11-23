@@ -18,6 +18,7 @@ import { eligibleCardLead, type StoredCardShare } from '@/lib/server/public-clie
 import type { ClientCardShareStatus } from '@/lib/client-progress-share';
 import { PROGRESS_SALESPERSON_ROLES } from '@/lib/client-progress';
 import { canAccessProgress } from '@/lib/client-progress';
+import { invalidateProgressReportSummary } from '@/lib/server/client-progress-report';
 
 const idSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,35}$/);
 const filtersSchema = z.object({
@@ -189,6 +190,7 @@ async function addClientProgressFeedback(input: unknown) {
     await ctx.db.createDocument(DATABASE_ID, COLLECTIONS.CLIENT_PROGRESS_EVENTS, parsed.feedbackId, {
       entryId: parsed.id, kind: 'feedback', text: parsed.text, authorId: ctx.actor.$id, authorName: ctx.actor.name,
     }, []);
+    invalidateProgressReportSummary();
   } catch (error) {
     if ((error as { code?: number }).code === 409) {
       const existing = await ctx.db.getDocument(DATABASE_ID, COLLECTIONS.CLIENT_PROGRESS_EVENTS, parsed.feedbackId);
