@@ -18,7 +18,10 @@ import type {
   User,
   UserRole,
 } from "@/lib/types";
-import { listLeadsAction } from "@/app/actions/lead/queries";
+import { getLeadAction } from "@/app/actions/lead/queries";
+import { assertLeadUpdateAllowed } from "@/app/actions/lead/visibility";
+import { normalizeLeadStatus } from "@/lib/utils/lead-status-workflow";
+import { isAdminLikeReadAllRole } from "@/lib/utils/role-utils";
 import { filterResolvedPaymentReminders } from '@/lib/server/payment-reminder-notifications';
 
 async function getActor(userId: string): Promise<User> {
@@ -263,11 +266,18 @@ export async function listLeadNotesAction(actorId: string, leadId: string): Prom
     throw new Error("Not authorized");
   }
 
+  await getLeadAction(leadId, actor.$id);
   const { databases } = await createAdminClient();
-  const response = await databases.listDocuments(
+  const visibility = [
+    Query.equal("authorId", actor.$id),
+    Query.equal("visibility", isAdminLikeReadAllRole(actor.role) || actor.role === "senior_tl" || actor.role === "team_lead"
+      ? ["team", "leadership"]
+      : ["team"]),
+  ];
+  const response = await databases.uncachedReads.listDocuments(
     DATABASE_ID,
     COLLECTIONS.LEAD_NOTES,
-    [Query.equal("leadId", leadId), Query.orderDesc("createdAt"), Query.limit(100)]
+    [Query.equal("leadId", leadId), Query.or(visibility), Query.orderDesc("createdAt"), Query.orderDesc("$id"), Query.limit(100)]
   );
   return response.documents as unknown as LeadNote[];
 }
@@ -282,7 +292,14 @@ export async function createLeadNoteAction(input: {
   ensureComponentAccess(actor.role, "leads");
   ensureCanMutate(actor.role);
 
+  const body = typeof input.body === "string" ? input.body.trim() : "";
+  if (!body || body.length > 10_000) throw new Error("Enter a note of 1 to 10,000 characters.");
+  if (!["team", "leadership", "private"].includes(input.visibility)) throw new Error("Invalid note visibility.");
+
+  const lead = await getLeadAction(input.leadId, actor.$id);
+  if (normalizeLeadStatus(lead.status) === "notinterested") throw new Error("Not authorized");
   const { databases } = await createAdminClient();
+  await assertLeadUpdateAllowed(databases, actor, lead);
   const doc = await databases.createDocument(
     DATABASE_ID,
     COLLECTIONS.LEAD_NOTES,
@@ -291,10 +308,9 @@ export async function createLeadNoteAction(input: {
       leadId: input.leadId,
       authorId: actor.$id,
       authorName: actor.name,
-      body: input.body,
+      body,
       visibility: input.visibility,
       createdAt: new Date().toISOString(),
-      updatedAt: null,
     }
   );
   return doc as unknown as LeadNote;

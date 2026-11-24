@@ -28,9 +28,7 @@ export function updateLeadFollowUp(input: UpdateLeadFollowUpInput): Promise<Lead
 }
 
 export function listLeadNotes(actorId: string, leadId: string): Promise<LeadNote[]> {
-  return cacheClientRead('sop:listLeadNotes', [actorId, leadId], () =>
-    listLeadNotesAction(actorId, leadId)
-  );
+  return listLeadNotesAction(actorId, leadId);
 }
 
 export function createLeadNote(input: {
@@ -39,7 +37,7 @@ export function createLeadNote(input: {
   body: string;
   visibility: LeadNoteVisibility;
 }): Promise<LeadNote> {
-  return createLeadNoteAction(input).finally(() => clearClientReadCache('sop:listLeadNotes'));
+  return createLeadNoteAction(input);
 }
 
 

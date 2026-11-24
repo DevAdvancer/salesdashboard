@@ -25,7 +25,6 @@ import {
   clearLeadReadCache,
   closeLead,
   listLeadAssignableAgents,
-  notInterestedLead,
   reopenLead,
   updateLead,
 } from "@/lib/services/lead-action-service";
@@ -157,7 +156,7 @@ function LeadDetailContent() {
       queryClient.invalidateQueries({ queryKey: queryKeys.leads.detail(leadId) });
       const fetchedLead = await getLeadAction(leadId, user.$id);
 
-      if (fetchedLead.isClosed) {
+      if (fetchedLead.isClosed && !isNotInterestedStatus(fetchedLead.status)) {
         router.push(`/client/${leadId}`);
         return;
       }
@@ -375,7 +374,6 @@ function LeadDetailContent() {
 
       await updateLead(leadId, leadData, user.$id, user.name);
       if (statusChanged && isNotInterestedStatus(nextStatus)) {
-        await notInterestedLead(leadId, user.$id, user.name);
         toast({
           title: "Success",
           description: "Lead marked as Not Interested",
@@ -383,8 +381,7 @@ function LeadDetailContent() {
         setIsEditing(false);
         queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
         queryClient.invalidateQueries({ queryKey: ['assigned-report'] });
-        await loadLead();
-        router.push("/leads");
+        router.push("/leads?status=Not+Interested");
         return;
       }
       if (statusChanged && isBackoutStatus(nextStatus)) {
@@ -851,7 +848,10 @@ function LeadDetailContent() {
   const isMonitor = user.role === "monitor";
   const isOperations = user.role === "operations";
   const isLeadOwner = lead.ownerId === user.$id;
-  const canModifyLead = !isOperations;
+  const isNotInterested = isNotInterestedStatus(lead.status);
+  const canModifyLead = !isOperations && !isNotInterested;
+  const canReopenLead = user.role === "admin" || user.role === "developer" ||
+    (user.role === "team_lead" && !isNotInterested);
 
   const rawLeadAmount = getLeadAmountValue(leadData as Record<string, unknown>);
   const isCloseRequiredFieldsMissingFlag = isCloseRequiredFieldsMissing({
@@ -898,7 +898,7 @@ function LeadDetailContent() {
         <div id="tour-lead-header">
           <Button
             variant="outline"
-            onClick={() => router.push("/leads")}
+            onClick={() => router.push(isNotInterested ? "/leads?status=Not+Interested" : "/leads")}
             className="mb-2">
             ← Back to Leads
           </Button>
@@ -906,7 +906,7 @@ function LeadDetailContent() {
             {headerFirstName} {headerLastName}
           </h1>
           <p className="text-muted-foreground mt-1">
-            {lead.isClosed ? "Closed Lead" : "Active Lead"}
+            {isNotInterested ? "Not Interested" : lead.isClosed ? "Closed Lead" : "Active Lead"}
           </p>
         </div>
         <div id="tour-lead-actions" className="flex flex-wrap gap-2">
@@ -956,11 +956,7 @@ function LeadDetailContent() {
               )}
             </>
           )}
-          {lead.isClosed &&
-            canModifyLead &&
-            (user?.role === "admin" ||
-              user?.role === "developer" ||
-              user?.role === "team_lead") && (
+          {lead.isClosed && canReopenLead && (
               <>
                 {isBackoutStatus(lead.status) && (
                   <Button
@@ -1025,7 +1021,7 @@ function LeadDetailContent() {
               <LeadFollowUpCard
                 lead={lead}
                 user={user}
-                disabled={lead.isClosed || (isMonitor && !isLeadOwner)}
+                disabled={!canModifyLead || lead.isClosed || (isMonitor && !isLeadOwner)}
                 onUpdated={(updatedLead) => {
                   if (updatedLead) {
                     setLead(updatedLead);
@@ -1058,11 +1054,14 @@ function LeadDetailContent() {
           )}
 
           {/* Notes Card */}
-          {user && (!isMonitor || isLeadOwner) && (
-            <div id="tour-lead-notes">
-              <LeadNotesCard leadId={lead.$id} user={user} />
-            </div>
-          )}
+          <div id="tour-lead-notes">
+            <LeadNotesCard
+              key={lead.$id}
+              leadId={lead.$id}
+              user={user}
+              canAddNote={canModifyLead && (!isMonitor || isLeadOwner || lead.assignedToId === user.$id)}
+            />
+          </div>
 
           {/* Metadata */}
           <LeadMetadataCard lead={lead} metaNames={metaNames} />

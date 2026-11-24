@@ -6,6 +6,7 @@ import { useRouter, useParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queries/keys";
 import { getLeadAction } from "@/app/actions/lead/queries";
+import { normalizeLeadStatus } from "@/lib/utils/lead-status-workflow";
 import { reopenLead } from "@/lib/services/lead-action-service";
 import { getUserByIdOrNull } from "@/lib/services/user-service";
 import { User } from "@/lib/types";
@@ -610,7 +611,13 @@ function HistoryDetailContent() {
         </div>
 
         <div className="space-y-6">
-          <LeadNotesCard leadId={leadId} user={user!} />
+          <LeadNotesCard
+            key={leadId}
+            leadId={leadId}
+            user={user!}
+            canAddNote={canModifyLead && normalizeLeadStatus(lead?.status) !== "notinterested" &&
+              (user?.role !== "monitor" || isLeadOwner || lead?.assignedToId === user?.$id)}
+          />
           <LeadMetadataCard 
             lead={lead!} 
             metaNames={{

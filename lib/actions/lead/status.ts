@@ -14,6 +14,7 @@ import { recordLeadLifecycleEvent } from '@/lib/utils/lead-payment-cycle';
 import { checkedLeadClosingBranch } from '@/lib/server/lead-closing-branch';
 import { isBackoutStatusInternal, isTextMissing } from '@/lib/utils/lead-close-gate';
 import { LeadActionError } from '@/lib/server/lead-errors';
+import { normalizeLeadStatus } from '@/lib/utils/lead-status-workflow';
 
 type AdminDatabases = Awaited<ReturnType<typeof createAdminClient>>['databases'];
 
@@ -195,6 +196,10 @@ export async function notInterestedLeadAction(
   )) as unknown as Lead;
 
   await assertLeadAccessAllowed(actorDoc, currentLead, databases);
+
+  if (currentLead.isClosed && normalizeLeadStatus(currentLead.status) === 'notinterested') {
+    return { success: true, lead: currentLead };
+  }
 
   const unassignedOwnerId = getUnassignedOwnerId();
   if (!unassignedOwnerId) {

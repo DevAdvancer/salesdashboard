@@ -9,18 +9,18 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { formatEasternDateTime } from '@/lib/utils/eastern-date';
 import { createLeadNote, listLeadNotes } from '@/lib/services/sop-service';
-import type { LeadNote, LeadNoteVisibility, User } from '@/lib/types';
+import type { LeadNote, User } from '@/lib/types';
 
 interface LeadNotesCardProps {
   leadId: string;
   user: User;
+  canAddNote: boolean;
 }
 
-export function LeadNotesCard({ leadId, user }: LeadNotesCardProps) {
+export function LeadNotesCard({ leadId, user, canAddNote }: LeadNotesCardProps) {
   const { toast } = useToast();
   const [notes, setNotes] = useState<LeadNote[]>([]);
   const [body, setBody] = useState('');
-  const visibility: LeadNoteVisibility = 'team'; // Hardcoded visibility
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +34,7 @@ export function LeadNotesCard({ leadId, user }: LeadNotesCardProps) {
     } catch (error) {
       console.error('Failed to load notes:', error);
       setNotes([]);
-      setError('Notes are not available for your current permissions.');
+      setError('Could not load notes.');
     } finally {
       setLoading(false);
     }
@@ -48,15 +48,15 @@ export function LeadNotesCard({ leadId, user }: LeadNotesCardProps) {
     if (!body.trim()) return;
     try {
       setSaving(true);
-      await createLeadNote({
+      const note = await createLeadNote({
         actorId: user.$id,
         leadId,
         body: body.trim(),
-        visibility,
+        visibility: 'team',
       });
       setBody('');
+      setNotes((previous) => [note, ...previous]);
       toast({ title: 'Note added', description: 'Lead note saved.' });
-      await loadNotes();
     } catch (error) {
       console.error('Failed to create note:', error);
       toast({ title: 'Error', description: 'Failed to save note.', variant: 'destructive' });
@@ -74,27 +74,29 @@ export function LeadNotesCard({ leadId, user }: LeadNotesCardProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-3">
+        {canAddNote && <div className="grid gap-3">
           <div>
             <Label htmlFor="leadNote">Add Note</Label>
             <Textarea
               id="leadNote"
               value={body}
+              maxLength={10_000}
+              disabled={saving}
               onChange={(event) => setBody(event.target.value)}
               placeholder="Add a useful update, blocker, or next-step detail..."
             />
           </div>
           <div className="flex justify-end">
-            <Button onClick={submitNote} disabled={saving || !body.trim()}>
+            <Button onClick={submitNote} disabled={loading || saving || !body.trim()}>
               {saving ? 'Saving...' : 'Add Note'}
             </Button>
           </div>
-        </div>
+        </div>}
 
         <div className="space-y-3">
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading notes...</p>
-          ) : error ? (
+          ) : error && notes.length === 0 ? (
             <p className="rounded-md border border-destructive p-3 text-sm text-muted-foreground">
               {error}
             </p>
@@ -108,9 +110,9 @@ export function LeadNotesCard({ leadId, user }: LeadNotesCardProps) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-sm">{note.authorName}</span>
-                    <span className="text-xs text-muted-foreground">
+                    <time dateTime={note.createdAt} className="text-xs text-muted-foreground">
                       {formatEasternDateTime(note.createdAt)}
-                    </span>
+                    </time>
                   </div>
                 </div>
                 <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{note.body}</p>

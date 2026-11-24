@@ -11,7 +11,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { queryKeys } from "@/lib/queries/keys";
 import { COLLECTIONS } from "@/lib/constants/appwrite";
 import { getUsersByIds } from "@/lib/services/user-service";
-import { MONITOR_ONLY_STATUSES } from "@/lib/utils/lead-status-workflow";
+import { MONITOR_ONLY_STATUSES, normalizeLeadStatus } from "@/lib/utils/lead-status-workflow";
 import {
   useAssignableUsersQuery,
   useBranchesQuery,
@@ -117,7 +117,9 @@ function LeadsContent() {
 
   // URL is the source of truth for filter values
   const urlSearch = searchParams.get(FILTER_PARAM_KEYS.q) ?? "";
-  const urlStatus = searchParams.get(FILTER_PARAM_KEYS.status) ?? "";
+  const requestedStatus = searchParams.get(FILTER_PARAM_KEYS.status) ?? "";
+  const isNotInterestedList = normalizeLeadStatus(requestedStatus) === "notinterested";
+  const urlStatus = isNotInterestedList ? "Not Interested" : requestedStatus;
   const urlAssignedTo = searchParams.get(FILTER_PARAM_KEYS.assignedTo) ?? "";
   const urlBranch = searchParams.get(FILTER_PARAM_KEYS.branch) ?? "";
   const urlFrom = searchParams.get(FILTER_PARAM_KEYS.from) ?? "";
@@ -222,7 +224,7 @@ function LeadsContent() {
 
   const canExportLeads = user ? isAdminLikeReadAllRole(user.role) : false;
   const isLeadGeneration = user?.role === "lead_generation";
-  const pageTitle = isLeadGeneration ? "Generated Leads" : "Active Leads";
+  const pageTitle = isNotInterestedList ? "Not Interested Leads" : isLeadGeneration ? "Generated Leads" : "Active Leads";
 
   const writeFiltersToUrl = useCallback(
     (next: FilterDrafts) => {
@@ -334,11 +336,11 @@ function LeadsContent() {
         : "";
     const isBackout =
       normalizedStatus === "backout" || normalizedStatus === "backedout";
-    if (currentFilters.isClosed === undefined) {
+    if (currentFilters.isClosed === undefined && !isNotInterestedList) {
       currentFilters.isClosed = isBackout;
     }
     return currentFilters;
-  }, [filters]);
+  }, [filters, isNotInterestedList]);
 
   const leadsQuery = useLeadsQuery({
     userId: user?.$id ?? "",
@@ -443,9 +445,10 @@ function LeadsContent() {
       "Generated",
       ...formOptions,
       "Backed Out",
+      "Not Interested",
       ...(isMonitor ? [...MONITOR_ONLY_STATUSES] : []),
     ]
-      .map((v) => v.trim())
+      .map((v) => normalizeLeadStatus(v) === "notinterested" ? "Not Interested" : v.trim())
       .filter((v) => {
         if (!v) return false;
         const clean = v.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -591,12 +594,13 @@ function LeadsContent() {
         key={lead.$id}
         lead={lead}
         showAssigned={showAssigned}
+        showMarkedDate={isNotInterestedList}
         assignedUsers={assignedUsers}
         owners={owners}
         onView={handleViewLead}
       />
     ));
-  }, [leads, assignedUsers, owners, showAssigned, handleViewLead]);
+  }, [leads, assignedUsers, owners, showAssigned, isNotInterestedList, handleViewLead]);
 
   const totalPages = Math.max(1, Math.ceil(totalLeads / ITEMS_PER_PAGE));
 

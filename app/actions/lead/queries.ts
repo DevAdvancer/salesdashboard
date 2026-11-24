@@ -32,6 +32,10 @@ import { restoreNotInterestedDuplicateLead, createLeadAction, updateLeadAction, 
 import { logger } from '@/lib/utils/logger';
 import { REQUIRED_LEAD_FIELD_LABELS, isValidId, normalizeDuplicateFieldValue, isBlankLeadValue, shouldIgnoreLinkedinDuplicate, assertRequiredLeadData } from "./sync-helpers";
 import { parseLeadDataSafely, getLeadAuditName, buildAuditChanges, getDuplicateValue } from "./sync-helpers";
+import {
+  NOT_INTERESTED_STATUSES, getLatestNotInterestedEvents, getNotInterestedAttribution,
+  getNotInterestedScope, matchesNotInterestedScope,
+} from "./not-interested";
 
 export async function getLeadAction(leadId: string, viewerId: string): Promise<Lead> {
     await assertAuthenticatedUserId(viewerId);
@@ -57,6 +61,17 @@ export async function getLeadAction(leadId: string, viewerId: string): Promise<L
       // previously the dept-scope post-filter rejected some rows that the
       // list had returned, breaking the detail page.
       return lead;
+    }
+
+    if (isNotInterestedStatus(lead.status)) {
+      const [scope, events] = await Promise.all([
+        getNotInterestedScope(databases, viewerDoc),
+        getLatestNotInterestedEvents(databases, [leadId]),
+      ]);
+      if (matchesNotInterestedScope(getNotInterestedAttribution(lead, events.get(leadId)), scope)) {
+        return lead;
+      }
+      throw new LeadActionError('PERMISSION_DENIED', 'Permission denied');
     }
 
     if (lead.ownerId === viewerId || lead.assignedToId === viewerId) {
@@ -102,10 +117,12 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
     try {
     await assertAuthenticatedUserId(userId);
     const { databases } = await createAdminClient();
+    const isNotInterestedList = isNotInterestedStatus(filters.status);
     // Another instance may have written the change, so this one's cache can be stale.
-    if (options?.fresh || (filters.isClosed === true && filters.sortBy === 'closedAt')) {
+    if (options?.fresh || isNotInterestedList || (filters.isClosed === true && filters.sortBy === 'closedAt')) {
       databases.clearReadCacheForCollection(COLLECTIONS.LEADS);
     }
+    if (isNotInterestedList) databases.clearReadCacheForCollection(COLLECTIONS.NOT_INTERESTED_LEADS);
     const queries: string[] = [];
 
     // Role-based filtering
@@ -114,21 +131,21 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
     const userRole = userDoc.role;
     const skipDepartmentScope = options?.skipDepartmentScope === true;
     let salesUserIds =
-      isAdminLikeReadAllRole(userRole) && !skipDepartmentScope
+      !isNotInterestedList && isAdminLikeReadAllRole(userRole) && !skipDepartmentScope
         ? await getDepartmentScopedUserIds(databases, 'sales')
         : null;
 
 
-    if (userRole === 'agent') {
+    if (!isNotInterestedList && userRole === 'agent') {
       // Agents see leads assigned to them OR leads they created
       const orConditions = [
           Query.equal('assignedToId', userId),
           Query.equal('ownerId', userId),
       ];
       queries.push(Query.or(orConditions));
-    } else if (userRole === 'lead_generation') {
+    } else if (!isNotInterestedList && userRole === 'lead_generation') {
       queries.push(Query.equal('ownerId', userId));
-    } else if (isAdminLikeReadAllRole(userRole)) {
+    } else if (!isNotInterestedList && isAdminLikeReadAllRole(userRole)) {
       // Admins and Managers see all leads across all branches — no branch/owner filter
       if (filters.teamLeadId) {
         const agents = await listAllDocuments<{ $id: string }>({
@@ -153,7 +170,7 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
           Query.or([Query.equal('ownerId', teamIds), Query.equal('assignedToId', teamIds)]),
         );
       }
-    } else if (userRole === 'team_lead') {
+    } else if (!isNotInterestedList && userRole === 'team_lead') {
       const { ownerVisibleUserIds, assignmentVisibleUserIds } =
         await getTeamLeadLeadVisibilityScope(databases, userId);
       appendTeamLeadLeadVisibilityQuery(
@@ -188,19 +205,15 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
     // Filter by closed status (default to active leads unless includeClosed is true)
     if (filters.isClosed !== undefined) {
       queries.push(Query.equal('isClosed', filters.isClosed));
-    } else if (!filters.includeClosed && !filters.searchQuery) {
+    } else if (!isNotInterestedList && !filters.includeClosed && !filters.searchQuery) {
       queries.push(Query.equal('isClosed', false));
     }
 
-    const normalizedRequestedStatus =
-      typeof filters.status === 'string'
-        ? filters.status.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
-        : '';
     const shouldExcludeNotInterestedFromActiveList =
       (filters.isClosed === undefined || filters.isClosed === false) &&
       !filters.includeClosed &&
       !filters.searchQuery &&
-      normalizedRequestedStatus !== 'notinterested';
+      !isNotInterestedList;
 
     if (shouldExcludeNotInterestedFromActiveList) {
       queries.push(Query.notEqual('status', 'Not Interested'));
@@ -223,20 +236,20 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
       const normalized = statusText.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
       if (normalized === 'backout' || normalized === 'backedout') {
         queries.push(Query.equal('status', ['Backout', 'Backed Out', 'Backedout', 'Backed out']));
-      } else if (normalized === 'notinterested') {
-        queries.push(Query.equal('status', ['Not-Interested', 'Not Interested']));
+      } else if (isNotInterestedList) {
+        queries.push(Query.equal('status', NOT_INTERESTED_STATUSES));
       } else {
         queries.push(Query.equal('status', filters.status));
       }
     }
 
     // Apply owner filter
-    if (filters.ownerId) {
+    if (!isNotInterestedList && filters.ownerId) {
       queries.push(Query.equal('ownerId', filters.ownerId));
     }
 
     // Apply "my leads" filter — leads owned by OR assigned to the requesting user
-    if (filters.mine) {
+    if (!isNotInterestedList && filters.mine) {
       queries.push(Query.or([
         Query.equal('ownerId', userId),
         Query.equal('assignedToId', userId),
@@ -244,7 +257,7 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
     }
 
     // Apply assigned agent filter
-    if (filters.assignedToId) {
+    if (!isNotInterestedList && filters.assignedToId) {
       queries.push(Query.equal('assignedToId', filters.assignedToId));
     }
 
@@ -301,6 +314,48 @@ export async function listLeadsAction(filters: LeadListFilters, userId: string, 
           queries.push(Query.contains('data', word));
         }
       }
+    }
+
+    if (isNotInterestedList) {
+      const scope = await getNotInterestedScope(databases, userDoc);
+      const teamScope = filters.teamLeadId && isAdminLikeReadAllRole(userRole)
+        ? await getNotInterestedScope(databases, { $id: filters.teamLeadId, role: 'team_lead' })
+        : null;
+      const matching = await listAllDocuments<Lead>({
+        databases,
+        databaseId: DATABASE_ID,
+        collectionId: LEADS_COLLECTION_ID,
+        queries: [...queries, Query.select([...LEADS_LIST_SELECT, 'history'])],
+        requireComplete: true,
+      });
+      const visible: Lead[] = [];
+      for (let offset = 0; offset < matching.length; offset += 100) {
+        const batch = matching.slice(offset, offset + 100);
+        const events = await getLatestNotInterestedEvents(databases, batch.map(lead => lead.$id));
+        for (const lead of batch) {
+          const attribution = getNotInterestedAttribution(lead, events.get(lead.$id));
+          if (!matchesNotInterestedScope(attribution, scope)) continue;
+          if (teamScope && !matchesNotInterestedScope(attribution, { owners: teamScope.assignees, assignees: teamScope.assignees })) continue;
+          if (filters.ownerId && attribution.ownerId !== filters.ownerId) continue;
+          if (filters.assignedToId && attribution.assignedToId !== filters.assignedToId) continue;
+          if (filters.mine && attribution.ownerId !== userId && attribution.assignedToId !== userId) continue;
+
+          // List rows show who held the lead when it was marked.
+          const { history: _history, ...row } = lead;
+          visible.push({
+            ...row,
+            ownerId: attribution.ownerId,
+            assignedToId: attribution.assignedToId,
+            closedAt: attribution.markedAt ?? null,
+          });
+        }
+      }
+      visible.sort((left, right) =>
+        (Date.parse(right.closedAt ?? '') || 0) - (Date.parse(left.closedAt ?? '') || 0) ||
+        right.$id.localeCompare(left.$id));
+      const start = (page - 1) * pageSize;
+      const leads = visible.slice(start, start + pageSize);
+      return { leads, total: visible.length, page, pageSize: wantExport ? leads.length : pageSize };
     }
 
     const projectedQueries = [...queries];

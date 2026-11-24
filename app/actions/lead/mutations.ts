@@ -550,7 +550,7 @@ export async function updateLeadAction(leadId: string, data: Partial<LeadData>, 
         }
 
         const targetStatus = (updatedData as any).status || currentLead.status;
-        if (targetStatus === "Not Interested" && currentLead.status !== "Not Interested") {
+        if (isNotInterestedStatus(targetStatus) && !isNotInterestedStatus(currentLead.status)) {
             const result = await notInterestedLeadAction(leadId, actorId, actorName || actorDoc.name || actorDoc.$id);
             return result.lead as unknown as Lead;
         }

@@ -1,4 +1,4 @@
-export {};
+import fc from 'fast-check';
 
 // `app/actions/lead.ts` reads its database and collection ids from
 // process.env at module scope (see its top-of-file consts), so these must be
@@ -267,13 +267,72 @@ jest.mock('@/lib/server/appwrite', () => ({
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { listLeadsAction, listLeadCountsAction } = require('@/app/actions/lead/queries');
+const { getLeadAction, listLeadsAction, listLeadCountsAction } = require('@/app/actions/lead/queries');
 
 async function visibleIdsFor(userId: string) {
   const user = USERS.find((u) => u.$id === userId)!;
   const res = await listLeadsAction({}, userId, user.role, [], { forExport: true });
   return res.leads.map((l: any) => l.$id).sort();
 }
+
+it('scopes Not Interested leads to their former owner and assignee, then paginates by marked time', async () => {
+  await fc.assert(fc.asyncProperty(
+    fc.array(fc.record({
+      ownerId: fc.constantFrom(AGENT_A1, AGENT_B1, LG_A),
+      assignedToId: fc.constantFrom(AGENT_A1, AGENT_B1, LG_A, null),
+    }), { minLength: 4, maxLength: 12 }),
+    async (attributions) => {
+      const events = attributions.map(({ ownerId, assignedToId }, index) => ({
+        $id: `event-${index}`,
+        leadId: `not-interested-${index}`,
+        previousOwnerId: ownerId,
+        previousAssignedToId: assignedToId,
+        status: 'active',
+        markedAt: new Date(Date.UTC(2026, 10, index + 1)).toISOString(),
+      }));
+      const rows = events.map((event, index) => ({
+        $id: event.leadId, ownerId: 'holding-owner', assignedToId: null,
+        status: index % 2 === 0 ? 'Not Interested' : 'Not-Interested',
+        isClosed: true, closedAt: event.markedAt, data: '{}',
+        $updatedAt: new Date(Date.UTC(2026, 11, 20 - index)).toISOString(),
+      }));
+      const listDocuments = mockListDocuments.getMockImplementation()!;
+      const getDocument = mockGetDocument.getMockImplementation()!;
+      mockListDocuments.mockImplementation(async (db, collection, queries) => {
+        if (collection === 'not_interested_leads') return evaluate(events, queries);
+        if (collection === 'test-leads-collection') return evaluate(rows, queries);
+        return listDocuments(db, collection, queries);
+      });
+      mockGetDocument.mockImplementation(async (db, collection, id) =>
+        rows.find(row => row.$id === id) ?? getDocument(db, collection, id));
+      try {
+        const filters = { status: 'Not Interested' };
+        const teamEventIds = events.filter(event =>
+          event.previousOwnerId === AGENT_A1 ||
+          event.previousAssignedToId === AGENT_A1 || event.previousAssignedToId === LG_A)
+          .reverse().map(event => event.leadId);
+        const ownEventIds = events.filter(event =>
+          event.previousOwnerId === AGENT_A1 || event.previousAssignedToId === AGENT_A1)
+          .reverse().map(event => event.leadId);
+        const first = await listLeadsAction(filters, TL_A, 'team_lead', [], { page: 1, pageSize: 2 });
+        const second = await listLeadsAction(filters, TL_A, 'team_lead', [], { page: 2, pageSize: 2 });
+        const own = await listLeadsAction({ ...filters, mine: true }, AGENT_A1, 'agent');
+        expect(first.total).toBe(teamEventIds.length);
+        expect(first.leads.map(row => row.$id)).toEqual(teamEventIds.slice(0, 2));
+        expect(second.leads.map(row => row.$id)).toEqual(teamEventIds.slice(2, 4));
+        expect(own.leads.map(row => row.$id)).toEqual(ownEventIds);
+        for (const row of rows) {
+          const detail = getLeadAction(row.$id, TL_A);
+          if (teamEventIds.includes(row.$id)) await expect(detail).resolves.toMatchObject({ $id: row.$id });
+          else await expect(detail).rejects.toThrow('Permission denied');
+        }
+      } finally {
+        mockListDocuments.mockImplementation(listDocuments);
+        mockGetDocument.mockImplementation(getDocument);
+      }
+    },
+  ), { numRuns: 35 });
+});
 
 describe('Client History closure ordering', () => {
   const rows = [

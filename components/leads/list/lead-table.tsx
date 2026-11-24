@@ -4,6 +4,8 @@ import { memo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LeadStatusBadge } from "@/components/ui/lead-status-badge";
+import { formatEasternCalendarDate } from "@/lib/utils/eastern-date";
+import { normalizeLeadStatus } from "@/lib/utils/lead-status-workflow";
 import type { Lead, User, LeadListFilters } from "@/lib/types";
 
 function parseLeadData(lead: Lead) {
@@ -45,12 +47,14 @@ export const LeadRow = memo(
   function LeadRow({
     lead,
     showAssigned,
+    showMarkedDate,
     assignedUsers,
     owners,
     onView,
   }: {
     lead: Lead;
     showAssigned: boolean;
+    showMarkedDate: boolean;
     assignedUsers: Map<string, User>;
     owners: Map<string, User>;
     onView: (leadId: string) => void;
@@ -64,6 +68,11 @@ export const LeadRow = memo(
     const sourceName =
       typeof leadData.sourceName === "string" ? leadData.sourceName : "";
     const source = typeof leadData.source === "string" ? leadData.source : "";
+    const activityDate = showMarkedDate
+      ? formatEasternCalendarDate(lead.closedAt)
+      : lead.$updatedAt
+        ? new Date(lead.$updatedAt).toLocaleDateString("en-US", { timeZone: "America/New_York" })
+        : "N/A";
 
     return (
       <tr className="border-b last:border-0 hover:bg-accent/50 transition-colors">
@@ -97,9 +106,7 @@ export const LeadRow = memo(
           </td>
         )}
         <td className="p-3 md:p-4 text-muted-foreground hidden sm:table-cell">
-          {lead.$updatedAt
-            ? new Date(lead.$updatedAt).toLocaleDateString("en-US", { timeZone: "America/New_York" })
-            : "N/A"}
+          {activityDate}
         </td>
         <td className="p-3 md:p-4">
           <Button
@@ -117,10 +124,12 @@ export const LeadRow = memo(
     prev.lead.$id === next.lead.$id &&
     prev.lead.status === next.lead.status &&
     prev.lead.$updatedAt === next.lead.$updatedAt &&
+    prev.lead.closedAt === next.lead.closedAt &&
     prev.lead.data === next.lead.data &&
     prev.lead.ownerId === next.lead.ownerId &&
     prev.lead.assignedToId === next.lead.assignedToId &&
     prev.showAssigned === next.showAssigned &&
+    prev.showMarkedDate === next.showMarkedDate &&
     prev.assignedUsers === next.assignedUsers &&
     prev.owners === next.owners &&
     prev.onView === next.onView,
@@ -191,7 +200,7 @@ export function LeadTable({
                     </th>
                   )}
                   <th className="p-3 md:p-4 font-semibold hidden sm:table-cell">
-                    Last Updated
+                    {normalizeLeadStatus(filters.status) === "notinterested" ? "Marked Not Interested" : "Last Updated"}
                   </th>
                   <th className="p-3 md:p-4 font-semibold">Actions</th>
                 </tr>
